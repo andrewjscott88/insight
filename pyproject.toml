@@ -7,6 +7,8 @@ name = "insight"
 dynamic = ["version"]
 description = "Evidence-first, local threat intelligence workbench"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE", "NOTICE"]
 requires-python = ">=3.11"
 classifiers = [
     "Private :: Do Not Upload",

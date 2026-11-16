@@ -169,8 +169,11 @@ docker compose cp insight:/data/backup-$(date +%Y%m%d).db ./
 - Source failures are visible and non-destructive. Some sites may block automated requests. No success is fabricated when a provider rejects or changes its endpoint.
 - Schema changes ship as Alembic migrations that are tested for reversibility and against databases written by every previous release. Timestamps are ISO-8601 UTC strings; see `docs/ARCHITECTURE.md`.
 - Audit events are application records, not tamper-proof logs. Local administrators can modify the database.
-- This repository does not assign a distribution license on your behalf; choose one before publishing.
 
 ## Extending it
 
 Add adapters in `connectors.py` only after reviewing their destinations, size limits and source terms. Keep deterministic evidence and analyst review independent of enrichment. `docs/LLM_EXTENSION.md` defines the future LLM integration boundary without enabling it now.
+
+## License
+
+Insight is released under the [MIT License](LICENSE). Third-party data and dependencies keep their own licences; see [NOTICE](NOTICE).

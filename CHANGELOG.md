@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Licensing
+- Insight is now released under the **MIT License** (`LICENSE`); `pyproject.toml` declares `license = "MIT"`.
+
 ### Added: cross-report IOC export
 - **One JSON file with every indicator of compromise across your reports** (`format: insight-ioc-v1`). Each
   indicator appears once, with:
