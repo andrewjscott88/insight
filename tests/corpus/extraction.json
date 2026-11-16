@@ -1,0 +1,293 @@
+{
+  "description": "Hand-labelled, synthetic threat-report snippets. Labels are what an analyst SHOULD get (ground truth), not what the extractor currently returns. All infrastructure uses reserved documentation ranges/names. Add real, permitted examples during Milestone 1.",
+  "documents": [
+    {
+      "id": "basic-ipv4",
+      "text": "The loader beaconed to 192.0.2.44 every 60 seconds.",
+      "expected": [
+        [
+          "ip",
+          "192.0.2.44"
+        ]
+      ]
+    },
+    {
+      "id": "ipv4-sentence-end",
+      "text": "Outbound connections were observed to 198.51.100.23.",
+      "expected": [
+        [
+          "ip",
+          "198.51.100.23"
+        ]
+      ]
+    },
+    {
+      "id": "ipv4-port",
+      "text": "C2 listener at 203.0.113.9:8443 accepted TLS.",
+      "expected": [
+        [
+          "ip",
+          "203.0.113.9"
+        ]
+      ]
+    },
+    {
+      "id": "ipv6",
+      "text": "A second stage was served from 2001:0db8:0000:0000:0000:0000:0000:0042 and 2001:db8::7.",
+      "expected": [
+        [
+          "ip",
+          "2001:db8::42"
+        ],
+        [
+          "ip",
+          "2001:db8::7"
+        ]
+      ]
+    },
+    {
+      "id": "cve-mixed-case",
+      "text": "Actors exploited cve-2024-3400 and CVE-2023-34362 before patches were applied.",
+      "expected": [
+        [
+          "cve",
+          "CVE-2024-3400"
+        ],
+        [
+          "cve",
+          "CVE-2023-34362"
+        ]
+      ]
+    },
+    {
+      "id": "cve-five-digit",
+      "text": "See CVE-2021-44228 (Log4Shell) for background.",
+      "expected": [
+        [
+          "cve",
+          "CVE-2021-44228"
+        ]
+      ]
+    },
+    {
+      "id": "url-with-query",
+      "text": "Payload: https://cdn.example.net/a/b.js?v=3&x=y.",
+      "expected": [
+        [
+          "url",
+          "https://cdn.example.net/a/b.js?v=3&x=y"
+        ],
+        [
+          "domain",
+          "cdn.example.net"
+        ]
+      ]
+    },
+    {
+      "id": "url-in-parens",
+      "text": "The lure (http://login.example.org/reset) harvested credentials.",
+      "expected": [
+        [
+          "url",
+          "http://login.example.org/reset"
+        ],
+        [
+          "domain",
+          "login.example.org"
+        ]
+      ]
+    },
+    {
+      "id": "markdown-link",
+      "text": "Read the [vendor advisory](https://psirt.example.com/advisories/42).",
+      "expected": [
+        [
+          "url",
+          "https://psirt.example.com/advisories/42"
+        ],
+        [
+          "domain",
+          "psirt.example.com"
+        ]
+      ]
+    },
+    {
+      "id": "domain-plain",
+      "text": "DNS queries for update-check.example.com spiked on Monday.",
+      "expected": [
+        [
+          "domain",
+          "update-check.example.com"
+        ]
+      ]
+    },
+    {
+      "id": "domain-uppercase",
+      "text": "Traffic to STAGING.EXAMPLE.ORG was blocked.",
+      "expected": [
+        [
+          "domain",
+          "staging.example.org"
+        ]
+      ]
+    },
+    {
+      "id": "sha256",
+      "text": "Dropper SHA256 A3F1C2D4E5B6A7980123456789ABCDEF0123456789ABCDEF0123456789ABCDEF.",
+      "expected": [
+        [
+          "sha256",
+          "a3f1c2d4e5b6a7980123456789abcdef0123456789abcdef0123456789abcdef"
+        ]
+      ]
+    },
+    {
+      "id": "sha1-md5",
+      "text": "SHA1 0123456789abcdef0123456789abcdef01234567 and MD5 0123456789abcdef0123456789abcdef.",
+      "expected": [
+        [
+          "sha1",
+          "0123456789abcdef0123456789abcdef01234567"
+        ],
+        [
+          "md5",
+          "0123456789abcdef0123456789abcdef"
+        ]
+      ]
+    },
+    {
+      "id": "mixed-report",
+      "text": "Initial access via CVE-2024-21887 on the VPN gateway; the implant contacted 192.0.2.10 and https://relay.example.com/c2 then dropped a file with MD5 fedcba9876543210fedcba9876543210.",
+      "expected": [
+        [
+          "cve",
+          "CVE-2024-21887"
+        ],
+        [
+          "ip",
+          "192.0.2.10"
+        ],
+        [
+          "url",
+          "https://relay.example.com/c2"
+        ],
+        [
+          "domain",
+          "relay.example.com"
+        ],
+        [
+          "md5",
+          "fedcba9876543210fedcba9876543210"
+        ]
+      ]
+    },
+    {
+      "id": "defanged-url",
+      "text": "Do not visit hxxp://malicious.example[.]com/payload during triage.",
+      "expected": [
+        [
+          "url",
+          "http://malicious.example.com/payload"
+        ],
+        [
+          "domain",
+          "malicious.example.com"
+        ]
+      ],
+      "note": "Known gap: defanged indicators are not refanged."
+    },
+    {
+      "id": "defanged-ip",
+      "text": "Scanner source: 192.0.2[.]15 and 198[.]51[.]100[.]3.",
+      "expected": [
+        [
+          "ip",
+          "192.0.2.15"
+        ],
+        [
+          "ip",
+          "198.51.100.3"
+        ]
+      ],
+      "note": "Known gap: defanged indicators are not refanged."
+    },
+    {
+      "id": "defanged-domain",
+      "text": "Phishing kit hosted on evil-login[.]example.",
+      "expected": [
+        [
+          "domain",
+          "evil-login.example"
+        ]
+      ],
+      "note": "Known gap: defanged indicators are not refanged."
+    },
+    {
+      "id": "email-only",
+      "text": "Report phishing to soc@example.org; the sender was spoof.user@example.net.",
+      "expected": [],
+      "note": "E-mail addresses are not an entity kind; their parts must not become domains."
+    },
+    {
+      "id": "file-names",
+      "text": "The archive invoice.pdf contained setup.exe and readme.txt.",
+      "expected": [],
+      "note": "Trap: file names look like domains."
+    },
+    {
+      "id": "version-string",
+      "text": "Fixed in firmware version 10.2.3.4 and agent 7.1.0.2.",
+      "expected": [],
+      "note": "Trap: four-part version numbers look like IPv4."
+    },
+    {
+      "id": "code-snippet",
+      "text": "The script called os.path.join and subprocess.run with shell=True.",
+      "expected": [],
+      "note": "Trap: dotted code identifiers look like domains."
+    },
+    {
+      "id": "timestamps",
+      "text": "Activity between 10:15:30 and 11:00:00 UTC on 2025-01-01.",
+      "expected": [],
+      "note": "Trap: clock times contain colons like IPv6."
+    },
+    {
+      "id": "invalid-ip",
+      "text": "A malformed entry read 999.10.10.10 in the log.",
+      "expected": []
+    },
+    {
+      "id": "credential-url",
+      "text": "A paste contained https://admin:hunter2@portal.example.com/ which we did not visit.",
+      "expected": [
+        [
+          "url",
+          "https://portal.example.com/"
+        ],
+        [
+          "domain",
+          "portal.example.com"
+        ]
+      ],
+      "note": "Credentials are stripped: the URL and its host are kept, the secret is never stored."
+    },
+    {
+      "id": "no-indicators",
+      "text": "This advisory discusses patching cadence and contains no technical indicators.",
+      "expected": []
+    },
+    {
+      "id": "notional-intrusion-report",
+      "path": "reports/notional-intrusion-report.md",
+      "expected_path": "reports/notional-intrusion-report.expected.json",
+      "note": "Full-length synthetic report (see tests/unit/test_notional_report.py)."
+    },
+    {
+      "id": "notional-salt-meridian",
+      "path": "reports/notional-salt-meridian.md",
+      "expected_path": "reports/notional-salt-meridian.expected.json",
+      "note": "Second full-length synthetic report (different indicators and edge cases)."
+    }
+  ]
+}

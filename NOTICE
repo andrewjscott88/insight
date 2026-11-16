@@ -1,0 +1,14 @@
+Insight
+Copyright (c) the Insight contributors.
+
+This product includes data derived from the Public Suffix List
+(https://publicsuffix.org/), licensed under the Mozilla Public License, v. 2.0
+(https://mozilla.org/MPL/2.0/): src/insight/data/tlds.txt contains the top-level
+labels of its ICANN section. The source of that file is the Public Suffix List
+itself; it is regenerated with scripts/update_tlds.py.
+
+Third-party Python dependencies are installed from requirements.lock and retain
+their own licences; scripts/check_licenses.py enforces the permitted set.
+
+No licence has been chosen for Insight itself yet (see README, "Scope and known
+limits"). Choose one before publishing or redistributing.

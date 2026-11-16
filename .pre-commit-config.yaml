@@ -1,0 +1,45 @@
+# Tier 0 - local, before every commit (install once: `pre-commit install --hook-type pre-commit --hook-type pre-push`).
+# Hooks call the tools pinned in requirements-dev.lock, so local results match CI exactly.
+repos:
+  - repo: local
+    hooks:
+      - id: forbidden-files
+        name: forbidden files and secrets (.env, databases, private keys)
+        entry: python scripts/check_forbidden_files.py
+        language: system
+        pass_filenames: false
+      - id: ruff-check
+        name: ruff check
+        entry: ruff check --fix
+        language: system
+        types: [python]
+      - id: ruff-format
+        name: ruff format
+        entry: ruff format
+        language: system
+        types: [python]
+      - id: mypy
+        name: mypy (strict)
+        entry: mypy
+        language: system
+        types: [python]
+        pass_filenames: false
+      - id: workflows
+        name: GitHub workflow schema + zizmor
+        entry: bash -c 'check-jsonschema --builtin-schema vendor.github-workflows .github/workflows/*.yml && zizmor --offline --min-severity medium --config .github/zizmor.yml .github/workflows'
+        language: system
+        files: ^\.github/workflows/
+        pass_filenames: false
+      - id: lock-check
+        name: lock files match pyproject.toml
+        entry: python scripts/lock.py --check
+        language: system
+        files: ^(pyproject\.toml|requirements.*)$
+        pass_filenames: false
+        stages: [pre-push]
+      - id: fast-tests
+        name: unit tests
+        entry: pytest tests/unit -q -x -p no:cacheprovider
+        language: system
+        pass_filenames: false
+        stages: [pre-push]

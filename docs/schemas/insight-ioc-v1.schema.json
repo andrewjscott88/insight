@@ -1,0 +1,280 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://insight.invalid/schemas/insight-ioc-v1.schema.json",
+  "title": "Insight IOC export (insight-ioc-v1)",
+  "description": "Cross-report indicator export produced by GET /api/iocs/export, the workspace's Export IOCs dialog and `insight export-iocs`. Not STIX. Fields may be added within v1, so consumers should ignore unknown properties; renaming or removing a field would make it v2. See docs/IOC_EXPORT.md.",
+  "type": "object",
+  "required": [
+    "format",
+    "export_id",
+    "generated_at",
+    "generator",
+    "handling_notice",
+    "tlp",
+    "defanged",
+    "filters",
+    "counts",
+    "iocs"
+  ],
+  "properties": {
+    "format": {
+      "const": "insight-ioc-v1",
+      "description": "Format identifier. Check it before reading the rest of the file."
+    },
+    "export_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique ID of this export. Also the object_id of the `ioc.export` audit event that recorded it."
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the file was produced (ISO-8601, UTC)."
+    },
+    "generator": {
+      "type": "string",
+      "description": "Producing application and version, e.g. `insight 0.2.0`."
+    },
+    "handling_notice": {
+      "type": "string",
+      "description": "Human-readable handling reminder. Not machine policy."
+    },
+    "tlp": {
+      "$ref": "#/$defs/tlp",
+      "description": "Most restrictive TLP label among the reports included in this file (AMBER when the file is empty). Handle the whole file at this label."
+    },
+    "defanged": {
+      "type": "boolean",
+      "description": "True if indicator values, report titles and evidence excerpts were defanged. Source URLs never are."
+    },
+    "filters": {
+      "$ref": "#/$defs/filters"
+    },
+    "counts": {
+      "$ref": "#/$defs/counts"
+    },
+    "iocs": {
+      "type": "array",
+      "description": "One entry per distinct indicator, sorted by kind, then value.",
+      "items": {
+        "$ref": "#/$defs/ioc"
+      }
+    }
+  },
+  "$defs": {
+    "tlp": {
+      "enum": ["CLEAR", "GREEN", "AMBER", "AMBER+STRICT", "RED"],
+      "description": "Traffic Light Protocol 2.0 label, least to most restrictive."
+    },
+    "kind": {
+      "enum": ["cve", "url", "sha512", "sha256", "sha1", "md5", "ip", "domain"]
+    },
+    "review_status": {
+      "enum": ["unreviewed", "accepted", "rejected"],
+      "description": "An analyst's verdict on one extracted mention. `accepted` means the extraction is accurate, not that the indicator is malicious."
+    },
+    "triage_status": {
+      "enum": ["new", "reviewing", "reviewed"],
+      "description": "The report's triage state in the inbox (not a verdict on any indicator)."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "filters": {
+      "type": "object",
+      "description": "The normalised filters that produced the file (defaults filled in).",
+      "required": [
+        "q",
+        "status",
+        "tlp",
+        "include_superseded",
+        "kinds",
+        "review_statuses",
+        "max_tlp",
+        "document_ids",
+        "include_evidence"
+      ],
+      "properties": {
+        "q": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Inbox search text ('' = no search)."
+        },
+        "status": {
+          "description": "Only reports with this triage status (null = any).",
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/triage_status" }]
+        },
+        "tlp": {
+          "description": "Only reports with exactly this label (null = any).",
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/tlp" }]
+        },
+        "include_superseded": {
+          "type": "boolean",
+          "description": "Whether superseded revisions of synced items were included."
+        },
+        "kinds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/kind" }
+        },
+        "review_statuses": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/review_status" }
+        },
+        "max_tlp": {
+          "description": "Reports labelled more restrictively than this were left out (null = no limit).",
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/tlp" }]
+        },
+        "document_ids": {
+          "type": "array",
+          "maxItems": 200,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 36 },
+          "description": "Only these reports ([] = no limit). Chosen reports are included even if superseded."
+        },
+        "include_evidence": {
+          "type": "boolean",
+          "description": "False if evidence excerpts were left out (every source's `evidence` is then null)."
+        }
+      }
+    },
+    "counts": {
+      "type": "object",
+      "required": ["iocs", "documents", "mentions", "by_kind"],
+      "properties": {
+        "iocs": { "type": "integer", "minimum": 0, "description": "Entries in `iocs`." },
+        "documents": { "type": "integer", "minimum": 0, "description": "Distinct reports that contributed." },
+        "mentions": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Included mentions (an indicator can be mentioned several times per report)."
+        },
+        "by_kind": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/kind" },
+          "additionalProperties": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+    "kev": {
+      "type": "object",
+      "description": "CISA Known Exploited Vulnerabilities context, as imported by the CISA KEV connector.",
+      "required": ["date_added", "due_date", "required_action", "vendor", "product", "imported_at"],
+      "properties": {
+        "date_added": { "type": "string" },
+        "due_date": { "type": "string" },
+        "required_action": { "type": "string" },
+        "vendor": { "type": "string" },
+        "product": { "type": "string" },
+        "imported_at": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "ioc": {
+      "type": "object",
+      "required": [
+        "kind",
+        "value",
+        "entity_id",
+        "tlp",
+        "first_ingested_at",
+        "last_ingested_at",
+        "review_statuses",
+        "kev",
+        "sources"
+      ],
+      "properties": {
+        "kind": { "$ref": "#/$defs/kind" },
+        "value": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Canonical value (refanged, lower-case host names, punycode for international names), or the defanged form when `defanged` is true."
+        },
+        "entity_id": {
+          "type": "string",
+          "description": "Insight's ID for this indicator; use it with GET /api/entities/{id} to pivot."
+        },
+        "tlp": {
+          "$ref": "#/$defs/tlp",
+          "description": "Most restrictive label among this indicator's included sources."
+        },
+        "first_ingested_at": {
+          "$ref": "#/$defs/timestamp",
+          "description": "When the oldest included source was added to Insight (not a publication or sighting date)."
+        },
+        "last_ingested_at": {
+          "$ref": "#/$defs/timestamp",
+          "description": "When the newest included source was added to Insight."
+        },
+        "review_statuses": {
+          "type": "object",
+          "description": "Number of included mentions per review status.",
+          "minProperties": 1,
+          "propertyNames": { "$ref": "#/$defs/review_status" },
+          "additionalProperties": { "type": "integer", "minimum": 1 }
+        },
+        "kev": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/kev" }],
+          "description": "KEV context for CVEs that are in the imported CISA KEV catalogue; otherwise null."
+        },
+        "sources": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Every included report that mentions the indicator, oldest first.",
+          "items": { "$ref": "#/$defs/source" }
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "required": [
+        "document_id",
+        "title",
+        "source_name",
+        "source_url",
+        "tlp",
+        "status",
+        "created_at",
+        "is_current",
+        "extractor_version",
+        "mentions",
+        "evidence"
+      ],
+      "properties": {
+        "document_id": {
+          "type": "string",
+          "description": "Report ID; GET /api/documents/{id} returns the full report."
+        },
+        "title": { "type": "string", "description": "As stored, or defanged when `defanged` is true." },
+        "source_name": { "type": "string" },
+        "source_url": { "type": "string", "description": "Publisher link ('' if none); never defanged." },
+        "tlp": { "$ref": "#/$defs/tlp" },
+        "status": { "$ref": "#/$defs/triage_status" },
+        "created_at": {
+          "$ref": "#/$defs/timestamp",
+          "description": "When the report was added to Insight."
+        },
+        "is_current": {
+          "type": "boolean",
+          "description": "False for a superseded revision (included with include_superseded or document_ids)."
+        },
+        "extractor_version": {
+          "type": "string",
+          "description": "Extractor that produced this report's observations, e.g. `regex-v2`."
+        },
+        "mentions": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Included mentions of this indicator in this report."
+        },
+        "evidence": {
+          "type": ["string", "null"],
+          "description": "Text around the first included mention (up to 90 characters either side), cut at arbitrary character positions. Defanged when `defanged` is true; null when the export was made without evidence."
+        }
+      }
+    }
+  }
+}

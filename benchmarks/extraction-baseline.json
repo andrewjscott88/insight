@@ -1,0 +1,41 @@
+{
+  "corpus_sha256": "86f0de8696a49a7ec0841e0ad28ea794dd172a30715eae750db2414e4471d791",
+  "scores": {
+    "cve": {
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "domain": {
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "ip": {
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "md5": {
+      "precision": 0.6667,
+      "recall": 1.0
+    },
+    "sha1": {
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "sha256": {
+      "precision": 1.0,
+      "recall": 0.8
+    },
+    "sha512": {
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "url": {
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "overall": {
+      "precision": 0.9785,
+      "recall": 0.9891
+    }
+  }
+}

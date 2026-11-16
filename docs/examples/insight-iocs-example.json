@@ -1,0 +1,236 @@
+{
+  "format": "insight-ioc-v1",
+  "export_id": "00000000-0000-4000-8000-000000000001",
+  "generated_at": "2026-01-16T09:00:00+00:00",
+  "generator": "insight 0.2.0",
+  "handling_notice": "Local export only. Preserve TLP and publisher restrictions. Not STIX. Extraction is not a maliciousness verdict: \"accepted\" means an analyst confirmed the extraction is accurate, not that the indicator is malicious.",
+  "tlp": "AMBER+STRICT",
+  "defanged": false,
+  "filters": {
+    "q": "",
+    "status": null,
+    "tlp": null,
+    "include_superseded": false,
+    "kinds": [
+      "cve",
+      "url",
+      "sha512",
+      "sha256",
+      "sha1",
+      "md5",
+      "ip",
+      "domain"
+    ],
+    "review_statuses": [
+      "unreviewed",
+      "accepted"
+    ],
+    "max_tlp": null,
+    "document_ids": [],
+    "include_evidence": true
+  },
+  "counts": {
+    "iocs": 6,
+    "documents": 3,
+    "mentions": 8,
+    "by_kind": {
+      "cve": 2,
+      "domain": 1,
+      "ip": 1,
+      "sha256": 1,
+      "url": 1
+    }
+  },
+  "iocs": [
+    {
+      "kind": "cve",
+      "value": "CVE-2023-34362",
+      "entity_id": "00000000-0000-4000-8000-000000000002",
+      "tlp": "AMBER+STRICT",
+      "first_ingested_at": "2026-01-15T09:10:00+00:00",
+      "last_ingested_at": "2026-01-15T09:10:00+00:00",
+      "review_statuses": {
+        "unreviewed": 1
+      },
+      "kev": null,
+      "sources": [
+        {
+          "document_id": "00000000-0000-4000-8000-000000000003",
+          "title": "Training scenario: suspicious file reference",
+          "source_name": "Synthetic malware exercise",
+          "source_url": "",
+          "tlp": "AMBER+STRICT",
+          "status": "new",
+          "created_at": "2026-01-15T09:10:00+00:00",
+          "is_current": true,
+          "extractor_version": "regex-v2",
+          "mentions": 1,
+          "evidence": "A256: a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3. The text includes CVE-2023-34362 as background reading. A hash appearing in a report does not establish that the file is m"
+        }
+      ]
+    },
+    {
+      "kind": "cve",
+      "value": "CVE-2024-3400",
+      "entity_id": "00000000-0000-4000-8000-000000000004",
+      "tlp": "CLEAR",
+      "first_ingested_at": "2026-01-15T09:00:00+00:00",
+      "last_ingested_at": "2026-01-15T09:00:00+00:00",
+      "review_statuses": {
+        "unreviewed": 1
+      },
+      "kev": null,
+      "sources": [
+        {
+          "document_id": "00000000-0000-4000-8000-000000000005",
+          "title": "Training scenario: edge appliance activity",
+          "source_name": "Synthetic lab bulletin",
+          "source_url": "",
+          "tlp": "CLEAR",
+          "status": "reviewed",
+          "created_at": "2026-01-15T09:00:00+00:00",
+          "is_current": true,
+          "extractor_version": "regex-v2",
+          "mentions": 1,
+          "evidence": "2.0.2.44 connecting to https://relay.example.org/beacon?case=Alpha. The bulletin mentions CVE-2024-3400 as a research reference, not evidence that the lab appliance was exploited. Validate the "
+        }
+      ]
+    },
+    {
+      "kind": "domain",
+      "value": "relay.example.org",
+      "entity_id": "00000000-0000-4000-8000-000000000006",
+      "tlp": "GREEN",
+      "first_ingested_at": "2026-01-15T09:00:00+00:00",
+      "last_ingested_at": "2026-01-15T09:05:00+00:00",
+      "review_statuses": {
+        "unreviewed": 1,
+        "accepted": 1
+      },
+      "kev": null,
+      "sources": [
+        {
+          "document_id": "00000000-0000-4000-8000-000000000005",
+          "title": "Training scenario: edge appliance activity",
+          "source_name": "Synthetic lab bulletin",
+          "source_url": "",
+          "tlp": "CLEAR",
+          "status": "reviewed",
+          "created_at": "2026-01-15T09:00:00+00:00",
+          "is_current": true,
+          "extractor_version": "regex-v2",
+          "mentions": 1,
+          "evidence": "raining data, not real intelligence. An analyst observed 192.0.2.44 connecting to https://relay.example.org/beacon?case=Alpha. The bulletin mentions CVE-2024-3400 as a research reference, not evide"
+        },
+        {
+          "document_id": "00000000-0000-4000-8000-000000000007",
+          "title": "Training scenario: shared infrastructure pivot",
+          "source_name": "Synthetic hunt notes",
+          "source_url": "",
+          "tlp": "GREEN",
+          "status": "new",
+          "created_at": "2026-01-15T09:05:00+00:00",
+          "is_current": true,
+          "extractor_version": "regex-v2",
+          "mentions": 1,
+          "evidence": "This is synthetic training data. The host relay.example.org and 192.0.2.44 appear in a second lab report. Their co-occurrence is a lead, not proof of"
+        }
+      ]
+    },
+    {
+      "kind": "ip",
+      "value": "192.0.2.44",
+      "entity_id": "00000000-0000-4000-8000-000000000008",
+      "tlp": "GREEN",
+      "first_ingested_at": "2026-01-15T09:00:00+00:00",
+      "last_ingested_at": "2026-01-15T09:05:00+00:00",
+      "review_statuses": {
+        "unreviewed": 1,
+        "accepted": 1
+      },
+      "kev": null,
+      "sources": [
+        {
+          "document_id": "00000000-0000-4000-8000-000000000005",
+          "title": "Training scenario: edge appliance activity",
+          "source_name": "Synthetic lab bulletin",
+          "source_url": "",
+          "tlp": "CLEAR",
+          "status": "reviewed",
+          "created_at": "2026-01-15T09:00:00+00:00",
+          "is_current": true,
+          "extractor_version": "regex-v2",
+          "mentions": 1,
+          "evidence": "This is synthetic training data, not real intelligence. An analyst observed 192.0.2.44 connecting to https://relay.example.org/beacon?case=Alpha. The bulletin mentions CVE-2024"
+        },
+        {
+          "document_id": "00000000-0000-4000-8000-000000000007",
+          "title": "Training scenario: shared infrastructure pivot",
+          "source_name": "Synthetic hunt notes",
+          "source_url": "",
+          "tlp": "GREEN",
+          "status": "new",
+          "created_at": "2026-01-15T09:05:00+00:00",
+          "is_current": true,
+          "extractor_version": "regex-v2",
+          "mentions": 1,
+          "evidence": "This is synthetic training data. The host relay.example.org and 192.0.2.44 appear in a second lab report. Their co-occurrence is a lead, not proof of attribution. A"
+        }
+      ]
+    },
+    {
+      "kind": "sha256",
+      "value": "a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3",
+      "entity_id": "00000000-0000-4000-8000-000000000009",
+      "tlp": "AMBER+STRICT",
+      "first_ingested_at": "2026-01-15T09:10:00+00:00",
+      "last_ingested_at": "2026-01-15T09:10:00+00:00",
+      "review_statuses": {
+        "unreviewed": 1
+      },
+      "kev": null,
+      "sources": [
+        {
+          "document_id": "00000000-0000-4000-8000-000000000003",
+          "title": "Training scenario: suspicious file reference",
+          "source_name": "Synthetic malware exercise",
+          "source_url": "",
+          "tlp": "AMBER+STRICT",
+          "status": "new",
+          "created_at": "2026-01-15T09:10:00+00:00",
+          "is_current": true,
+          "extractor_version": "regex-v2",
+          "mentions": 1,
+          "evidence": "This is synthetic training data. Sample SHA256: a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3. The text includes CVE-2023-34362 as background reading. A hash appearing in a report doe"
+        }
+      ]
+    },
+    {
+      "kind": "url",
+      "value": "https://relay.example.org/beacon?case=Alpha",
+      "entity_id": "00000000-0000-4000-8000-000000000010",
+      "tlp": "CLEAR",
+      "first_ingested_at": "2026-01-15T09:00:00+00:00",
+      "last_ingested_at": "2026-01-15T09:00:00+00:00",
+      "review_statuses": {
+        "unreviewed": 1
+      },
+      "kev": null,
+      "sources": [
+        {
+          "document_id": "00000000-0000-4000-8000-000000000005",
+          "title": "Training scenario: edge appliance activity",
+          "source_name": "Synthetic lab bulletin",
+          "source_url": "",
+          "tlp": "CLEAR",
+          "status": "reviewed",
+          "created_at": "2026-01-15T09:00:00+00:00",
+          "is_current": true,
+          "extractor_version": "regex-v2",
+          "mentions": 1,
+          "evidence": "thetic training data, not real intelligence. An analyst observed 192.0.2.44 connecting to https://relay.example.org/beacon?case=Alpha. The bulletin mentions CVE-2024-3400 as a research reference, not evidence that the lab a"
+        }
+      ]
+    }
+  ]
+}

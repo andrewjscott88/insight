@@ -1,0 +1,44 @@
+# Weekly dependency refresh: regenerates every lock file with the newest versions pyproject.toml allows and
+# opens a pull request, which then has to pass the full Tier 1 pipeline like any other change.
+name: Lock refresh
+
+on:
+  schedule:
+    - cron: '41 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - run: pip install "uv==0.13.7"
+      - run: python scripts/lock.py --upgrade
+      - name: Open or update the pull request
+        env:
+          # PRs opened with the default GITHUB_TOKEN do not trigger other workflows. Provide a fine-grained PAT
+          # or GitHub App token as LOCK_REFRESH_TOKEN so the PR runs CI (see docs/CI_CD.md).
+          GH_TOKEN: ${{ secrets.LOCK_REFRESH_TOKEN || github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          if git diff --quiet -- 'requirements*.lock'; then echo 'Locks already current.'; exit 0; fi
+          branch=deps/lock-refresh
+          git config user.name 'insight-bot'
+          git config user.email 'insight-bot@users.noreply.github.com'
+          git checkout -B "$branch"
+          git commit -am 'deps: weekly lock refresh'
+          git push --force "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" "$branch"
+          gh pr view "$branch" --repo "$REPO" >/dev/null 2>&1 || gh pr create --repo "$REPO" --head "$branch" \
+            --title 'deps: weekly lock refresh' --body 'Automated `python scripts/lock.py --upgrade`. Review the diff and CI.'

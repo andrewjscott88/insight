@@ -1,0 +1,161 @@
+# Tier 4 - release gate. Final tags only (vX.Y.Z). Publishes a signed, attested image to GHCR and a GitHub
+# Release. "CD" for Insight means *publishing*: users pull the image; nothing is deployed to a server.
+name: Release
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  verify:
+    name: Pre-release checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Version, changelog, validation report, upgrade fixture
+        run: python scripts/check_release.py "${TAG}"
+        env:
+          TAG: ${{ github.ref_name }}
+      - name: Everything pinned (base image digests, action SHAs)
+        run: python scripts/check_pins.py --strict
+      - name: The same commit passed the milestone gate as a release candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          passed="$(gh run list --repo "$REPO" --workflow milestone-gate.yml --commit "$GITHUB_SHA" \
+            --status success --json databaseId --jq 'length')"
+          if [ "${passed}" -lt 1 ]; then
+            echo "::error::No successful milestone-gate run for ${GITHUB_SHA}. Tag vX.Y.Z-rc.N first."
+            exit 1
+          fi
+
+  publish:
+    name: Build, sign, attest, publish
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: release  # configure required reviewers on this environment
+    permissions:
+      contents: write  # GitHub Release
+      packages: write  # GHCR push
+      id-token: write  # keyless cosign signing and build provenance
+      attestations: write
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Build the wheel (same procedure as the image)
+        run: |
+          python -m venv /tmp/build && /tmp/build/bin/pip install --require-hashes -r requirements-build.lock
+          /tmp/build/bin/pip wheel --no-deps --no-build-isolation --wheel-dir dist .
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+      - id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ github.ref_name }}
+            REVISION=${{ github.sha }}
+          sbom: true
+          provenance: mode=max
+      - uses: sigstore/cosign-installer@v3
+      - name: Sign the image (keyless, OIDC)
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: cosign sign --yes "${IMAGE}@${DIGEST}"
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/*.whl
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          python scripts/release_notes.py "${TAG}" > notes.md
+          printf '\n\n**Image:** `%s@%s`\n\nVerify: `cosign verify %s@%s --certificate-identity-regexp "^https://github.com/%s/" --certificate-oidc-issuer https://token.actions.githubusercontent.com`\n' \
+            "$IMAGE" "$DIGEST" "$IMAGE" "$DIGEST" "$GITHUB_REPOSITORY" >> notes.md
+          gh release create "${TAG}" --repo "$GITHUB_REPOSITORY" --title "Insight ${TAG}" --notes-file notes.md \
+            dist/*.whl requirements.lock docs/VALIDATION.md
+
+  post-release:
+    name: Verify what was published
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: sigstore/cosign-installer@v3
+      - name: Signature verifies for this repository's workflow identity
+        env:
+          DIGEST: ${{ needs.publish.outputs.digest }}
+        run: |
+          cosign verify "${IMAGE}@${DIGEST}" \
+            --certificate-identity-regexp "^https://github.com/${GITHUB_REPOSITORY}/" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com
+      - name: Pull by digest and smoke test
+        env:
+          DIGEST: ${{ needs.publish.outputs.digest }}
+        run: |
+          password="$(openssl rand -hex 16)"
+          echo "::add-mask::${password}"
+          echo "SMOKE_PASSWORD=${password}" >> "$GITHUB_ENV"
+          docker run -d --name insight --read-only --tmpfs /tmp --cap-drop ALL -p 127.0.0.1:8080:8080 \
+            -e INSIGHT_PASSWORD="${password}" -e INSIGHT_SESSION_SECRET="$(openssl rand -hex 32)" \
+            "${IMAGE}@${DIGEST}"
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - run: |
+          pip install --require-hashes -r requirements.lock
+          python scripts/smoke.py http://127.0.0.1:8080 --password "${SMOKE_PASSWORD}"

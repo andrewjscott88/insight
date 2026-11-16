@@ -1,0 +1,7 @@
+# zizmor policy. Tag pins are tolerated on every push for now; full commit-SHA pins are enforced at the release
+# gate (`scripts/check_pins.py --strict`). After pinning (see docs/CI_CD.md), change "ref-pin" to "hash-pin".
+rules:
+  unpinned-uses:
+    config:
+      policies:
+        '*': ref-pin

@@ -1,0 +1,154 @@
+# Tier 2 - nightly, advisory. Never blocks merges; any failure opens (or updates) a GitHub issue.
+name: Nightly
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONUNBUFFERED: '1'
+  PIP_DISABLE_PIP_VERSION_CHECK: '1'
+  UV_VERSION: '0.13.7'
+
+jobs:
+  live-sources:
+    name: Live contract tests (real publishers)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - run: pip install --require-hashes -r requirements-dev.lock && pip install --no-deps -e .
+      - run: pytest tests/live -m live -v
+        env:
+          INSIGHT_LIVE_TESTS: '1'
+
+  deep-properties:
+    name: Property tests (5,000 examples)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - run: pip install --require-hashes -r requirements-dev.lock && pip install --no-deps -e .
+      - run: pytest tests/unit/test_extraction.py -k 'invariants or deterministic' -v
+        env:
+          HYPOTHESIS_PROFILE: nightly
+
+  mutation:
+    name: Mutation testing
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Separate environment (mutmut 3.8 needs pytest < 9; the project is deliberately not installed)
+        run: pip install --require-hashes -r requirements-dev.lock && pip install "pytest<9" "mutmut==3.8.0"
+      - run: mutmut run --max-children 4
+      - name: Score against the ratchet (raise MUTATION_SCORE_MIN as tests improve; never lower it)
+        if: always()
+        env:
+          MUTATION_SCORE_MIN: '0.86'  # 0.2.0: 86.5% of 1,910 mutants (raise as the score improves)
+        run: |
+          mutmut results --all true > mutmut-results.txt || true
+          python - <<'PY'
+          import collections, os, sys
+          counts = collections.Counter(line.rsplit(': ', 1)[-1].strip() for line in open('mutmut-results.txt') if ': ' in line)
+          scored = counts['killed'] + counts['survived'] + counts['no tests'] + counts['timeout']
+          score = counts['killed'] / scored if scored else 0.0
+          minimum = float(os.environ['MUTATION_SCORE_MIN'])
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write(f'## Mutation testing\n\nScore **{score:.1%}** (minimum {minimum:.0%})\n\n')
+              summary.write('\n'.join(f'- {k}: {v}' for k, v in sorted(counts.items())) + '\n')
+          sys.exit(0 if score >= minimum else 1)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mutation-results
+          path: mutmut-results.txt
+          retention-days: 90
+
+  fresh-dependencies:
+    name: Newest allowed dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - run: pip install "uv==${UV_VERSION}"
+      - name: Resolve the newest versions pyproject.toml allows and run the suite against them
+        run: |
+          uv pip compile pyproject.toml --extra dev --upgrade -o /tmp/fresh.txt
+          diff <(grep '==' requirements-dev.lock | cut -d' ' -f1 | sort) <(grep '==' /tmp/fresh.txt | cut -d' ' -f1 | sort) \
+            > /tmp/changes.txt || true
+          { echo '## Dependency drift'; echo '```'; cat /tmp/changes.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          pip install -r /tmp/fresh.txt && pip install --no-deps -e .
+          pytest -x -q -p no:randomly
+
+  image-rescan:
+    name: Re-scan the latest released image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Find the latest release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          tag="$(gh release view --repo "$REPO" --json tagName --jq .tagName 2>/dev/null || true)"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+      - name: Trivy (new CVEs in already shipped images)
+        if: steps.release.outputs.tag != ''
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ghcr.io/${{ github.repository }}:${{ steps.release.outputs.tag }}
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '1'
+
+  report:
+    name: Open or update the nightly-failure issue
+    needs: [live-sources, deep-properties, mutation, fresh-dependencies, image-rescan]
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title='Nightly pipeline failure'
+          number="$(gh issue list --repo "$REPO" --state open --search "in:title ${title}" --json number --jq '.[0].number')"
+          body="The nightly pipeline failed: ${RUN_URL}"
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --repo "$REPO" --body "$body"
+          else
+            gh issue create --repo "$REPO" --title "$title" --body "$body"
+          fi

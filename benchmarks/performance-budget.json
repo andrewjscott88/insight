@@ -1,0 +1,8 @@
+{
+  "_comment": "Generous ceilings for a single-user pilot on a CI runner; tighten as real usage data arrives.",
+  "documents": 1000,
+  "ingest_seconds_max": 60.0,
+  "search_p95_ms_max": 250.0,
+  "list_page_queries_max": 2,
+  "detail_p95_ms_max": 100.0
+}

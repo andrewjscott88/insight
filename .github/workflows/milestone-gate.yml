@@ -1,0 +1,165 @@
+# Tier 3 - milestone gate. Runs for release-candidate tags (vX.Y.Z-rc.N) or on demand. A final release tag is
+# only publishable if the *same commit* passed this gate (enforced by release.yml).
+name: Milestone gate
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONUNBUFFERED: '1'
+  PIP_DISABLE_PIP_VERSION_CHECK: '1'
+
+jobs:
+  ci:
+    name: Tier 1 checks
+    uses: ./.github/workflows/ci.yml
+
+  release-metadata:
+    name: Version, changelog, validation report
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - run: python scripts/check_release.py "${TAG}"
+        env:
+          TAG: ${{ github.ref_name }}
+
+  benchmarks:
+    name: Extraction quality and performance budget
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - run: pip install --require-hashes -r requirements-dev.lock && pip install --no-deps -e .
+      - name: Extraction quality (no regression > 1 point per entity kind)
+        run: python scripts/benchmark_extraction.py --report extraction.md
+      - name: Performance budget (SQLite)
+        run: python scripts/benchmark_performance.py --report performance-sqlite.md
+      - name: Performance budget (PostgreSQL)
+        run: >-
+          python scripts/benchmark_performance.py --report performance-postgres.md
+          --database-url postgresql+psycopg://postgres:postgres@127.0.0.1:5432/postgres
+      - name: Publish reports
+        if: always()
+        run: cat extraction.md performance-sqlite.md performance-postgres.md >> "$GITHUB_STEP_SUMMARY" || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: benchmark-reports
+          path: '*.md'
+          retention-days: 90
+
+  backup-drill:
+    name: Backup and restore drill
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - run: pip install --require-hashes -r requirements.lock && pip install --no-deps .
+      - run: python scripts/backup_restore_drill.py
+
+  browser-and-dast:
+    name: Browser end-to-end + OWASP ZAP against the container
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - run: docker build -t insight:rc .
+      - name: Start the container exactly as Compose does
+        run: |
+          password="$(openssl rand -hex 16)"
+          echo "::add-mask::${password}"
+          echo "E2E_PASSWORD=${password}" >> "$GITHUB_ENV"
+          docker run -d --name insight --read-only --tmpfs /tmp --cap-drop ALL \
+            --security-opt no-new-privileges:true -p 8080:8080 \
+            -e INSIGHT_PASSWORD="${password}" -e INSIGHT_SESSION_SECRET="$(openssl rand -hex 32)" insight:rc
+      - name: Install browser test tooling
+        run: |
+          pip install --require-hashes -r requirements-e2e.lock && pip install --no-deps -e .
+          python -m playwright install --with-deps chromium
+      - run: python scripts/smoke.py http://127.0.0.1:8080 --password "${E2E_PASSWORD}"
+      - name: Playwright (Chromium)
+        run: pytest tests/e2e -m e2e -v --junitxml=junit-e2e.xml
+        env:
+          INSIGHT_E2E_URL: http://127.0.0.1:8080
+          INSIGHT_E2E_PASSWORD: ${{ env.E2E_PASSWORD }}
+      - name: OWASP ZAP baseline scan, signed in (fails on FAIL-level alerts)
+        run: |
+          cookie="$(python scripts/smoke.py http://127.0.0.1:8080 --password "${E2E_PASSWORD}" --no-demo --print-cookie)"
+          echo "::add-mask::${cookie#insight_session=}"
+          mkdir -p zap && chmod 777 zap
+          docker run --rm --network host -v "${PWD}/zap:/zap/wrk" ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py -t http://127.0.0.1:8080/ -I -r zap-report.html -J zap-report.json \
+            -z "-config replacer.full_list(0).description=session -config replacer.full_list(0).enabled=true \
+                -config replacer.full_list(0).matchtype=REQ_HEADER -config replacer.full_list(0).matchstr=Cookie \
+                -config replacer.full_list(0).replacement=${cookie}"
+      - if: failure()
+        run: docker logs insight
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-and-dast
+          path: |
+            junit-e2e.xml
+            zap/
+          retention-days: 90
+
+  supply-chain:
+    name: Licences and SBOM
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - run: pip install --require-hashes -r requirements-dev.lock && pip install --no-deps -e .
+      - run: python scripts/check_licenses.py
+      - name: CycloneDX SBOM of the runtime dependency set
+        run: |
+          # --strict: without it an unreachable vulnerability service still exits 0 and writes an empty SBOM.
+          pip-audit --strict --require-hashes --disable-pip -r requirements.lock -s osv \
+            -f cyclonedx-json -o sbom-python.cdx.json
+          python -c "import json,sys; n=len(json.load(open('sbom-python.cdx.json')).get('components',[])); print(n,'components'); sys.exit(n==0)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom-python.cdx.json
+          retention-days: 90

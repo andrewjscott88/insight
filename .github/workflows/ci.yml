@@ -1,0 +1,204 @@
+# Tier 1 - every push to main, every pull request and merge-queue entry. Blocks merging.
+# Also called by the milestone gate (workflow_call) so release candidates re-run exactly these checks.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  merge_group:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  PYTHONUNBUFFERED: '1'
+  PIP_DISABLE_PIP_VERSION_CHECK: '1'
+  UV_VERSION: '0.13.7'
+
+jobs:
+  quality:
+    name: Lint, types, locks, workflow security
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Install tooling from the hash-pinned lock
+        run: |
+          pip install --require-hashes -r requirements-dev.lock
+          pip install --no-deps -e .
+          pip install "uv==${UV_VERSION}"
+      - run: pip check
+      - run: ruff check src tests scripts
+      - run: ruff format --check src tests scripts
+      - run: mypy
+      - name: Lock files match pyproject.toml
+        run: python scripts/lock.py --check
+      - name: Forbidden files and secrets
+        run: python scripts/check_forbidden_files.py
+      - name: Workflow schema
+        run: check-jsonschema --builtin-schema vendor.github-workflows .github/workflows/*.yml
+      - name: Workflow security (zizmor)
+        run: zizmor --offline --min-severity medium --config .github/zizmor.yml .github/workflows
+      - name: Pinning report (blocking only at the release gate)
+        run: python scripts/check_pins.py
+
+  test:
+    name: Tests (Python ${{ matrix.python-version }}, SQLite)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12', '3.13', '3.14']
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install --require-hashes -r requirements-dev.lock && pip install --no-deps -e .
+      - name: pytest (unit, API, UI simulation, benchmarks-as-tests)
+        run: pytest --cov --cov-report=term-missing --cov-report=xml --cov-fail-under=90 --junitxml=junit.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-${{ matrix.python-version }}
+          path: |
+            junit.xml
+            coverage.xml
+          retention-days: 90
+
+  test-postgres:
+    name: Tests (Python 3.13, PostgreSQL 16)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      INSIGHT_TEST_DATABASE_URL: postgresql+psycopg://postgres:postgres@127.0.0.1:5432/postgres
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - run: pip install --require-hashes -r requirements-dev.lock && pip install --no-deps -e .
+      - run: pytest -m "not slow" --junitxml=junit-postgres.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-postgres
+          path: junit-postgres.xml
+          retention-days: 90
+
+  security:
+    name: Dependency audit and secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Known vulnerabilities in runtime dependencies
+        run: |
+          pip install --require-hashes -r requirements-dev.lock
+          # --strict: fail if any dependency could not be audited (offline runs otherwise "pass" vacuously).
+          pip-audit --strict --require-hashes --disable-pip -r requirements.lock --vulnerability-service osv
+      - name: Secrets in git history (gitleaks)
+        run: >-
+          docker run --rm -v "${PWD}:/repo" zricethezav/gitleaks:v8.18.4
+          detect --source /repo --redact --verbose --exit-code 1
+
+  package:
+    name: Wheel build, clean install, licences
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Build the wheel exactly like the Dockerfile does
+        run: |
+          python -m venv /tmp/build && /tmp/build/bin/pip install --require-hashes -r requirements-build.lock
+          /tmp/build/bin/pip wheel --no-deps --no-build-isolation --wheel-dir dist .
+      - name: Install into a clean runtime environment
+        run: |
+          python -m venv /tmp/runtime
+          /tmp/runtime/bin/pip install --require-hashes -r requirements.lock
+          /tmp/runtime/bin/pip install --no-deps --no-index dist/*.whl
+          /tmp/runtime/bin/pip check
+          /tmp/runtime/bin/insight --version
+      - name: Upgrade the oldest release fixture with the installed wheel
+        run: |
+          cp tests/fixtures/releases/insight-0.1.0.sqlite3 /tmp/upgrade.db
+          INSIGHT_DATABASE_URL=sqlite:////tmp/upgrade.db /tmp/runtime/bin/insight migrate
+      - name: Runtime licence policy
+        run: /tmp/runtime/bin/python scripts/check_licenses.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel
+          path: dist/*.whl
+          retention-days: 30
+
+  container:
+    name: Container build, scan, read-only smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - run: docker build --build-arg VERSION=ci --build-arg "REVISION=${GITHUB_SHA}" -t insight:ci .
+      - name: Vulnerability scan (Trivy)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: insight:ci
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '1'
+      - name: Run like production (read-only root, no capabilities, loopback only)
+        run: |
+          echo "SMOKE_PASSWORD=$(openssl rand -hex 16)" >> "$GITHUB_ENV"
+      - run: |
+          docker run -d --name insight --read-only --tmpfs /tmp --cap-drop ALL \
+            --security-opt no-new-privileges:true -p 127.0.0.1:8080:8080 \
+            -e INSIGHT_PASSWORD="${SMOKE_PASSWORD}" -e INSIGHT_SESSION_SECRET="$(openssl rand -hex 32)" \
+            -v insight-data:/data insight:ci
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Smoke test
+        run: |
+          pip install --require-hashes -r requirements.lock
+          python scripts/smoke.py http://127.0.0.1:8080 --password "${SMOKE_PASSWORD}"
+      - name: Container health
+        run: test "$(docker inspect -f '{{.State.Running}}' insight)" = true
+      - if: failure()
+        run: docker logs insight

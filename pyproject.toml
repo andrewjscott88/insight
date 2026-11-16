@@ -1,0 +1,185 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "insight"
+dynamic = ["version"]
+description = "Evidence-first, local threat intelligence workbench"
+readme = "README.md"
+requires-python = ">=3.11"
+classifiers = [
+    "Private :: Do Not Upload",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Framework :: FastAPI",
+    "Typing :: Typed",
+]
+dependencies = [
+    "fastapi>=0.115,<1",
+    # Imported directly by main.py (middleware, ASGI types), so declared rather than inherited via FastAPI.
+    # The floor matches NiceGUI's own requirement.
+    "starlette>=1.3.1,<2",
+    "uvicorn[standard]>=0.30,<1",
+    "sqlalchemy>=2.0,<3",
+    "jinja2>=3.1.6,<4",
+    "python-multipart>=0.0.20,<1",
+    "itsdangerous>=2.2,<3",
+    # NiceGUI 4.x does not exist (the previous pin made the project uninstallable).
+    "nicegui>=3.18,<4",
+    "httpx>=0.28,<1",
+    "defusedxml>=0.7,<1",
+    "python-dotenv>=1,<2",
+    "pydantic>=2.7,<3",
+    "alembic>=1.14,<2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8,<10",
+    "pytest-asyncio>=1.0",
+    "pytest-cov>=6",
+    "hypothesis>=6.100",
+    # Starlette >= 1.x TestClient prefers httpx2 and warns when falling back to httpx.
+    "httpx2>=2",
+    "ruff>=0.11,<1",
+    "mypy>=1.15",
+    # Lets the whole suite run against PostgreSQL (INSIGHT_TEST_DATABASE_URL); CI does this on every push.
+    "psycopg[binary]>=3.2,<4",
+    # CI pipeline linting: workflow schema validation and GitHub Actions security audit.
+    "check-jsonschema>=0.29",
+    # Validates IOC exports against docs/schemas/insight-ioc-v1.schema.json in the test suite.
+    "jsonschema>=4.23",
+    "zizmor>=1.0",
+    "pip-audit>=2.7",
+    "pre-commit>=4",
+]
+postgres = ["psycopg[binary]>=3.2,<4"]
+# Browser end-to-end tests (milestone gate). Install browsers with `playwright install chromium`.
+e2e = ["playwright>=1.58,<2"]
+
+[project.scripts]
+insight = "insight.cli:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "insight.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+insight = [
+    "templates/*.html", "static/*", "py.typed", "data/*.txt",
+    "migrations/script.py.mako", "migrations/versions/*.py",
+]
+
+# --------------------------------------------------------------------------- pytest
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+pythonpath = ["."]  # makes `scripts` importable for its unit tests
+addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+xfail_strict = true
+filterwarnings = [
+    "error",
+    # Third-party deprecations we cannot fix from here.
+    "ignore::DeprecationWarning:nicegui.*",
+    "ignore::DeprecationWarning:engineio.*",
+    "ignore::DeprecationWarning:socketio.*",
+]
+markers = [
+    "ui: NiceGUI interaction tests (in-process user simulation)",
+    "slow: tests that spawn subprocesses or take more than a second",
+    "live: contacts real third-party sources; only runs with INSIGHT_LIVE_TESTS=1 (nightly)",
+    "e2e: real-browser tests against a running server; only runs with INSIGHT_E2E_URL set (milestone gate)",
+]
+
+[tool.coverage.run]
+# By path, not package: Alembic executes migrations/env.py under a module name outside the package.
+source = ["src/insight"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+exclude_also = ["if TYPE_CHECKING:", "if __name__ == .__main__.:"]
+
+# --------------------------------------------------------------------------- ruff
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+src = ["src", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",    # pycodestyle
+    "F",         # pyflakes
+    "I",         # isort
+    "UP",        # pyupgrade
+    "B",         # bugbear
+    "S",         # bandit (security)
+    "SIM",       # simplify
+    "C4",        # comprehensions
+    "RET",       # return
+    "PIE",       # misc
+    "PT",        # pytest style
+    "PTH",       # pathlib
+    "DTZ",       # timezone-aware datetimes
+    "ASYNC",     # async pitfalls
+    "PERF",      # performance
+    "PGH",       # pygrep hooks
+    "LOG", "G",  # logging
+    "T20",       # print
+    "FA",        # future annotations
+    "RUF",       # ruff-specific
+]
+ignore = [
+    "RUF001",    # intentional typographic characters (·, –, ✳) in UI copy
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S104", "S105", "S106", "S603", "S607"]
+"src/insight/cli.py" = ["T201", "S104"]
+"scripts/**" = ["T201", "S603", "S607"]
+"src/insight/migrations/versions/**" = ["S608"]
+# Nested `with` blocks mirror the visual layout tree in NiceGUI; flattening them hurts readability.
+"src/insight/ui.py" = ["SIM117"]
+
+[tool.ruff.format]
+quote-style = "single"
+
+# --------------------------------------------------------------------------- mypy
+[tool.mypy]
+python_version = "3.11"
+files = ["src", "tests", "scripts"]
+mypy_path = ["src", "."]
+explicit_package_bases = true
+strict = true
+warn_unreachable = true
+enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["defusedxml.*", "playwright.*", "jsonschema.*"]
+ignore_missing_imports = true
+
+# --------------------------------------------------------------------------- mutation testing (nightly)
+# Run in a separate environment: `pip install -r requirements-dev.lock "pytest<9" mutmut==3.8.0` *without*
+# installing the project (mutmut 3.8 is not yet compatible with pytest 9). See docs/CI_CD.md.
+[tool.mutmut]
+source_paths = ["src/insight/extraction.py", "src/insight/connectors.py", "src/insight/services.py"]
+also_copy = [
+    "src/insight", "scripts", "benchmarks", "docs", ".github", "CHANGELOG.md", "Dockerfile",
+    "requirements.lock", "requirements-dev.lock", "requirements-e2e.lock", "requirements-build.lock",
+]
+pytest_add_cli_args_test_selection = ["tests/unit", "tests/api"]
+pytest_add_cli_args = [
+    "-p", "no:cacheprovider", "-q", "-o", "pythonpath=src .", "-o", "addopts=", "-m", "not slow",
+    "--ignore=tests/unit/test_packaging.py",  # needs an installed distribution
+    "--ignore=tests/unit/test_docs.py",  # checks repository documents, not the mutated code
+]
