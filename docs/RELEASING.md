@@ -13,6 +13,8 @@ release candidate.
    ```sh
    python scripts/make_release_fixture.py        # writes tests/fixtures/releases/insight-X.Y.Z.sqlite3
    ```
+   Without a local environment, run the **Release fixture** workflow (Actions → Release fixture → Run workflow)
+   on the release branch instead: it runs the same script and commits the file.
    From now on, every future version's CI upgrades this database. A migration that would break it fails
    before release.
 5. If the extractor improved on purpose, update the benchmark baseline:

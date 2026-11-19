@@ -1,0 +1,39 @@
+# Release preparation, manual: creates tests/fixtures/releases/insight-<version>.sqlite3 for the version in
+# src/insight/__init__.py (docs/RELEASING.md, step 4) and commits it to the branch it was started on. The
+# fixture is synthetic data written through the normal services; it is never regenerated once committed.
+name: Release fixture
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fixture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+      - run: pip install --require-hashes -r requirements.lock && pip install --no-deps -e .
+      - run: python scripts/make_release_fixture.py
+      - name: Commit the new fixture
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          git add tests/fixtures/releases/
+          if git diff --cached --quiet; then echo 'Fixture already committed.'; exit 0; fi
+          version="$(python -c 'import insight; print(insight.__version__)')"
+          git config user.name 'insight-bot'
+          git config user.email 'insight-bot@users.noreply.github.com'
+          git commit -m "Add the ${version} upgrade fixture"
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" "HEAD:${BRANCH}"
