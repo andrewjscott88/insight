@@ -4,21 +4,26 @@ Planned work for Insight, in rough priority order. Each item links to its GitHub
 background lives in [docs/CI_CD.md](docs/CI_CD.md) (milestones), [docs/VALIDATION.md](docs/VALIDATION.md) (what is
 not yet verified) and the README's "Scope and known limits".
 
-## Now: finish the 0.5.0 release
+## Done: the 0.5.0 release
 
 - [x] [#4](https://github.com/andrewjscott88/insight/issues/4) **Pin GitHub Actions to commit SHAs and the base image to a digest.** Run `pinact run` (or `ratchet pin`),
       update both `FROM` lines in the `Dockerfile`, and switch `.github/zizmor.yml` to `hash-pin`. The release gate
       fails until this is done.
-- [ ] [#5](https://github.com/andrewjscott88/insight/issues/5) **Get the `v0.5.0-rc.1` milestone gate green.** Still unverified for 0.5.0: `docker build` and the image,
+- [x] [#5](https://github.com/andrewjscott88/insight/issues/5) **Get the `v0.5.0-rc.1` milestone gate green.** Still unverified for 0.5.0: `docker build` and the image,
       the Makefile's Docker targets against real containers (including `make mfa-enable`), Trivy, gitleaks,
       `pip-audit`, the Playwright browser and accessibility suites, the ZAP scan and mutation testing.
-- [ ] [#6](https://github.com/andrewjscott88/insight/issues/6) **Commit the 0.5.0 upgrade fixture** (`python scripts/make_release_fixture.py`), update `docs/VALIDATION.md`
+- [x] [#6](https://github.com/andrewjscott88/insight/issues/6) **Commit the 0.5.0 upgrade fixture** (`python scripts/make_release_fixture.py`), update `docs/VALIDATION.md`
       with what the gate verified, and tag the final `v0.5.0`.
-- [ ] [#7](https://github.com/andrewjscott88/insight/issues/7) **Repository settings:** branch protection on `main`, a `release` environment with a required reviewer, and
+- [x] [#7](https://github.com/andrewjscott88/insight/issues/7) **Repository settings:** branch protection on `main`, a `release` environment with a required reviewer, and
       a decision on GHCR image visibility.
 - [x] [#8](https://github.com/andrewjscott88/insight/issues/8) **Fix:** a CVE-enrichment request for a well-formed CVE that no report mentions is refused (`422`) but still
       starts the 6.5 s enrichment window.
-- [ ] Review and merge the open Dependabot updates (Python base image, GitHub Actions).
+
+## Now
+
+- [ ] Review the open Dependabot updates one at a time: the GitHub Actions major versions (#18; the Docker,
+      cosign and attestation actions run only in the release workflow, which still warns about Node 20) and the
+      Python 3.15 base image (#1, after adding 3.15 to the test matrix).
 
 ## Next
 
