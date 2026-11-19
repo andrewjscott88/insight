@@ -448,8 +448,6 @@ verify the signature (§6).
 - One API key at a time; rotation takes effect immediately (no overlap), so update the client right after
   `make api-key-rotate`.
 - `make smoke` and `scripts/smoke.py` sign in with the password only, so they need MFA off.
-- A CVE-enrichment request for a well-formed CVE that no report mentions is refused (`422`) but still starts the
-  6.5 s enrichment window.
 - No delete function (use §9); audit events are not tamper-proof.
 - Extraction is deterministic regex plus validation (about 98% precision and recall on the labelled corpus).
   Known gaps:

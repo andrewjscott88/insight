@@ -16,7 +16,7 @@ not yet verified) and the README's "Scope and known limits".
       with what the gate verified, and tag the final `v0.5.0`.
 - [ ] [#7](https://github.com/andrewjscott88/insight/issues/7) **Repository settings:** branch protection on `main`, a `release` environment with a required reviewer, and
       a decision on GHCR image visibility.
-- [ ] [#8](https://github.com/andrewjscott88/insight/issues/8) **Fix:** a CVE-enrichment request for a well-formed CVE that no report mentions is refused (`422`) but still
+- [x] [#8](https://github.com/andrewjscott88/insight/issues/8) **Fix:** a CVE-enrichment request for a well-formed CVE that no report mentions is refused (`422`) but still
       starts the 6.5 s enrichment window.
 - [ ] Review and merge the open Dependabot updates (Python base image, GitHub Actions).
 

@@ -358,14 +358,21 @@ def _store_enrichment(
         record.payload, record.fetched_at = json.dumps(payload), now()
 
 
+async def validate_enrichment(session_factory: SessionFactory, cve: str, provider: str) -> None:
+    """Raise ``ValueError`` unless :func:`enrich_cve` would send this request (valid CVE and provider, and a
+    report mentions the CVE). Callers check this before consuming the enrichment throttle window."""
+    enrichment_request(cve, provider)
+    if not await asyncio.to_thread(_cve_is_known, session_factory, cve):
+        raise ValueError('Import a report mentioning this CVE first')
+
+
 async def enrich_cve(session_factory: SessionFactory, cve: str, provider: str) -> dict[str, Any]:
     """Look up ``cve`` at ``provider`` (``epss`` or ``nvd``) and cache the JSON response.
 
     Raises ``ValueError`` for invalid requests and :class:`ProviderError` for upstream failures.
     """
+    await validate_enrichment(session_factory, cve, provider)
     url, params = enrichment_request(cve, provider)
-    if not await asyncio.to_thread(_cve_is_known, session_factory, cve):
-        raise ValueError('Import a report mentioning this CVE first')
     try:
         raw = await download(url, params)
     except (httpx.HTTPError, OSError, ValueError) as exc:

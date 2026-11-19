@@ -29,7 +29,14 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from . import __version__, apikeys, services
 from .appearance import PAGE_BACKGROUND, TEXT_SIZE_COOKIE, THEME_COOKIE, text_size_choice, theme_choice
 from .config import Settings
-from .connectors import SOURCES, ProviderError, SourceSyncError, enrich_cve, enrichment_request, sync_source
+from .connectors import (
+    SOURCES,
+    ProviderError,
+    SourceSyncError,
+    enrich_cve,
+    sync_source,
+    validate_enrichment,
+)
 from .demo import seed
 from .ioc_export import export_filename
 from .models import Document, SessionFactory, database
@@ -777,7 +784,8 @@ def _register_enrichment_route(app: FastAPI, sessions: SessionFactory, require_a
     @app.post('/api/enrichment/{provider}/{cve}', dependencies=[Depends(require_auth)])
     async def enrich(provider: str, cve: str) -> dict[str, Any]:
         try:
-            enrichment_request(cve, provider)  # Reject bad input before it consumes the throttle window.
+            # Reject bad input and CVEs no report mentions before they consume the throttle window.
+            await validate_enrichment(sessions, cve, provider)
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
         if time.monotonic() - app.state.last_lookup < ENRICHMENT_INTERVAL_SECONDS:

@@ -148,10 +148,17 @@ def test_invalid_requests_are_422_and_do_not_consume_the_throttle(
     assert app.state.last_lookup == 0.0
 
 
-def test_unknown_cve_is_422(authed: TestClient) -> None:
+def test_unknown_cve_is_422_and_does_not_consume_the_throttle(
+    app: FastAPI, authed: TestClient, monkeypatch: pytest.MonkeyPatch, with_cve: str
+) -> None:
+    # Regression (#8): a well-formed CVE that no report mentions was refused but still started the 6.5 s
+    # window, so the next valid request was throttled.
     response = authed.post('/api/enrichment/epss/CVE-2024-99999')
     assert response.status_code == 422
     assert 'Import a report' in response.json()['detail']
+    assert app.state.last_lookup == 0.0
+    monkeypatch.setattr(connectors, 'download', fake_download(b'{"data": []}'))
+    assert authed.post(f'/api/enrichment/epss/{with_cve}').status_code == 200
 
 
 @pytest.mark.parametrize('payload', [b'<html>Rate limited</html>', b'[]'])

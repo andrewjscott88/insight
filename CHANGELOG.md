@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+- **CVE enrichment:** a request for a well-formed CVE that no report mentions is still refused (`422`) but no
+  longer starts the 6.5 s enrichment window, so the next valid lookup is not throttled (#8).
+
 ### Fixed: CI
 - **Every GitHub Action is pinned to a commit SHA and the base image to a digest**; zizmor now enforces
   `hash-pin` and the release gate's pin check passes. `aquasecurity/trivy-action` moves from `0.28.0`, a tag that
