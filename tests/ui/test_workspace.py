@@ -10,7 +10,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from nicegui import ui
+from nicegui import Client, ui
 from nicegui.element_filter import ElementFilter
 from nicegui.testing.user import User
 from sqlalchemy import select
@@ -164,10 +164,18 @@ async def test_ioc_export_dialog_previews_the_download(user: User) -> None:
 
 
 def record_navigation(user: User, monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, bool]]:
-    """Record download navigations instead of performing them (the simulator can only open pages)."""
+    """Record download navigations instead of performing them (the simulator can only open pages).
+
+    NiceGUI <= 3.18 routes `ui.navigate.to` straight to the simulated user's `navigate.to`; 3.19 sends it
+    through `Client.open`, and the simulator then drops `new_tab`. Patching both records the call once on
+    either version.
+    """
     calls: list[tuple[str, bool]] = []
     monkeypatch.setattr(
         user.navigate, 'to', lambda target, new_tab=False: calls.append((str(target), new_tab))
+    )
+    monkeypatch.setattr(
+        Client, 'open', lambda _client, target, new_tab=False: calls.append((str(target), new_tab))
     )
     return calls
 

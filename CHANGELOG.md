@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Fixed: CI
+- **Every GitHub Action is pinned to a commit SHA and the base image to a digest**; zizmor now enforces
+  `hash-pin` and the release gate's pin check passes. `aquasecurity/trivy-action` moves from `0.28.0`, a tag that
+  no longer exists (removed after the March 2026 trivy-action tag hijack, GHSA-69fq-xp46-6x23), to `v0.36.0`.
+  This had broken the container job and the nightly image re-scan.
+- **Mutation testing scored 0%:** a repository-hygiene test failed inside mutmut's `mutants/` copy (which git
+  ignores), so mutmut aborted before testing any mutant. The test now skips when run from such a copy.
+- **The newest-dependencies job failed on NiceGUI 3.19**, whose test simulator routes `ui.navigate.to` through
+  `Client.open` and drops `new_tab`. The test helper now records the call on 3.18 and 3.19; the application was
+  unaffected.
+
 ## 0.5.0 - 2026-11-19
 
 ### Added: readability for people with reading difficulties (ADR 0017)

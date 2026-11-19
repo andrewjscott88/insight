@@ -134,7 +134,7 @@ cosign verify ghcr.io/<org>/insight@sha256:<digest> \
 | # | Input | Why / how |
 | --- | --- | --- |
 | 1 | **Repository layout**: `insight/` must be the git repository root | GitHub only reads `.github/` at the root. |
-| 2 | **Pin actions to commit SHAs and the base image to a digest** | Not possible offline. Run `pinact run` (or `ratchet pin`) and `docker buildx imagetools inspect python:3.13-slim`, update both `FROM` lines, then switch `.github/zizmor.yml` to `hash-pin`. The release gate enforces this. |
+| 2 | ~~**Pin actions to commit SHAs and the base image to a digest**~~ | Done for 0.5.0: every `uses:` is pinned to a commit SHA with its tag in a comment, both `FROM` lines carry the `python:3.13-slim` index digest, and `.github/zizmor.yml` enforces `hash-pin`. Dependabot keeps the SHAs and digest current. `trivy-action` moved from the deleted `0.28.0` tag to `v0.36.0` (the old tags were removed after the March 2026 tag-hijack incident, GHSA-69fq-xp46-6x23). |
 | 3 | **Confirm action and tool versions** | Written against `checkout@v5`, `setup-python@v6`, `upload-artifact@v4`, `docker/*@v3/v5/v6`, `cosign-installer@v3`, `attest-build-provenance@v2`, `codeql-action@v3`, `trivy-action@0.28.0`, `gitleaks v8.18.4`, `uv 0.13.7`. Pinning (2) also confirms these exist. |
 | 4 | **Branch protection** on `main` | Required checks listed under Tier 1; require PR review; block force-push. |
 | 5 | **`release` environment** with required reviewers | Settings → Environments. Publishing waits for a named approver. |

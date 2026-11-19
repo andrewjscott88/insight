@@ -379,6 +379,11 @@ def test_no_source_or_package_data_file_is_gitignored() -> None:
     )
     if shutil.which('git') is None or inside.stdout.strip() != 'true':
         pytest.skip('not a git work tree')
+    top = subprocess.run(
+        ['git', 'rev-parse', '--show-toplevel'], cwd=ROOT, capture_output=True, text=True, check=False
+    )
+    if Path(top.stdout.strip()).resolve() != ROOT.resolve():
+        pytest.skip('running from a copy inside another work tree (mutmut mutants/)')
     candidates = [str(p.relative_to(ROOT)) for p in (ROOT / 'src' / 'insight').rglob('*') if p.is_file()]
     candidates = [c for c in candidates if '__pycache__' not in c and not c.endswith('.pyc')]
     result = subprocess.run(

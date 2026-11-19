@@ -6,7 +6,7 @@ not yet verified) and the README's "Scope and known limits".
 
 ## Now: finish the 0.5.0 release
 
-- [ ] [#4](https://github.com/andrewjscott88/insight/issues/4) **Pin GitHub Actions to commit SHAs and the base image to a digest.** Run `pinact run` (or `ratchet pin`),
+- [x] [#4](https://github.com/andrewjscott88/insight/issues/4) **Pin GitHub Actions to commit SHAs and the base image to a digest.** Run `pinact run` (or `ratchet pin`),
       update both `FROM` lines in the `Dockerfile`, and switch `.github/zizmor.yml` to `hash-pin`. The release gate
       fails until this is done.
 - [ ] [#5](https://github.com/andrewjscott88/insight/issues/5) **Get the `v0.5.0-rc.1` milestone gate green.** Still unverified for 0.5.0: `docker build` and the image,

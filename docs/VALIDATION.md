@@ -31,8 +31,8 @@ Recorded while the work was done, for whoever prepares the next release to confi
 **Not yet verified** (no Docker or internet in the build environment): `docker build` and the image with the new
 `LICENSE`/`NOTICE` copy step, the Makefile's Docker targets against real containers (including the interactive
 `make mfa-enable` prompt through `docker compose run`), Trivy, gitleaks, `pip-audit`, the Playwright browser
-suite, the ZAP scan and mutation testing. `make release-check` currently fails on unpinned GitHub Actions, as
-the release gate intends, until the workflows are pinned by commit SHA.
+suite, the ZAP scan and mutation testing. GitHub Actions and the base image are now pinned by commit SHA and
+digest (`python scripts/check_pins.py --strict` passes).
 
 ## Verified in the build environment
 
