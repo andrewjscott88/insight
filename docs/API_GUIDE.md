@@ -40,7 +40,7 @@ curl -sS "$INSIGHT_URL/api/stats" -H "Authorization: Bearer $INSIGHT_API_KEY"
 ```
 
 ```json
-{"status":"ok","version":"0.2.0"}
+{"status":"ok","version":"0.5.0"}
 {"documents":4,"entities":10,"unreviewed":4,"observations_unreviewed":12}
 ```
 

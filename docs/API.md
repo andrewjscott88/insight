@@ -1,4 +1,4 @@
-# HTTP API (0.2.0)
+# HTTP API (0.5.0)
 
 JSON over HTTP on the same origin as the workspace. The API is **unversioned and intended for automation by
 the single operator** (scripts, a SIEM), signed in with a browser session or the

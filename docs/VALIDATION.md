@@ -3,7 +3,7 @@
 What was verified for release 0.2.0, what was not, and how. Update this file for every release (see
 [RELEASING.md](RELEASING.md)).
 
-## Unreleased: API platform, deployment settings, MFA, Makefile (verified so far)
+## 0.5.0: API platform, deployment settings, MFA, Makefile (verified so far)
 
 Recorded while the work was done, for whoever prepares the next release to confirm in the release gates.
 

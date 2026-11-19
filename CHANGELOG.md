@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 - 2026-11-19
 
 ### Added: readability for people with reading difficulties (ADR 0017)
 An audit against WCAG 2.2, W3C COGA, the British Dyslexia Association style guide, APCA and plain-language
