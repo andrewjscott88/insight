@@ -202,6 +202,8 @@ docker compose cp insight:/data/backup-$(date +%Y%m%d).db ./
 - Schema changes ship as Alembic migrations that are tested for reversibility and against databases written by every previous release. Timestamps are ISO-8601 UTC strings; see `docs/ARCHITECTURE.md`.
 - Audit events are application records, not tamper-proof logs. Local administrators can modify the database.
 
+Planned work is listed in [ROADMAP.md](ROADMAP.md).
+
 ## Extending it
 
 Add adapters in `connectors.py` only after reviewing their destinations, size limits and source terms. Keep deterministic evidence and analyst review independent of enrichment. `docs/LLM_EXTENSION.md` defines the future LLM integration boundary without enabling it now.
