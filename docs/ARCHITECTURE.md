@@ -21,10 +21,14 @@ The narrower first release trades the research report's React, RabbitMQ/Celery, 
 - `services.py`: ingestion, revisions, search, read models, IOC export queries and analyst actions (the only SQL layer).
 - `ioc_export.py`: the cross-report IOC export format (`insight-ioc-v1`): grouping, TLP labelling and defanging. Pure functions, no SQL.
 - `connectors.py`: curated feed/KEV/NVD/EPSS integration.
+- `apikeys.py`: API key format, generation and hashing (pure functions). `totp.py`: RFC 6238 codes for the sign-in second factor (pure, standard library only). `ratelimit.py`: in-process per-caller token buckets and the API's policies ([ADR 0012](adr/0012-single-api-key-and-rate-limits.md)).
 - `main.py`: authentication, sessions, CSRF, API and security boundary. `create_app` only composes: state, middleware, then one `_register_*` function per route group (pages, login, workspace, documents, triage, exports, entities, sources, enrichment). Shared pieces (`session_checker`, `auth_dependency`, `start_session`, `get_document_or_404`, `ioc_export_query`) are module-level so they can be tested alone (`tests/api/test_app_factory.py`).
-- `ui/`: NiceGUI workspace, one module per panel (`inbox`, `entities`, `watch_terms`, `sources`, `enrichment`, `ingest`, `ioc_export`, `stats`), plus `workspace.py` (typed per-tab state and cross-panel hooks) and `page.py` (layout).
+- `ui/`: NiceGUI workspace, one module per panel (`inbox`, `entities`, `watch_terms`, `sources`, `enrichment`, `ingest`, `ioc_export`, `stats`), plus `workspace.py` (typed per-tab state and cross-panel hooks), `page.py` (layout), `reader.py` (the report reader), `theme.py` (light and dark colour tokens), `styles.py` (the style sheet: type scale, reading width, focus outline, phone rules), `typography.py` (real headings, new-tab links), `messages.py` (messages that stay until dismissed), `glossary.py` ("What the words mean"), `appearance.py` (the Light/Dark/System and "Larger text" buttons) and `mobile.py` (phone inbox navigation). Readability rules: [ADR 0017](adr/0017-readability-standard.md).
+- `appearance.py`: the theme vocabulary shared by the configuration, the sign-in pages and the workspace (`INSIGHT_THEME`, the per-device `insight_theme` cookie). See [ADR 0016](adr/0016-colour-themes-and-per-device-choice.md).
+- `templates/`, `static/app.css`: the sign-in and sign-out pages, in the same themes.
 - `demo.py`: synthetic reserved-namespace examples.
-- `cli.py`: `init`, `serve`, `migrate`, `backup`, `export-iocs`.
+- `cli.py`: `init`, `serve`, `migrate`, `backup`, `export-iocs`, `api-key`, `mfa`.
+- `Makefile` (repository): shortcuts for Docker operations, keys, MFA, tests and CI gates (`make help`).
 - `scripts/` (repository only): CI/CD gates, benchmarks and release tooling. See `docs/CI_CD.md`.
 
 ## Evidence and deduplication
@@ -48,6 +52,8 @@ NVD/EPSS enrichments are separate provider-labeled JSON payloads with fetch time
 - **TLP**: default AMBER. `services.apply_tlp_policy` raises the label to the most restrictive `TLP:` marking
   in the text and never lowers it. It runs inside `ingest`, so UI, API and connectors behave the same
   ([ADR 0009](adr/0009-tlp-policy.md)).
+  `INSIGHT_MAX_TLP` (default `AMBER+STRICT`) then refuses manual submissions whose label is above the limit
+  ([ADR 0013](adr/0013-instance-tlp-limit.md)).
 - **IOC export** (`services.export_iocs` → `ioc_export.build_export`): one entry per canonical entity with its
   source reports. Reports are selected with the same conditions as the inbox search (`_document_conditions`).
   The file and every IOC carry the most restrictive TLP of their reports, so the export never appears less
@@ -67,7 +73,7 @@ NVD/EPSS enrichments are separate provider-labeled JSON payloads with fetch time
 
 ## Schema migrations
 
-Alembic owns the schema (revisions: `0001` baseline = 0.1.0, `0002` document revisions, `0003` folded search text and truncation flag). `database()` runs `insight.migrations.upgrade()` on every start. A 0.1.0 database (tables created by `create_all`, no `alembic_version`) is first stamped at the baseline revision `0001`, which reproduces the 0.1.0 schema exactly, then upgraded. `insight migrate` does the same explicitly. SQLite migrations run in batch mode with foreign keys temporarily disabled and a `foreign_key_check` before commit, which is SQLite's documented procedure.
+Alembic owns the schema (revisions: `0001` baseline = 0.1.0, `0002` document revisions, `0003` folded search text and truncation flag, `0004` API keys, `0005` audit actor, per-key TLP limit and MFA). `database()` runs `insight.migrations.upgrade()` on every start. A 0.1.0 database (tables created by `create_all`, no `alembic_version`) is first stamped at the baseline revision `0001`, which reproduces the 0.1.0 schema exactly, then upgraded. `insight migrate` does the same explicitly. SQLite migrations run in batch mode with foreign keys temporarily disabled and a `foreign_key_check` before commit, which is SQLite's documented procedure.
 
 To add a migration: change `models.py`, then run
 `INSIGHT_DATABASE_URL=sqlite:///data/dev.db alembic revision --autogenerate --rev-id 0004 -m "..."` (using the repository's `alembic.ini`), review the file, and run the tests. `test_models_match_migrations` fails if the models and migrations disagree; `test_every_revision_is_reversible` checks `downgrade()`.
@@ -76,15 +82,53 @@ To add a migration: change `models.py`, then run
 
 ## API
 
-Session-authenticated JSON routes live under `/api`. `/api/session` exposes the CSRF token after authentication; writes require `X-CSRF-Token`. A valid browser session is required for JSON exports too. API contracts are initial and not yet versioned.
+JSON routes live under `/api`. Each is reachable with the browser session (cookie plus `X-CSRF-Token` on writes;
+`/api/session` hands out the token) or the single API key (`Authorization: Bearer`, no CSRF). Contracts are not
+versioned yet; breaking changes are listed in the CHANGELOG. Usage: [API_GUIDE](API_GUIDE.md); fields:
+[API](API.md).
 
-No live connection happens at startup. Sources must be run manually. Syncs share an in-process lock. Provider lookups are explicitly requested and globally throttled for the single operator. There is no durable queue/retry scheduler; failed jobs produce an error record and are manually retried.
+### Request pipeline
+
+```
+TLS reverse proxy (optional; the container listens on loopback)
+ → ProxyHeaders       only from INSIGHT_TRUSTED_PROXIES: real client address and scheme (uvicorn's middleware)
+ → TrustedHost        Host must be in INSIGHT_ALLOWED_HOSTS
+ → Session            signed cookie; the session ID must be live in server memory
+ → Boundary           Origin check, 2 MB body limit, security headers (+ HSTS, RateLimit headers)
+ → require_auth       one FastAPI dependency on every /api route, in this order:
+      1. credential   Bearer key (hash lookup; uniform 401; invalid keys throttled per address)
+                      or session (401) + CSRF on writes (403)
+      2. authorise    read-only key: GET only; browser-only routes; TLP-limited key: no audit, no enrichment
+      3. rate limit   token bucket per caller and policy (read / write / ioc-export) → 429 + Retry-After
+ → route              opens the transaction with the caller as audit actor and passes its TLP limit
+ → services           the only SQL layer; TLP limits become one condition on Document.tlp
+```
+
+- **API key** (`apikeys.py`, ADR 0012): `insk_<key id>_<secret>`; SHA-256 stored; one active key, managed only
+  from the CLI/Makefile on the host, so neither a browser session nor a key can mint keys.
+- **Rate limiting** (`ratelimit.py`): in-process token buckets behind one method (`RateLimiter.hit`), with an
+  injectable clock; authenticated callers and per-address invalid-key counting use separate limiters so one
+  cannot evict the other. Moving to several workers means a shared store (e.g. Redis) behind the same method.
+- **TLP enforcement**: the instance limit (`INSIGHT_MAX_TLP`, ADR 0013) is applied in `services.ingest` after
+  marking-based raising; a key's limit (ADR 0014) is a `max_tlp` argument on every report query, guarded by an
+  architecture test and a leak-sweep test.
+- **Audit actor**: `services.set_actor(db, ...)` names the caller on the database session; `services.audit`
+  records it on every event, so service signatures did not change.
+- **Sign-in MFA** (`totp.py`, ADR 0015): optional, `INSIGHT_MFA=on`; the TOTP secret is paired from the CLI.
+
+No live connection happens at startup. Sources must be run manually. Syncs share an in-process lock. Provider
+lookups are explicitly requested and globally throttled for the single operator. There is no durable queue/retry
+scheduler; failed jobs produce an error record and are manually retried.
 
 ## Next milestones
 
 1. Validate pilot workflow and extraction quality with real permitted reports.
 2. Add migration/versioning, search pagination and robust per-source incremental cursors.
 3. Introduce identity-provider accounts and recipient/group handling before collaboration.
+   API work designed but deferred so far (single operator, no Redis/PostgreSQL in production yet): a versioned
+   `/api/v1` with deprecation headers, a published OpenAPI contract with response models, RFC 9457 problem
+   details, cursor pagination, `202 Accepted` jobs for syncs and large exports, `Idempotency-Key`, shared
+   sessions and rate limits (Redis) for several workers, and several named keys per user.
 4. Add asset inventory relevance, investigations and watchlist notifications.
 5. Add structured import/export and source-specific licensing/retention controls.
 6. Add opt-in LLM enrichment behind the independent contract, only after evaluations and routing policies.

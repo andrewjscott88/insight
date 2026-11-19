@@ -2,8 +2,139 @@
 
 ## Unreleased
 
-### Licensing
-- Insight is now released under the **MIT License** (`LICENSE`); `pyproject.toml` declares `license = "MIT"`.
+### Added: readability for people with reading difficulties (ADR 0017)
+An audit against WCAG 2.2, W3C COGA, the British Dyslexia Association style guide, APCA and plain-language
+guidance found six WCAG A/AA failures and many readability gaps. The GUI now meets WCAG 2.2 AA plus the AAA
+criteria written for reading, and a browser test (axe-core) checks every screen in both themes on desktop and phone.
+- **Easier to read:** 16 px minimum text (was down to 10 px; 98% of desktop text was under 16 px), line spacing of at
+  least 1.5, lines of about 70 characters (were up to 130), sentence case instead of capitals, left-aligned text, and
+  report text in the page instead of a small scrolling box.
+- **Stronger contrast:** every text colour at least 7:1 in both themes (WCAG AAA) and APCA Lc 75 or more; dark-mode
+  grey text was APCA Lc 51. Light-theme field borders 4.2:1 or more (were 1.78:1).
+- **Larger text** button (per device, remembered): a 19 px base with more space between letters, words and lines.
+- **What the words mean:** a plain-language glossary of every abbreviation and specialist term (TLP, IOC, CVE,
+  KEV...). Interface text rewritten in plainer words: Flesch-Kincaid grade 7.4 → 4.2; no sentence above grade 9.
+- **Messages stay until you dismiss them** (they vanished after about 5 seconds, errors included); a new one replaces
+  the last. They never cover a dialog or the control you are on.
+- **Clear errors:** problems are explained on the field itself, in plain words that name the field as you see it
+  (was `title: String should have at least 1 character`), and the cursor goes to the first one. Problems inside an
+  open dialog are shown in the dialog.
+- **Structure for assistive technology:** page language (`lang="en-US"`), real headings, named dialogs, links that say
+  they open a new tab, invalid fields marked `aria-invalid`, a decorative loading bar hidden from screen readers.
+- **Keyboard and motion:** a 3 px focus outline on every control (was a faint tint, 1.2–1.9:1); 44 px targets;
+  animations off when the device asks for reduced motion.
+- **You keep your place:** a page that loses its connection for up to 30 seconds (a phone losing signal or going to
+  sleep) carries on where it was. After NiceGUI's default of 3 seconds it reloaded, losing the reading position and
+  any unsaved note.
+
+### Fixed: found by the readability audit
+- Page language missing on the workspace (WCAG 3.1.1, Level A).
+- No headings anywhere in the workspace (WCAG 1.3.1).
+- The report text box could not be scrolled with the keyboard (WCAG 2.1.1).
+- Light theme: field borders 1.78:1 (WCAG 1.4.11); selected report title 4.0:1 on hover (WCAG 1.4.3).
+- Light theme: Quasar's "dark text" colour was remapped to the light panel colour (a defect from the theme work).
+- Words were broken mid-word in narrow boxes ("docume-nts", especially with larger text): only hashes and URLs
+  may break now, and the counters wrap to fewer columns instead.
+
+### Added: light and dark themes, and a GUI that reads well on phones
+- **Theme switch.** **Light / Dark / System** buttons at the top right of the workspace (icons only on a phone)
+  switch at once. The browser remembers the choice for a year in the `insight_theme` cookie, per device, and the
+  sign-in and sign-out pages use it too. **System is the default:** it follows the device's light/dark setting
+  and changes with it. The workspace was dark only before. ADR 0016.
+- **`INSIGHT_THEME=system|light|dark`** sets the default for browsers that have not picked a theme.
+  `make theme THEME=dark` writes it to `.env` and restarts; `make up THEME=light` does the same while building.
+  An invalid value stops start-up.
+- **Phone layout:** larger text (16 px report text), 16 px inputs so iOS no longer zooms when a field is focused,
+  touch targets of at least 40–44 px, short tab labels (Inbox, Entities, Watch, Sources) that fit without
+  scrolling, the three counters in one row, tighter dialogs, and report text that no longer scrolls inside the
+  scrolling page. Opening a report on a phone scrolls to it, and **← Back to list** returns to the list with that
+  report in view.
+- The mobile address bar follows the theme (`theme-color`).
+
+### Fixed: readability defects found while adding the themes
+- **Filled buttons were unreadable** (white on mint, 1.6:1) in the dark theme. Labels are now dark on mint
+  (9.7:1). Every text colour is tested at WCAG AA (4.5:1) in both themes, from the palette and as rendered in
+  Chromium.
+- **The sign-in card ran off the right edge of a phone screen.**
+- **Responsive labels that never showed:** the header tagline (`hidden sm:block` loses to Quasar's `!important`
+  `.hidden`). Now visible on wider screens; an architecture test forbids the pattern.
+
+### Changed: sign-in style sheet
+- `static/app.css` now holds only the sign-in and sign-out pages' styles (about 150 unused rules from an earlier
+  front end were removed); the sign-out page uses it instead of inline colours.
+
+### Added: HTTP API for scripts and SIEMs
+- **API key.** One key at a time, sent as `Authorization: Bearer insk_…` (no sign-in flow, cookie or CSRF token).
+  Created, rotated, revoked and inspected only on the host: `make api-key-create|status|rotate|revoke` or
+  `insight api-key create|status|rotate|revoke` (`--name`, `--access read|read-write`, `--expires-days`,
+  `--max-tlp`). Read-only by default; expiry required (default 90 days, at most 365); shown once, stored as a
+  SHA-256 hash only. Rotation and revocation apply on the next request, without a restart. Invalid, revoked
+  and expired keys all get the same `401`. Audited as `api_key.create` / `api_key.revoke`; every write made
+  with the key is logged with its key ID, never the key. ADR 0012.
+- **TLP limit per key** (`--max-tlp GREEN`, `MAX_TLP=GREEN`): reports above it are invisible to the key on every
+  route (indistinguishable from missing ones), its IOC exports are capped at the limit, and it cannot store
+  reports above it. Limited keys cannot read the audit log or run CVE enrichment. `--max-tlp RED` removes the
+  limit. ADR 0014.
+- **Rate limits per caller** on every authenticated `/api` request: `read` 300/min, `write` 60/min,
+  `ioc-export` 30/hour; the key and the browser session have separate budgets. Invalid keys are limited to 10
+  per minute per client address without ever refusing the valid key. Responses carry `RateLimit-Policy` and
+  `RateLimit` (IETF draft); `429` adds `Retry-After`.
+- **Audit events record who acted**: `operator`, `api-key:<key ID>`, `cli`, `connector:<source>` or `system`
+  (`GET /api/audit` returns `actor`).
+
+### Added: publishing an instance
+- **Reverse proxy support.** `INSIGHT_TRUSTED_PROXIES` (IPs or CIDR networks) makes Insight honour
+  `X-Forwarded-For`/`X-Forwarded-Proto` from the proxy only. Before, sign-in and every other browser write
+  behind an HTTPS proxy failed with `403` (Insight saw `http`, the browser's `Origin` said `https`), and every
+  client appeared to come from the proxy. `*` and malformed entries stop start-up.
+- **TLP:RED is refused by default.** `INSIGHT_MAX_TLP` (default `AMBER+STRICT`) is the most restrictive label
+  the instance stores. A report labelled above it, or raised above it by a `TLP:` marking in its text, is
+  refused on upload from the workspace and the API (`422`, with the reason) and nothing is stored; the workspace
+  offers only permitted labels. Connectors and the demo are exempt. Start-up logs how many stored reports exceed
+  the limit. ADR 0013.
+- **Optional sign-in MFA, off by default.** `INSIGHT_MFA=on` requires an authenticator-app code (TOTP, RFC
+  6238). `make mfa-enable` pairs the app if needed (nothing is saved until a code matches), sets `INSIGHT_MFA=on`
+  in `.env` and restarts; `make mfa-disable` turns it off and keeps the pairing; `make mfa-status`,
+  `make mfa-reset`; CLI `insight mfa setup|reset|status`. Each code works once; a wrong password never uses up a
+  code; either mistake gets the same message. MFA on with no app paired locks sign-in (`503`) instead of
+  falling back to the password. ADR 0015.
+- `Strict-Transport-Security: max-age=31536000` on every response when `INSIGHT_SECURE_COOKIES=1`.
+- `compose.yaml` passes `INSIGHT_ALLOWED_HOSTS`, `INSIGHT_TRUSTED_PROXIES`, `INSIGHT_SECURE_COOKIES`,
+  `INSIGHT_MAX_TLP` and `INSIGHT_MFA` through from `.env`, with safe defaults. Invalid values stop start-up.
+
+### Added: Makefile
+- `make help` lists 48 targets: first run (`env`: `.env` with generated credentials, never overwritten), running
+  (`up`, `stop`, `restart`, `down`, `logs`, `ps`, `health`, `version`), data (`backup`, `restore` with a
+  confirmation prompt, `export-iocs`, `migrate`, `db-shell`), the API key, MFA, checks against a running
+  instance (`smoke`, `test-e2e`), development (`dev`, `serve`, `test*`, `lint`, `format`, `typecheck`), CI gates
+  (`check`, `ci`, `package`, `benchmark`, `drill`) and maintenance (`locks`, `ioc-example`, `update-tlds`,
+  `release-fixture`, `release-check`, `clean`). Backups and exports land in owner-only `backups/` and
+  `exports/`, which git and Docker ignore; editing `.env` never loosens its permissions.
+- `scripts/check_forbidden_files.py` also refuses files under `backups/` and `exports/`, and Insight API keys
+  (`insk_…`) in any committed file.
+
+### Licence
+- Insight is released under the **MIT License** (`LICENSE`). The wheel and image carry `LICENSE` and `NOTICE`;
+  the package metadata declares `License-Expression: MIT`.
+
+### Documentation
+- New [docs/API_GUIDE.md](docs/API_GUIDE.md): authentication (key and session), status codes, errors, rate
+  limits, TLP and paging, a `curl` command for every route, recipes (SIEM pulls, ingesting files, paging,
+  bulk review, back-off on `429`, Python) and troubleshooting. Its commands were executed against a running
+  instance, and a test fails if a route has no `curl` example.
+- RUNBOOK: reverse proxy setup, MFA, the API key, monitoring signals for the new log lines, Makefile
+  equivalents. SECURITY: a checklist for publishing an instance. ARCHITECTURE: the API request pipeline and the
+  deferred API work. ADRs 0012-0015. VALIDATION: what the unreleased work was verified against.
+
+### Fixed before release
+- Found while building the above, each with a regression test: a full-width or other non-ASCII digit in a
+  sign-in code caused a server error; `--max-tlp RED` stored a RED limit instead of lifting it, locking the key
+  out of the audit log for good; a clock stepping backwards could drain a rate-limit bucket and lock a caller
+  out.
+
+### Known issue
+- A CVE-enrichment request for a well-formed CVE that no report mentions is refused (`422`) but still starts the
+  6.5 s enrichment window (pre-existing; malformed requests do not).
 
 ### Added: cross-report IOC export
 - **One JSON file with every indicator of compromise across your reports** (`format: insight-ioc-v1`). Each
@@ -74,8 +205,18 @@ test (`tests/api/test_ioc_export_reports.py` and `tests/unit/test_ioc_export.py`
   shutdown releases database connections even if shutdown fails. Two unused definitions were removed.
 
 ### Upgrade notes
-No schema change. The inbox search now builds its report filters with the same helper as the IOC export;
-results are unchanged.
+- **TLP:RED uploads are refused by default.** To keep storing TLP:RED material deliberately, set
+  `INSIGHT_MAX_TLP=RED` in `.env`. Existing RED reports are kept either way; start-up logs how many exceed the
+  limit. The browser (e2e) tests need `INSIGHT_MAX_TLP=RED` on the server they run against.
+- Schema migrations `0004` (`api_keys`) and `0005` (audit `actor`, the key's `max_tlp`, `operator_mfa`) run
+  automatically at start-up; back up first, as always. No existing data changes. Audit events from before
+  `0005` have an empty actor.
+- MFA stays off unless you turn it on (`make mfa-enable`). The new settings (`INSIGHT_TRUSTED_PROXIES`,
+  `INSIGHT_MAX_TLP`, `INSIGHT_MFA`) are validated strictly: a typo stops start-up with a message naming it.
+- Browser API clients are rate limited too (far above interactive use). Scripts that scraped the sign-in form
+  can switch to the API key (docs/API_GUIDE.md).
+- The inbox search now builds its report filters with the same helper as the IOC export; results are
+  unchanged.
 
 ## 0.2.0 - 2026-11-13
 

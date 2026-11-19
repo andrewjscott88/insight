@@ -24,10 +24,15 @@ pre-commit install --hook-type pre-commit --hook-type pre-push
 
 | Stage | Hooks |
 | --- | --- |
-| commit | forbidden files/secrets (`.env`, databases, keys, credentials), ruff check + format, mypy --strict, workflow schema + zizmor (when workflows change) |
+| commit | forbidden files/secrets (`.env`, databases, keys, credentials, `backups/` and `exports/`, Insight API keys `insk_…`), ruff check + format, mypy --strict, workflow schema + zizmor (when workflows change) |
 | push | lock files match `pyproject.toml`, unit tests |
 
 All hooks call the tools pinned in `requirements-dev.lock`, so local results match CI.
+
+Local equivalents from the Makefile: `make check` (Tier 1's quality job; a test keeps its commands identical to
+`ci.yml`), `make test-cov`, `make test-postgres`, `make package`, and `make ci` for all Tier 1 jobs that need no
+Docker. Milestone-gate pieces: `make benchmark`, `make drill`, `make test-e2e`; release checks:
+`make release-check TAG=vX.Y.Z`.
 
 ## Tier 1 - CI (blocks merge)
 

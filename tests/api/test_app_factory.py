@@ -65,6 +65,67 @@ def test_auth_dependency(method: str, signed_in: bool, csrf: str | None, status:
     assert exc.value.status_code == status
 
 
+@pytest.mark.parametrize(
+    ('method', 'path', 'policy'),
+    [
+        ('GET', '/api/documents', 'read'),
+        ('HEAD', '/api/stats', 'read'),
+        ('GET', '/api/documents/x/export', 'read'),
+        ('GET', '/api/iocs/export', 'ioc-export'),
+        ('POST', '/api/documents', 'write'),
+        ('POST', '/api/sources/cisa-kev/sync', 'write'),
+    ],
+)
+def test_rate_limit_policy(method: str, path: str, policy: str) -> None:
+    assert main.rate_limit_policy(method, path).name == policy
+
+
+def keyed_request(method: str, token: str, path: str = '/api/stats') -> Request:
+    headers = [(b'authorization', f'Bearer {token}'.encode())]
+    return Request({'type': 'http', 'method': method, 'path': path, 'headers': headers, 'session': {}})
+
+
+@pytest.mark.parametrize(
+    ('method', 'access', 'path', 'status'),
+    [
+        ('GET', 'read', '/api/stats', None),
+        ('POST', 'read', '/api/documents', 403),
+        ('POST', 'read-write', '/api/documents', None),  # no CSRF token needed with a key
+        ('GET', 'read-write', '/api/session', 403),
+    ],
+)
+def test_auth_dependency_with_api_keys(method: str, access: str, path: str, status: int | None) -> None:
+    caller = main.Caller('api_key', 'abc', 'read-write' if access == 'read-write' else 'read')
+
+    def verify(token: str) -> tuple[main.Caller | None, str]:
+        return (caller, 'ok') if token == 'good' else (None, 'unknown')
+
+    require_auth = main.auth_dependency(lambda _session: False, verify_key=verify)
+    incoming = keyed_request(method, 'good', path)
+    if status is None:
+        require_auth(incoming)
+        assert incoming.state.caller == caller
+    else:
+        with pytest.raises(HTTPException) as exc:
+            require_auth(incoming)
+        assert exc.value.status_code == status
+    with pytest.raises(HTTPException) as bad:
+        require_auth(keyed_request(method, 'bad', path))
+    assert bad.value.status_code == 401
+
+
+def test_api_keys_are_refused_when_no_verifier_is_configured() -> None:
+    require_auth = main.auth_dependency(lambda _session: True)
+    with pytest.raises(HTTPException) as exc:
+        require_auth(keyed_request('GET', 'anything'))
+    assert exc.value.status_code == 401
+
+
+def test_caller_limit_keys_are_distinct() -> None:
+    assert main.SESSION_CALLER.limit_key == 'session'
+    assert main.Caller('api_key', 'abc').limit_key == 'key:abc'
+
+
 def test_start_session_rotates_identity_and_prunes_expired_sessions() -> None:
     now = time.time()
     app = app_with_sessions(old=now + 100, stale=now - 1, other=now + 100)

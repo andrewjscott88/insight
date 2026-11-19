@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 from collections.abc import Iterator, MutableMapping
 from types import SimpleNamespace
 from typing import Any
@@ -10,7 +11,8 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from insight.main import MAX_BODY_BYTES, SECURITY_HEADERS, BoundaryMiddleware
+from insight.config import Settings
+from insight.main import MAX_BODY_BYTES, SECURITY_HEADERS, BoundaryMiddleware, create_app
 
 
 @pytest.mark.parametrize('path', ['/health', '/login', '/api/documents', '/does-not-exist'])
@@ -244,3 +246,13 @@ def test_security_headers_never_duplicate_or_override_application_headers() -> N
 def test_sensitive_responses_are_still_not_cached(authed: TestClient) -> None:
     for path in ('/api/stats', '/api/documents', '/login', '/static/app.css'):
         assert authed.get(path).headers['cache-control'] == 'no-store', path
+
+
+def test_hsts_only_when_the_deployment_is_https_only(settings: Settings) -> None:
+    """Strict-Transport-Security follows INSIGHT_SECURE_COOKIES (i.e. a deployment behind HTTPS)."""
+    with TestClient(create_app(settings, with_ui=False)) as plain:
+        assert 'strict-transport-security' not in plain.get('/health').headers
+    secure = dataclasses.replace(settings, secure_cookies=True)
+    with TestClient(create_app(secure, with_ui=False)) as https:
+        assert https.get('/health').headers['strict-transport-security'] == 'max-age=31536000'
+        assert https.get('/login').headers['strict-transport-security'] == 'max-age=31536000'

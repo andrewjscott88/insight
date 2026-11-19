@@ -61,7 +61,8 @@ dev = [
 ]
 postgres = ["psycopg[binary]>=3.2,<4"]
 # Browser end-to-end tests (milestone gate). Install browsers with `playwright install chromium`.
-e2e = ["playwright>=1.58,<2"]
+# axe-playwright-python bundles Deque's axe-core (MPL-2.0) for the accessibility gate (ADR 0017).
+e2e = ["playwright>=1.58,<2", "axe-playwright-python>=0.1.8,<1"]
 
 [project.scripts]
 insight = "insight.cli:main"

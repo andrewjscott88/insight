@@ -1,0 +1,9 @@
+{# Shared <head> lines: this device's theme (data-theme on <html>) and the mobile address-bar colour. #}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+{% if theme == 'system' %}{% for name, color in page_background.items() %}
+<meta name="theme-color" media="(prefers-color-scheme: {{ name }})" content="{{ color }}">
+{% endfor %}{% else %}
+<meta name="theme-color" content="{{ page_background[theme] }}">
+{% endif %}
+<link rel="stylesheet" href="/static/app.css">

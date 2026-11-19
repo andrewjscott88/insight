@@ -115,12 +115,22 @@ All options. Option values are case-insensitive on the command line:
 
 ### Through the API
 
-`GET /api/iocs/export` with a signed-in session; GET requests need no CSRF header. The parameters are the same
+`GET /api/iocs/export` with the API key (recommended for scripts and SIEMs; see the
+[API guide](API_GUIDE.md)) or a signed-in session; GET requests need no CSRF header. Each caller may export 30
+times per hour (`429` with `Retry-After` beyond that), and a key created with `--max-tlp` never exports reports
+above its limit. The parameters are the same
 as the CLI options, written `kind`, `review_status`, `max_tlp`, `defang`, `evidence` (`false` to leave
 evidence out), `document_id`, `q`, `status`, `tlp` and `include_superseded`. Values are **case-sensitive** here:
 `ip`, not `IP`; `GREEN`, not `green`.
 
-With curl:
+With curl and the API key (`make api-key-create NAME=siem MAX_TLP=GREEN` creates a read-only one):
+
+```sh
+curl -fsS -OJ -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  "http://127.0.0.1:8080/api/iocs/export?kind=ip&kind=domain&review_status=accepted&max_tlp=GREEN&defang=true&evidence=false"
+```
+
+With curl and a browser session instead (signing in through the form):
 
 ```sh
 BASE=http://127.0.0.1:8080

@@ -19,6 +19,8 @@ Only the latest release receives fixes. Upgrade using [docs/RUNBOOK.md](docs/RUN
 
 ## Scope and posture
 
-Insight is a single-operator workbench bound to loopback. What it protects against, what it does not, and what
-is required before any shared or networked use is documented in [docs/SECURITY.md](docs/SECURITY.md).
+Insight is a single-operator workbench. By default it listens on loopback only; it can be published behind a TLS
+reverse proxy. What it protects against, what it does not, and what to do before exposing it to a network is
+documented in [docs/SECURITY.md](docs/SECURITY.md). API keys start with `insk_`: if you find one in a public
+place, report it as above so it can be revoked.
 Operational incident handling is in [docs/RUNBOOK.md](docs/RUNBOOK.md) §12.

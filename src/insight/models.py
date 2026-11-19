@@ -120,6 +120,9 @@ class AuditEvent(Base):
     object_id: Mapped[str] = mapped_column(String(36))
     detail: Mapped[str] = mapped_column(Text, default='')
     created_at: Mapped[str] = mapped_column(String(40), default=now)
+    #: Who acted: ``operator`` (browser session), ``api-key:<key id>``, ``cli``, ``connector:<source>`` or
+    #: ``system``. Empty for events recorded before 0005. Taken from ``Session.info['actor']`` (see services).
+    actor: Mapped[str] = mapped_column(String(80), default='', server_default='')
 
 
 class KEVRecord(Base):
@@ -157,6 +160,41 @@ class Enrichment(Base):
     provider: Mapped[str] = mapped_column(String(20))
     payload: Mapped[str] = mapped_column(Text)
     fetched_at: Mapped[str] = mapped_column(String(40), default=now)
+
+
+class ApiKey(Base):
+    """API key for scripts and SIEM integrations. Only the SHA-256 of the key is stored (``insight.apikeys``).
+
+    Rows are never deleted: revoked and expired keys stay as a record of what existed. At most one key is
+    active (not revoked, not expired) at a time; ``services.create_api_key`` enforces this.
+    """
+
+    __tablename__ = 'api_keys'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    key_id: Mapped[str] = mapped_column(String(12), unique=True)
+    token_hash: Mapped[str] = mapped_column(String(64))
+    name: Mapped[str] = mapped_column(String(100))
+    access: Mapped[str] = mapped_column(String(20))
+    created_at: Mapped[str] = mapped_column(String(40), default=now)
+    expires_at: Mapped[str] = mapped_column(String(40))
+    last_used_at: Mapped[str | None] = mapped_column(String(40), default=None)
+    revoked_at: Mapped[str | None] = mapped_column(String(40), default=None)
+    #: Most restrictive TLP label this key may read or write; ``None`` means the instance limit only.
+    max_tlp: Mapped[str | None] = mapped_column(String(20), default=None)
+
+
+class OperatorMfa(Base):
+    """The operator's TOTP second factor (at most one row; no row means MFA is off). See ``insight.totp``.
+
+    The shared secret must be stored in a recoverable form to verify codes; protect the database accordingly.
+    ``last_step`` is the 30-second time step of the last accepted code, so a code can never be used twice.
+    """
+
+    __tablename__ = 'operator_mfa'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    secret: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[str] = mapped_column(String(40), default=now)
+    last_step: Mapped[int] = mapped_column(default=0)
 
 
 SessionFactory: TypeAlias = sessionmaker[Session]

@@ -14,7 +14,7 @@ WORKDIR /src
 # The build backend is hash-pinned too, and used without build isolation so pip cannot fetch anything else.
 COPY requirements-build.lock ./
 RUN pip install --require-hashes -r requirements-build.lock
-COPY pyproject.toml README.md ./
+COPY pyproject.toml README.md LICENSE NOTICE ./
 COPY src ./src
 RUN pip wheel --no-deps --no-build-isolation --wheel-dir /dist .
 

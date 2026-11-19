@@ -9,6 +9,7 @@ and a rejected victim address still reached recipients inside a neighbouring exc
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import os
 import re
@@ -20,6 +21,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from insight import cli
+from insight.config import Settings
 from insight.extraction import canonical, known_tlds
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -42,6 +44,12 @@ NOT_NETWORK = {
 }
 
 Keys = set[tuple[str, str]]
+
+
+@pytest.fixture
+def settings(settings: Settings) -> Settings:
+    """These tests process the synthetic TLP:RED report on purpose, so they opt in: INSIGHT_MAX_TLP=RED."""
+    return dataclasses.replace(settings, max_tlp='RED')
 
 
 def truth(name: str) -> Keys:

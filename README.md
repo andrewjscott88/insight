@@ -1,11 +1,13 @@
 # Insight
 
-A local, single-operator threat-intelligence workbench. Application logic and the interactive GUI are authored in **Python**, using **NiceGUI + FastAPI + SQLAlchemy**. NiceGUI supplies the underlying browser assets; no separate React/Node build is required.
+A single-operator threat-intelligence workbench, run locally or published behind a TLS reverse proxy. Application logic and the interactive GUI are authored in **Python**, using **NiceGUI + FastAPI + SQLAlchemy**. NiceGUI supplies the underlying browser assets; no separate React/Node build is required.
 
-**Version 0.2.0: a single-operator pilot release, not a production multi-user TIP.** Nothing is deployed or connected automatically. Operating it: [docs/RUNBOOK.md](docs/RUNBOOK.md). All documentation: [docs/README.md](docs/README.md).
+**Version 0.2.0: a single-operator pilot release, not a production multi-user TIP.** Nothing is deployed or connected automatically. Operating it: [docs/RUNBOOK.md](docs/RUNBOOK.md). Scripting against it: [docs/API_GUIDE.md](docs/API_GUIDE.md) (every call, with `curl`). All documentation: [docs/README.md](docs/README.md).
 
 ## What works
 
+- **Built for readability, including for people with dyslexia or other reading difficulties** ([ADR 0017](docs/adr/0017-readability-standard.md)): WCAG 2.2 AA plus its reading-related AAA criteria (7:1 contrast, lines of about 70 characters, 1.5 line spacing, plain language), 16 px minimum text, no capitals, real headings, a strong focus outline, messages that stay until you dismiss them, a **Larger text** button and a **What the words mean** glossary. Checked in the test suite with axe-core on every screen.
+- **Light and dark themes, readable on phones.** The workspace follows each device's light/dark setting by default; the **Light / Dark / System** buttons in the header override it for that browser. The instance default is `INSIGHT_THEME` (`make theme THEME=dark`). On a phone the layout uses larger text, no zoom-on-focus, big touch targets, and opening a report scrolls to it (with **← Back to list**). Text in both themes meets WCAG AA contrast (tested).
 - Password-protected analyst inbox with split-pane report reader, search and TLP/status filters. Search ignores case, accents and Unicode normal form identically on SQLite and PostgreSQL.
 - Paste reports with title, source, URL and handling label; preserve original text and its SHA-256 hash.
 - Deterministic extraction of CVEs, IPv4/IPv6, URLs, domains and MD5/SHA1/SHA256/SHA512 mentions, including defanged (`hxxp`, `[.]`) and international (punycode) forms. It is precision-first: about 98% precision and recall on the labelled corpus ([docs/EXTRACTION.md](docs/EXTRACTION.md)).
@@ -17,6 +19,12 @@ A local, single-operator threat-intelligence workbench. Application logic and th
 - On-demand NVD and FIRST EPSS CVE lookups; no API key required for this small-scale prototype. Provider throttling/outages still apply.
 - JSON report exports retain provenance and TLP; they are **not STIX** and do not authorize redistribution.
 - **IOC export**: one JSON file listing every indicator across your reports once, with its source reports, evidence, KEV context and the most restrictive TLP of the reports it includes. Filter by type, review status, highest TLP or report; defang for e-mail and tickets, and leave evidence out when sharing. **Export IOCs** in the workspace (with a live count preview), **Export this report's IOCs** in the reader, `insight export-iocs FILE` or `GET /api/iocs/export`. Not STIX and not a blocklist by itself: see [docs/IOC_EXPORT.md](docs/IOC_EXPORT.md).
+- **HTTP API with an API key for scripts and SIEMs**: one key, created, rotated and revoked only on the host (`make api-key-create` / `insight api-key`), sent as `Authorization: Bearer`. Read-only unless you choose read-write; mandatory expiry; stored as a hash only; optionally limited to a TLP label (`MAX_TLP=GREEN`: more restrictive reports are invisible to it). Per-caller rate limits with `RateLimit` headers and `429` + `Retry-After`. Guide with every `curl` command: [docs/API_GUIDE.md](docs/API_GUIDE.md); field reference: [docs/API.md](docs/API.md).
+- **TLP:RED is refused by default** (`INSIGHT_MAX_TLP=AMBER+STRICT`), including reports whose text carries a RED marking, so material meant for named recipients does not end up on a server. Set `INSIGHT_MAX_TLP=RED` to allow it.
+- **Optional sign-in MFA** (authenticator-app codes), off by default: `make mfa-enable` / `make mfa-disable`.
+- **Public deployment** behind a TLS reverse proxy: trusted proxy headers (`INSIGHT_TRUSTED_PROXIES`), secure cookies and HSTS. See [docs/RUNBOOK.md](docs/RUNBOOK.md) ("Reverse proxy").
+- The audit log records who acted: the operator, the API key (by key ID), the CLI or a connector.
+- A `Makefile` for every routine task: `make help`.
 - Clearly labeled synthetic demo data. All examples use reserved test infrastructure, not live malicious endpoints.
 - Persistent SQLite database in a Docker volume, with automatic schema migrations. PostgreSQL 16 is supported and tested in CI (`INSIGHT_DATABASE_URL=postgresql+psycopg://…`, `pip install '.[postgres]'`).
 - Publisher edits to synced items (e.g. a changed KEV description) become **revisions** of one report, not duplicates. The inbox shows the current revision; older ones stay available as evidence.
@@ -28,9 +36,8 @@ The starting connectors access publicly available intelligence without paid subs
 ## Quick start: Docker Desktop
 
 1. Unzip this project and open a terminal **inside the `insight` folder**.
-2. Create `.env` with a strong workspace password and random signing secret.
-
-If Python 3 is installed (Windows: replace `python` with `py` if necessary):
+2. Create `.env` with a strong workspace password and random signing secret. With `make` (Linux, macOS, WSL):
+   `make env`. Otherwise, if Python 3 is installed (Windows: replace `python` with `py` if necessary):
 
 ```sh
 python -c "import pathlib,secrets; p=pathlib.Path('.env'); p.open('x').write('INSIGHT_PASSWORD='+secrets.token_urlsafe(18)+'\nINSIGHT_SESSION_SECRET='+secrets.token_urlsafe(48)+'\n')"
@@ -38,7 +45,7 @@ python -c "import pathlib,secrets; p=pathlib.Path('.env'); p.open('x').write('IN
 
 This refuses to overwrite an existing `.env`. Alternatively, create `.env` manually using `.env.example` and choose a password of at least 12 characters plus a random secret of at least 32 characters. Keep the file private.
 
-3. Run:
+3. Run `make up`, or:
 
 ```sh
 docker compose up --build -d
@@ -48,13 +55,33 @@ docker compose up --build -d
 5. Click **Load demo**, inspect a report, review its extracted observations and follow an entity to related reports.
 6. In **Sources**, run only the sources you want. These buttons make outbound internet requests. NVD/EPSS lookups explicitly send the selected CVE identifier to that provider; source documents are not sent.
 
-The container runs as an unprivileged user with a read-only root filesystem and no Linux capabilities. The Docker port is bound to **127.0.0.1 only**. Do not expose this prototype directly to your LAN or the internet. It uses local HTTP, one shared operator password and in-memory session revocation. Restarting signs everyone out. Use one process/worker.
+The container runs as an unprivileged user with a read-only root filesystem and no Linux capabilities. The Docker port is bound to **127.0.0.1 only**. Never expose port 8080 itself to your LAN or the internet: to publish Insight, put it behind a TLS reverse proxy as described in [docs/RUNBOOK.md](docs/RUNBOOK.md) ("Reverse proxy") and read [docs/SECURITY.md](docs/SECURITY.md) first. It has one operator password (plus optional MFA), in-memory sessions and rate limits: restarting signs everyone out. Use one process/worker.
 
 ```sh
 docker compose logs -f insight
 docker compose stop
 docker compose start
 ```
+
+### Makefile
+
+`make help` lists every target. Each wraps a command documented in the RUNBOOK or CONTRIBUTING, so those stay
+the reference. Common ones:
+
+| Task | Command |
+| --- | --- |
+| First run | `make env` (creates `.env`, never overwrites) · `make up` |
+| Run | `make up` · `make stop` · `make restart` · `make down` · `make logs` · `make ps` · `make health` |
+| Back up / restore | `make backup` (into `backups/`) · `make restore BACKUP=backups/backup-....db` (asks first) |
+| Export IOCs | `make export-iocs EXPORT_ARGS="--max-tlp GREEN --review-status accepted --defang --no-evidence"` (into `exports/`) |
+| API key | `make api-key-create NAME=siem [ACCESS=read-write] [MAX_TLP=GREEN]` · `make api-key-status` · `make api-key-rotate` · `make api-key-revoke` |
+| Sign-in MFA (off by default) | `make mfa-enable` · `make mfa-disable` · `make mfa-status` · `make mfa-reset` |
+| Default colour theme (System) | `make theme THEME=system\|light\|dark` · or while building: `make up THEME=dark` |
+| Check an instance | `make smoke` · `make version` |
+| Develop | `make dev` · `make test` · `make test-fast` · `make format` · `make check` · `make ci` |
+
+`backups/` and `exports/` hold copies of your intelligence: they are created owner-only, ignored by git and
+Docker, and `scripts/check_forbidden_files.py` refuses to commit them.
 
 Data survives container rebuilds in `insight_insight-data` (the exact Compose prefix follows your directory name). `docker compose down` preserves it; **`docker compose down -v` deletes it**.
 
@@ -87,6 +114,8 @@ Open http://127.0.0.1:8080. Default local data lives in `./data/insight.db`. Use
 | `insight migrate` | Apply database migrations explicitly |
 | `insight backup FILE` | Consistent online SQLite backup, safe while running (never overwrites) |
 | `insight export-iocs FILE` | Write a JSON IOC export (never overwrites; owner-only file). Options and recipes: [docs/IOC_EXPORT.md](docs/IOC_EXPORT.md#2-quick-start) |
+| `insight mfa setup` | Pair an authenticator app for sign-in codes (shows a secret, then confirms one code). Also `status`, `reset`. MFA itself is **off by default** and switched with `INSIGHT_MFA=on`; with Docker, `make mfa-enable` / `make mfa-disable` do both steps |
+| `insight api-key create --name NAME` | Create the API key for scripts/SIEM (read-only unless `--access read-write`; `--max-tlp GREEN` hides more restrictive reports from it; shown once). Also `status`, `rotate`, `revoke`. See [docs/API.md](docs/API.md#api-key-scripts-and-siem) |
 | `insight --version` | Print the version |
 
 Install the git hooks once: `pre-commit install --hook-type pre-commit --hook-type pre-push`.
@@ -110,6 +139,8 @@ Browser tests (Playwright) against a running instance:
 pip install --require-hashes -r requirements-e2e.lock && python -m playwright install chromium
 INSIGHT_E2E_URL=http://127.0.0.1:8080 INSIGHT_E2E_PASSWORD=... pytest tests/e2e -m e2e
 ```
+
+Start that instance with `INSIGHT_MAX_TLP=RED`: one browser test ingests the synthetic TLP:RED report.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow, [docs/TESTING.md](docs/TESTING.md) for the test-suite design, [docs/CI_CD.md](docs/CI_CD.md) for the pipeline and [docs/RELEASING.md](docs/RELEASING.md) for the release procedure. Scripting against Insight: [docs/API.md](docs/API.md).
 
@@ -159,7 +190,8 @@ docker compose cp insight:/data/backup-$(date +%Y%m%d).db ./
 
 ## Scope and known limits
 
-- No team accounts, SSO, RBAC, MFA or recipient-level dissemination rules.
+- No team accounts, SSO, RBAC or recipient-level dissemination rules. MFA is an optional single-operator authenticator-app code, off by default (`make mfa-enable`). One API key at a time.
+- Sessions and rate limits live in server memory: one worker, and a restart resets them. The API is unversioned (breaking changes are listed in the CHANGELOG's upgrade notes).
 - No full-text relevance ranking engine, automated scheduling, alert delivery, case management or graph visualization yet.
 - No PDF/binary parsing, arbitrary URL fetching, arbitrary feed entry, STIX/TAXII/MISP synchronization or automatic full-article storage.
 - No actor/malware attribution, ML or LLM inference. Extraction is deterministic and can still miss or mis-read unusual formats (see the known gaps in [docs/EXTRACTION.md](docs/EXTRACTION.md); the labelled benchmark `python scripts/benchmark_extraction.py` measures quality). Manual review is essential. URL extraction trims sentence punctuation and unbalanced closing brackets, so verify against the source evidence.
@@ -176,4 +208,6 @@ Add adapters in `connectors.py` only after reviewing their destinations, size li
 
 ## License
 
-Insight is released under the [MIT License](LICENSE). Third-party data and dependencies keep their own licences; see [NOTICE](NOTICE).
+Insight is released under the [MIT License](LICENSE). Copyright (c) 2026 Andrew Scott and the Insight contributors.
+Third-party data and dependencies keep their own licences; see [NOTICE](NOTICE). The MIT License covers this
+software, not the intelligence you store in it: source reports keep their publishers' terms and TLP labels.

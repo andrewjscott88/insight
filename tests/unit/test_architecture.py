@@ -7,6 +7,7 @@ build SQL, so search semantics, revision handling and auditing cannot drift apar
 from __future__ import annotations
 
 import ast
+import re
 from pathlib import Path
 
 import pytest
@@ -18,7 +19,7 @@ UI_MODULES = sorted((PACKAGE / 'ui').glob('*.py'))
 FRONT_ENDS = [*UI_MODULES, PACKAGE / 'main.py']
 SQL_BUILDERS = {'select', 'insert', 'update', 'delete', 'func', 'or_', 'and_', 'text'}
 ORM_CLASSES = {'Document', 'Entity', 'Observation', 'Note', 'AuditEvent', 'KEVRecord', 'WatchTerm'}
-ORM_CLASSES |= {'SourceRun', 'Enrichment'}
+ORM_CLASSES |= {'SourceRun', 'Enrichment', 'ApiKey'}
 
 
 def imports(path: Path) -> list[tuple[str, str]]:
@@ -58,3 +59,74 @@ def test_ui_does_not_touch_orm_classes(path: Path) -> None:
 @pytest.mark.parametrize('path', UI_MODULES, ids=lambda p: p.name)
 def test_ui_does_not_depend_on_the_api_module(path: Path) -> None:
     assert all(not module.endswith('main') for module, _ in imports(path))
+
+
+#: Service functions that read or change reports. Every call from the API must pass the caller's TLP limit
+#: (``max_tlp=``), or a TLP-limited API key could see reports above its limit (ADR 0014).
+TLP_AWARE_SERVICES = {
+    'DocumentQuery', 'detail', 'list_entities', 'entity_documents', 'count_entity_documents', 'stats',
+    'set_document_status', 'set_observation_status', 'add_note', 'ingest',
+}  # fmt: skip
+
+
+def test_api_routes_pass_the_callers_tlp_limit_to_services() -> None:
+    tree = ast.parse((PACKAGE / 'main.py').read_text())
+    calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == 'services'
+        and node.func.attr in TLP_AWARE_SERVICES
+    ]
+    assert {call.func.attr for call in calls if isinstance(call.func, ast.Attribute)} == TLP_AWARE_SERVICES
+    missing = [
+        f'services.{call.func.attr} (line {call.lineno})'
+        for call in calls
+        if isinstance(call.func, ast.Attribute) and not any(kw.arg == 'max_tlp' for kw in call.keywords)
+    ]
+    assert missing == [], f'pass max_tlp=reader_limit(request): {missing}'
+    lookups = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == 'get_document_or_404'
+    ]
+    assert lookups
+    assert all(len(call.args) + len(call.keywords) == 3 for call in lookups), 'pass the TLP limit'
+
+
+#: Tailwind classes with a fixed colour shade (``text-amber-300``) look right in one theme only.
+FIXED_SHADE = re.compile(
+    r'\b(?:text|bg|border|ring|outline|decoration|divide|fill|stroke)-'
+    r'(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|'
+    r'violet|purple|fuchsia|pink|rose)-\d{2,3}\b'
+)
+HEX_COLOUR = re.compile(r'#[0-9a-fA-F]{3,8}\b')
+
+
+@pytest.mark.parametrize('path', [p for p in UI_MODULES if p.name != 'theme.py'], ids=lambda p: p.name)
+def test_panels_use_theme_colours_only(path: Path) -> None:
+    """Colours live in ``ui/theme.py`` as light and dark tokens; a hard-coded one breaks one of the themes."""
+    source = path.read_text()
+    assert not FIXED_SHADE.findall(source), f'{path.name}: use a theme class (e.g. text-warn) instead'
+    assert not HEX_COLOUR.findall(source), f'{path.name}: colours belong in ui/theme.py PALETTES'
+
+
+@pytest.mark.parametrize('path', UI_MODULES, ids=lambda p: p.name)
+def test_responsive_visibility_does_not_use_quasars_hidden_class(path: Path) -> None:
+    """Regression: ``hidden sm:block`` never shows, because Quasar's ``.hidden`` is ``!important``.
+
+    The desktop tab labels and the header tagline were invisible at every width; use ``max-sm:hidden``.
+    """
+    assert not re.findall(
+        r"'(?:[^']* )?hidden [^']*\b(?:sm|md|lg|xl):(?:block|flex|inline|grid)", path.read_text()
+    )
+
+
+@pytest.mark.parametrize('path', [p for p in UI_MODULES if p.name != 'messages.py'], ids=lambda p: p.name)
+def test_messages_go_through_tell(path: Path) -> None:
+    """Regression: messages vanished after ~5 s. ``messages.tell`` keeps them until dismissed (WCAG 2.2.1)."""
+    assert 'ui.notify(' not in path.read_text(), f'{path.name}: use messages.tell(...) instead of ui.notify'

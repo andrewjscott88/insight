@@ -1,25 +1,44 @@
 # HTTP API (0.2.0)
 
-JSON over HTTP on the same origin as the workspace. The API is **unversioned and intended for local automation
-by the single operator**. Breaking changes are listed in `CHANGELOG.md` under "Upgrade notes". There is no
-OpenAPI endpoint (disabled on purpose); this file is the reference.
+JSON over HTTP on the same origin as the workspace. The API is **unversioned and intended for automation by
+the single operator** (scripts, a SIEM), signed in with a browser session or the
+[API key](#api-key-scripts-and-siem). Breaking changes are listed in `CHANGELOG.md` under "Upgrade notes".
+There is no OpenAPI endpoint (disabled on purpose); this file is the reference.
+
+**New to the API?** Start with the [API guide](API_GUIDE.md): authentication, limits and a tested `curl`
+command for every route, plus recipes (SIEM pulls, ingesting files, paging, back-off) and troubleshooting. This
+page is the field-by-field reference.
 
 ## Authentication and request rules
 
 1. `GET /login` returns a form containing `csrf_token` (also stored in the session cookie `insight_session`,
    HttpOnly, SameSite=Strict).
-2. `POST /login` (form fields `csrf_token`, `password`) → `303` to `/` on success; `401` wrong password; `403`
-   bad or missing CSRF token; `429` throttled (more than 30 failures per minute; each failure waits ~1 s).
+2. `POST /login` (form fields `csrf_token`, `password`, and `otp` when MFA is on) → `303` to `/` on
+   success; `401` wrong password or authentication code (one message for both); `403` bad or missing CSRF
+   token; `429` throttled (more than 30 failures per minute; each failure waits ~1 s); `503` MFA is on but no
+   authenticator app is paired (sign-in locked). MFA is off by default (`INSIGHT_MFA=on` or `make mfa-enable`
+   turns it on); then `otp` is the 6-digit code from the app, and each code works once.
 3. `GET /api/session` → `{"csrf_token": "…"}`. Send it as `X-CSRF-Token` on **every non-GET** API request.
 4. `POST /logout` (form field `csrf_token`) revokes the session server-side.
 
 Every request is also checked as follows:
 - The `Host` header must be in `INSIGHT_ALLOWED_HOSTS`, else `400`.
 - An `Origin` header, if present, must equal `scheme://host`, else `403`. `Origin: null` is always refused.
+  Behind a TLS-terminating proxy listed in `INSIGHT_TRUSTED_PROXIES`, `scheme` is the browser's
+  (`X-Forwarded-Proto`), so `https://host` matches.
 - Request bodies are limited to 2 MB, else `413`.
 
 Responses carry `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: same-origin`
-and, unless the route sets its own, `Cache-Control: no-store`.
+and, unless the route sets its own, `Cache-Control: no-store`. With `INSIGHT_SECURE_COOKIES=1` they also carry
+`Strict-Transport-Security: max-age=31536000`. Authenticated `/api` responses carry `RateLimit-Policy` and
+`RateLimit` ([Rate limits](#rate-limits)).
+
+Errors are JSON `{"detail": "message"}`; request-body validation errors list each problem
+(`{"detail": [{"loc": ["body", "title"], "msg": "...", ...}]}`). Status codes across the API: `400` host not
+allowed, `401` no valid key or session, `403` forbidden (read-only or TLP-limited key, CSRF, origin,
+browser-only route), `404` not found or above the key's TLP limit, `409` conflict, `413` body too large, `422`
+invalid or refused input, `429` rate limited (`Retry-After`), `502` external source failed, `503` sign-in locked
+(MFA on, no app paired). Details per status: [API guide, section 3](API_GUIDE.md#3-conventions-errors-rate-limits-tlp-paging).
 
 Minimal client:
 
@@ -32,6 +51,87 @@ c.headers['X-CSRF-Token'] = c.get('/api/session').json()['csrf_token']
 ```
 
 All `/api/*` routes return `401` without a valid session and `403` for writes without the CSRF header.
+
+## API key (scripts and SIEM)
+
+Automation should use the API key instead of the sign-in flow above. There is **one active key at a time**,
+managed only from the command line on the host (there is no API or UI for it, so a hijacked browser session
+cannot create one):
+
+```sh
+insight api-key create --name siem                    # read-only, expires in 90 days
+insight api-key create --name scripts --access read-write --expires-days 30
+insight api-key status                                # key ID, access, expiry, last use; never the key
+insight api-key rotate                                # new key, same settings; the old one stops at once
+insight api-key revoke
+# Docker: docker compose exec insight insight api-key create --name siem
+```
+
+The key (`insk_<12-hex key ID>_<43-character secret>`) is printed **once**; only its SHA-256 is stored, so a
+lost key cannot be recovered, only rotated. Store it in your secret manager or SIEM credential store, never in
+a URL or a repository. Send it on every request:
+
+```python
+import httpx
+c = httpx.Client(base_url='https://insight.example.org', headers={'Authorization': f'Bearer {API_KEY}'})
+iocs = c.get('/api/iocs/export', params={'max_tlp': 'GREEN', 'review_status': 'accepted'}).json()
+```
+
+| | Session (browser) | API key |
+| --- | --- | --- |
+| Credential | `insight_session` cookie | `Authorization: Bearer <key>` |
+| CSRF token on writes | Required (`X-CSRF-Token`) | Not used |
+| Reads (`GET`) | Yes | Yes |
+| Writes (`POST`) | Yes | Only with `--access read-write` |
+| `GET /api/session`, the workspace UI | Yes | No (`403`) |
+| Reports above a TLP limit | Sees all | With `--max-tlp`, invisible (see below) |
+
+- `401` with `WWW-Authenticate: Bearer error="invalid_token"` and `{"detail": "Invalid or expired API key"}`
+  for any unknown, malformed, revoked or expired key (the reason is logged server-side, with the key ID only).
+- `403 "This API key is read-only"` for a write with a read-only key.
+- When an `Authorization: Bearer` header is present, the key alone decides: a session cookie sent alongside is
+  ignored. Other schemes (e.g. `Basic` added by a reverse proxy) are ignored and the session applies.
+- Expiry is required (1-365 days, default 90). Rotate before it expires: `insight api-key status` shows the date.
+- Revocation and rotation take effect on the next request; no restart is needed.
+- **TLP limit** (`insight api-key create --max-tlp GREEN`): the key sees only reports at or below that label.
+  Reports above it behave exactly like missing ones: absent from lists, search, entity counts, stats and IOC
+  exports (an export's `max_tlp` is lowered to the key's), `404` for detail, export, review and notes, and
+  entities mentioned only in such reports are `404` too. The key cannot store a report above its limit (`422`).
+  `GET /api/audit` and CVE enrichment are refused (`403 "Not available to TLP-limited API keys"`), because
+  they reveal information across all reports. Rotation keeps the limit unless `--max-tlp` is given again;
+  `insight api-key rotate --max-tlp RED` removes it.
+- Key creation and revocation are audited (`api_key.create`, `api_key.revoke`). Every write made with the key is
+  logged by `insight.auth` as `API key <key ID>: POST /api/...`.
+
+## Rate limits
+
+Every authenticated `/api` request counts against a budget **per caller**: the API key and the signed-in
+operator have separate budgets, so a runaway script cannot lock the analyst out of the workspace.
+
+| Policy | Requests | Limit |
+| --- | --- | --- |
+| `read` | `GET`/`HEAD`, except the IOC export | 300 per minute |
+| `write` | `POST` (ingest, triage, notes, demo, sync, enrichment) | 60 per minute |
+| `ioc-export` | `GET /api/iocs/export` | 30 per hour |
+| (invalid keys) | Requests with a wrong, revoked or expired key, per client address | 10 per minute |
+
+Budgets are token buckets: the full limit is available as a burst, then it refills evenly (`read`: 5 per
+second; `ioc-export`: one every 2 minutes). Requests refused with `429` do not use up budget. A valid key is
+never refused because of invalid-key attempts. Source sync and enrichment keep their own stricter rules
+(one sync at a time, `409`; one lookup per 6.5 s, `429`).
+
+Limited responses carry the IETF draft headers
+([draft-ietf-httpapi-ratelimit-headers](https://datatracker.ietf.org/doc/draft-ietf-httpapi-ratelimit-headers/)):
+
+```
+RateLimit-Policy: "read";q=300;w=60      300 requests per 60 s window
+RateLimit: "read";r=297;t=1              297 left; full again in 1 s
+```
+
+A `429` adds `Retry-After: <seconds>`. Clients should wait at least that long (and back off exponentially on
+repeated `429`s). A SIEM polling the IOC export every 5 minutes uses 12 of its 30 exports per hour.
+
+Limits are held in the server's memory: they reset on restart and assume one worker (`insight serve` runs one).
 
 ## Documents
 
@@ -47,6 +147,10 @@ Returns the document detail (below) plus:
 
 Errors:
 - `422`: validation failed, or more than 2,000 indicator mentions (split the document);
+- `422`: the report's label, after raising, is above the instance's TLP limit (`INSIGHT_MAX_TLP`, default
+  `AMBER+STRICT`, so TLP:RED is refused). Nothing is stored. `detail` says whether a marking in the text caused
+  it, e.g. `Refused: the text carries a TLP:RED marking, so the report counts as TLP:RED (submitted as
+  TLP:AMBER). This instance stores reports up to TLP:AMBER+STRICT (INSIGHT_MAX_TLP). …`;
 - `409`: concurrent import (retry).
 
 ### `GET /api/documents`
@@ -176,7 +280,7 @@ Errors:
 | --- | --- |
 | `GET /api/sources` | Registry entries with the last 5 runs each |
 | `POST /api/sources/{key}/sync` | `{"message": …}`. Keys: `cisa-kev`, `cisa-advisories`, `sans-isc`, `ncsc`. `404` unknown key, `409` another sync running, `502` failure (recorded as an error run). |
-| `POST /api/enrichment/{provider}/{cve}` | Provider JSON (`epss`, `nvd`), cached. `422` invalid input or unknown CVE, `429` within 6.5 s of the last lookup, `502` provider failure. |
+| `POST /api/enrichment/{provider}/{cve}` | Provider JSON (`epss`, `nvd`), cached. `422` invalid input or unknown CVE, `429` within 6.5 s of the last lookup (a well-formed unknown CVE also starts the window), `502` provider failure, `403` for TLP-limited keys. |
 
 Sync and enrichment are the only routes that cause outbound network traffic.
 
@@ -185,12 +289,17 @@ Sync and enrichment are the only routes that cause outbound network traffic.
 | Route | Result |
 | --- | --- |
 | `GET /api/stats` | `{documents, entities, unreviewed, observations_unreviewed}` (current revisions only) |
-| `GET /api/audit` | Latest 200 audit events |
+| `GET /api/audit` | Latest 200 audit events: `{action, object_id, detail, actor, created_at}`. Not available to TLP-limited keys |
 | `GET /api/watch-terms` | `[{id, term}]` |
 | `POST /api/demo` | `{"created": n}`; loads the synthetic demo, idempotent |
 | `GET /health` | `{"status": "ok", "version": "…"}`, no authentication required |
 
+Audit `actor`: `operator` (browser session or workspace), `api-key:<key ID>`, `cli`, `connector:<source key>`,
+`system`, or empty for events recorded before schema revision `0005`.
+
 Audit actions:
+- `api_key.create`, `api_key.revoke` (detail: key ID, and the reason `rotated` or `revoked`), `mfa.pair`,
+  `mfa.reset` (pairing an authenticator app, or forgetting it);
 - `document.ingest`, `document.review`, `document.export`, `document.tlp_raised`;
 - `ioc.export` (detail: counts, TLP, defanging and filters as JSON);
 - `document.revision.supersede`, `document.revision.reactivate`;

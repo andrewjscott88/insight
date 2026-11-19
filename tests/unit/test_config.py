@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
 
-from insight.config import DEFAULT_ALLOWED_HOSTS, Settings
+from insight.config import DEFAULT_ALLOWED_HOSTS, DEFAULT_MAX_TLP, Settings, parse_max_tlp
 
 GOOD = {'INSIGHT_PASSWORD': 'p' * 12, 'INSIGHT_SESSION_SECRET': 's' * 32}
 
@@ -74,3 +75,88 @@ def test_settings_are_immutable() -> None:
     settings = Settings(database_url='sqlite://', password='p' * 12, session_secret='s' * 32)
     with pytest.raises(AttributeError):
         settings.password = 'changed'  # type: ignore[misc]
+
+
+# --------------------------------------------------------------------------- reverse proxy and TLP limit
+
+
+def test_public_deployment_settings_default_to_safe_values() -> None:
+    settings = Settings.from_env(GOOD)
+    assert settings.trusted_proxies == ()  # forwarded headers are ignored unless a proxy is named
+    assert settings.max_tlp == 'AMBER+STRICT'  # TLP:RED is refused unless explicitly allowed
+    assert Settings(database_url='sqlite://', password='p', session_secret='s').max_tlp == 'AMBER+STRICT'
+
+
+def test_trusted_proxies_and_max_tlp_from_env() -> None:
+    settings = Settings.from_env(
+        {**GOOD, 'INSIGHT_TRUSTED_PROXIES': ' 127.0.0.1, 172.18.0.0/16 ,, ::1 ', 'INSIGHT_MAX_TLP': ' red '}
+    )
+    assert settings.trusted_proxies == ('127.0.0.1', '172.18.0.0/16', '::1')
+    assert settings.max_tlp == 'RED'
+
+
+@pytest.mark.parametrize(
+    ('value', 'message'),
+    [
+        ('*', 'any client forge its address'),
+        ('127.0.0.1, *', 'any client forge its address'),
+        ('10.0.0.1/8', "'10.0.0.1/8' is not an IP address or network"),  # host bits set: uvicorn ignores it
+        ('proxy.internal', "'proxy.internal' is not an IP address or network"),
+        ('300.1.1.1', "'300.1.1.1' is not an IP address"),
+    ],
+)
+def test_invalid_trusted_proxies_fail_closed(value: str, message: str) -> None:
+    with pytest.raises(RuntimeError, match=re.escape(message)):
+        Settings.from_env({**GOOD, 'INSIGHT_TRUSTED_PROXIES': value})
+
+
+@pytest.mark.parametrize('value', ['WHITE', 'AMBER STRICT', 'TLP:RED', 'secret'])
+def test_invalid_max_tlp_fails_closed(value: str) -> None:
+    with pytest.raises(RuntimeError, match='INSIGHT_MAX_TLP must be one of'):
+        Settings.from_env({**GOOD, 'INSIGHT_MAX_TLP': value})
+
+
+@pytest.mark.parametrize('value', ['', '   '])
+def test_empty_max_tlp_means_the_default(value: str) -> None:
+    assert parse_max_tlp(value) == DEFAULT_MAX_TLP
+
+
+# --------------------------------------------------------------------------- MFA switch
+
+
+def test_mfa_is_off_by_default() -> None:
+    assert Settings.from_env(GOOD).mfa is False
+
+
+@pytest.mark.parametrize(('value', 'expected'), [('on', True), ('ON', True), (' 1 ', True), ('yes', True),
+                                                 ('true', True), ('off', False), ('0', False), ('no', False),
+                                                 ('false', False), ('', False)])  # fmt: skip
+def test_mfa_switch(value: str, expected: bool) -> None:
+    assert Settings.from_env({**GOOD, 'INSIGHT_MFA': value}).mfa is expected
+
+
+@pytest.mark.parametrize('value', ['onn', 'enabled', '2', 'totp'])
+def test_an_invalid_mfa_switch_fails_closed(value: str) -> None:
+    """A typo must stop start-up, never leave sign-in silently password-only."""
+    with pytest.raises(RuntimeError, match='INSIGHT_MFA must be "on" or "off"'):
+        Settings.from_env({**GOOD, 'INSIGHT_MFA': value})
+
+
+# --------------------------------------------------------------------------- default colour theme
+
+
+def test_theme_follows_the_device_by_default() -> None:
+    assert Settings.from_env(GOOD).theme == 'system'
+    assert Settings(database_url='sqlite://', password='p' * 12, session_secret='s' * 32).theme == 'system'
+
+
+@pytest.mark.parametrize(('value', 'expected'), [('light', 'light'), ('Dark', 'dark'), (' system ', 'system'),
+                                                 ('', 'system')])  # fmt: skip
+def test_theme_setting(value: str, expected: str) -> None:
+    assert Settings.from_env({**GOOD, 'INSIGHT_THEME': value}).theme == expected
+
+
+@pytest.mark.parametrize('value', ['drak', 'auto', 'night'])
+def test_an_invalid_theme_stops_start_up(value: str) -> None:
+    with pytest.raises(RuntimeError, match='INSIGHT_THEME must be one of system, light, dark'):
+        Settings.from_env({**GOOD, 'INSIGHT_THEME': value})

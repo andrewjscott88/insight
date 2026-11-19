@@ -172,6 +172,11 @@ def test_runtime_dependencies_pass_the_licence_policy() -> None:
         ('notes.txt', '-----BEGIN OPENSSH ' + 'PRIVATE KEY-----', True),  # split: don't trip the scanner
         ('config.sh', 'INSIGHT_SESSION_SECRET=abcdefghijklmnopqrstuvwxyz', True),
         ('readme.md', 'Set INSIGHT_PASSWORD= in your .env file', False),
+        ('backups/backup-2026-01-01-120000.db', '', True),
+        ('exports/iocs-2026-01-01-120000.json', '{}', True),  # TLP-labelled data from `make export-iocs`
+        ('docs/exports/guide.md', 'text', False),
+        ('siem.conf', 'api_key = insk_0123456789ab_' + 'A' * 43, True),  # built here: don't trip the scanner
+        ('docs/API.md', 'The key (`insk_<12-hex key ID>_<43-character secret>`)', False),
     ],
 )
 def test_forbidden_files(tmp_path: Path, name: str, content: str, blocked: bool) -> None:

@@ -5,6 +5,8 @@ from __future__ import annotations
 from nicegui import ui
 
 from .. import services
+from .messages import tell
+from .typography import heading
 from .workspace import Workspace
 
 
@@ -40,24 +42,25 @@ def build_watch_terms(ws: Workspace) -> None:
             with ws.write() as db:
                 created = services.add_watch_term(db, term_input.value or '')
         except ValueError as exc:
-            ui.notify(str(exc), type='warning')
+            term_input.error = str(exc)
+            tell(str(exc), 'warning')
             return
         if created is None:
-            ui.notify('That watch term already exists.', type='warning')
+            tell('That watch term already exists.', 'warning')
             return
         term_input.set_value('')
         ws.refresh_all()
 
     ws.on_refresh(watch_terms.refresh)
-    ui.label('Focus your review').classes('text-xl')
+    heading('Watch terms', 2)
     ui.label(
-        'Local, case-insensitive substring matches highlight relevant source reporting. '
-        'Matches are leads, not a risk score.'
-    ).classes('muted text-sm')
+        'Reports that contain one of these words are marked in the inbox. Capital letters do not matter. '
+        'A match is a lead to follow, not a risk score.'
+    ).classes('muted prose')
     with ui.row().classes('w-full items-center'):
         term_input = (
             ui.input('Watch term', placeholder='e.g. Palo Alto, VPN, identity')
-            .props('outlined dense maxlength=120')
+            .props('outlined maxlength=120')
             .classes('flex-1')
         )
         ui.button('Add watch term', on_click=add)

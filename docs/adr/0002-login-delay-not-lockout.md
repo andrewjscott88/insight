@@ -1,6 +1,7 @@
 # ADR 0002: Sign-in throttling by delay, not lockout
 
-Status: accepted (0.2.0)
+Status: accepted (0.2.0); refined by [ADR 0012](0012-single-api-key-and-rate-limits.md) (invalid API keys are
+throttled per client address the same way) and [ADR 0015](0015-totp-second-factor.md) (optional second factor)
 
 ## Context
 0.1.0 locked every sign-in for a minute after 10 failures. Any local process could deny the operator access.

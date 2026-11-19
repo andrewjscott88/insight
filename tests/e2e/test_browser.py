@@ -4,6 +4,9 @@
 
 Unlike the NiceGUI simulation tests, these execute the real JavaScript/Vue/Quasar front end, websockets,
 cookies and browser security behaviour. Skipped unless ``INSIGHT_E2E_URL`` is set.
+
+Start the server with ``INSIGHT_MAX_TLP=RED``: one test ingests the synthetic TLP:RED report to check that its
+marking raises the label (the default limit would refuse it).
 """
 
 from __future__ import annotations
@@ -32,7 +35,8 @@ expect.set_options(timeout=TIMEOUT)
 @pytest.fixture(scope='module')
 def browser() -> Iterator[Any]:
     with playwright_api.sync_playwright() as playwright:
-        browser = playwright.chromium.launch()
+        # INSIGHT_E2E_CHROMIUM: an already-installed Chromium/Chrome instead of Playwright's download.
+        browser = playwright.chromium.launch(executable_path=os.environ.get('INSIGHT_E2E_CHROMIUM') or None)
         yield browser
         browser.close()
 
@@ -54,11 +58,11 @@ def sign_in(page: Any, password: str = PASSWORD) -> None:
 def open_document(page: Any, title: str) -> None:
     """Click a list entry and wait until the detail pane shows *that* document.
 
-    Loading the demo auto-selects a document, so "EXTRACTED OBSERVATIONS" may already be visible for a
+    Loading the demo auto-selects a document, so "Extracted observations" may already be visible for a
     different one; typing before the pane re-renders would target a textarea that is about to be replaced.
     """
     page.get_by_role('button', name=title).first.click()
-    expect(page.locator('div.text-2xl', has_text=title)).to_be_visible()
+    expect(page.locator('.document-reader h2', has_text=title)).to_be_visible()
 
 
 def test_wrong_password_is_rejected(context: Any) -> None:
@@ -106,7 +110,7 @@ def test_analyst_workflow(context: Any) -> None:
     page.get_by_label('Source content').fill('Exploitation of CVE-2024-3400 from 192.0.2.77 was observed.')
     page.get_by_role('button', name='Ingest document').click()
     expect(page.get_by_text('Document ingested.')).to_be_visible()
-    expect(page.locator('div.text-2xl', has_text=title)).to_be_visible()
+    expect(page.locator('.document-reader h2', has_text=title)).to_be_visible()
     page.get_by_role('button', name='Accept').first.click()
     # Wait for the server to confirm the review (the pane re-renders) before typing into it.
     expect(page.get_by_text(re.compile(r'· accepted$')).first).to_be_visible()
@@ -156,8 +160,8 @@ def test_full_length_notional_report(context: Any) -> None:
     page.get_by_label('Source name').fill('Notional CTI Cell')
     page.get_by_label('Source content').fill(text)
     page.get_by_role('button', name='Ingest document').click()
-    expect(page.locator('div.text-2xl', has_text=title)).to_be_visible()
-    expect(page.get_by_text('EXTRACTED OBSERVATIONS · 35')).to_be_visible()
+    expect(page.locator('.document-reader h2', has_text=title)).to_be_visible()
+    expect(page.get_by_text('Extracted observations (35)')).to_be_visible()
     assert page.locator('script[src*="cdn-update"]').count() == 0
     assert not [url for url in requests if 'example.com' in url or 'example.net' in url]
 
@@ -176,10 +180,10 @@ def test_second_notional_report_tlp_and_javascript_offsets(context: Any) -> None
     page.get_by_label('Source name').fill('Notional CTI Cell')
     page.get_by_label('Source content').fill(text)
     page.get_by_role('button', name='Ingest document').click()
-    expect(page.locator('div.text-2xl', has_text=title)).to_be_visible()
+    expect(page.locator('.document-reader h2', has_text=title)).to_be_visible()
     expect(page.get_by_text('Handling label raised from TLP:AMBER to TLP:RED')).to_be_visible()
-    expect(page.get_by_text('EXTRACTED OBSERVATIONS · 52')).to_be_visible()
-    doc_id = page.locator('a', has_text='Download local JSON export').get_attribute('href').split('/')[3]
+    expect(page.get_by_text('Extracted observations (52)')).to_be_visible()
+    doc_id = page.locator('a', has_text='Download this report as JSON').get_attribute('href').split('/')[3]
     # Array.from() iterates code points (Python semantics); String.slice() uses UTF-16 code units.
     check = page.evaluate(
         """async (id) => {

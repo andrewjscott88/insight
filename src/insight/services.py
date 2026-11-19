@@ -8,19 +8,23 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import unicodedata
 from bisect import bisect_left
 from collections import defaultdict
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Any, Final
 
 from sqlalchemy import ColumnElement, and_, func, or_, select
 from sqlalchemy.orm import Session
 
+from . import apikeys, totp
 from .extraction import ZERO_WIDTH, Mention, extract
 from .ioc_export import IocMention, build_export
 from .models import (
+    ApiKey,
     AuditEvent,
     Document,
     Enrichment,
@@ -28,6 +32,7 @@ from .models import (
     KEVRecord,
     Note,
     Observation,
+    OperatorMfa,
     SourceRun,
     WatchTerm,
     now,
@@ -43,6 +48,7 @@ from .schemas import (
     tlp_markings,
 )
 
+log = logging.getLogger('insight.tlp')
 SUMMARY_LENGTH: Final = 220
 PIVOT_PAGE_SIZE: Final = 25
 MAX_PAGE_SIZE: Final = 200
@@ -50,6 +56,9 @@ MAX_QUERY_LENGTH: Final = 200
 MAX_WATCH_TERM_LENGTH: Final = 120
 #: Upper bound on indicator mentions in one IOC export, so a single request cannot exhaust memory.
 MAX_EXPORT_MENTIONS: Final = 100_000
+#: ``api_keys.last_used_at`` is written at most this often, so API traffic does not become a stream of writes.
+API_KEY_TOUCH_INTERVAL: Final = timedelta(minutes=5)
+MAX_API_KEY_NAME_LENGTH: Final = 100
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,14 +79,30 @@ class DocumentQuery:
     include_superseded: bool = False
     offset: int = 0
     limit: int = 100
+    #: Reader's TLP limit (a TLP-limited API key): more restrictive reports are invisible.
+    max_tlp: str | None = None
 
 
 # --------------------------------------------------------------------------- audit
 
 
+#: Actor recorded when the caller did not name one (e.g. the synthetic demo loaded by a test).
+DEFAULT_ACTOR: Final = 'system'
+
+
+def set_actor(db: Session, actor: str) -> Session:
+    """Name who acts in this session: ``operator``, ``api-key:<key id>``, ``cli``, ``connector:<source>``.
+
+    Every audit event written through ``db`` records it, so service functions need no extra parameter.
+    """
+    db.info['actor'] = actor
+    return db
+
+
 def audit(db: Session, action: str, object_id: str, detail: str = '') -> None:
-    """Record an application audit event in the current transaction."""
-    db.add(AuditEvent(action=action, object_id=object_id, detail=detail))
+    """Record an application audit event (with the session's actor) in the current transaction."""
+    actor = str(db.info.get('actor', DEFAULT_ACTOR))
+    db.add(AuditEvent(action=action, object_id=object_id, detail=detail, actor=actor))
 
 
 def audit_events(db: Session, limit: int = 200) -> list[AuditEvent]:
@@ -146,6 +171,58 @@ def apply_tlp_policy(item: DocumentInput) -> DocumentInput:
     return item if effective == item.tlp else item.model_copy(update={'tlp': effective})
 
 
+class TlpNotPermitted(ValueError):
+    """The label (after ``apply_tlp_policy``) is above what this instance stores (``INSIGHT_MAX_TLP``)."""
+
+
+def tlp_permitted(label: str, max_tlp: str) -> bool:
+    return TLP_LEVELS.index(label) <= TLP_LEVELS.index(max_tlp)
+
+
+def permitted_tlp_levels(max_tlp: str) -> list[str]:
+    """Labels a submitter may choose, least restrictive first."""
+    return [label for label in TLP_LEVELS if tlp_permitted(label, max_tlp)]
+
+
+def _refuse_above(submitted: str, effective: str, max_tlp: str) -> None:
+    if tlp_permitted(effective, max_tlp):
+        return
+    limit = f'This instance stores reports up to TLP:{max_tlp} (INSIGHT_MAX_TLP).'
+    if effective == submitted:
+        message = f'TLP:{effective} reports cannot be stored here. {limit}'
+    else:
+        message = (
+            f'Refused: the text carries a TLP:{effective} marking, so the report counts as TLP:{effective} '
+            f'(submitted as TLP:{submitted}). {limit} If the text only mentions that label, reword it.'
+        )
+    log.warning('Refused a TLP:%s report (submitted as TLP:%s; limit TLP:%s)', effective, submitted, max_tlp)
+    raise TlpNotPermitted(message)
+
+
+def count_documents_above(db: Session, max_tlp: str) -> int:
+    """Stored reports labelled more restrictively than ``max_tlp`` (e.g. from before the limit was set)."""
+    above = [label for label in TLP_LEVELS if not tlp_permitted(label, max_tlp)]
+    if not above:
+        return 0
+    return db.scalar(select(func.count()).select_from(Document).where(Document.tlp.in_(above))) or 0
+
+
+def visible_levels(max_tlp: str | None) -> tuple[str, ...]:
+    """Labels a reader limited to ``max_tlp`` may see (all of them for ``None``)."""
+    return TLP_LEVELS if max_tlp is None else TLP_LEVELS[: TLP_LEVELS.index(max_tlp) + 1]
+
+
+def stricter_limit(*limits: str | None) -> str | None:
+    """The most restrictive of several optional TLP limits (``None`` means unlimited)."""
+    given = [limit for limit in limits if limit is not None]
+    return min(given, key=TLP_LEVELS.index) if given else None
+
+
+def _visible(max_tlp: str | None) -> list[ColumnElement[bool]]:
+    """SQL condition restricting ``Document`` rows to a reader's TLP limit (none when unlimited)."""
+    return [] if max_tlp is None else [Document.tlp.in_(visible_levels(max_tlp))]
+
+
 def _create_document(
     db: Session,
     item: DocumentInput,
@@ -181,7 +258,12 @@ def _create_document(
 
 
 def ingest(
-    db: Session, item: DocumentInput, *, ref: SourceRef | None = None, truncated: bool = False
+    db: Session,
+    item: DocumentInput,
+    *,
+    ref: SourceRef | None = None,
+    truncated: bool = False,
+    max_tlp: str | None = None,
 ) -> tuple[Document, bool]:
     """Store ``item`` with its extracted observations. Returns ``(document, created)``.
 
@@ -195,9 +277,15 @@ def ingest(
     With ``ref`` (curated sources): at most one revision per source item is current. Changed content creates
     a new revision that supersedes the previous one; reverting to an earlier revision's exact content makes
     that revision current again. Stored bodies are never edited, so observation offsets stay valid.
+
+    ``max_tlp`` (manual submissions: ``INSIGHT_MAX_TLP``) refuses the report with :class:`TlpNotPermitted`
+    when its label *after* raising is more restrictive, so a marking in the text cannot slip past the limit.
+    Nothing is stored and no exact duplicate is returned.
     """
     submitted_tlp = item.tlp
     item = apply_tlp_policy(item)
+    if max_tlp is not None:
+        _refuse_above(submitted_tlp, item.tlp, max_tlp)
     fp = fingerprint(item)
     existing = db.scalar(select(Document).where(Document.fingerprint == fp))
     if ref is None:
@@ -254,10 +342,10 @@ def like_pattern(term: str) -> str:
 
 
 def _document_conditions(
-    *, q: str, status: str | None, tlp: str | None, include_superseded: bool
+    *, q: str, status: str | None, tlp: str | None, include_superseded: bool, max_tlp: str | None = None
 ) -> list[ColumnElement[bool]]:
     """Report selection shared by the inbox search and the IOC export, so both pick the same reports."""
-    conditions: list[ColumnElement[bool]] = []
+    conditions: list[ColumnElement[bool]] = _visible(max_tlp)
     if not include_superseded:
         conditions.append(Document.is_current.is_(True))
     if term := fold(q.strip()[:MAX_QUERY_LENGTH]).strip():
@@ -273,7 +361,11 @@ def search_documents(db: Session, query: DocumentQuery) -> list[Document]:
     """Inbox search shared by the API and UI (newest first, bounded page size)."""
     stmt = select(Document)
     conditions = _document_conditions(
-        q=query.q, status=query.status, tlp=query.tlp, include_superseded=query.include_superseded
+        q=query.q,
+        status=query.status,
+        tlp=query.tlp,
+        include_superseded=query.include_superseded,
+        max_tlp=query.max_tlp,
     )
     if conditions:
         stmt = stmt.where(*conditions)
@@ -282,8 +374,12 @@ def search_documents(db: Session, query: DocumentQuery) -> list[Document]:
     return list(db.scalars(stmt))
 
 
-def get_document(db: Session, doc_id: str) -> Document | None:
-    return db.get(Document, doc_id)
+def get_document(db: Session, doc_id: str, *, max_tlp: str | None = None) -> Document | None:
+    """The report, or ``None`` if it does not exist or is above the reader's TLP limit (indistinguishable)."""
+    doc = db.get(Document, doc_id)
+    if doc is None or doc.tlp not in visible_levels(max_tlp):
+        return None
+    return doc
 
 
 def summaries(db: Session, docs: Sequence[Document]) -> list[dict[str, Any]]:
@@ -332,13 +428,17 @@ def _kev_view(kev: KEVRecord | None) -> dict[str, str] | None:
     }
 
 
-def revisions(db: Session, doc: Document) -> list[dict[str, Any]]:
-    """All revisions of the same source item, oldest first (empty for manual documents)."""
+def revisions(db: Session, doc: Document, *, max_tlp: str | None = None) -> list[dict[str, Any]]:
+    """All revisions of the same source item visible to the reader, oldest first (empty for manual ones)."""
     if doc.source_key is None or doc.external_id is None:
         return []
     rows = db.scalars(
         select(Document)
-        .where(Document.source_key == doc.source_key, Document.external_id == doc.external_id)
+        .where(
+            Document.source_key == doc.source_key,
+            Document.external_id == doc.external_id,
+            *_visible(max_tlp),
+        )
         .order_by(Document.created_at, Document.id)
     )
     return [
@@ -361,8 +461,11 @@ def _utf16_offsets(text: str) -> Callable[[int], int]:
     return lambda offset: offset + bisect_left(astral, offset)
 
 
-def detail(db: Session, doc: Document) -> dict[str, Any]:
-    """Full document view: body, provenance, revisions, observations (with KEV context) and notes."""
+def detail(db: Session, doc: Document, *, max_tlp: str | None = None) -> dict[str, Any]:
+    """Full document view: body, provenance, revisions, observations (with KEV context) and notes.
+
+    ``max_tlp`` hides other revisions above the reader's limit; the caller has already checked ``doc``.
+    """
     result = summary(db, doc)
     result.update(
         body=doc.body,
@@ -371,7 +474,7 @@ def detail(db: Session, doc: Document) -> dict[str, Any]:
         source_key=doc.source_key,
         external_id=doc.external_id,
         supersedes_id=doc.supersedes_id,
-        revisions=revisions(db, doc),
+        revisions=revisions(db, doc, max_tlp=max_tlp),
     )
     rows = db.execute(
         select(Observation, Entity, KEVRecord)
@@ -404,31 +507,48 @@ def detail(db: Session, doc: Document) -> dict[str, Any]:
     return result
 
 
-def stats(db: Session) -> dict[str, int]:
-    """Workspace counters. Document counts include current revisions only."""
-    current = Document.is_current.is_(True)
+def stats(db: Session, *, max_tlp: str | None = None) -> dict[str, int]:
+    """Workspace counters. Document counts include current revisions only; ``max_tlp`` counts what the reader
+    may see (entities: those mentioned in at least one visible report)."""
+    current = [Document.is_current.is_(True), *_visible(max_tlp)]
+    if max_tlp is None:
+        entities = select(func.count()).select_from(Entity)
+    else:
+        entities = (
+            select(func.count(func.distinct(Observation.entity_id)))
+            .select_from(Observation)
+            .join(Document, Observation.document_id == Document.id)
+            .where(*_visible(max_tlp))
+        )
     return {
-        'documents': db.scalar(select(func.count()).select_from(Document).where(current)) or 0,
-        'entities': db.scalar(select(func.count()).select_from(Entity)) or 0,
+        'documents': db.scalar(select(func.count()).select_from(Document).where(*current)) or 0,
+        'entities': db.scalar(entities) or 0,
         'unreviewed': db.scalar(
-            select(func.count()).select_from(Document).where(current, Document.status != 'reviewed')
+            select(func.count()).select_from(Document).where(*current, Document.status != 'reviewed')
         )
         or 0,
         'observations_unreviewed': db.scalar(
             select(func.count())
             .select_from(Observation)
             .join(Document, Observation.document_id == Document.id)
-            .where(current, Observation.review_status == 'unreviewed')
+            .where(*current, Observation.review_status == 'unreviewed')
         )
         or 0,
     }
 
 
-def list_entities(db: Session, q: str = '', limit: int = 200) -> list[tuple[Entity, int]]:
-    """Entities with the number of distinct documents mentioning them (literal, case-insensitive search)."""
+def list_entities(
+    db: Session, q: str = '', limit: int = 200, *, max_tlp: str | None = None
+) -> list[tuple[Entity, int]]:
+    """Entities with the number of distinct documents mentioning them (literal, case-insensitive search).
+
+    With ``max_tlp``, only reports the reader may see count; entities mentioned only in others are left out.
+    """
     stmt = (
         select(Entity, func.count(func.distinct(Observation.document_id)))
         .join(Observation, Observation.entity_id == Entity.id)
+        .join(Document, Observation.document_id == Document.id)
+        .where(*_visible(max_tlp))
         .group_by(Entity.id)
         .order_by(Entity.kind, Entity.value)
         .limit(limit)
@@ -443,7 +563,12 @@ def get_entity(db: Session, entity_id: str) -> Entity | None:
 
 
 def entity_documents(
-    db: Session, entity_id: str, *, offset: int = 0, limit: int = PIVOT_PAGE_SIZE
+    db: Session,
+    entity_id: str,
+    *,
+    offset: int = 0,
+    limit: int = PIVOT_PAGE_SIZE,
+    max_tlp: str | None = None,
 ) -> list[Document]:
     """One page of documents (all revisions) mentioning the entity, newest first.
 
@@ -453,7 +578,7 @@ def entity_documents(
     ids = select(Observation.document_id).where(Observation.entity_id == entity_id).distinct()
     stmt = (
         select(Document)
-        .where(Document.id.in_(ids))
+        .where(Document.id.in_(ids), *_visible(max_tlp))
         .order_by(Document.created_at.desc(), Document.id)
         .offset(max(0, offset))
         .limit(min(max(1, limit), MAX_PAGE_SIZE))
@@ -461,9 +586,12 @@ def entity_documents(
     return list(db.scalars(stmt))
 
 
-def count_entity_documents(db: Session, entity_id: str) -> int:
-    stmt = select(func.count(func.distinct(Observation.document_id))).where(
-        Observation.entity_id == entity_id
+def count_entity_documents(db: Session, entity_id: str, *, max_tlp: str | None = None) -> int:
+    """Distinct reports mentioning the entity that the reader may see (0: treat the entity as not found)."""
+    stmt = (
+        select(func.count(func.distinct(Observation.document_id)))
+        .join(Document, Observation.document_id == Document.id)
+        .where(Observation.entity_id == entity_id, *_visible(max_tlp))
     )
     return db.scalar(stmt) or 0
 
@@ -624,28 +752,37 @@ def export_iocs(db: Session, query: IocExportQuery) -> dict[str, Any]:
 # --------------------------------------------------------------------------- analyst actions
 
 
-def set_document_status(db: Session, doc_id: str, status: str) -> Document | None:
+def set_document_status(
+    db: Session, doc_id: str, status: str, *, max_tlp: str | None = None
+) -> Document | None:
+    """Set the triage status; ``None`` if the report does not exist or is above the caller's TLP limit."""
     if status not in DOCUMENT_STATUSES:
         raise ValueError(f'Unknown document status: {status}')
-    doc = db.get(Document, doc_id)
+    doc = get_document(db, doc_id, max_tlp=max_tlp)
     if doc is not None:
         doc.status = status
         audit(db, 'document.review', doc.id, status)
     return doc
 
 
-def set_observation_status(db: Session, obs_id: str, status: str) -> Observation | None:
+def set_observation_status(
+    db: Session, obs_id: str, status: str, *, max_tlp: str | None = None
+) -> Observation | None:
+    """Review a mention; ``None`` if it does not exist or its report is above the caller's TLP limit."""
     if status not in REVIEW_STATUSES:
         raise ValueError(f'Unknown review status: {status}')
     obs = db.get(Observation, obs_id)
+    if obs is not None and get_document(db, obs.document_id, max_tlp=max_tlp) is None:
+        obs = None
     if obs is not None:
         obs.review_status = status
         audit(db, 'observation.review', obs.id, status)
     return obs
 
 
-def add_note(db: Session, doc_id: str, body: str) -> Note | None:
-    if db.get(Document, doc_id) is None:
+def add_note(db: Session, doc_id: str, body: str, *, max_tlp: str | None = None) -> Note | None:
+    """Add an analyst note; ``None`` if the report does not exist or is above the caller's TLP limit."""
+    if get_document(db, doc_id, max_tlp=max_tlp) is None:
         return None
     note = Note(document_id=doc_id, body=body)
     db.add(note)
@@ -697,3 +834,179 @@ def recent_source_runs(db: Session, source_key: str | None = None, limit: int = 
 
 def cached_enrichments(db: Session, cve: str) -> list[Enrichment]:
     return list(db.scalars(select(Enrichment).where(Enrichment.cve == cve).order_by(Enrichment.provider)))
+
+
+# --------------------------------------------------------------------------- API key (one active at a time)
+
+
+def active_api_key(db: Session) -> ApiKey | None:
+    """The key that currently authenticates requests: not revoked and not expired."""
+    return db.scalar(
+        select(ApiKey)
+        .where(ApiKey.revoked_at.is_(None), ApiKey.expires_at > now())
+        .order_by(ApiKey.created_at.desc())
+        .limit(1)
+    )
+
+
+def _issue_api_key(
+    db: Session, *, name: str, access: str, expires_days: int, max_tlp: str | None
+) -> tuple[ApiKey, str]:
+    name = name.strip()
+    if not 1 <= len(name) <= MAX_API_KEY_NAME_LENGTH:
+        raise ValueError(f'Key name must be 1-{MAX_API_KEY_NAME_LENGTH} characters')
+    if access not in apikeys.ACCESS_LEVELS:
+        raise ValueError(f'Access must be one of: {", ".join(apikeys.ACCESS_LEVELS)}')
+    apikeys.check_expiry_days(expires_days)
+    if max_tlp is not None and max_tlp not in TLP_LEVELS:
+        raise ValueError(f'TLP limit must be one of: {", ".join(TLP_LEVELS)}')
+    if max_tlp == TLP_LEVELS[-1]:
+        max_tlp = None  # A limit of RED hides nothing: store it as "no limit", which also lifts a limit.
+    new = apikeys.generate()
+    key = ApiKey(
+        key_id=new.key_id,
+        token_hash=new.token_hash,
+        name=name,
+        access=access,
+        expires_at=(datetime.now(UTC) + timedelta(days=expires_days)).isoformat(),
+        max_tlp=max_tlp,
+    )
+    db.add(key)
+    db.flush()
+    detail = {
+        'key_id': key.key_id,
+        'name': key.name,
+        'access': key.access,
+        'expires_at': key.expires_at,
+        'max_tlp': key.max_tlp,
+    }
+    audit(db, 'api_key.create', key.id, json.dumps(detail, sort_keys=True))
+    return key, new.token
+
+
+def _revoke(db: Session, key: ApiKey, reason: str) -> None:
+    key.revoked_at = now()
+    audit(db, 'api_key.revoke', key.id, json.dumps({'key_id': key.key_id, 'reason': reason}, sort_keys=True))
+
+
+def create_api_key(
+    db: Session,
+    *,
+    name: str,
+    access: str,
+    expires_days: int = apikeys.DEFAULT_EXPIRY_DAYS,
+    max_tlp: str | None = None,
+) -> tuple[ApiKey, str]:
+    """Issue the API key and return it with its plaintext token (show once; only the hash is stored).
+
+    ``max_tlp`` limits what the key can read and write (``None``: whatever the instance stores). Raises
+    ``ValueError`` for invalid input or when a key is already active (rotate or revoke it first).
+    """
+    if (current := active_api_key(db)) is not None:
+        raise ValueError(f'API key {current.key_id} is already active; rotate or revoke it first')
+    return _issue_api_key(db, name=name, access=access, expires_days=expires_days, max_tlp=max_tlp)
+
+
+def rotate_api_key(
+    db: Session,
+    *,
+    name: str | None = None,
+    access: str | None = None,
+    expires_days: int = apikeys.DEFAULT_EXPIRY_DAYS,
+    max_tlp: str | None = None,
+) -> tuple[ApiKey, str]:
+    """Revoke the active key and issue its replacement in one step.
+
+    Name, access and TLP limit carry over unless given; ``max_tlp='RED'`` removes the limit.
+    """
+    current = active_api_key(db)
+    if current is None:
+        raise ValueError('No active API key to rotate; create one')
+    replacement = _issue_api_key(
+        db,
+        name=name or current.name,
+        access=access or current.access,
+        expires_days=expires_days,
+        max_tlp=max_tlp or current.max_tlp,
+    )
+    _revoke(db, current, 'rotated')
+    return replacement
+
+
+def revoke_api_key(db: Session) -> ApiKey | None:
+    """Revoke the active key immediately; ``None`` when there is none."""
+    current = active_api_key(db)
+    if current is not None:
+        _revoke(db, current, 'revoked')
+    return current
+
+
+def verify_api_key(db: Session, token: str) -> tuple[ApiKey | None, str]:
+    """``(key, 'ok')`` for a valid, active key, else ``(None, reason)``. Records use (rate-limited writes).
+
+    ``reason`` (``malformed``, ``unknown``, ``revoked``, ``expired``) is for server logs only; callers must
+    answer every failure identically.
+    """
+    key_id = apikeys.parse_key_id(token)
+    if key_id is None:
+        return None, 'malformed'
+    key = db.scalar(select(ApiKey).where(ApiKey.key_id == key_id))
+    if key is None or not apikeys.token_matches(token, key.token_hash):
+        return None, 'unknown'
+    if key.revoked_at is not None:
+        return None, 'revoked'
+    current = datetime.now(UTC)
+    if key.expires_at <= current.isoformat():
+        return None, 'expired'
+    if key.last_used_at is None or key.last_used_at < (current - API_KEY_TOUCH_INTERVAL).isoformat():
+        key.last_used_at = current.isoformat()
+    return key, 'ok'
+
+
+# --------------------------------------------------------------------------- operator MFA (TOTP)
+#
+# Pairing (an authenticator app's secret stored here) is separate from the switch that requires it at sign-in
+# (``INSIGHT_MFA``, off by default). Pair once; turn MFA on and off without pairing again.
+
+
+def mfa_paired(db: Session) -> bool:
+    return db.scalar(select(func.count()).select_from(OperatorMfa)) != 0
+
+
+def pair_mfa(db: Session, secret: str, confirmed_step: int) -> None:
+    """Store a confirmed authenticator-app secret. Raises ``ValueError`` if an app is already paired.
+
+    ``confirmed_step`` (the code the operator typed to prove the app was set up) is recorded as used, so that
+    code cannot also sign in.
+    """
+    if mfa_paired(db):
+        raise ValueError('An authenticator app is already paired; reset it first to pair a new one')
+    row = OperatorMfa(secret=secret, last_step=confirmed_step)
+    db.add(row)
+    db.flush()
+    audit(db, 'mfa.pair', row.id)
+
+
+def reset_mfa(db: Session) -> bool:
+    """Forget the paired app (e.g. a lost phone); ``False`` when none was paired."""
+    rows = list(db.scalars(select(OperatorMfa)))
+    for row in rows:
+        db.delete(row)
+        audit(db, 'mfa.reset', row.id)
+    return bool(rows)
+
+
+def verify_mfa_code(db: Session, code: str, at: float | None = None) -> bool:
+    """True for a current code of the paired app that has not been used yet (it is then marked used).
+
+    False when no app is paired (fail closed). A replayed code, or any code from an older time step than the
+    last accepted one, is refused. Call it only after the password was verified, so guesses do not burn codes.
+    """
+    row = db.scalar(select(OperatorMfa).with_for_update())
+    if row is None:
+        return False
+    step = totp.matching_step(row.secret, code, at, after=row.last_step)
+    if step is None:
+        return False
+    row.last_step = step
+    return True

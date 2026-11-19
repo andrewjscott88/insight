@@ -29,7 +29,8 @@ def test_relative_links_resolve(document: Path) -> None:
 def test_required_documents_exist() -> None:
     required = [
         'README.md', 'CHANGELOG.md', 'CONTRIBUTING.md', 'SECURITY.md', 'NOTICE',
-        'docs/README.md', 'docs/RUNBOOK.md', 'docs/ARCHITECTURE.md', 'docs/API.md', 'docs/EXTRACTION.md',
+        'docs/README.md', 'docs/RUNBOOK.md', 'docs/ARCHITECTURE.md', 'docs/API.md', 'docs/API_GUIDE.md',
+        'docs/EXTRACTION.md',
         'docs/SECURITY.md', 'docs/TESTING.md', 'docs/CI_CD.md', 'docs/RELEASING.md', 'docs/VALIDATION.md',
         'docs/adr/README.md', '.github/pull_request_template.md',
     ]  # fmt: skip
@@ -52,3 +53,17 @@ def test_api_reference_covers_every_route() -> None:
 
 def test_readme_states_the_current_version() -> None:
     assert f'Version {insight.__version__}' in (ROOT / 'README.md').read_text(encoding='utf-8')
+
+
+def test_api_guide_has_a_curl_command_for_every_route() -> None:
+    """docs/API_GUIDE.md shows every route with a concrete path (`/api/documents/$DOC_ID/review`)."""
+    routes = re.findall(r"@app\.(?:get|post)\('([^']+)'", (ROOT / 'src' / 'insight' / 'main.py').read_text())
+    guide = (ROOT / 'docs' / 'API_GUIDE.md').read_text(encoding='utf-8')
+    missing = []
+    for route in routes:
+        pattern = re.escape(route)
+        pattern = re.sub(r'\\\{[a-z_]+\\\}', r'[^/\\s"?]+', pattern)
+        if not re.search(pattern + r'(?![a-z/-])', guide):
+            missing.append(route)
+    assert missing == []
+    assert guide.count('curl ') >= 40

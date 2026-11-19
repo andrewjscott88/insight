@@ -12,6 +12,7 @@ from typing import Any
 from nicegui import ui
 
 from .. import services
+from .typography import heading
 from .workspace import Workspace
 
 
@@ -28,17 +29,15 @@ def build_entities(ws: Workspace) -> None:
                 superseded = '' if is_current else ' · superseded'
 
                 def open_source(document_id: str = doc_id) -> None:
+                    ws.show_inbox()  # Before opening, so the reader is on screen when a phone scrolls to it.
                     ws.open_document(document_id)
-                    ws.show_inbox()
 
                 ui.button(f'{title} · TLP:{tlp}{superseded}', on_click=open_source).props(
                     'flat no-caps align=left'
                 ).classes('w-full')
             shown = offset + len(rows)
             if shown < total:
-                more = (
-                    ui.button(f'Show more ({total - shown} remaining)').props('flat dense').classes('text-xs')
-                )
+                more = ui.button(f'Show more ({total - shown} remaining)').props('flat dense no-caps')
 
                 def load_more(button: ui.button = more, next_offset: int = shown) -> None:
                     button.delete()
@@ -59,9 +58,9 @@ def build_entities(ws: Workspace) -> None:
                 'panel w-full break-value'
             )
             with expansion:
-                ui.label('Entity matches link sources; they do not establish maliciousness.').classes(
-                    'muted text-xs'
-                )
+                ui.label(
+                    'A match shows that reports mention the same value. It does not prove harm.'
+                ).classes('muted text-xs')
                 container = ui.column().classes('w-full gap-1')
 
             def on_open(event: Any, box: ui.column = container, target: str = entity_id) -> None:
@@ -70,16 +69,15 @@ def build_entities(ws: Workspace) -> None:
 
             expansion.on_value_change(on_open)
         if not rows:
-            ui.label('No entities found. Ingest source reporting to start connecting evidence.').classes(
-                'muted p-5'
-            )
+            ui.label('No entities yet. Add a report to start linking evidence.').classes('muted p-5')
 
     def search(value: str | None) -> None:
         ws.state.entity_q = value or ''
         entity_list.refresh()
 
     ws.on_refresh(entity_list.refresh)
-    ui.label('Trace every indicator back to its sources.').classes('muted')
+    heading('Entity explorer', 2)
+    ui.label('Trace every indicator back to the reports that mention it.').classes('muted prose')
     ui.input('Search entity values', on_change=lambda e: search(e.value)).props(
         'outlined dense debounce=300 clearable'
     ).classes('w-full max-w-xl')

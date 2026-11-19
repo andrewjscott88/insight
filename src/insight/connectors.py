@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 from . import __version__
 from .models import Enrichment, Entity, KEVRecord, SessionFactory, SourceRun, now
 from .schemas import DocumentInput
-from .services import SourceRef, ingest
+from .services import SourceRef, ingest, set_actor
 
 MAX_BYTES: Final = 8_000_000
 MAX_FEED_ITEMS: Final = 100
@@ -287,6 +287,7 @@ def import_kev(db: Session, payload: bytes) -> tuple[int, int]:
 
 def _store_source(session_factory: SessionFactory, source: Source, payload: bytes) -> str:
     with session_factory.begin() as db:
+        set_actor(db, f'connector:{source.key}')
         if source.kind == 'kev':
             count, added = import_kev(db, payload)
             message = (

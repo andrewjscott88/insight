@@ -8,7 +8,17 @@ services:
       INSIGHT_PASSWORD: ${INSIGHT_PASSWORD:?Run the credential setup in README first}
       INSIGHT_SESSION_SECRET: ${INSIGHT_SESSION_SECRET:?Run the credential setup in README first}
       INSIGHT_DATA_DIR: /data
-      INSIGHT_ALLOWED_HOSTS: localhost,127.0.0.1
+      # Public deployment behind a reverse proxy: set these in .env (see docs/RUNBOOK.md, "Reverse proxy").
+      INSIGHT_ALLOWED_HOSTS: ${INSIGHT_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      INSIGHT_TRUSTED_PROXIES: ${INSIGHT_TRUSTED_PROXIES:-}
+      INSIGHT_SECURE_COOKIES: ${INSIGHT_SECURE_COOKIES:-0}
+      # Most restrictive TLP label stored; RED is refused unless set to RED (docs/SECURITY.md).
+      INSIGHT_MAX_TLP: ${INSIGHT_MAX_TLP:-AMBER+STRICT}
+      # Authenticator-app code at sign-in: off by default. Turn on with `make mfa-enable` (docs/RUNBOOK.md).
+      INSIGHT_MFA: ${INSIGHT_MFA:-off}
+      # Default colour theme (system, light or dark) for browsers that have not picked one in the workspace
+      # header. `make theme THEME=dark` sets it. "system" follows each device's light/dark setting.
+      INSIGHT_THEME: ${INSIGHT_THEME:-system}
     volumes:
       - insight-data:/data
     restart: unless-stopped

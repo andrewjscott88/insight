@@ -4,23 +4,28 @@ For whoever installs, runs, upgrades, backs up or troubleshoots Insight. Command
 deployment from the README, run from the directory that contains `compose.yaml`. Local-Python equivalents are
 given where they differ.
 
-> Insight is a **single-operator, loopback-only** workbench. Do not expose it to a network without the
-> hardening listed in [SECURITY.md](SECURITY.md) ("Before internet/shared use").
+> Insight is a **single-operator** workbench, bound to loopback by default. To publish it, use a TLS reverse
+> proxy ("Reverse proxy" in §2) and work through the checklist in [SECURITY.md](SECURITY.md) ("Publishing an
+> instance"). Never expose port 8080 itself. `make help` lists a shortcut for most commands below.
 
 ## Quick reference
 
-| Task | Command |
-| --- | --- |
-| Start / stop / restart | `docker compose up -d` · `docker compose stop` · `docker compose restart` |
-| Status and health | `docker compose ps` · `curl -fsS http://127.0.0.1:8080/health` |
-| Follow logs | `docker compose logs -f insight` |
-| Backup (online, safe while running) | `docker compose exec insight insight backup /data/backup-$(date +%F).db` |
-| Copy a backup off the volume | `docker compose cp insight:/data/backup-YYYY-MM-DD.db ./` |
-| Export IOCs (e.g. shareable at GREEN) | `docker compose exec insight insight export-iocs /data/iocs-$(date +%F).json --max-tlp GREEN --review-status accepted --defang --no-evidence` |
-| Copy an export off the volume, then remove it | `docker compose cp insight:/data/iocs-YYYY-MM-DD.json ./` · `docker compose exec insight rm /data/iocs-YYYY-MM-DD.json` |
-| Apply migrations explicitly | `docker compose exec insight insight migrate` |
-| Smoke-test a running instance | `python scripts/smoke.py http://127.0.0.1:8080 --password "$INSIGHT_PASSWORD"` |
-| Version | `docker compose exec insight insight --version` · `curl -s http://127.0.0.1:8080/health` |
+The Makefile wraps these (`make help`); the commands it runs are the ones in the right-hand column.
+
+| Task | Make | Command |
+| --- | --- | --- |
+| Start / stop / restart | `make up` · `make stop` · `make restart` | `docker compose up -d` · `docker compose stop` · `docker compose restart` |
+| Status and health | `make ps` · `make health` | `docker compose ps` · `curl -fsS http://127.0.0.1:8080/health` |
+| Follow logs | `make logs` | `docker compose logs -f insight` |
+| Backup (online, safe while running) and copy it off the volume | `make backup` (into `backups/`, owner-only) | `docker compose exec insight insight backup /data/backup-$(date +%F).db` · `docker compose cp insight:/data/backup-YYYY-MM-DD.db ./` |
+| Restore | `make restore BACKUP=backups/…` (asks first) | §5 |
+| Export IOCs (e.g. shareable at GREEN), copy it off the volume, remove it | `make export-iocs EXPORT_ARGS="--max-tlp GREEN --review-status accepted --defang --no-evidence"` | `docker compose exec insight insight export-iocs /data/iocs-$(date +%F).json …` · `docker compose cp insight:/data/iocs-YYYY-MM-DD.json ./` · `docker compose exec insight rm /data/iocs-YYYY-MM-DD.json` |
+| Apply migrations explicitly | `make migrate` | `docker compose exec insight insight migrate` |
+| Smoke-test a running instance | `make smoke` (password from `.env`, no demo data) | `python scripts/smoke.py http://127.0.0.1:8080 --password "$INSIGHT_PASSWORD"` |
+| Version | `make version` · `make health` | `docker compose exec insight insight --version` · `curl -s http://127.0.0.1:8080/health` |
+| API key | `make api-key-create NAME=siem` · `make api-key-status` · `-rotate` · `-revoke` | `docker compose exec insight insight api-key …` |
+| Sign-in MFA (off by default) | `make mfa-enable` · `make mfa-disable` · `make mfa-status` · `make mfa-reset` | §4, "Sign-in second factor" |
+| Default colour theme (System by default) | `make theme THEME=dark` · `make up THEME=light` | Set `INSIGHT_THEME` in `.env`, then `docker compose up -d` (§4, "Colour theme") |
 
 ## 1. System overview
 
@@ -56,9 +61,49 @@ Set in `.env` (Compose reads it) or the process environment. Real environment va
 | `INSIGHT_DATABASE_URL` | no | `sqlite:///<data dir>/insight.db` | e.g. `postgresql+psycopg://user:pass@host/insight` |
 | `INSIGHT_ALLOWED_HOSTS` | no | `localhost,127.0.0.1` | Host headers accepted. Anything else gets HTTP 400. |
 | `INSIGHT_SECURE_COOKIES` | no | `0` | Set `1` only behind HTTPS |
+| `INSIGHT_TRUSTED_PROXIES` | no | none | Reverse proxy address(es), IPs or CIDRs (`172.18.0.1`, `10.0.0.0/24`). See "Reverse proxy" below. `*` and malformed entries stop start-up. |
+| `INSIGHT_MFA` | no | `off` | `on` requires an authenticator-app code at sign-in (`make mfa-enable` pairs the app and sets it). Anything other than on/off stops start-up. |
+| `INSIGHT_MAX_TLP` | no | `AMBER+STRICT` | Most restrictive label stored. Reports at or raised to a higher label (i.e. TLP:RED) are refused on upload. `RED` allows everything. |
+| `INSIGHT_THEME` | no | `system` | Colour theme for browsers that have not picked one: `system` (follow each device's light/dark setting), `light` or `dark`. Each browser can override it with the Light/Dark/System buttons in the workspace header (`make theme THEME=dark` sets it). Anything else stops start-up. |
 | `NICEGUI_STORAGE_PATH` | no | `/data/.nicegui` in the image | Must be writable |
 
 Never commit `.env`: a pre-commit hook and CI block it. Treat the file like the password it contains.
+
+Invalid values for `INSIGHT_TRUSTED_PROXIES`, `INSIGHT_MAX_TLP`, `INSIGHT_MFA` or `INSIGHT_THEME` stop start-up with a message naming the
+variable, rather than running with a setting that silently does nothing.
+
+### Reverse proxy (public deployment)
+Put Insight behind a TLS-terminating reverse proxy (Caddy, nginx, Traefik); never expose port 8080 itself. The
+Compose port stays bound to 127.0.0.1, so only the proxy on the same host can reach it.
+
+1. In `.env`: `INSIGHT_ALLOWED_HOSTS=insight.example.org`, `INSIGHT_SECURE_COOKIES=1` and
+   `INSIGHT_TRUSTED_PROXIES=<address the proxy connects from>`.
+2. Find that address: before setting it, make one request through the proxy and read the client address in
+   `docker compose logs insight` (uvicorn's access line, e.g. `172.18.0.1:53422 - "GET /login"`). With the
+   proxy on the host, this is the Compose network's gateway:
+   `docker network inspect insight_default -f '{{(index .IPAM.Config 0).Gateway}}'` (the network name follows
+   your directory name).
+3. The proxy must pass the original `Host` header, set `X-Forwarded-For` and `X-Forwarded-Proto`, and forward
+   WebSocket upgrades (the workspace uses them). Caddy does all of this by default:
+   `insight.example.org { reverse_proxy 127.0.0.1:8080 }`. For nginx:
+
+   ```nginx
+   location / {
+       proxy_pass http://127.0.0.1:8080;
+       proxy_set_header Host $host;
+       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+       proxy_set_header X-Forwarded-Proto $scheme;
+       proxy_http_version 1.1;
+       proxy_set_header Upgrade $http_upgrade;
+       proxy_set_header Connection "upgrade";
+   }
+   ```
+4. `docker compose up -d`. The log shows `Trusting X-Forwarded-For/-Proto from: …`. Sign in through the
+   public URL to confirm.
+
+Without step 1, sign-in through an HTTPS proxy fails with `403` (Insight sees `http`, the browser's `Origin`
+says `https`), and every client appears to come from the proxy's address. Forwarded headers from any other
+address are ignored, so clients cannot forge their address or scheme.
 
 ## 3. First start
 
@@ -92,6 +137,63 @@ Rotate at least every 90 days, when anyone who knew them leaves, and **immediate
 
 Everyone is signed out, and cookies issued with the old secret stop working.
 
+### The API key
+`insight api-key status` shows the key ID, access, expiry and last use (in Docker: `docker compose exec insight
+insight api-key status`). Rotate before the expiry date with `insight api-key rotate`, then paste the new key
+into the SIEM or script: the old key stops working immediately. Rotating `INSIGHT_SESSION_SECRET` does not
+affect the key. `429` responses with `Retry-After` mean a client exceeded its rate limit (docs/API.md).
+
+### Sign-in second factor (MFA)
+MFA is **off by default**: sign-in asks for the password only. Turning it on adds a code from an authenticator
+app (Google Authenticator, Microsoft Authenticator, 1Password, Aegis, Bitwarden, ...). Two separate things are
+involved: **pairing** the app (stored in the database) and the **switch** `INSIGHT_MFA=on|off` (in `.env`).
+
+| With Docker (Makefile) | What it does |
+| --- | --- |
+| `make mfa-enable` | Pairs an app if none is paired (shows a secret, then asks for one code; nothing is saved until a code matches), sets `INSIGHT_MFA=on` in `.env`, restarts Insight |
+| `make mfa-disable` | Sets `INSIGHT_MFA=off` and restarts. The app stays paired, so `make mfa-enable` later needs no new pairing |
+| `make mfa-status` | Whether MFA is on and whether an app is paired |
+| `make mfa-reset` | Forgets the paired app (lost or replaced phone) |
+
+Without make: `docker compose run --rm insight insight mfa setup`, then set `INSIGHT_MFA=on` in `.env` and run
+`docker compose up -d`. Local Python: `insight mfa setup`, set `INSIGHT_MFA=on`, restart `insight serve`.
+
+Pairing prints a secret and an `otpauth://` URI: enter the secret in the app manually as a time-based account,
+or turn the URI into a QR code on your own machine. With MFA on, each code works once. If `INSIGHT_MFA=on` but no
+app is paired, sign-in is **locked** (the sign-in page says so) rather than falling back to the password alone;
+start-up logs an error. **Lost phone:** `make mfa-disable` (sign in with the password), then `make mfa-reset`
+and `make mfa-enable` with the new phone. Codes depend on the clock: if they are always refused, check the time
+on the phone and the server (NTP). The pairing secret is stored in the database: protect backups like the
+password.
+
+### Colour theme and text size
+The workspace and the sign-in pages come in a light and a dark theme. **System** (the default) follows each
+device's light/dark setting and changes with it, e.g. when a phone switches to dark mode in the evening.
+
+- **In the browser:** the **Light / Dark / System** buttons at the top right of the workspace (icons only on a
+  phone) switch at once. The choice is remembered by that browser in the `insight_theme` cookie for a year, so
+  a phone and a desktop can differ. It is a display preference, not a credential.
+- **Instance default** (browsers that have not picked one): `INSIGHT_THEME=system|light|dark` in `.env`.
+
+| With Docker (Makefile) | What it does |
+| --- | --- |
+| `make theme THEME=dark` | Sets `INSIGHT_THEME=dark` in `.env` (the file stays private) and restarts Insight |
+| `make up THEME=light` | The same while building and starting; without `THEME`, `make up` leaves `.env` alone |
+| `make theme` | Shows the usage and the current value |
+
+Without make: set `INSIGHT_THEME` in `.env` and run `docker compose up -d` (local Python: restart `insight serve`).
+A browser that has already picked a theme keeps it; choosing **System** there hands it back to the device.
+
+**Larger text** (next to the theme buttons) gives that browser a 19 px base size with more space between
+letters, words and lines, for anyone who finds dense text hard to read. It is remembered per device in the
+`insight_text` cookie and also applies to the sign-in page. **What the words mean** explains every abbreviation and
+specialist term in plain language. Messages stay on screen until you press **Dismiss**. The readability standard
+the GUI meets is [ADR 0017](adr/0017-readability-standard.md).
+
+### Who did what
+`GET /api/audit` (and the `audit_events` table) records an `actor` per event: `operator`, `api-key:<key ID>`,
+`cli`, `connector:<source>` or `system`. Events from before schema revision `0005` have an empty actor.
+
 ### Sign-in throttling (expected behaviour)
 Each failed sign-in waits about 1 s, and sign-ins are checked one at a time. More than 30 failures in one
 minute returns HTTP 429 for the rest of that minute. A legitimate operator can always sign in again after the
@@ -115,6 +217,9 @@ Host cron example (daily at 02:30, keep 14):
 ```
 
 ### Restore
+`make restore BACKUP=backups/backup-YYYY-MM-DD-HHMMSS.db` performs these steps after asking for confirmation
+(`CONFIRM=yes` skips the question). By hand:
+
 1. `docker compose stop`
 2. Copy the backup into the volume as the live database, preserving ownership:
    ```sh
@@ -217,6 +322,13 @@ shows history.
 - Raises are audited (`document.tlp_raised`), the UI warns, and the API returns `tlp_raised_from`.
 - Public feeds are CLEAR.
 - Labels are metadata: there is no recipient-level enforcement (single user).
+- **TLP limit** (`INSIGHT_MAX_TLP`, default `AMBER+STRICT`): a report labelled, or raised by a marking in its
+  text, above the limit is refused on upload from the workspace and the API (`422`), and nothing is stored.
+  So by default TLP:RED never reaches the server. A text that only *mentions* "TLP:RED" is refused too: reword
+  the marking if it is not the report's own handling label. Connector items (public feeds) and the synthetic
+  demo are not limited. Reports stored before the limit are kept and stay readable; at start-up Insight logs
+  how many exceed it. Review them and delete any that must not stay (procedure below) before exposing the
+  instance.
 
 **Exports** keep provenance and TLP. They are not permission to share.
 - A **report export** (`/api/documents/{id}/export`) contains one report with all its observations.
@@ -237,7 +349,7 @@ procedure. It preserves the revision chain and audits the deletion.
 2. Find the document ID (shown in the export file name, or `GET /api/documents?q=…`).
 3. Run this in the data volume. Replace `DOC_ID` and the reason; `python -m sqlite3` ships with the image.
    ```sh
-   docker compose run --rm --no-deps --entrypoint python insight -m sqlite3 /data/insight.db
+   docker compose run --rm --no-deps --entrypoint python insight -m sqlite3 /data/insight.db   # or: make db-shell
    ```
    ```sql
    PRAGMA foreign_keys = ON;
@@ -297,7 +409,12 @@ Uvicorn logs every request line.
 | Signal | How | Alert when |
 | --- | --- | --- |
 | Liveness | Docker `HEALTHCHECK` → `/health` every 30 s | Not `healthy` for more than 2 minutes |
-| Brute-force attempts | Log lines `Failed sign-in attempt` / `Sign-in refused` | More than 10 in 10 minutes |
+| Brute-force attempts | Log lines `Failed sign-in attempt` (says whether the password or the code was wrong) / `Sign-in refused` | More than 10 in 10 minutes |
+| API key probing | Log lines `Rejected API key <key ID> from <address>: <reason>` (reason `revoked`/`expired`: an old key is still in use somewhere) | More than 10 in 10 minutes, or any `revoked` |
+| Unexpected API writes | Log lines `API key <key ID>: POST /api/...`; `GET /api/audit` (`actor`) | Writes you did not schedule |
+| Rate limiting | Log lines `Rate limit '<policy>' exceeded by <caller>` | Repeated for your own integration (raise its schedule interval) |
+| Refused uploads | Log lines `Refused a TLP:RED report` (never the content) | Any, if nobody expected to upload RED |
+| MFA misconfiguration | Log line `INSIGHT_MFA=on but no authenticator app is paired` (sign-in locked) | Any |
 | Source health | Run history / `GET /api/sources` (`runs[0].status`) | Same source `error` 3 times in a row |
 | Disk | Volume usage | Above 80% |
 | Upstream changes | Nightly pipeline issue "Nightly pipeline failure" | Any new comment |
@@ -308,6 +425,8 @@ Uvicorn logs every request line.
 | Incident | Immediate actions |
 | --- | --- |
 | Password or secret may be exposed | Rotate both (§4), then review logs for sign-ins you did not make. `.env` is plaintext: check who can read it. |
+| Phone with the authenticator app lost | `make mfa-disable`, sign in with the password, `make mfa-reset`, then `make mfa-enable` with the new phone. If the phone may be in someone else's hands, also rotate `INSIGHT_PASSWORD`. |
+| API key may be exposed | `insight api-key revoke` (immediate), then `insight api-key create` and update the client. Check `insight.auth` logs for `API key <key ID>` writes and `Rejected API key` lines, and the audit log for unexpected changes. |
 | Unknown sign-ins or brute force | Confirm the port is bound to 127.0.0.1 (`docker compose port insight 8080`); rotate credentials; find the local process responsible |
 | Secret committed to git | Rotate it, then purge the history (`git filter-repo`). gitleaks in CI should have flagged it. |
 | Vulnerable dependency (CI, Trivy, Dependabot) | Wait for (or trigger) `lock-refresh`, then release through the normal gates. Do not hot-patch the container. |
@@ -324,7 +443,13 @@ verify the signature (§6).
 
 ## 14. Known limitations (0.2.0)
 
-- Single operator; no SSO, RBAC or recipient-level TLP enforcement; in-memory sessions (one worker).
+- Single operator; no SSO, RBAC or recipient-level TLP enforcement; in-memory sessions and rate limits (one
+  worker; a restart signs everyone out and resets the limits).
+- One API key at a time; rotation takes effect immediately (no overlap), so update the client right after
+  `make api-key-rotate`.
+- `make smoke` and `scripts/smoke.py` sign in with the password only, so they need MFA off.
+- A CVE-enrichment request for a well-formed CVE that no report mentions is refused (`422`) but still starts the
+  6.5 s enrichment window.
 - No delete function (use §9); audit events are not tamper-proof.
 - Extraction is deterministic regex plus validation (about 98% precision and recall on the labelled corpus).
   Known gaps:
@@ -349,7 +474,9 @@ verify the signature (§6).
 | --- | --- |
 | [README](../README.md) | Quick start, daily workflow, commands |
 | [ARCHITECTURE](ARCHITECTURE.md) | Design, data model, migrations, revisions |
-| [API](API.md) | HTTP endpoints |
+| [API_GUIDE](API_GUIDE.md) | Every API call with `curl`, authentication, limits, recipes, troubleshooting |
+| [API](API.md) | HTTP endpoint and field reference |
+| [Makefile](../Makefile) | `make help`: shortcuts for running, backing up, keys, MFA, tests and CI gates |
 | [EXTRACTION](EXTRACTION.md) | Indicator extraction rules and limits |
 | [SECURITY](SECURITY.md) | Security posture and hardening requirements |
 | [TESTING](TESTING.md) · [CI_CD](CI_CD.md) · [RELEASING](RELEASING.md) | Quality gates and release process |

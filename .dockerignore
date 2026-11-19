@@ -19,3 +19,5 @@ requirements-dev.lock
 requirements-e2e.lock
 scripts
 benchmarks
+backups
+exports

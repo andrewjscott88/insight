@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -49,8 +50,8 @@ async def test_unauthenticated_visitors_are_redirected(ui_env: SimpleNamespace) 
 
 async def test_workspace_renders_empty_state(user: User) -> None:
     await user.should_see('Intelligence workspace')
-    await user.should_see('No sources match.')
-    await user.should_see('Select a source to inspect reporting')
+    await user.should_see('No reports match.')
+    await user.should_see('Choose a report from the list')
     await user.should_see('No watch terms yet.')
     await user.should_see('No source syncs yet.')
 
@@ -84,7 +85,7 @@ async def test_blank_note_is_rejected(user: User) -> None:
     await load_demo(user)
     await open_document(user, 'Training scenario: edge appliance activity')
     user.find('Save note').click()
-    await user.should_see('Enter a note between 1 and 10,000 characters.')
+    await user.should_see('Write a note first (up to 10,000 characters).')
 
 
 async def test_document_status_review(user: User, ui_env: SimpleNamespace) -> None:
@@ -109,16 +110,34 @@ async def test_ingest_dialog_creates_and_deduplicates(user: User, ui_env: Simple
         assert (doc.title, doc.tlp) == ('Pasted report', 'AMBER')  # the dialog defaults to AMBER
 
 
+def field_error(field: ui.input) -> str | None:
+    """The message shown under a field (read through a function: mypy would keep a narrowed attribute)."""
+    return field.error
+
+
 async def test_ingest_dialog_validation(user: User) -> None:
     user.find('Ingest intelligence').click()
     user.find('Ingest document').click()
-    await user.should_see('title:')
+    # Plain-language messages on the fields themselves (WCAG 3.3.1, 3.3.3), announced by Quasar (role=alert).
+    await user.should_see('Enter a title for the report (up to 300 characters).')
+    title = user.find('Document title').elements.pop()
+    assert isinstance(title, ui.input)
+    assert field_error(title) == 'Enter a title for the report (up to 300 characters).'
+    assert title.props['aria-invalid'] == 'true'
+    assert not user.notify.messages, 'no message behind the dialog: the fields say it'
     user.find('Document title').type('t')
+    assert field_error(title) is None, 'the message goes away as soon as the field is changed'
+    assert title.props['aria-invalid'] == 'false'
     user.find('Source name').type('s')
     user.find('Source content').type('b')
     user.find('Source URL (optional)').type('javascript:alert(1)')
     user.find('Ingest document').click()
-    await user.should_see('source_url:')
+    await user.should_see('Enter a web address that starts with http:// or https://')
+    url = user.find('Source URL (optional)').elements.pop()
+    assert isinstance(url, ui.input)
+    assert (
+        field_error(url) == 'Enter a web address that starts with http:// or https://, or leave this empty.'
+    )
 
 
 async def test_ioc_export_dialog_opens_with_its_options(user: User) -> None:
@@ -179,7 +198,8 @@ async def test_ioc_export_dialog_blocks_an_empty_download(
     await user.should_see('Nothing matches these filters.')  # empty workspace
     user.find('Download JSON').click()
     await asyncio.sleep(0.1)
-    assert user.notify.contains('Nothing matches these filters.')
+    # Said inside the dialog: a message would wait behind it.
+    await user.should_see('Nothing to download. Nothing matches these filters.')
     assert calls == []
 
 
@@ -256,7 +276,7 @@ async def test_source_sync_success_and_failure(
         return json.dumps(kev).encode()
 
     monkeypatch.setattr(connectors, 'download', feed)
-    user.find('Sync now').click()  # lowest id = first registry entry (CISA KEV)
+    user.find(kind=ui.button, content='Sync now').click()  # lowest id = first registry entry (CISA KEV)
     await user.should_see('Updated 1 KEV records; 1 new reports')
     await user.should_see('cisa-kev · success')
 
@@ -264,7 +284,7 @@ async def test_source_sync_success_and_failure(
         raise OSError('offline')
 
     monkeypatch.setattr(connectors, 'download', broken)
-    user.find('Sync now').click()
+    user.find(kind=ui.button, content='Sync now').click()
     await user.should_see('Sync failed: OSError: offline')
     await user.should_see('cisa-kev · error')
 
@@ -281,8 +301,8 @@ async def test_enrichment_dialog_requires_consent(
     monkeypatch.setattr(connectors, 'download', provider)
     await load_demo(user)
     await open_document(user, 'Training scenario: edge appliance activity')
-    user.find('Optional CVE enrichment').click()
-    await user.should_see('Enrich CVE-2024-3400')
+    user.find('Look up this CVE').click()
+    await user.should_see('Look up CVE-2024-3400')
     fetch = user.find(kind=ui.button, content='Fetch from provider')
     assert not fetch.elements.pop().enabled  # disabled until the analyst consents
     user.find(kind=ui.checkbox).click()
@@ -335,7 +355,9 @@ async def test_superseded_revision_banner_links_to_current(user: User) -> None:
     user.find('Search intelligence').type('Original description')  # matches only the old revision
     await user.should_see('1 sources shown')
     await open_document(user, 'CVE-2024-3400 · PAN-OS')
-    await user.should_see('Superseded revision. The publisher has since changed this item.')
+    await user.should_see(
+        'Superseded revision. This is an old version: the publisher has changed this report since.'
+    )
     await user.should_see('Original description')
     user.find('Open current revision').click()
     await user.should_see('Publisher edit')
@@ -369,7 +391,7 @@ async def test_full_length_report_through_the_ingest_dialog(user: User, ui_env: 
     user.find('Source content').type(text)
     user.find('Ingest document').click()
     await user.should_see('Document ingested.')
-    await user.should_see('EXTRACTED OBSERVATIONS · 35')
+    await user.should_see('Extracted observations (35)')
     await user.should_see('CVE-2024-3400')
     with ui_env.app.state.session_factory() as db:
         stored = db.scalar(select(Document))
@@ -399,7 +421,8 @@ async def test_workspace_size_does_not_grow_with_recurring_indicators(
 
 
 async def test_tlp_marking_raises_the_label_and_warns(user: User, ui_env: SimpleNamespace) -> None:
-    """The TLP:RED SALT MERIDIAN report pasted with the dialog's AMBER default is stored as RED, visibly."""
+    """With RED allowed, the TLP:RED SALT MERIDIAN report pasted as AMBER is stored as RED, visibly."""
+    ui_env.app.state.settings = dataclasses.replace(ui_env.app.state.settings, max_tlp='RED')
     text = (Path(__file__).parent.parent / 'corpus' / 'reports' / 'notional-salt-meridian.md').read_text(
         'utf-8'
     )
@@ -414,6 +437,42 @@ async def test_tlp_marking_raises_the_label_and_warns(user: User, ui_env: Simple
         stored = db.scalar(select(Document))
         assert stored is not None
         assert stored.tlp == 'RED'
+
+
+async def test_red_reports_are_refused_by_default(user: User, ui_env: SimpleNamespace) -> None:
+    """By default (INSIGHT_MAX_TLP=AMBER+STRICT) RED is not offered and a RED marking is refused."""
+    user.find('Ingest intelligence').click()
+    label = user.find(kind=ui.select, content='Traffic Light Protocol').elements.pop()
+    assert isinstance(label, ui.select)
+    assert label.options == ['CLEAR', 'GREEN', 'AMBER', 'AMBER+STRICT']
+    assert label.value == 'AMBER'
+    user.find('Document title').type('Partner briefing')
+    user.find('Source name').type('Partner')
+    user.find('Source content').type('TLP:RED\nSeen at 192.0.2.8.')
+    user.find('Ingest document').click()
+    await user.should_see('Refused: the text carries a TLP:RED marking')
+    with ui_env.app.state.session_factory() as db:
+        assert db.scalar(select(Document)) is None
+
+
+async def test_workspace_actions_are_audited_as_the_operator(user: User, ui_env: SimpleNamespace) -> None:
+    user.find('Ingest intelligence').click()
+    user.find('Document title').type('Analyst paste')
+    user.find('Source name').type('Analyst')
+    user.find('Source content').type('Seen at 192.0.2.8.')
+    user.find('Ingest document').click()
+    await user.should_see('Document ingested.')
+    with ui_env.app.state.session_factory() as db:
+        assert set(db.scalars(select(AuditEvent.actor))) == {'operator'}
+
+
+async def test_the_default_label_stays_valid_under_a_low_limit(user: User, ui_env: SimpleNamespace) -> None:
+    ui_env.app.state.settings = dataclasses.replace(ui_env.app.state.settings, max_tlp='GREEN')
+    await user.open('/')  # the dialog is built when the page loads
+    user.find('Ingest intelligence').click()
+    label = user.find(kind=ui.select, content='Traffic Light Protocol').elements.pop()
+    assert isinstance(label, ui.select)
+    assert (label.options, label.value) == (['CLEAR', 'GREEN'], 'GREEN')
 
 
 async def test_entity_pivots_load_lazily_and_page(user: User, ui_env: SimpleNamespace) -> None:
@@ -444,4 +503,4 @@ async def test_truncated_feed_items_are_labelled(user: User, ui_env: SimpleNames
         )
     await user.open('/')
     await open_document(user, 'Long feed item')
-    await user.should_see('Truncated by the connector')
+    await user.should_see('Only part of this report was saved.')

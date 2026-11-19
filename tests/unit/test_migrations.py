@@ -96,10 +96,14 @@ def release_0_1_0(tmp_path: Path) -> Path:
 
 def test_release_0_1_0_upgrades_without_data_loss(release_0_1_0: Path) -> None:
     with closing(sqlite3.connect(release_0_1_0)) as before:
+        existing = {row[0] for row in before.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        # Tables added after 0.1.0 (e.g. api_keys in 0004) cannot lose data; count every table 0.1.0 had.
         counts = {
             t: before.execute(f'SELECT count(*) FROM {t}').fetchone()[0]  # noqa: S608
             for t in Base.metadata.tables
+            if t in existing
         }
+        assert set(counts) >= {'documents', 'observations', 'entities', 'notes', 'audit_events'}
 
     engine, sessions = database(f'sqlite:///{release_0_1_0}')
     try:

@@ -3,6 +3,37 @@
 What was verified for release 0.2.0, what was not, and how. Update this file for every release (see
 [RELEASING.md](RELEASING.md)).
 
+## Unreleased: API platform, deployment settings, MFA, Makefile (verified so far)
+
+Recorded while the work was done, for whoever prepares the next release to confirm in the release gates.
+
+- **Tests:** 1,143 pass on each of CPython 3.11, 3.12, 3.13 and 3.14 (2 skipped: browser and live suites);
+  1,073 pass against PostgreSQL 16 (`-m "not slow"`). Branch coverage 97.1% (gate 90%). `ruff`, `ruff format`,
+  `mypy --strict`, lock check, forbidden-files scan, workflow schema and zizmor clean (`make ci` end to end).
+- **Schema:** migrations `0004` and `0005` reversible, models equal migrations, and the 0.1.0 and 0.2.0 release
+  databases upgrade to `0005` from the installed wheel.
+- **Security properties, each with a test that was checked by breaking the code:** no report above a key's TLP
+  limit leaks through any API route (removing the limit from one route fails the sweep and the architecture
+  test); invalid-key floods never lock out the valid key; a clock stepping backwards cannot drain a rate-limit
+  bucket; non-ASCII digits in an MFA code are refused instead of causing a server error; a limit of RED lifts a
+  key's TLP limit.
+- **Live server walkthroughs** (`insight serve`, curl): API key create/use/rotate/revoke without restart; bad
+  keys `401` then `429`; TLP:RED refused; GREEN-limited key sees only GREEN; the 31st IOC export in an hour
+  `429` with `Retry-After: 120`; audit actors; MFA off by default, then on with code, replay refused; sign-in
+  through a simulated HTTPS reverse proxy (`403` before `INSIGHT_TRUSTED_PROXIES`, `303` after; `Secure`
+  cookie; untrusted peers cannot forge headers); HSTS.
+- **[API guide](API_GUIDE.md):** every `sh` block executed in order against a live server (exit 0, no errors);
+  the SIEM script and the Python example run, including the failure path with a revoked key.
+- **Makefile:** every non-Docker target run for real (`env`, `serve`, `health`, `smoke`, `check`, `ci`,
+  `package`, `benchmark`, `drill`, `test-postgres`, `clean`); Docker targets verified against a recording
+  stand-in for `docker compose`.
+
+**Not yet verified** (no Docker or internet in the build environment): `docker build` and the image with the new
+`LICENSE`/`NOTICE` copy step, the Makefile's Docker targets against real containers (including the interactive
+`make mfa-enable` prompt through `docker compose run`), Trivy, gitleaks, `pip-audit`, the Playwright browser
+suite, the ZAP scan and mutation testing. `make release-check` currently fails on unpinned GitHub Actions, as
+the release gate intends, until the workflows are pinned by commit SHA.
+
 ## Verified in the build environment
 
 **Test suite**

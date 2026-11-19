@@ -34,10 +34,10 @@ def test_dedup_and_distinct_provenance(authed: TestClient, make_document: MakeDo
     first = make_document()
     repeated = make_document()
     other = make_document(source_name='Second publisher')
-    restricted = make_document(tlp='RED')
+    relabelled = make_document(tlp='GREEN')  # a different handling label is different provenance
     assert not repeated['created']
     assert repeated['id'] == first['id']
-    assert len({first['id'], other['id'], restricted['id']}) == 3
+    assert len({first['id'], other['id'], relabelled['id']}) == 3
     assert first['content_hash'] == other['content_hash']
     assert authed.get('/api/stats').json()['documents'] == 3
 

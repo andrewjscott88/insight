@@ -2,15 +2,24 @@
 
 from __future__ import annotations
 
+import dataclasses
 from pathlib import Path
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
+from insight.config import Settings
+
 REPORTS = Path(__file__).parent.parent / 'corpus' / 'reports'
 GLASS = (REPORTS / 'notional-intrusion-report.md').read_text('utf-8')
 SALT = (REPORTS / 'notional-salt-meridian.md').read_text('utf-8')
+
+
+@pytest.fixture
+def settings(settings: Settings) -> Settings:
+    """These tests process the synthetic TLP:RED report on purpose, so they opt in: INSIGHT_MAX_TLP=RED."""
+    return dataclasses.replace(settings, max_tlp='RED')
 
 
 def payload(body: str = GLASS, **changes: str) -> dict[str, str]:

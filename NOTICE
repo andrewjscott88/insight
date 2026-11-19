@@ -1,5 +1,7 @@
 Insight
-Copyright (c) the Insight contributors.
+Copyright (c) 2026 Andrew Scott and the Insight contributors.
+
+Insight is licensed under the MIT License; see LICENSE.
 
 This product includes data derived from the Public Suffix List
 (https://publicsuffix.org/), licensed under the Mozilla Public License, v. 2.0
@@ -9,5 +11,3 @@ itself; it is regenerated with scripts/update_tlds.py.
 
 Third-party Python dependencies are installed from requirements.lock and retain
 their own licences; scripts/check_licenses.py enforces the permitted set.
-
-Insight itself is licensed under the MIT License; see LICENSE.

@@ -1,1 +1,22 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sign in · Insight</title><link rel="stylesheet" href="/static/app.css"></head><body class="login-page"><main class="login-card"><a class="brand" href="/"><span class="brand-mark">✳</span><span>Insight<small>INTELLIGENCE WORKSPACE</small></span></a><div class="eyebrow">A CLEARER PICTURE STARTS HERE</div><h1>Welcome back.</h1><p class="muted">Sign in to your private intelligence workspace.</p><form action="/login" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label>Workspace password<input name="password" type="password" autocomplete="current-password" required autofocus></label>{% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}<button class="primary" type="submit">Open workspace →</button></form><p class="login-footer"><span class="status-dot"></span> Source-led intelligence. Analyst-reviewed.</p></main></body></html>
+<!doctype html>
+<html lang="en" data-theme="{{ theme }}" data-text="{{ text_size }}">
+<head>
+{% include '_theme_head.html' %}
+<title>Sign in · Insight</title>
+</head>
+<body class="login-page">
+<main class="login-card">
+<a class="brand" href="/"><span class="brand-mark" aria-hidden="true">✳</span><span>Insight<small>Intelligence workspace</small></span></a>
+<p class="eyebrow">A clearer picture starts here</p>
+<h1>Welcome back.</h1>
+<p class="muted">Sign in to your private intelligence workspace.</p>
+<form action="/login" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<label>Workspace password<input name="password" type="password" autocomplete="current-password" required autofocus></label>
+{% if mfa %}<label>Authentication code<input name="otp" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,7}" maxlength="7" required></label>{% endif %}
+{% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+<button class="primary" type="submit">Open workspace →</button>
+</form>
+<p class="login-footer"><span class="status-dot" aria-hidden="true"></span> Source-led intelligence. Analyst-reviewed.</p>
+</main>
+</body>
+</html>

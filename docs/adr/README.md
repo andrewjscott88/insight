@@ -16,3 +16,9 @@ superseded ones are marked, never deleted.
 | [0009](0009-tlp-policy.md) | TLP: default AMBER; markings can only raise the label | Accepted |
 | [0010](0010-known-defect-register.md) | Known defects as strict expected-failure tests | Accepted |
 | [0011](0011-offsets-code-points-and-utf16.md) | Evidence offsets: code points, plus UTF-16 for JavaScript | Accepted |
+| [0012](0012-single-api-key-and-rate-limits.md) | One API key, managed from the CLI; per-caller rate limits | Accepted |
+| [0013](0013-instance-tlp-limit.md) | An instance TLP limit; TLP:RED refused by default | Accepted |
+| [0014](0014-per-key-tlp-limit.md) | A TLP limit per API key, enforced in the service layer | Accepted |
+| [0015](0015-totp-second-factor.md) | TOTP second factor for the operator, managed from the CLI | Accepted |
+| [0016](0016-colour-themes-and-per-device-choice.md) | Light and dark themes from one set of tokens; per-device choice | Accepted |
+| [0017](0017-readability-standard.md) | Readability: WCAG 2.2 AA, its reading-related AAA criteria and dyslexia guidance | Accepted |

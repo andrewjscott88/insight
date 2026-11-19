@@ -73,5 +73,7 @@ class Workspace:
 
     @contextmanager
     def write(self) -> Generator[Session, None, None]:
+        """A write transaction; its audit events name the ``operator`` (only the operator uses the UI)."""
         with self.sessions.begin() as db:
+            db.info['actor'] = 'operator'
             yield db

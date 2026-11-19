@@ -14,6 +14,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 FORBIDDEN_NAMES = re.compile(r'(^|/)(\.env(\..*)?|.*\.(db|sqlite3?|pem|key|p12|pfx))$')
+#: Where `make backup` and `make export-iocs` write: database copies and TLP-labelled exports.
+FORBIDDEN_DIRECTORIES = re.compile(r'^(backups|exports)/')
 ALLOWED = re.compile(r'^(\.env\.example|tests/fixtures/.*\.sqlite3)$')
 SECRET_CONTENT = [
     (re.compile(r'-----BEGIN (RSA |EC |OPENSSH |)PRIVATE KEY-----'), 'private key'),
@@ -22,6 +24,7 @@ SECRET_CONTENT = [
         'credential',
     ),
     (re.compile(r'\bghp_[A-Za-z0-9]{36}\b|\bgithub_pat_[A-Za-z0-9_]{40,}\b'), 'GitHub token'),
+    (re.compile(r'\binsk_[0-9a-f]{12}_[A-Za-z0-9_-]{43}'), 'Insight API key'),
 ]
 
 
@@ -39,7 +42,7 @@ def tracked_files(root: Path = ROOT) -> list[str]:
 def problems(paths: Iterable[str], root: Path = ROOT) -> list[str]:
     found = []
     for path in paths:
-        if FORBIDDEN_NAMES.search(path) and not ALLOWED.match(path):
+        if FORBIDDEN_DIRECTORIES.match(path) or (FORBIDDEN_NAMES.search(path) and not ALLOWED.match(path)):
             found.append(f'{path}: this kind of file must not be committed')
             continue
         file = root / path

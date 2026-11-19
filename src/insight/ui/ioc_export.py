@@ -21,9 +21,12 @@ from ..schemas import (
     TLP_LEVELS,
     IocExportQuery,
 )
+from .messages import problem_area
+from .typography import heading
 from .workspace import ALL_STATUSES, ALL_TLP, Workspace, WorkspaceState
 
 EXPORT_ROUTE: Final = '/api/iocs/export'
+TITLE: Final = 'Export indicators of compromise (IOCs)'
 NO_TLP_LIMIT: Final = 'No limit'
 KIND_LABELS: Final = {
     'cve': 'CVE',
@@ -111,13 +114,16 @@ def open_ioc_export_dialog(ws: Workspace) -> None:
     """Build the dialog on demand (like the enrichment dialog), so every export starts from the defaults."""
     if not ws.authorized():
         return
-    with ui.dialog() as dialog, ui.card().classes('panel w-[600px] max-w-full p-6 gap-4'):
-        ui.label('EXPORT FROM YOUR WORKSPACE').classes('eyebrow')
-        ui.label('Export indicators of compromise').classes('text-2xl')
+    with (
+        ui.dialog().props(f'aria-label="{TITLE}"') as dialog,
+        ui.card().classes('panel dialog-card w-[40rem] max-w-full p-6 gap-4'),
+    ):
+        ui.label('Export from your workspace').classes('eyebrow')
+        heading(TITLE, 2)
         ui.label(
-            'One JSON file listing each indicator once, with every report that mentions it, the evidence '
-            'and the handling label.'
-        ).classes('muted text-sm')
+            'You get one file (JSON) that lists each indicator once. For each one it shows the reports that '
+            'mention it, the words around it, and the TLP label.'
+        ).classes('muted prose')
         kinds_input = (
             ui.select(
                 {kind: KIND_LABELS.get(kind, kind) for kind in INDICATOR_KINDS},
@@ -139,9 +145,9 @@ def open_ioc_export_dialog(ws: Workspace) -> None:
             .classes('w-full')
         )
         ui.label(
-            'Accepted means an analyst confirmed the extraction is accurate, not that the indicator is '
-            'malicious.'
-        ).classes('muted text-xs -mt-3')
+            'Accepted means someone checked that the value was copied correctly. '
+            'It does not mean the value is harmful.'
+        ).classes('muted text-sm prose -mt-3')
         max_tlp_input = (
             ui.select(
                 [NO_TLP_LIMIT, *TLP_LEVELS], value=NO_TLP_LIMIT, label='Most restrictive TLP to include'
@@ -150,15 +156,17 @@ def open_ioc_export_dialog(ws: Workspace) -> None:
             .classes('w-full')
         )
         inbox_input = ui.checkbox('Only reports matching the current inbox search and filters')
-        defang_input = ui.checkbox('Defang values (hxxps://, example[.]com) for e-mail and tickets')
+        defang_input = ui.checkbox('Defang values so they cannot be clicked (hxxps://, example[.]com)')
         evidence_input = ui.checkbox(
-            'Include evidence excerpts (report text around each indicator; untick before sharing)', value=True
+            'Include evidence excerpts: the words around each indicator. '
+            'Untick this before you share the file.',
+            value=True,
         )
         ui.label(
-            'The file carries the most restrictive TLP of the reports it includes. Exports preserve TLP '
-            'metadata; they do not grant sharing permission. Not STIX.'
-        ).classes('muted text-xs')
-        preview = ui.label().classes('text-sm text-primary')
+            'The file gets the strictest TLP label of the reports in it. Exports keep TLP labels. '
+            'They do not give permission to share. The file is not in the STIX format.'
+        ).classes('muted text-sm prose')
+        preview = ui.label().classes('text-primary prose').props('role=status')
 
         def counts() -> dict[str, int] | None:
             """Counts for the current choices, or None (with a message) if the choices are incomplete."""
@@ -191,11 +199,11 @@ def open_ioc_export_dialog(ws: Workspace) -> None:
             kinds = list(kinds_input.value or [])
             statuses = list(review_input.value or [])
             if not kinds or not statuses:
-                ui.notify('Choose at least one indicator type and one review status.', type='warning')
+                problem.set_text('Choose at least one indicator type and one review status.')
                 return
             found = counts()
             if found is None or not found['iocs'] or found['mentions'] > services.MAX_EXPORT_MENTIONS:
-                ui.notify(preview.text, type='warning')
+                problem.set_text(f'Nothing to download. {preview.text}')
                 return
             url = export_url(
                 kinds=kinds,
@@ -208,6 +216,7 @@ def open_ioc_export_dialog(ws: Workspace) -> None:
             ui.navigate.to(url, new_tab=True)
             dialog.close()
 
+        problem = problem_area()
         with ui.row().classes('w-full justify-end'):
             ui.button('Cancel', on_click=dialog.close).props('flat')
             ui.button('Download JSON ↓', on_click=download)

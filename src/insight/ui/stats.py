@@ -20,10 +20,12 @@ def build_stats(ws: Workspace) -> None:
             (counts['entities'], 'Unique extracted entities'),
             (counts['observations_unreviewed'], 'Observations awaiting review'),
         )
-        with ui.row().classes('w-full gap-4 flex-wrap'):
+        # As many across as fit without breaking a word (three on most screens, fewer with "Larger text" on
+        # a phone). The width is in rem, so it grows with the text. Regression: labels broke mid-word.
+        with ui.element('div').classes('stat-tiles w-full gap-2 sm:gap-4'):
             for value, title in tiles:
-                with ui.column().classes('panel p-5 flex-1 min-w-[180px] gap-1'):
-                    ui.label(str(value)).classes('text-3xl font-medium')
+                with ui.column().classes('panel p-3 sm:p-5 min-w-0 gap-1'):
+                    ui.label(str(value)).classes('text-2xl sm:text-3xl font-medium')
                     ui.label(title).classes('muted text-xs')
 
     ws.on_refresh(stats.refresh)

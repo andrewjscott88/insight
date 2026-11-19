@@ -215,3 +215,254 @@ def test_serve_configures_insight_logging(monkeypatch: pytest.MonkeyPatch, in_tm
     assert len(handlers) == 1
     assert logger.getEffectiveLevel() == logging.INFO
     assert logging.getLogger('insight.auth').isEnabledFor(logging.INFO)
+
+
+# --------------------------------------------------------------------------- api-key
+
+
+def key_from(output: str) -> str:
+    [token] = [line for line in output.splitlines() if line.startswith('insk_')]
+    return token
+
+
+def test_api_key_lifecycle(sqlite_env: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    from insight import apikeys
+
+    assert cli.main(['api-key', 'status']) == 0
+    assert 'No active API key' in capsys.readouterr().out
+
+    assert cli.main(['api-key', 'create', '--name', 'siem']) == 0
+    out = capsys.readouterr().out
+    token = key_from(out)
+    key_id = apikeys.parse_key_id(token)
+    assert f'Created API key {key_id} "siem" (read-only; sees every label stored; expires ' in out
+    assert 'shown only once' in out
+    assert 'Authorization: Bearer' in out
+
+    assert cli.main(['api-key', 'status']) == 0
+    status = capsys.readouterr().out
+    assert f'Active API key {key_id} "siem" (read-only;' in status
+    assert 'last used never' in status
+    assert token not in status
+
+    assert cli.main(['api-key', 'create', '--name', 'second']) == 1
+    assert f'API key {key_id} is already active; rotate or revoke it first' in capsys.readouterr().err
+
+    assert cli.main(['api-key', 'rotate', '--access', 'read-write', '--expires-days', '7']) == 0
+    rotated = capsys.readouterr().out
+    assert key_from(rotated) != token
+    assert 'Rotated to API key' in rotated
+    assert '"siem" (read-write;' in rotated
+
+    assert cli.main(['api-key', 'revoke']) == 0
+    assert 'Revoked API key' in capsys.readouterr().out
+    assert cli.main(['api-key', 'revoke']) == 0
+    assert 'nothing to revoke' in capsys.readouterr().out
+    assert cli.main(['api-key', 'rotate']) == 1
+    assert 'No active API key to rotate' in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ('argv', 'message'),
+    [
+        (['api-key'], 'usage: insight api-key {create,rotate,revoke,status}'),
+        (['api-key', 'delete'], 'usage: insight api-key {create,rotate,revoke,status}'),
+        (['api-key', 'create'], 'usage: insight api-key create --name NAME'),
+    ],
+)
+def test_api_key_usage_errors(argv: list[str], message: str, capsys: pytest.CaptureFixture[str]) -> None:
+    assert cli.main(argv) == 2
+    assert message in capsys.readouterr().err
+
+
+def test_api_key_rejects_invalid_expiry(sqlite_env: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    assert cli.main(['api-key', 'create', '--name', 'siem', '--expires-days', '400']) == 1
+    assert 'between 1 and 365 days' in capsys.readouterr().err
+
+
+def test_api_key_requires_an_existing_current_database(
+    monkeypatch: pytest.MonkeyPatch, in_tmp: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(os, 'environ', {'INSIGHT_DATA_DIR': str(in_tmp / 'data')})
+    assert cli.main(['api-key', 'status']) == 1
+    assert 'run `insight migrate` or start Insight first' in capsys.readouterr().err
+    assert cli.main(['migrate']) == 0
+    monkeypatch.setattr('insight.migrations.head_revision', lambda: '9999')
+    assert cli.main(['api-key', 'status']) == 1
+    assert 'schema is not current' in capsys.readouterr().err
+
+
+def test_api_key_status_shows_last_use(sqlite_env: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    from insight import services
+    from insight.config import database_url_from_env
+    from insight.models import database
+
+    assert cli.main(['api-key', 'create', '--name', 'siem']) == 0
+    token = key_from(capsys.readouterr().out)
+    engine, sessions = database(database_url_from_env(), migrate=False)
+    with sessions.begin() as db:
+        services.verify_api_key(db, token)
+    engine.dispose()
+    assert cli.main(['api-key', 'status']) == 0
+    assert 'last used 20' in capsys.readouterr().out
+
+
+def test_api_key_with_a_tlp_limit(sqlite_env: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    assert cli.main(['api-key', 'create', '--name', 'siem', '--max-tlp', 'green']) == 0
+    assert '(read-only; sees TLP:GREEN and below;' in capsys.readouterr().out
+    assert cli.main(['api-key', 'rotate']) == 0
+    assert 'sees TLP:GREEN and below' in capsys.readouterr().out  # kept on rotation
+    assert cli.main(['api-key', 'rotate', '--max-tlp', 'RED']) == 0  # RED hides nothing: the limit is lifted
+    assert 'sees every label stored' in capsys.readouterr().out
+    assert cli.main(['api-key', 'rotate']) == 0
+    assert 'sees every label stored' in capsys.readouterr().out  # and stays lifted
+    assert cli.main(['api-key', 'revoke']) == 0
+    assert cli.main(['api-key', 'create', '--name', 'x', '--max-tlp', 'WHITE']) == 1
+    assert 'TLP limit must be one of' in capsys.readouterr().err
+
+
+# --------------------------------------------------------------------------- mfa
+
+MFA_SECRET = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP'
+
+
+def answer_codes(monkeypatch: pytest.MonkeyPatch, *codes: str) -> list[str]:
+    """Typed codes for `insight mfa setup`; returns the prompts shown."""
+    from insight import totp
+
+    monkeypatch.setattr(totp, 'generate_secret', lambda: MFA_SECRET)
+    prompts: list[str] = []
+    pending = list(codes)
+
+    def typed(prompt: str) -> str:
+        prompts.append(prompt)
+        if not pending:
+            raise EOFError
+        return pending.pop(0)
+
+    monkeypatch.setattr('builtins.input', typed)
+    return prompts
+
+
+def test_mfa_setup_confirms_a_code_before_pairing(
+    sqlite_env: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from insight import totp
+
+    good = totp.code_at(MFA_SECRET, totp.time_step())
+    wrong = '000000' if good != '000000' else '111111'
+    prompts = answer_codes(monkeypatch, wrong, good)
+    assert cli.main(['mfa', 'setup']) == 0
+    captured = capsys.readouterr()
+    assert 'JBSW Y3DP EHPK 3PXP JBSW Y3DP EHPK 3PXP' in captured.out
+    assert 'otpauth://totp/Insight%3Aoperator?secret=' + MFA_SECRET in captured.out
+    # MFA stays off: pairing alone does not switch it on (INSIGHT_MFA does).
+    assert 'Authenticator app paired. MFA is still off until INSIGHT_MFA=on' in captured.out
+    assert 'does not match' in captured.err
+    assert prompts == ['Code shown by the app: '] * 2
+
+
+def test_mfa_setup_is_idempotent(
+    sqlite_env: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`make mfa-enable` runs setup every time: an already paired app is kept, and that is not an error."""
+    from insight import totp
+
+    answer_codes(monkeypatch, totp.code_at(MFA_SECRET, totp.time_step()))
+    assert cli.main(['mfa', 'setup']) == 0
+    capsys.readouterr()
+    prompts = answer_codes(monkeypatch)
+    assert cli.main(['mfa', 'setup']) == 0
+    assert 'already paired; keeping it' in capsys.readouterr().out
+    assert prompts == []  # no new secret, no prompt
+
+
+@pytest.mark.parametrize(
+    ('switch', 'paired', 'expected'),
+    [
+        (
+            '',
+            False,
+            'MFA is off (INSIGHT_MFA=off). No authenticator app is paired: sign-in needs the password only',
+        ),
+        (
+            'off',
+            True,
+            'MFA is off (INSIGHT_MFA=off). An authenticator app is paired: sign-in needs the password',
+        ),
+        (
+            'on',
+            True,
+            'MFA is on (INSIGHT_MFA=on). An authenticator app is paired: sign-in needs the password and',
+        ),
+        ('on', False, 'MFA is on (INSIGHT_MFA=on). No authenticator app is paired: sign-in is LOCKED'),
+    ],
+)
+def test_mfa_status(
+    sqlite_env: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    switch: str,
+    paired: bool,
+    expected: str,
+) -> None:
+    from insight import totp
+
+    if paired:
+        answer_codes(monkeypatch, totp.code_at(MFA_SECRET, totp.time_step()))
+        assert cli.main(['mfa', 'setup']) == 0
+        capsys.readouterr()
+    os.environ['INSIGHT_MFA'] = switch
+    assert cli.main(['mfa', 'status']) == 0
+    assert expected in capsys.readouterr().out
+
+
+def test_mfa_status_rejects_an_invalid_switch(sqlite_env: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    os.environ['INSIGHT_MFA'] = 'onn'
+    assert cli.main(['mfa', 'status']) == 1
+    assert 'INSIGHT_MFA must be "on" or "off"' in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(('switch', 'message'), [('off', 'MFA is off'), ('on', 'sign-in is locked')])
+def test_mfa_reset(
+    sqlite_env: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    switch: str,
+    message: str,
+) -> None:
+    from insight import totp
+
+    assert cli.main(['mfa', 'reset']) == 0
+    assert 'nothing to reset' in capsys.readouterr().out
+    answer_codes(monkeypatch, totp.code_at(MFA_SECRET, totp.time_step()))
+    assert cli.main(['mfa', 'setup']) == 0
+    capsys.readouterr()
+    os.environ['INSIGHT_MFA'] = switch
+    assert cli.main(['mfa', 'reset']) == 0
+    out = capsys.readouterr().out
+    assert 'Authenticator app forgotten' in out
+    assert message in out
+
+
+def test_mfa_setup_saves_nothing_without_a_matching_code(
+    sqlite_env: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    answer_codes(monkeypatch, 'nope', '123', 'abcdef')
+    assert cli.main(['mfa', 'setup']) == 1
+    assert 'no authenticator app was paired (nothing was saved)' in capsys.readouterr().err
+    assert cli.main(['mfa', 'status']) == 0
+    assert 'No authenticator app is paired' in capsys.readouterr().out
+
+
+def test_mfa_setup_can_be_cancelled(
+    sqlite_env: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    answer_codes(monkeypatch)  # end of input at the first prompt (Ctrl-D)
+    assert cli.main(['mfa', 'setup']) == 1
+    assert 'Cancelled; no authenticator app was paired' in capsys.readouterr().err
+
+
+def test_mfa_usage(capsys: pytest.CaptureFixture[str]) -> None:
+    assert cli.main(['mfa']) == 2
+    assert 'usage: insight mfa {setup,reset,status}' in capsys.readouterr().err

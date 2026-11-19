@@ -30,7 +30,8 @@ with TestClient(app) as client:
     token = re.search(r'name="csrf_token" value="([^"]+)"', client.get("/login").text).group(1)
     response = client.post("/login", data={"csrf_token": token, "password": "correct-password"})
     assert response.status_code == 200, response.status_code
-    assert "Intelligence workspace" in response.text and "Source reporting" in response.text
+    assert "Intelligence workspace" in response.text and "Reports" in response.text
+    assert '<html lang="en-US"' in response.text, "regression: no page language (WCAG 3.1.1)"
     assert client.get("/static/app.css").status_code == 200
     csrf = client.get("/api/session").json()["csrf_token"]
     assert client.post("/api/demo", headers={"X-CSRF-Token": csrf}).status_code == 200

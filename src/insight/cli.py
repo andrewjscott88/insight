@@ -1,4 +1,4 @@
-"""Command-line entry point: ``init``, ``serve``, ``migrate``, ``backup`` and ``export-iocs``."""
+"""Command line: ``init``, ``serve``, ``migrate``, ``backup``, ``export-iocs``, ``api-key`` and ``mfa``."""
 
 from __future__ import annotations
 
@@ -7,11 +7,20 @@ import logging
 import os
 import secrets
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from . import __version__
+
+if TYPE_CHECKING:
+    from .models import SessionFactory
+
+API_KEY_ACTIONS = ('create', 'rotate', 'revoke', 'status')
+MFA_ACTIONS = ('setup', 'reset', 'status')
+#: Attempts to type the first code when enrolling an authenticator app.
+MFA_ENROL_ATTEMPTS = 3
 
 #: How IOC export fields are named on the command line, for error messages that match what the user typed.
 EXPORT_OPTIONS = {
@@ -33,6 +42,21 @@ export-iocs examples:
   insight export-iocs hashes.json --kind md5 --kind sha1 --kind sha256 --kind sha512
   insight export-iocs report.json --document DOCUMENT_ID
   In Docker, write under /data, e.g. /data/iocs.json. Guide: docs/IOC_EXPORT.md
+
+api-key examples (one key at a time; the key is printed once, only its hash is stored):
+  insight api-key create --name siem                 read-only key, expires in 90 days
+  insight api-key create --name scripts --access read-write --expires-days 30
+  insight api-key status                             key ID, access, expiry and last use (never the key)
+  insight api-key rotate                             replace the key (the old one stops working at once)
+  insight api-key revoke
+  insight api-key create --name siem --max-tlp GREEN   a key that never sees AMBER or RED reports
+  In Docker: docker compose exec insight insight api-key create --name siem. Guide: docs/API.md
+
+mfa (sign-in second factor: a code from an authenticator app; off by default):
+  insight mfa setup       pair an app: shows a secret for it, then asks for one code to confirm
+  insight mfa status      whether MFA is on (INSIGHT_MFA) and whether an app is paired
+  insight mfa reset       forget the paired app (e.g. a lost phone; needs shell access to the host)
+  MFA is switched on and off with INSIGHT_MFA=on|off in .env. With Docker: make mfa-enable / make mfa-disable
 """
 
 
@@ -46,15 +70,21 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument('--version', action='version', version=f'%(prog)s {__version__}')
     parser.add_argument(
         'command',
-        choices=['init', 'serve', 'migrate', 'backup', 'export-iocs'],
+        choices=['init', 'serve', 'migrate', 'backup', 'export-iocs', 'api-key', 'mfa'],
         nargs='?',
         default='serve',
         help=(
             'init: create .env | serve: run (default) | migrate: upgrade the database | backup DEST | '
-            'export-iocs DEST: write a JSON IOC export'
+            'export-iocs DEST: write a JSON IOC export | api-key ACTION: manage the API key | '
+            'mfa ACTION: pair the sign-in authenticator app'
         ),
     )
-    parser.add_argument('destination', nargs='?', help='backup/export-iocs: file to write (must not exist)')
+    parser.add_argument(
+        'destination',
+        nargs='?',
+        help='backup/export-iocs: file to write (must not exist) | api-key: create, rotate, revoke or '
+        'status | mfa: setup, reset or status',
+    )
     parser.add_argument('--host', default='127.0.0.1')
     parser.add_argument('--port', default=8080, type=int)
     export = parser.add_argument_group(
@@ -78,7 +108,8 @@ def build_parser() -> argparse.ArgumentParser:
         '--max-tlp',
         metavar='LABEL',
         help='include only reports at or below this label: CLEAR GREEN AMBER AMBER+STRICT RED '
-        '(default: no limit)',
+        '(default: no limit). With api-key create/rotate: the most restrictive label the key may read '
+        'or write (default: no limit beyond INSIGHT_MAX_TLP; rotate keeps the current one)',
     )
     export.add_argument(
         '--defang', action='store_true', help='write hxxps://example[.]com style values, titles and evidence'
@@ -106,6 +137,19 @@ def build_parser() -> argparse.ArgumentParser:
     export.add_argument(
         '--include-superseded', action='store_true', help='also include superseded revisions of synced items'
     )
+    keys = parser.add_argument_group('api-key options')
+    keys.add_argument(
+        '--name', metavar='NAME', help='create/rotate: label, e.g. siem (default on rotate: keep)'
+    )
+    keys.add_argument(
+        '--access',
+        choices=['read', 'read-write'],
+        help='create/rotate: read = GET requests only (default on create) | read-write = also writes',
+    )
+    keys.add_argument(
+        '--expires-days', type=int, default=90, metavar='DAYS', help='create/rotate: 1-365 (default: 90)'
+    )
+
     return parser
 
 
@@ -246,6 +290,7 @@ def export_iocs(destination: Path, filters: Mapping[str, Any]) -> str:
         written = False
         try:
             with os.fdopen(fd, 'w', encoding='utf-8') as file, sessions.begin() as db:
+                services.set_actor(db, 'cli')
                 result = services.export_iocs(db, query)
                 json.dump(result, file, ensure_ascii=False, indent=2)
                 file.write('\n')
@@ -259,6 +304,152 @@ def export_iocs(destination: Path, filters: Mapping[str, Any]) -> str:
     finally:
         engine.dispose()
     return export_summary(result, destination)
+
+
+@contextmanager
+def _current_database() -> Iterator[SessionFactory]:
+    """The configured database, which must exist and be at the current schema (never migrated from here)."""
+    from sqlalchemy import make_url
+
+    from .config import database_url_from_env
+    from .migrations import current_revision, head_revision
+    from .models import database
+
+    load_env_file()
+    database_url = database_url_from_env()
+    url = make_url(database_url)
+    if url.get_backend_name() == 'sqlite' and (
+        not url.database or url.database == ':memory:' or not Path(url.database).is_file()
+    ):
+        raise ValueError(
+            f'No database at {url.database or "(in-memory)"}; run `insight migrate` or start Insight first'
+        )
+    engine, sessions = database(database_url, migrate=False)
+    try:
+        if current_revision(engine) != head_revision():
+            raise ValueError('The database schema is not current; run `insight migrate` first.')
+        yield sessions
+    finally:
+        engine.dispose()
+
+
+def _describe_key(key: Any) -> str:
+    access = 'read-only' if key.access == 'read' else 'read-write'
+    visibility = f'TLP:{key.max_tlp} and below' if key.max_tlp else 'every label stored'
+    return f'{key.key_id} "{key.name}" ({access}; sees {visibility}; expires {key.expires_at[:10]})'
+
+
+def api_key(
+    action: str, *, name: str | None, access: str | None, expires_days: int, max_tlp: str | None = None
+) -> str:
+    """Create, rotate, revoke or describe the API key. Returns what to print; raises ``ValueError``."""
+    from . import services
+
+    with _current_database() as sessions, sessions.begin() as db:
+        services.set_actor(db, 'cli')
+        if action == 'status':
+            key = services.active_api_key(db)
+            if key is None:
+                return 'No active API key. Create one with `insight api-key create --name NAME`.'
+            used = f'{key.last_used_at[:16]} (recorded every 5 minutes)' if key.last_used_at else 'never'
+            return f'Active API key {_describe_key(key)}; created {key.created_at[:19]}, last used {used}.'
+        if action == 'revoke':
+            key = services.revoke_api_key(db)
+            if key is None:
+                return 'No active API key; nothing to revoke.'
+            return f'Revoked API key {key.key_id}. Requests using it are refused from now on.'
+        if action == 'create':
+            key, token = services.create_api_key(
+                db, name=name or '', access=access or 'read', expires_days=expires_days, max_tlp=max_tlp
+            )
+            verb = 'Created'
+        else:
+            key, token = services.rotate_api_key(
+                db, name=name, access=access, expires_days=expires_days, max_tlp=max_tlp
+            )
+            verb = 'Rotated to'
+    return (
+        f'{verb} API key {_describe_key(key)}.\n'
+        'Copy it now: it is shown only once and cannot be recovered (only a hash is stored).\n\n'
+        f'{token}\n\n'
+        'Send it as the header  Authorization: Bearer <key>'
+    )
+
+
+def _mfa_switch() -> bool:
+    """``INSIGHT_MFA`` as the server reads it (``.env`` and the environment); ``ValueError`` if invalid."""
+    from .config import parse_mfa
+
+    try:
+        return parse_mfa(os.environ.get('INSIGHT_MFA', ''))
+    except RuntimeError as exc:
+        raise ValueError(str(exc)) from exc
+
+
+def mfa(action: str, read_code: Callable[[str], str] | None = None) -> str:
+    """Pair (interactively), reset or describe the sign-in authenticator app; raises ``ValueError``.
+
+    Pairing is separate from the switch that requires a code at sign-in (``INSIGHT_MFA``, off by default; the
+    Makefile's ``mfa-enable``/``mfa-disable`` set it). ``read_code`` asks for the code the app shows (default:
+    ``input``, looked up per call).
+    """
+    from . import services, totp
+
+    read = read_code or input
+    with _current_database() as sessions:
+        switch_on = _mfa_switch()
+        with sessions() as db:
+            paired = services.mfa_paired(db)
+        if action == 'status':
+            state = 'on' if switch_on else 'off'
+            app = 'An authenticator app is paired' if paired else 'No authenticator app is paired'
+            if switch_on and not paired:
+                effect = 'sign-in is LOCKED until an app is paired (make mfa-enable, or insight mfa setup)'
+            elif switch_on:
+                effect = 'sign-in needs the password and a code from the app'
+            else:
+                effect = 'sign-in needs the password only (make mfa-enable turns MFA on)'
+            return f'MFA is {state} (INSIGHT_MFA={state}). {app}: {effect}.'
+        if action == 'reset':
+            with sessions.begin() as db:
+                services.set_actor(db, 'cli')
+                removed = services.reset_mfa(db)
+            if not removed:
+                return 'No authenticator app was paired; nothing to reset.'
+            if switch_on:
+                return (
+                    'Authenticator app forgotten. MFA is still on, so sign-in is locked until you pair a new '
+                    'app (make mfa-enable, or insight mfa setup) or turn MFA off (make mfa-disable).'
+                )
+            return 'Authenticator app forgotten. MFA is off: sign-in needs the password only.'
+        if paired:
+            return (
+                'An authenticator app is already paired; keeping it. To pair a different one: '
+                'insight mfa reset, then insight mfa setup.'
+            )
+        secret = totp.generate_secret()
+        grouped = ' '.join(secret[i : i + 4] for i in range(0, len(secret), 4))
+        print(
+            'Add Insight to your authenticator app (Google Authenticator, Microsoft Authenticator, '
+            '1Password, Aegis, Bitwarden, ...):\n'
+            f'  Secret key (enter manually, type "time-based"): {grouped}\n'
+            f'  Or this URI (paste it, or turn it into a QR code locally): {totp.provisioning_uri(secret)}\n'
+            'Keep the secret private: anyone who has it can generate codes.'
+        )
+        for _ in range(MFA_ENROL_ATTEMPTS):
+            step = totp.matching_step(secret, read('Code shown by the app: '))
+            if step is not None:
+                with sessions.begin() as db:
+                    services.set_actor(db, 'cli')
+                    services.pair_mfa(db, secret, step)
+                if switch_on:
+                    return 'Authenticator app paired. MFA is on: sign-in asks for the password and a code.'
+                return (
+                    'Authenticator app paired. MFA is still off until INSIGHT_MFA=on '
+                    '(make mfa-enable sets it and restarts Insight).'
+                )
+            print("That code does not match; check the phone's clock and try the next code.", file=sys.stderr)
+    raise ValueError('no matching code; no authenticator app was paired (nothing was saved)')
 
 
 def _plural(count: int, noun: str) -> str:
@@ -347,6 +538,40 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(export_iocs(Path(args.destination), export_filters(args)))
         except (ValueError, FileExistsError) as exc:
             print(f'Export failed: {exc}', file=sys.stderr)
+            return 1
+        return 0
+    if args.command == 'api-key':
+        if args.destination not in API_KEY_ACTIONS:
+            print(f'usage: insight api-key {{{",".join(API_KEY_ACTIONS)}}} [options]', file=sys.stderr)
+            return 2
+        if args.destination == 'create' and not args.name:
+            print('usage: insight api-key create --name NAME [--access read|read-write]', file=sys.stderr)
+            return 2
+        try:
+            print(
+                api_key(
+                    args.destination,
+                    name=args.name,
+                    access=args.access,
+                    expires_days=args.expires_days,
+                    max_tlp=args.max_tlp.upper() if args.max_tlp else None,
+                )
+            )
+        except ValueError as exc:
+            print(f'API key: {exc}', file=sys.stderr)
+            return 1
+        return 0
+    if args.command == 'mfa':
+        if args.destination not in MFA_ACTIONS:
+            print(f'usage: insight mfa {{{",".join(MFA_ACTIONS)}}}', file=sys.stderr)
+            return 2
+        try:
+            print(mfa(args.destination))
+        except ValueError as exc:
+            print(f'MFA: {exc}', file=sys.stderr)
+            return 1
+        except (EOFError, KeyboardInterrupt):
+            print('\nCancelled; no authenticator app was paired (nothing was saved).', file=sys.stderr)
             return 1
         return 0
     serve(args.host, args.port)
