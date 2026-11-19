@@ -32,10 +32,16 @@ ENV PYTHONUNBUFFERED=1 \
     INSIGHT_DATA_DIR=/data \
     NICEGUI_STORAGE_PATH=/data/.nicegui
 WORKDIR /app
+# Debian security fixes published after the pinned base image (Trivy scans the result in CI).
+RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
 COPY requirements.lock ./
 RUN pip install --require-hashes -r requirements.lock
 COPY --from=build /dist/ /tmp/dist/
+# pip is a build tool: remove it (and the libraries it vendors) once Insight is installed.
 RUN pip install --no-deps --no-index /tmp/dist/*.whl \
+    && pip uninstall -y pip \
     && rm -rf /tmp/dist \
     && useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin appuser \
     && mkdir /data \

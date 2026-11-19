@@ -12,6 +12,12 @@
 - **The newest-dependencies job failed on NiceGUI 3.19**, whose test simulator routes `ui.navigate.to` through
   `Client.open` and drops `new_tab`. The test helper now records the call on 3.18 and 3.19; the application was
   unaffected.
+- **Container image: six HIGH findings from Trivy removed.** The runtime stage now applies pending Debian
+  security updates (zlib, CVE-2026-85091) and uninstalls `pip` after installing Insight, which removes the
+  `msgpack`, `urllib3` and `setuptools` copies that pip vendors. Nothing in the running container uses pip.
+- **Secret scan:** `.gitleaksignore` lists the fake `insk_` key that `tests/unit/test_scripts.py` builds to test
+  the forbidden-files check (a false positive in gitleaks' generic rule).
+- `docs/examples/insight-iocs-example.json` regenerated for 0.5.0 (generator version).
 
 ## 0.5.0 - 2026-11-19
 

@@ -1,0 +1,4 @@
+# False positives, by gitleaks fingerprint (commit:file:rule:line). Each entry must be a deliberate test value,
+# never a real credential.
+# tests/unit/test_scripts.py builds a fake `insk_` API key at runtime to prove check_forbidden_files.py blocks it.
+9944fdc0a9a63eff0566b8aa66320d23e792059c:tests/unit/test_scripts.py:generic-api-key:178
