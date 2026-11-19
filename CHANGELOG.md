@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Changed: CISA advisories now come from CISA's CSAF files
+- **CISA Security Advisories** (`cisa-csaf`) replaces **CISA Cybersecurity Advisories** (`cisa-advisories`).
+  cisa.gov answers `403 Access Denied` to automated clients for its advisories RSS feed, whatever their request
+  headers, so the old source never worked. The new one reads CISA's machine-readable CSAF 2.0 advisories from
+  its GitHub repository: per sync, the 25 industrial control system and other vulnerability advisories CISA
+  most recently published or updated.
+  Each report keeps the advisory's summary, vendors, sectors and every CVE with its CVSS score, is TLP:CLEAR,
+  and links to CISA's web page for the advisory. An updated advisory becomes a revision of its report. CISA does
+  not publish threat-actor advisories as CSAF, so they are not included.
+- **API:** the source key `cisa-advisories` is gone; use `cisa-csaf`. Reports already imported keep their source.
+- **Outbound traffic:** syncing this source contacts `raw.githubusercontent.com`. If you run an egress allow-list,
+  add that host.
+
 ## 0.5.0 - 2026-11-19
 
 ### Fixed before release: CVE enrichment throttle

@@ -25,6 +25,12 @@ if os.environ.get('INSIGHT_LIVE_TESTS') != '1':
 @pytest.mark.parametrize('key', sorted(connectors.SOURCES))
 def test_source_is_reachable_and_parsable(key: str) -> None:
     source = connectors.SOURCES[key]
+    if source.kind == 'csaf':
+        items, skipped = asyncio.run(connectors.fetch_csaf(source))
+        assert skipped == 0, f'{key}: {skipped} of the newest advisories could not be read'
+        assert len(items) == connectors.CSAF_INBOX_LIMIT
+        assert all(item.external_id for item in items)
+        return
     payload = asyncio.run(connectors.download(source.url))
     if source.kind == 'kev':
         rows = json.loads(payload)['vulnerabilities']

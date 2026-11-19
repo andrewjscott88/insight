@@ -299,7 +299,7 @@ These are the only routes that make Insight contact other servers. Sync imports 
 sends only the CVE identifier to FIRST EPSS or NIST NVD.
 
 ```sh
-# Registry and the last 5 runs of each source: cisa-kev, cisa-advisories, sans-isc, ncsc
+# Registry and the last 5 runs of each source: cisa-kev, cisa-csaf, sans-isc, ncsc
 curl -sS "$INSIGHT_URL/api/sources" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq '.[] | {key, name, last_run: .runs[0]}'
 # Run one source now (read-write key). 409: another sync is running; 502: the source failed (recorded as a run)
 curl -sS -X POST "$INSIGHT_URL/api/sources/cisa-kev/sync" -H "Authorization: Bearer $INSIGHT_API_KEY"

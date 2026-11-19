@@ -279,7 +279,7 @@ Errors:
 | Route | Result |
 | --- | --- |
 | `GET /api/sources` | Registry entries with the last 5 runs each |
-| `POST /api/sources/{key}/sync` | `{"message": …}`. Keys: `cisa-kev`, `cisa-advisories`, `sans-isc`, `ncsc`. `404` unknown key, `409` another sync running, `502` failure (recorded as an error run). |
+| `POST /api/sources/{key}/sync` | `{"message": …}`. Keys: `cisa-kev`, `cisa-csaf`, `sans-isc`, `ncsc`. `404` unknown key, `409` another sync running, `502` failure (recorded as an error run). |
 | `POST /api/enrichment/{provider}/{cve}` | Provider JSON (`epss`, `nvd`), cached. `422` invalid input or unknown CVE, `429` within 6.5 s of the last lookup (a well-formed unknown CVE also starts the window), `502` provider failure, `403` for TLP-limited keys. |
 
 Sync and enrichment are the only routes that cause outbound network traffic.

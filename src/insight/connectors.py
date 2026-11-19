@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import asyncio
+import csv
+import io
 import ipaddress
 import json
 import re
 import socket
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from html import unescape
+from itertools import islice
 from typing import Any, Final, Literal
 from urllib.parse import urlsplit
 
@@ -29,6 +33,23 @@ MAX_FEED_SUMMARY: Final = 500
 MAX_KEV_ROWS: Final = 20_000
 MAX_KEV_FIELD: Final = 10_000
 KEV_INBOX_LIMIT: Final = 100
+#: CISA publishes its advisories as CSAF 2.0 files on GitHub (its RSS feeds refuse automated clients).
+#: Folder OT holds the industrial control system advisories, IT the other vulnerability advisories; VA
+#: repeats IT.
+CSAF_BASE: Final = 'https://raw.githubusercontent.com/cisagov/CSAF/develop/csaf_files/'
+CSAF_INBOX_LIMIT: Final = 25
+MAX_CSAF_INDEX_ROWS: Final = 50_000
+MAX_CSAF_VULNERABILITIES: Final = 100
+MAX_CSAF_NOTE: Final = 4_000
+MAX_CSAF_BODY: Final = 60_000
+#: ``changes.csv`` paths: a year folder and a file name. Nothing else (``..``, absolute URLs) is followed.
+CSAF_PATH_RE: Final = re.compile(r'\d{4}/[a-z0-9][a-z0-9._-]{0,99}\.json', re.ASCII)
+CSAF_ID_RE: Final = re.compile(r'[A-Za-z0-9][A-Za-z0-9._:-]{0,99}', re.ASCII)
+#: CSAF 2.0 uses TLP 1.0 labels; TLP 2.0 renamed WHITE to CLEAR.
+CSAF_TLP: Final[dict[str, str]] = {
+    'WHITE': 'CLEAR', 'CLEAR': 'CLEAR', 'GREEN': 'GREEN', 'AMBER': 'AMBER', 'RED': 'RED'
+}  # fmt: skip
+CSAF_SCORES: Final = (('cvss_v4', '4.0'), ('cvss_v3', '3'), ('cvss_v2', '2.0'))
 USER_AGENT: Final = f'Insight/{__version__} (local analyst workbench)'
 ATOM: Final = '{http://www.w3.org/2005/Atom}'
 CVE_RE: Final = re.compile(r'CVE-\d{4}-\d{4,}', re.ASCII)
@@ -64,9 +85,17 @@ class SourceSyncError(ConnectorError):
 class Source:
     key: str
     name: str
+    #: The feed for ``kev`` and ``rss`` sources. For ``csaf`` sources, the page people open to browse them.
     url: str
-    kind: Literal['kev', 'rss']
+    kind: Literal['kev', 'rss', 'csaf']
     note: str
+    #: ``csaf`` sources: the ``changes.csv`` index of each CSAF folder that is read.
+    indexes: tuple[str, ...] = ()
+
+    @property
+    def fetch_urls(self) -> tuple[str, ...]:
+        """The URLs a sync requests first (advisory files named by a CSAF index sit beside it)."""
+        return self.indexes or (self.url,)
 
 
 SOURCES: Final[dict[str, Source]] = {
@@ -81,11 +110,14 @@ SOURCES: Final[dict[str, Source]] = {
             'not a universal deadline.',
         ),
         Source(
-            'cisa-advisories',
-            'CISA Cybersecurity Advisories',
-            'https://www.cisa.gov/cybersecurity-advisories/all.xml',
-            'rss',
-            'Metadata and up to 500 characters of feed summary; no full-article crawling.',
+            'cisa-csaf',
+            'CISA Security Advisories',
+            'https://github.com/cisagov/CSAF',
+            'csaf',
+            f'The {CSAF_INBOX_LIMIT} advisories CISA most recently published or updated, about weaknesses in '
+            "industrial control systems and other products, from CISA's machine-readable files (CSAF). "
+            'Advisories about attacker groups are not included.',
+            indexes=(CSAF_BASE + 'OT/white/changes.csv', CSAF_BASE + 'IT/white/changes.csv'),
         ),
         Source(
             'sans-isc',
@@ -104,7 +136,7 @@ SOURCES: Final[dict[str, Source]] = {
     )
 }
 ALLOWED_HOSTS: Final[frozenset[str]] = frozenset(
-    {h for s in SOURCES.values() if (h := urlsplit(s.url).hostname)}
+    {h for s in SOURCES.values() for u in s.fetch_urls if (h := urlsplit(u).hostname)}
     | {urlsplit(u).hostname or '' for u in PROVIDERS.values()}
 )
 
@@ -216,6 +248,179 @@ def parse_feed(payload: bytes, source: Source) -> list[FeedItem]:
     return docs
 
 
+@dataclass(frozen=True, slots=True)
+class CsafEntry:
+    """One advisory file named by a CSAF ``changes.csv`` index, and when the publisher last changed it."""
+
+    url: str
+    changed: datetime
+
+
+def parse_csaf_changes(payload: bytes, index_url: str) -> list[CsafEntry]:
+    """Parse a CSAF ``changes.csv`` index (``"path","timestamp"`` rows, quoted or not).
+
+    Paths must be a year folder and a ``.json`` file name; anything else, and rows with an unreadable
+    timestamp, are skipped. Raises ``ValueError`` if the index is too large or not UTF-8.
+    """
+    if len(payload) > MAX_BYTES:
+        raise ValueError('CSAF index exceeds size limit')
+    rows = list(islice(csv.reader(io.StringIO(payload.decode('utf-8'))), MAX_CSAF_INDEX_ROWS + 1))
+    if len(rows) > MAX_CSAF_INDEX_ROWS:
+        raise ValueError(f'CSAF index has more than {MAX_CSAF_INDEX_ROWS} rows')
+    base = index_url.rsplit('/', 1)[0] + '/'
+    entries: list[CsafEntry] = []
+    for row in rows:
+        if len(row) != 2 or not CSAF_PATH_RE.fullmatch(path := row[0].strip()):
+            continue
+        try:
+            changed = datetime.fromisoformat(row[1].strip())
+        except ValueError:
+            continue
+        entries.append(CsafEntry(base + path, changed if changed.tzinfo else changed.replace(tzinfo=UTC)))
+    return entries
+
+
+def _obj(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _items(value: Any) -> list[dict[str, Any]]:
+    return [v for v in value if isinstance(v, dict)] if isinstance(value, list) else []
+
+
+def _str(value: Any) -> str:
+    return value.strip() if isinstance(value, str) else ''
+
+
+def _csaf_score(vulnerability: dict[str, Any]) -> str:
+    for score in _items(vulnerability.get('scores')):
+        for key, version in CSAF_SCORES:
+            base = _obj(score.get(key)).get('baseScore')
+            if isinstance(base, int | float) and not isinstance(base, bool):
+                return f'CVSS {version} base score {base}'
+    return ''
+
+
+def parse_csaf(payload: bytes, source: Source, url: str) -> FeedItem:
+    """Turn one CSAF 2.0 advisory into a report: its summary, vendors, sectors and every CVE with its score.
+
+    Legal notices, generic recommended practices and product trees are left out. The report links to CISA's
+    web page for the advisory when the file names one, otherwise to the file. ``truncated`` is set when
+    vulnerabilities or long notes were cut. Raises ``ValueError`` for anything that is not a usable CSAF 2.0
+    advisory.
+    """
+    if len(payload) > MAX_BYTES:
+        raise ValueError('CSAF document exceeds size limit')
+    data = _obj(json.loads(payload))
+    doc = _obj(data.get('document'))
+    tracking = _obj(doc.get('tracking'))
+    advisory_id, title = _str(tracking.get('id')), _str(doc.get('title'))
+    if doc.get('csaf_version') != '2.0' or not CSAF_ID_RE.fullmatch(advisory_id) or not title:
+        raise ValueError('Not a CSAF 2.0 advisory with an ID and a title')
+    label = _str(_obj(_obj(doc.get('distribution')).get('tlp')).get('label')).upper()
+    tlp = CSAF_TLP.get(label or 'WHITE')  # files in CISA's public "white" folders without a label are public
+    if tlp is None:
+        raise ValueError('Unknown TLP label in CSAF document')
+
+    cut = False
+
+    def bounded(text: str) -> str:
+        nonlocal cut
+        cut = cut or len(text) > MAX_CSAF_NOTE
+        return text[:MAX_CSAF_NOTE]
+
+    notes = _items(doc.get('notes'))
+    summary = ' '.join(
+        bounded(t) for n in notes if n.get('category') == 'summary' and (t := _str(n.get('text')))
+    )
+    sectors = [
+        bounded(t)
+        for n in notes
+        if n.get('category') == 'other'
+        and 'sector' in _str(n.get('title')).lower()
+        and (t := _str(n.get('text')))
+    ]
+    vendors = [
+        name
+        for b in _items(_obj(data.get('product_tree')).get('branches'))
+        if b.get('category') == 'vendor' and (name := _str(b.get('name')))
+    ]
+    lines = [f'{advisory_id}: {title}', '']
+    if summary:
+        lines += [summary, '']
+    if vendors:
+        lines.append('Vendors: ' + ', '.join(vendors[:20]))
+    if sectors:
+        lines.append('Critical infrastructure sectors: ' + '; '.join(sectors))
+    released, current = (
+        _str(tracking.get('initial_release_date'))[:10],
+        _str(tracking.get('current_release_date'))[:10],
+    )
+    version = _str(tracking.get('version'))
+    if released:
+        lines.append(
+            f'Released {released}'
+            + (f'; current version {version} ({current})' if version and current else '')
+            + '.'
+        )
+    vulnerabilities = _items(data.get('vulnerabilities'))
+    if vulnerabilities:
+        lines += ['', 'Vulnerabilities:']
+    for vulnerability in vulnerabilities[:MAX_CSAF_VULNERABILITIES]:
+        cve = _str(vulnerability.get('cve'))
+        about = next(
+            (t for n in _items(vulnerability.get('notes')) if n.get('category') in ('summary', 'description')
+             and (t := _str(n.get('text')))),
+            _str(vulnerability.get('title')),
+        )  # fmt: skip
+        label_parts = [p for p in (cve if CVE_RE.fullmatch(cve) else '', _csaf_score(vulnerability)) if p]
+        lines.append(f'- {", ".join(label_parts) or "No CVE"}: {bounded(about) or "No description"}')
+    if len(vulnerabilities) > MAX_CSAF_VULNERABILITIES:
+        cut = True
+        lines.append(f'... and {len(vulnerabilities) - MAX_CSAF_VULNERABILITIES} more in the full advisory.')
+    body = '\n'.join(lines)
+    if len(body) > MAX_CSAF_BODY:
+        body, cut = body[:MAX_CSAF_BODY], True
+
+    web_page = next(
+        (u for r in _items(doc.get('references'))
+         if r.get('category') == 'self' and (u := _str(r.get('url'))).startswith('https://www.cisa.gov/')),
+        '',
+    )  # fmt: skip
+    fields = {'title': f'{advisory_id} · {title}'[:300], 'body': body, 'source_name': source.name, 'tlp': tlp}
+    try:
+        document = DocumentInput(**fields, source_url=web_page or url)
+    except ValueError:
+        # A malformed link in the file cannot become a clickable source URL; the file's own address is safe.
+        document = DocumentInput(**fields, source_url=url)
+    return FeedItem(document, advisory_id, truncated=cut)
+
+
+async def fetch_csaf(source: Source) -> tuple[list[FeedItem], int]:
+    """Read every index of ``source``, then fetch and parse the :data:`CSAF_INBOX_LIMIT` most recently changed
+    advisories (new ones and updates: ``changes.csv`` dates each file by its last change).
+
+    Returns ``(items, skipped)``. One unreadable advisory is skipped and counted; an unreadable index, or no
+    readable advisory at all, raises.
+    """
+    entries: dict[str, CsafEntry] = {}
+    for index_url in source.indexes:
+        for entry in parse_csaf_changes(await download(index_url), index_url):
+            entries.setdefault(entry.url, entry)
+    newest = sorted(entries.values(), key=lambda e: e.changed, reverse=True)[:CSAF_INBOX_LIMIT]
+    if not newest:
+        raise ValueError('The CSAF index lists no advisories')
+    items: list[FeedItem] = []
+    for entry in newest:
+        try:
+            items.append(parse_csaf(await download(entry.url), source, entry.url))
+        except (httpx.HTTPError, OSError, ValueError, RecursionError):
+            continue
+    if not items:
+        raise ValueError(f'None of the {len(newest)} newest CSAF advisories could be read')
+    return items, len(newest) - len(items)
+
+
 def _validate_kev_rows(payload: bytes) -> list[dict[str, str]]:
     if len(payload) > MAX_BYTES:
         raise ValueError('KEV file exceeds size limit')
@@ -295,16 +500,30 @@ def _store_source(session_factory: SessionFactory, source: Source, payload: byte
             )
         else:
             docs = parse_feed(payload, source)
-            added = sum(
-                ingest(
-                    db,
-                    d.document,
-                    ref=SourceRef(source.key, d.external_id) if d.external_id else None,
-                    truncated=d.truncated,
-                )[1]
-                for d in docs
-            )
-            message = f'Read {len(docs)} feed items; {added} new reports.'
+            message = f'Read {len(docs)} feed items; {_ingest_items(db, source, docs)} new reports.'
+        db.add(SourceRun(source_key=source.key, status='success', message=message))
+    return message
+
+
+def _ingest_items(db: Session, source: Source, items: list[FeedItem]) -> int:
+    """Store feed or advisory items keyed by their publisher identity; returns how many reports are new."""
+    return sum(
+        ingest(
+            db,
+            item.document,
+            ref=SourceRef(source.key, item.external_id) if item.external_id else None,
+            truncated=item.truncated,
+        )[1]
+        for item in items
+    )
+
+
+def _store_csaf(session_factory: SessionFactory, source: Source, items: list[FeedItem], skipped: int) -> str:
+    with session_factory.begin() as db:
+        set_actor(db, f'connector:{source.key}')
+        message = f'Read {len(items)} advisories; {_ingest_items(db, source, items)} new reports.'
+        if skipped:
+            message += f' {skipped} could not be read.'
         db.add(SourceRun(source_key=source.key, status='success', message=message))
     return message
 
@@ -323,8 +542,11 @@ async def sync_source(session_factory: SessionFactory, key: str) -> str:
     if source is None:
         raise ValueError('Unknown source')
     try:
-        payload = await download(source.url)
         # Database work is synchronous; keep it off the event loop so the UI stays responsive.
+        if source.kind == 'csaf':
+            items, skipped = await fetch_csaf(source)
+            return await asyncio.to_thread(_store_csaf, session_factory, source, items, skipped)
+        payload = await download(source.url)
         return await asyncio.to_thread(_store_source, session_factory, source, payload)
     except Exception as exc:
         # Store a bounded diagnostic, never response bodies or credentials.

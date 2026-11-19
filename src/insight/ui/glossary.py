@@ -106,6 +106,10 @@ GLOSSARY: Final[tuple[tuple[str, str], ...]] = (
         'The US Cybersecurity and Infrastructure Security Agency.',
     ),
     (
+        'CSAF',
+        'A way of writing security warnings so that computers can read them. CISA uses it for its warnings.',
+    ),
+    (
         'EPSS (FIRST)',
         'A score from the FIRST organisation: how likely a weakness is to be used in an attack soon.',
     ),
