@@ -303,9 +303,19 @@ most once every 6.5 s.
 | `ValueError: Source resolves to a non-public destination` | DNS returned a private or loopback address | Possible DNS tampering: check resolvers; do not work around it |
 | `ValueError: Source exceeds the 8 MB payload limit` | Feed grew | Confirm it is legitimate; raise `MAX_BYTES` in a release |
 | `ValueError: Invalid CVE in KEV input` / `Invalid KEV record field` | KEV format changed | Nothing was imported (all-or-nothing). Report it; the nightly live tests should also flag it. |
+| `Read N advisories; … X could not be read.` (success) | Some CISA advisory files failed to download or are not valid CSAF | The others were imported; the next sync tries again. Report it if it persists. |
+| `ValueError: The CSAF index lists no advisories` / `None of the N newest CSAF advisories could be read` | CISA moved or changed its CSAF repository | Nothing was imported. Report it; the nightly live tests should also flag it. |
 | `OSError` / `ConnectError` | No network or DNS | Check host egress (an egress firewall is recommended) |
 | Enrichment `429` | Less than 6.5 s since the last lookup | Wait |
 | Enrichment `502 … non-JSON` | Provider outage or HTML error page | Retry later |
+
+**CISA Security Advisories** (`cisa-csaf`) reads CISA's machine-readable CSAF 2.0 files from its GitHub
+repository (`raw.githubusercontent.com/cisagov/CSAF`): the `changes.csv` index of the OT (industrial control
+systems) and IT folders, then the 25 advisories CISA most recently published or updated, so one sync makes
+about 27 requests. An updated advisory becomes a new revision of its report. Each report keeps the
+advisory's summary, vendors, sectors and every CVE with its CVSS score (up to 100), and links to CISA's web page
+for the advisory. CISA does not publish its threat-actor advisories (AA-series, #StopRansomware) as CSAF, so they
+are not included. It replaced the CISA advisories RSS feed, which cisa.gov refuses to automated clients (`403`).
 
 Feed items keep at most 500 characters of summary. Such items show **Truncated by the connector**, because the
 full report may contain more indicators. Open the original source and paste it if you are permitted to.
