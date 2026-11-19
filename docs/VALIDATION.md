@@ -1,11 +1,11 @@
-# Validation report · 0.2.0
+# Validation report · 0.5.0
 
-What was verified for release 0.2.0, what was not, and how. Update this file for every release (see
+What was verified for each release, what was not, and how. Update this file for every release (see
 [RELEASING.md](RELEASING.md)).
 
-## 0.5.0: API platform, deployment settings, MFA, Makefile (verified so far)
+## 0.5.0: API platform, deployment settings, MFA, Makefile, themes, readability
 
-Recorded while the work was done, for whoever prepares the next release to confirm in the release gates.
+Recorded while the work was done, then confirmed by the release gates below.
 
 - **Tests:** 1,143 pass on each of CPython 3.11, 3.12, 3.13 and 3.14 (2 skipped: browser and live suites);
   1,073 pass against PostgreSQL 16 (`-m "not slow"`). Branch coverage 97.1% (gate 90%). `ruff`, `ruff format`,
@@ -28,11 +28,28 @@ Recorded while the work was done, for whoever prepares the next release to confi
   `package`, `benchmark`, `drill`, `test-postgres`, `clean`); Docker targets verified against a recording
   stand-in for `docker compose`.
 
-**Not yet verified** (no Docker or internet in the build environment): `docker build` and the image with the new
-`LICENSE`/`NOTICE` copy step, the Makefile's Docker targets against real containers (including the interactive
-`make mfa-enable` prompt through `docker compose run`), Trivy, gitleaks, `pip-audit`, the Playwright browser
-suite, the ZAP scan and mutation testing. GitHub Actions and the base image are now pinned by commit SHA and
-digest (`python scripts/check_pins.py --strict` passes).
+**Release gates on GitHub Actions** (Tier 1 CI and the milestone gate for `v0.5.0-rc.2`, commit `6b16d39`):
+- **Tier 1:** 1,575 tests pass on each of CPython 3.11–3.14 (SQLite) and 1,493 on PostgreSQL 16; lint,
+  types, lock files, workflow schema and zizmor (`hash-pin`) clean; `pip-audit` finds no known vulnerabilities in
+  the runtime lock; gitleaks clean over the full history (one documented test-value false positive in
+  `.gitleaksignore`).
+- **Container:** `docker build` with the `LICENSE`/`NOTICE` copy step; Trivy finds no fixable CRITICAL or HIGH
+  vulnerabilities (after applying Debian security updates and removing `pip` from the runtime image); the
+  read-only, no-capabilities smoke test passes.
+- **Browser end-to-end:** 45 Playwright (Chromium) tests pass against the container, including the axe-core
+  readability checks.
+- **OWASP ZAP baseline, signed in:** 0 FAIL, 8 WARN (missing Cross-Origin-Embedder-Policy, NiceGUI's bundled
+  JavaScript patterns, "modern web application", a private-IP note on the loopback test address), 60 rules pass.
+- **Extraction benchmark:** 97.9% precision and 98.9% recall overall on the labelled corpus, no regression
+  against the baseline. **Performance budget:** no violations on SQLite or PostgreSQL.
+- **Backup and restore drill** against a real `insight serve`: passed. **Licences:** every runtime dependency
+  on the allowed list; CycloneDX SBOM of 53 components.
+- **Upgrade fixture:** `tests/fixtures/releases/insight-0.5.0.sqlite3` committed; the 0.1.0, 0.2.0 and 0.5.0
+  databases upgrade in CI. All actions and the base image are pinned (`check_pins.py --strict` passes).
+
+**Not verified for 0.5.0:** the Makefile's Docker targets against real containers (including the interactive
+`make mfa-enable` prompt through `docker compose run`; verified only against a recording stand-in), and
+mutation testing, which runs nightly and had not completed a run on 0.5.0 when this was written.
 
 ## Verified in the build environment
 

@@ -1,12 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 - 2026-11-19
 
-### Fixed
+### Fixed before release: CVE enrichment throttle
 - **CVE enrichment:** a request for a well-formed CVE that no report mentions is still refused (`422`) but no
   longer starts the 6.5 s enrichment window, so the next valid lookup is not throttled (#8).
 
-### Fixed: CI
+### Fixed before release: CI and container image
 - **Every GitHub Action is pinned to a commit SHA and the base image to a digest**; zizmor now enforces
   `hash-pin` and the release gate's pin check passes. `aquasecurity/trivy-action` moves from `0.28.0`, a tag that
   no longer exists (removed after the March 2026 trivy-action tag hijack, GHSA-69fq-xp46-6x23), to `v0.36.0`.
@@ -25,8 +25,6 @@
 - **Release fixture:** `tests/fixtures/releases/insight-0.5.0.sqlite3` committed, created by the new manual
   **Release fixture** workflow (`.github/workflows/release-fixture.yml`) for releases prepared without a local
   environment.
-
-## 0.5.0 - 2026-11-19
 
 ### Added: readability for people with reading difficulties (ADR 0017)
 An audit against WCAG 2.2, W3C COGA, the British Dyslexia Association style guide, APCA and plain-language
@@ -157,10 +155,6 @@ criteria written for reading, and a browser test (axe-core) checks every screen 
   sign-in code caused a server error; `--max-tlp RED` stored a RED limit instead of lifting it, locking the key
   out of the audit log for good; a clock stepping backwards could drain a rate-limit bucket and lock a caller
   out.
-
-### Known issue
-- A CVE-enrichment request for a well-formed CVE that no report mentions is refused (`422`) but still starts the
-  6.5 s enrichment window (pre-existing; malformed requests do not).
 
 ### Added: cross-report IOC export
 - **One JSON file with every indicator of compromise across your reports** (`format: insight-ioc-v1`). Each
