@@ -18,6 +18,9 @@
 - **Secret scan:** `.gitleaksignore` lists the fake `insk_` key that `tests/unit/test_scripts.py` builds to test
   the forbidden-files check (a false positive in gitleaks' generic rule).
 - `docs/examples/insight-iocs-example.json` regenerated for 0.5.0 (generator version).
+- **Release fixture:** `tests/fixtures/releases/insight-0.5.0.sqlite3` committed, created by the new manual
+  **Release fixture** workflow (`.github/workflows/release-fixture.yml`) for releases prepared without a local
+  environment.
 
 ## 0.5.0 - 2026-11-19
 
