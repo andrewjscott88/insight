@@ -9,7 +9,7 @@ from nicegui import ui
 from .. import services
 from ..connectors import SOURCES, Source, sync_all, sync_source
 from .messages import tell
-from .schedules import build_all_sources_schedule, build_schedule_control
+from .schedules import ScheduleControls, build_all_sources_schedule, build_schedule_control
 from .typography import heading, new_tab_link
 from .workspace import Workspace
 
@@ -62,8 +62,8 @@ def build_sources(ws: Workspace) -> None:
         'does this for each one in turn. A schedule does it for you, and skips a feed that has not changed. '
         'Insight never sends your own reports anywhere.'
     ).classes('muted prose')
-    selects: dict[str, ui.select] = {}
-    build_all_sources_schedule(ws, selects)
+    controls = ScheduleControls()
+    build_all_sources_schedule(ws, controls)
     for source in SOURCES.values():
         with ui.column().classes('panel w-full p-4 my-3'):
             heading(source.name, 3)
@@ -72,7 +72,7 @@ def build_sources(ws: Workspace) -> None:
             with ui.row().classes('items-center gap-3 flex-wrap'):
                 sync_button = ui.button('Sync now')
                 sync_button.on_click(lambda key=source.key, button=sync_button: run(key, button))
-                selects[source.key] = build_schedule_control(ws, source)
+                build_schedule_control(ws, source, controls)
     heading('Recent sync activity', 3, 'subsection-title mt-4')
     with ui.column().classes('w-full gap-3'):
         source_history()

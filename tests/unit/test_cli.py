@@ -507,3 +507,11 @@ def test_schedule_usage_errors(
 ) -> None:
     assert cli.main(argv) == 1
     assert message in capsys.readouterr().err
+
+
+def test_schedule_at_a_time_of_day(sqlite_env: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    assert cli.main(['schedule', 'all', '--every', '24h', '--at', '00:00']) == 0
+    out = capsys.readouterr().out
+    assert out.count(' 00:00 UTC') == 4
+    assert cli.main(['schedule', 'ncsc', '--every', '6h', '--at', '25:00']) == 1
+    assert 'HH:MM in UTC' in capsys.readouterr().err

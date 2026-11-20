@@ -655,3 +655,24 @@ async def test_one_choice_schedules_every_source(user: User, ui_env: SimpleNames
     await user.should_see('The schedule is saved, but this server does not run scheduled syncs')
     assert scheduled(ui_env) == dict.fromkeys(connectors.SOURCES, 1440)
     assert all(s.value == 1440 for s in user.find(kind=ui.select, content='Sync by itself').elements)
+
+
+async def test_schedules_can_start_at_a_time_of_day(user: User, ui_env: SimpleNamespace) -> None:
+    import dataclasses
+
+    ui_env.app.state.settings = dataclasses.replace(ui_env.app.state.settings, run_jobs=True)
+    user.find(kind=ui.select, content='Start at').elements.pop().set_value('00:00')
+    user.find(kind=ui.select, content='Sync all sources by themselves').elements.pop().set_value(1440)
+    await user.should_see('All sources sync by itself every day, starting at 00:00 UTC.')
+    await user.should_see('00:00 UTC')
+    with ui_env.app.state.session_factory() as db:
+        nexts = {s.next_run_at for s in services.list_schedules(db).values()}
+    assert len(nexts) == 1
+    assert str(next(iter(nexts))).endswith('T00:00:00+00:00')
+    # Moving the start time moves the schedules that are on.
+    user.find(kind=ui.select, content='Start at').elements.pop().set_value('06:00')
+    await user.should_see('Schedules that are on now run from 06:00 UTC.')
+    with ui_env.app.state.session_factory() as db:
+        assert all(
+            str(s.next_run_at).endswith('T06:00:00+00:00') for s in services.list_schedules(db).values()
+        )

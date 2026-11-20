@@ -4,10 +4,12 @@
 
 ### Added: scheduled syncs (off by default)
 - **Sources can sync by themselves**: *Off* (default), *Every hour*, *Every 6 hours* or *Every day*, per source
-  or for all sources at once, in the Sources tab, which also shows the next sync. On the host:
-  `insight schedule SOURCE|all --every off|1h|6h|24h` (`insight schedule` lists them). Over the API:
-  `GET /api/schedules` for anyone signed in; `PUT /api/schedules/{key}` from a browser session only, never an
-  API key. Changes are audited (`schedule.update`). [ADR 0018](docs/adr/0018-opt-in-scheduled-syncs.md).
+  or for all sources at once, in the Sources tab, which also shows the next sync. **Start at** picks the time of
+  day (UTC) the syncs run from, and every next sync keeps that slot, so a daily sync stays at, say, 00:00 UTC.
+  On the host: `insight schedule SOURCE|all --every off|1h|6h|24h [--at HH:MM]` (`insight schedule` lists
+  them). Over the API:
+  `GET /api/schedules` for anyone signed in; `PUT /api/schedules/{key}` (with an optional `at`) from a browser
+  session only, never an API key. Changes are audited (`schedule.update`). [ADR 0018](docs/adr/0018-opt-in-scheduled-syncs.md).
 - **A job runner inside `insight serve`** runs them (`INSIGHT_RUN_JOBS`, default `on`; set `off` in every
   process but one if you run several). Jobs are stored (migration `0006`), one at a time per source, and never
   overlap a sync someone started. A failed scheduled sync is tried again after 5, then 10 minutes; every attempt

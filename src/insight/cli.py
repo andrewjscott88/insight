@@ -145,6 +145,11 @@ def build_parser() -> argparse.ArgumentParser:
         choices=list(SCHEDULE_EVERY),
         help='schedule: how often the source syncs by itself while `insight serve` runs (off: when asked)',
     )
+    parser.add_argument(
+        '--at',
+        metavar='HH:MM',
+        help='schedule: the time of day (UTC) the syncs start from, e.g. 00:00 (default: within a minute)',
+    )
     keys = parser.add_argument_group('api-key options')
     keys.add_argument(
         '--name', metavar='NAME', help='create/rotate: label, e.g. siem (default on rotate: keep)'
@@ -394,7 +399,7 @@ def _mfa_switch() -> bool:
         raise ValueError(str(exc)) from exc
 
 
-def schedule(source: str | None, every: str | None) -> str:
+def schedule(source: str | None, every: str | None, at: str | None = None) -> str:
     """Show every source's schedule, after setting ``source`` (a key, or ``all``) to ``every`` if given.
 
     Raises ``ValueError`` for an unknown source or a missing ``--every``. Audited as ``schedule.update`` by
@@ -413,10 +418,12 @@ def schedule(source: str | None, every: str | None) -> str:
             keys = list(SOURCES) if source == 'all' else [source]
             if any(key not in SOURCES for key in keys):
                 raise ValueError(f'unknown source {source!r}; use all or one of: {", ".join(SOURCES)}')
+            now = datetime.now(UTC)
+            starts_at = services.time_of_day(at, now) if at else None
             with sessions.begin() as db:
                 services.set_actor(db, 'cli')
                 for key in keys:
-                    services.set_schedule(db, key, SCHEDULE_EVERY[every], at=datetime.now(UTC))
+                    services.set_schedule(db, key, SCHEDULE_EVERY[every], at=now, starts_at=starts_at)
         with sessions() as db:
             stored = services.list_schedules(db)
             lines = []
@@ -621,7 +628,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     if args.command == 'schedule':
         try:
-            print(schedule(args.destination, args.every))
+            print(schedule(args.destination, args.every, args.at))
         except ValueError as exc:
             print(f'Schedule: {exc}', file=sys.stderr)
             return 1

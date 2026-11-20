@@ -86,3 +86,14 @@ def test_jobs_list_the_newest_first(app: FastAPI, authed: TestClient) -> None:
         'kind': 'source.sync', 'key': 'ncsc', 'status': 'queued', 'attempts': 0, 'actor': 'schedule'
     }  # fmt: skip
     assert authed.get('/api/jobs', params={'limit': 0}).status_code == 422
+
+
+def test_a_schedule_can_start_at_a_time_of_day(authed: TestClient) -> None:
+    body = authed.put('/api/schedules/cisa-kev', json={'interval_minutes': 1440, 'at': '00:00'}).json()
+    assert body['next_run_at'].endswith('T00:00:00+00:00')
+    assert body['next_run_at'] > datetime.now(UTC).isoformat()
+    for bad in ('24:00', '7:00', 'midnight'):
+        assert (
+            authed.put('/api/schedules/cisa-kev', json={'interval_minutes': 1440, 'at': bad}).status_code
+            == 422
+        )

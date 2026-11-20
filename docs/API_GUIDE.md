@@ -324,8 +324,8 @@ or the host's CLI, never an API key (`403`):
 
 ```sh
 curl -sS -b "$JAR" -X PUT "$INSIGHT_URL/api/schedules/cisa-kev" -H "X-CSRF-Token: $CSRF" \
-  -H 'Content-Type: application/json' -d '{"interval_minutes": 360}'
-insight schedule all --every 24h      # on the host: every source once a day (off: only when asked)
+  -H 'Content-Type: application/json' -d '{"interval_minutes": 1440, "at": "00:00"}'   # daily at midnight UTC
+insight schedule all --every 24h --at 00:00     # on the host: every source daily at 00:00 UTC (off: only when asked)
 ```
 
 Enrichment answers `422` for a malformed or unknown CVE (`Import a report mentioning this CVE first`), `429`

@@ -30,9 +30,12 @@ Two constraints shape the answer:
    and a person never sync at the same moment. At start-up it takes back jobs that a stopped process left
    running.
 4. **Retries with back-off.** A failed sync is tried again after 5, then 10 minutes, then marked `failed`. Every
-   attempt is also a `SourceRun`, so *Recent sync activity* shows exactly what happened. A schedule's next run
-   counts from when it ran, so a server that was off for days does not catch up with a burst.
-5. **Fetch less.** `fetch_state` (also migration 0006) keeps each URL's `ETag`, `Last-Modified` and payload
+   attempt is also a `SourceRun`, so *Recent sync activity* shows exactly what happened.
+6. **A time of day.** A schedule can start at a chosen time (UTC), and every next run keeps that slot: a daily
+   sync at 00:00 stays at 00:00, and a 6-hourly one from 00:00 runs at 00, 06, 12 and 18. After downtime the
+   schedule runs once and moves to the next slot, rather than catching up with a burst. Without a start time,
+   a schedule runs within a minute of being turned on.
+7. **Fetch less.** `fetch_state` (also migration 0006) keeps each URL's `ETag`, `Last-Modified` and payload
    SHA-256. Syncs send `If-None-Match` / `If-Modified-Since`; a `304`, or the same bytes as last time, records
    `Unchanged since the last sync.` and writes nothing else. A new Insight version re-reads every source once,
    in case its parsing changed. State is saved only in the transaction that stored the data, and not when CISA

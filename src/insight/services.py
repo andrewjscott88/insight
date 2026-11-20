@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 import unicodedata
 from bisect import bisect_left
 from collections import defaultdict
@@ -980,11 +981,29 @@ def list_schedules(db: Session) -> dict[str, Schedule]:
     return {s.source_key: s for s in db.scalars(select(Schedule))}
 
 
-def set_schedule(db: Session, source_key: str, interval_minutes: int, *, at: datetime) -> Schedule:
+def time_of_day(hhmm: str, at: datetime) -> datetime:
+    """``HH:MM`` (UTC) on the day of ``at``; raises ``ValueError`` for anything else."""
+    if not re.fullmatch(r'([01]\d|2[0-3]):[0-5]\d', hhmm):
+        raise ValueError('Start time must be HH:MM in UTC, from 00:00 to 23:59')
+    hours, minutes = map(int, hhmm.split(':'))
+    return at.astimezone(UTC).replace(hour=hours, minute=minutes, second=0, microsecond=0)
+
+
+def _next_slot(start: datetime, interval: timedelta, at: datetime) -> datetime:
+    """The first moment ``start + n * interval`` (n >= 0) that is not before ``at``."""
+    if start >= at:
+        return start
+    return start + interval * -((start - at) // interval)
+
+
+def set_schedule(
+    db: Session, source_key: str, interval_minutes: int, *, at: datetime, starts_at: datetime | None = None
+) -> Schedule:
     """Turn a source's schedule on (``interval_minutes`` from :data:`SCHEDULE_INTERVALS`) or off (``0``).
 
-    A schedule that is turned on runs at the next tick, then every interval. Callers check that the source
-    exists. Audited as ``schedule.update``.
+    A schedule that is turned on runs at the next tick, or at ``starts_at`` (rolled forward by whole intervals
+    if it has passed), then every interval from there: a daily sync at 00:00 stays at 00:00. Callers check
+    that the source exists. Audited as ``schedule.update``.
     """
     if interval_minutes not in SCHEDULE_INTERVALS:
         raise ValueError(f'Interval must be one of {", ".join(map(str, SCHEDULE_INTERVALS))} minutes')
@@ -992,8 +1011,12 @@ def set_schedule(db: Session, source_key: str, interval_minutes: int, *, at: dat
     was = schedule.interval_minutes if schedule.enabled else 0
     schedule.interval_minutes = interval_minutes
     schedule.enabled = interval_minutes > 0
-    if interval_minutes != was:  # Choosing the same interval again does not postpone the next run.
-        schedule.next_run_at = stamp(at) if schedule.enabled else None
+    if not schedule.enabled:
+        schedule.next_run_at = None
+    elif starts_at is not None:
+        schedule.next_run_at = stamp(_next_slot(starts_at, timedelta(minutes=interval_minutes), at))
+    elif interval_minutes != was:  # Choosing the same interval again does not postpone the next run.
+        schedule.next_run_at = stamp(at)
     schedule.updated_at = stamp(at)
     schedule.actor = str(db.info.get('actor', DEFAULT_ACTOR))
     db.add(schedule)
@@ -1025,8 +1048,8 @@ def _active_job(db: Session, kind: str, key: str) -> Job | None:
 def enqueue_due_schedules(db: Session, *, at: datetime) -> list[Job]:
     """Queue a sync for every enabled schedule that is due, and move each one's next run on by its interval.
 
-    The next run counts from ``at``, not from the missed time, so a server that was off for days does not
-    catch up with a burst of syncs.
+    The next run keeps the schedule's slot (a daily 00:00 sync stays at 00:00) and is the first slot after
+    ``at``, so a server that was off for days runs each schedule once, not once for every missed slot.
     """
     due = db.scalars(
         select(Schedule)
@@ -1036,7 +1059,10 @@ def enqueue_due_schedules(db: Session, *, at: datetime) -> list[Job]:
     jobs = []
     for schedule in due:
         jobs.append(enqueue_job(db, SOURCE_SYNC, schedule.source_key, at=at, actor='schedule'))
-        schedule.next_run_at = stamp(at + timedelta(minutes=schedule.interval_minutes))
+        interval = timedelta(minutes=schedule.interval_minutes)
+        slot = datetime.fromisoformat(schedule.next_run_at or stamp(at))
+        # The first slot strictly after `at`: due now and run, so the next one is at least one interval away.
+        schedule.next_run_at = stamp(_next_slot(slot + interval, interval, at + timedelta(microseconds=1)))
     return jobs
 
 

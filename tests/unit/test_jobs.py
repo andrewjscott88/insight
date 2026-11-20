@@ -292,3 +292,50 @@ async def test_run_forever_recovers_logs_and_stops(
 
 def test_describe_schedules_says_when_nothing_is_scheduled(session_factory: sessionmaker[Session]) -> None:
     assert jobs.describe_schedules(session_factory).startswith('No scheduled syncs')
+
+
+# --------------------------------------------------------------------------- a time of day
+
+
+MIDNIGHT = datetime(2026, 11, 21, 0, 0, tzinfo=UTC)
+
+
+def test_a_daily_schedule_keeps_its_hour(session_factory: sessionmaker[Session]) -> None:
+    """Daily at 00:00 UTC, chosen at 09:00: the first sync is tomorrow 00:00, and every one after at 00:00."""
+    now = datetime(2026, 11, 20, 9, 0, tzinfo=UTC)
+    with session_factory.begin() as db:
+        services.set_schedule(db, 'cisa-kev', 1440, at=now, starts_at=services.time_of_day('00:00', now))
+        assert services.list_schedules(db)['cisa-kev'].next_run_at == services.stamp(MIDNIGHT)
+        assert services.enqueue_due_schedules(db, at=MIDNIGHT - timedelta(seconds=1)) == []
+        ran_at = MIDNIGHT + timedelta(seconds=12)  # the runner's tick lands a little after the hour
+        assert len(services.enqueue_due_schedules(db, at=ran_at)) == 1
+        assert services.list_schedules(db)['cisa-kev'].next_run_at == services.stamp(
+            MIDNIGHT + timedelta(days=1)
+        )
+
+
+def test_after_downtime_the_next_sync_is_still_on_the_hour(session_factory: sessionmaker[Session]) -> None:
+    now = datetime(2026, 11, 20, 9, 0, tzinfo=UTC)
+    with session_factory.begin() as db:
+        services.set_schedule(db, 'ncsc', 360, at=now, starts_at=services.time_of_day('00:00', now))
+        assert services.list_schedules(db)['ncsc'].next_run_at == services.stamp(now.replace(hour=12))
+        back = datetime(2026, 11, 23, 14, 7, tzinfo=UTC)  # off for three days
+        assert len(services.enqueue_due_schedules(db, at=back)) == 1  # once, not once per missed slot
+        assert services.list_schedules(db)['ncsc'].next_run_at == services.stamp(
+            back.replace(hour=18, minute=0)
+        )
+
+
+def test_a_start_time_in_the_future_is_kept(session_factory: sessionmaker[Session]) -> None:
+    now = datetime(2026, 11, 20, 9, 0, tzinfo=UTC)
+    with session_factory.begin() as db:
+        services.set_schedule(db, 'ncsc', 60, at=now, starts_at=services.time_of_day('23:30', now))
+        assert services.list_schedules(db)['ncsc'].next_run_at == services.stamp(
+            now.replace(hour=23, minute=30)
+        )
+
+
+@pytest.mark.parametrize('value', ['24:00', '7:00', '00:60', 'midnight', '00:00:00', ''])
+def test_start_times_are_hh_mm_utc(value: str) -> None:
+    with pytest.raises(ValueError, match='HH:MM in UTC'):
+        services.time_of_day(value, T0)

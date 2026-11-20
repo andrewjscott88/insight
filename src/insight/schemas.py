@@ -80,9 +80,11 @@ class ObservationReview(BaseModel):
 
 
 class ScheduleInput(BaseModel):
-    """``PUT /api/schedules/{key}``: how often the source syncs by itself, in minutes (0: off)."""
+    """``PUT /api/schedules/{key}``: how often the source syncs by itself, in minutes (0: off), and optionally
+    the time of day (``HH:MM`` UTC) its syncs start from."""
 
     interval_minutes: int
+    at: str | None = Field(default=None, pattern=r'^([01]\d|2[0-3]):[0-5]\d$')
 
 
 class NoteInput(BaseModel):

@@ -17,8 +17,8 @@ A single-operator threat-intelligence workbench, run locally or published behind
 - Organization watch terms highlight literal product, vendor or topic matches. These are transparent keyword matches, not calibrated risk scores.
 - Curated connectors: CISA KEV, CISA security advisories (CISA's machine-readable CSAF files), SANS ISC and UK
   NCSC feeds. **Sync now** per source, **Sync all sources** at the top of the workspace, and **opt-in
-  schedules** (off by default; every hour, 6 hours or day, per source or for all) so the feeds and the brief stay
-  fresh by themselves. An unchanged feed is not downloaded again (`ETag` / `Last-Modified`). See
+  schedules** (off by default; every hour, 6 hours or day, per source or for all, from a time of day you choose,
+  in UTC) so the feeds and the brief stay fresh by themselves. An unchanged feed is not downloaded again (`ETag` / `Last-Modified`). See
   [ADR 0018](docs/adr/0018-opt-in-scheduled-syncs.md).
 - **Intel brief** on the landing page: what the last 7 days add up to, built from your reports (no AI). An
   **executive summary** in a few plain sentences (what came in, what attackers are using now and the US federal

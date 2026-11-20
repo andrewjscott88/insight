@@ -812,8 +812,10 @@ def _register_source_routes(app: FastAPI, sessions: SessionFactory, require_auth
         if key not in SOURCES:
             raise HTTPException(404, 'Unknown source')
         try:
+            now = datetime.now(UTC)
+            starts_at = services.time_of_day(body.at, now) if body.at else None
             with acting(sessions, request) as db:
-                schedule = services.set_schedule(db, key, body.interval_minutes, at=datetime.now(UTC))
+                schedule = services.set_schedule(db, key, body.interval_minutes, at=now, starts_at=starts_at)
                 return schedule_view(key, schedule)
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
