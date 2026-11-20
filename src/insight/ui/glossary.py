@@ -42,6 +42,41 @@ GLOSSARY: Final[tuple[tuple[str, str], ...]] = (
         'it.',
     ),
     (
+        'Verdict: unknown, benign, suspicious, malicious',
+        'What you decided an indicator means. Benign means harmless. Malicious means it is used in '
+        'attacks. Unknown means nobody has decided yet. A verdict is not the same as accepting a value. A '
+        'verdict can end on a date you choose.',
+    ),
+    (
+        'Warning',
+        'A sign that a value must never be blocked, whatever its verdict. Insight works it out from the '
+        'value itself.',
+    ),
+    (
+        'Private or reserved address',
+        'An address that only works inside a network, or is kept for special uses. Blocking it could cut '
+        'off your own computers.',
+    ),
+    (
+        'Example address',
+        'An address set aside for examples in books and guides, such as 192.0.2.1. No real computer uses it.',
+    ),
+    (
+        'Reserved name',
+        'A name that is not a real site on the internet, such as example.com or a name ending in .local.',
+    ),
+    (
+        'Common vendor site',
+        'The site of a big company, such as microsoft.com. Reports often name it, and blocking it would '
+        'break things.',
+    ),
+    (
+        'Blocklist',
+        'A list of values for a firewall to block. A value goes on it only when you marked it malicious, '
+        'accepted it in a report and it has no warning. Verdicts on addresses drop off after 30 days, and '
+        'on domains after 90 days, unless you chose an end date.',
+    ),
+    (
         'New, reviewing, reviewed',
         'How far you have got with a whole report.',
     ),

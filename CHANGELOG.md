@@ -40,6 +40,11 @@
 - `GET /api/entities/{id}` gains `flags`, `assessment`, `first_seen_at` and `last_seen_at`. First and last seen
   are computed from the reports the caller can see, so a TLP-limited key learns nothing from restricted ones.
 - The SIEM recipe in the API guide now pulls the blocklist instead of the raw export (review finding C1).
+- **In the workspace:** each observation in the reader, and each entity in the entity explorer, shows its
+  warnings as badges and its verdict, with **Set verdict** / **Change verdict** (a reason, its TLP label and an
+  optional end date). The reason's label defaults to AMBER, or to the report's own label when that is stricter.
+  The explorer also shows when the value was first and last seen. New glossary entries explain verdicts, each
+  warning and the blocklist; the verdict dialog is in the accessibility (axe) walk.
 
 ### Changed: the service layer is a package (internal)
 - `services.py` (1,300 lines) is now `insight/services/`, one module per domain: `tlp`, `audit`, `common`,

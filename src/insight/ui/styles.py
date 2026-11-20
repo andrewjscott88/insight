@@ -60,6 +60,8 @@ body.body--dark, body.body--light { background:var(--ins-bg);color:var(--ins-tex
 .break-value { overflow-wrap:break-word; }
 .stat-tiles { display:grid;grid-template-columns:repeat(auto-fit, minmax(min(100%, 8.5rem), 1fr)); }
 .tlp-badge { font-weight:600; }
+/* A warning flag (review Design 1): the text colour already passes contrast; the border marks it as a tag. */
+.flag-badge { font-weight:600;border:1px solid currentColor; }
 .tlp-clear { color:var(--ins-tlp-clear);background:var(--ins-tlp-clear-bg); }
 .tlp-green { color:var(--ins-tlp-green);background:var(--ins-tlp-green-bg); }
 .tlp-amber { color:var(--ins-tlp-amber);background:var(--ins-tlp-amber-bg); }
