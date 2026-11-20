@@ -8,8 +8,8 @@ A staging deployment stage only becomes relevant at Milestone 3 (multi-user acco
  Tier 0  pre-commit (local)   .pre-commit-config.yaml           every commit / push
  Tier 1  CI                   .github/workflows/ci.yml          every push & PR - blocks merge
  Tier 2  Nightly              .github/workflows/nightly.yml     03:17 UTC daily, 04:41 Sunday - advisory
- Tier 3  Milestone gate       .github/workflows/milestone-gate.yml   tag vX.Y.Z-rc.N - blocks the release
- Tier 4  Release              .github/workflows/release.yml     tag vX.Y.Z - human approval, publishes
+ Tier 3  Milestone gate       .github/workflows/milestone-gate.yml   inside every release; optional dry run
+ Tier 4  Release              .github/workflows/release.yml     tag vX.Y.Z - gate, human approval, publishes
          + codeql.yml (SAST), lock-refresh.yml (weekly dependency PR), dependabot.yml (monthly: actions, base image)
 ```
 
@@ -69,9 +69,11 @@ Any failure opens (or comments on) a "Nightly pipeline failure" issue.
 > mutmut 3.8 is not yet compatible with pytest 9, so the mutation job installs `pytest<9` in its own
 > environment without installing the project (see `[tool.mutmut]` in `pyproject.toml`).
 
-## Tier 3 - milestone gate (blocks the release candidate)
+## Tier 3 - milestone gate (blocks the release)
 
-Triggered by `vX.Y.Z-rc.N` tags (or manually). Re-runs **all of Tier 1** (`workflow_call`), then:
+The release workflow runs it on every final tag before publishing can be approved (`workflow_call`). It also
+runs on its own as a dry run: on demand, or for an optional `vX.Y.Z-rc.N` tag. Re-runs **all of Tier 1** on
+every supported Python (`workflow_call`), then:
 
 | Job | Gate |
 | --- | --- |
@@ -101,12 +103,15 @@ Reports are attached to the run summary and as artifacts (90 days).
 Final tags `vX.Y.Z` only. See `docs/RELEASING.md` for the step-by-step procedure.
 
 1. **verify**: release metadata and upgrade fixture; `check_pins.py --strict` (every base image by digest,
-   every action by commit SHA); the **same commit** has a successful milestone-gate run.
-2. **publish**: runs in the protected `release` environment, which **requires a human approval**. Builds
+   every action by commit SHA).
+2. **gate**: the whole milestone gate (Tier 3) on this commit, in the same run. Until 0.6.0 the gate ran on a
+   release-candidate tag and the release only checked that it had passed, which cost one more tag and one
+   more round trip per release (review G1).
+3. **publish**: runs in the protected `release` environment, which **requires a human approval**. Builds
    wheel and image; pushes to GHCR with BuildKit SBOM and `provenance: mode=max`; **cosign keyless
    signature**; GitHub build-provenance attestations for image and wheel; GitHub Release with the changelog
    section, wheel, runtime lock and validation report.
-3. **post-release**: `cosign verify` against this repository's workflow identity; pull **by digest**,
+4. **post-release**: `cosign verify` against this repository's workflow identity; pull **by digest**,
    run read-only, smoke test.
 
 ### Release rehearsal

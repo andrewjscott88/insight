@@ -36,6 +36,9 @@
 - Mutation testing and the newest-dependency check run weekly (Sunday); live contracts, deep property tests and
   the image re-scan stay daily. A manual *Nightly* run does everything.
 - Dependabot batches action and base-image updates into one pull request each per month.
+- **One tag per release.** The release workflow now runs the whole milestone gate on the final tag, then waits
+  for approval before publishing; a release-candidate tag is no longer required (it remains an optional dry
+  run, as does running the gate by hand). See `docs/RELEASING.md`.
 
 ### Added: verdicts, warning flags and a blocklist
 - **Verdicts.** An analyst can now say what an indicator *means*: `benign`, `suspicious` or `malicious`
