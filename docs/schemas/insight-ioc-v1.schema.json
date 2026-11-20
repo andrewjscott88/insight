@@ -73,6 +73,14 @@
       "enum": ["unreviewed", "accepted", "rejected"],
       "description": "An analyst's verdict on one extracted mention. `accepted` means the extraction is accurate, not that the indicator is malicious."
     },
+    "verdict": {
+      "enum": ["unknown", "benign", "suspicious", "malicious"],
+      "description": "An analyst's verdict on the indicator: what it means, as opposed to review (whether it was copied correctly). `unknown` when none was recorded, or when its own label is above the export's TLP limit."
+    },
+    "flag": {
+      "enum": ["non-routable", "documentation", "reserved-name", "common-benign"],
+      "description": "Why a value is unsafe to block: a private or reserved address, a documentation range, a special-use name, or a vendor domain reports cite constantly. Computed from the value (docs/IOC_EXPORT.md)."
+    },
     "triage_status": {
       "enum": ["new", "reviewing", "reviewed"],
       "description": "The report's triage state in the inbox (not a verdict on any indicator)."
@@ -93,7 +101,9 @@
         "review_statuses",
         "max_tlp",
         "document_ids",
-        "include_evidence"
+        "include_evidence",
+        "verdicts",
+        "exclude_flags"
       ],
       "properties": {
         "q": {
@@ -139,6 +149,19 @@
         "include_evidence": {
           "type": "boolean",
           "description": "False if evidence excerpts were left out (every source's `evidence` is then null)."
+        },
+        "verdicts": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/verdict" },
+          "description": "Only indicators with one of these verdicts (all four = no limit)."
+        },
+        "exclude_flags": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/flag" },
+          "description": "Indicators with any of these warning flags were left out ([] = none excluded)."
         }
       }
     },
@@ -184,6 +207,9 @@
         "last_ingested_at",
         "review_statuses",
         "kev",
+        "verdict",
+        "verdict_valid_until",
+        "flags",
         "sources"
       ],
       "properties": {
@@ -219,6 +245,17 @@
         "kev": {
           "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/kev" }],
           "description": "KEV context for CVEs that are in the imported CISA KEV catalogue; otherwise null."
+        },
+        "verdict": { "$ref": "#/$defs/verdict" },
+        "verdict_valid_until": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/timestamp" }],
+          "description": "When the verdict expires (null: no expiry recorded). Blocklists also apply a default lifetime per kind."
+        },
+        "flags": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/flag" },
+          "description": "Warning flags. A flagged value never appears on a blocklist, whatever its verdict."
         },
         "sources": {
           "type": "array",

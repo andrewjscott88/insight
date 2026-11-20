@@ -185,7 +185,7 @@ Files saved from the browser or the API get your normal file permissions. Restri
 | I want to… | Workspace dialog | Command line |
 | --- | --- | --- |
 | **Share with a trusted community** (TLP:GREEN) | TLP ≤ `GREEN`; review status `accepted` only; defang on; evidence **off** | `--max-tlp GREEN --review-status accepted --defang --no-evidence` |
-| **Feed a firewall, proxy or DNS blocklist** | types URL, Domain, IP address; `accepted` only; defang **off** | `--kind url --kind domain --kind ip --review-status accepted` |
+| **Feed a firewall, proxy or DNS blocklist** | use the blocklist instead: `GET /api/iocs/blocklist?kind=ip` ([API](API.md)) | (API only) |
 | **Hunt for files in EDR** | types MD5, SHA-1, SHA-256, SHA-512 | `--kind md5 --kind sha1 --kind sha256 --kind sha512` |
 | **Prioritise patching** | type CVE | `--kind cve`, then list the KEV entries (see [§8](#8-using-the-file-in-other-tools)) |
 | **Paste indicators into a ticket or e-mail** | defang on | `--defang`, and read [§7](#7-defanging) first |
@@ -194,10 +194,11 @@ Files saved from the browser or the API get your normal file permissions. Restri
 | **Check extraction quality** (QA) | tick all three review statuses | `--review-status unreviewed --review-status accepted --review-status rejected` |
 | **Include history** of synced items | inbox switch **Include superseded revisions** + "Only reports matching…" | `--include-superseded` |
 
-> **Before you load anything into a blocking control:** Insight has no "malicious" verdict. Reports mention
-> legitimate infrastructure (vendor sites, cloud services, documentation addresses), and the export includes it
-> unless an analyst rejected those mentions. Use `accepted` only, agree within your team that "accept" is used
-> for indicators you intend to act on, and review the list before deploying it.
+> **Before you load anything into a blocking control:** "accepted" means a value was copied correctly, not
+> that it is harmful. Reports mention legitimate infrastructure (vendor sites, cloud services, documentation
+> addresses) and victims' own addresses. For blocking, use the **blocklist** (`GET /api/iocs/blocklist`): it
+> holds only values an analyst judged `malicious`, with an accepted mention and no warning flag, until the
+> verdict expires. In an export, filter with `verdict=malicious` and check each IOC's `flags`.
 
 ## 4. How the filters combine
 
@@ -257,6 +258,9 @@ Then one entry per indicator, sorted by type and then value. An excerpt:
   "last_ingested_at": "2026-01-15T09:05:00+00:00",
   "review_statuses": { "unreviewed": 1, "accepted": 1 },
   "kev": null,
+  "verdict": "unknown",
+  "verdict_valid_until": null,
+  "flags": ["reserved-name"],
   "sources": [
     { "title": "Training scenario: edge appliance activity", "tlp": "CLEAR", "status": "reviewed",
       "extractor_version": "regex-v2", "mentions": 1,
@@ -269,6 +273,14 @@ Then one entry per indicator, sorted by type and then value. An excerpt:
 ```
 
 How to read it:
+
+- **`verdict`** is what an analyst decided the indicator means: `unknown` (nothing recorded yet), `benign`,
+  `suspicious` or `malicious`, with `verdict_valid_until` when it expires. A verdict whose own TLP label is
+  above the export's limit shows as `unknown`.
+- **`flags`** say why a value is unsafe to block, whatever its verdict: `non-routable` (private, loopback,
+  shared or reserved addresses), `documentation` (example ranges such as 192.0.2.0/24), `reserved-name`
+  (`.local`, `.test`, `example.org`, as here) and `common-benign` (a short list of vendor domains such as
+  `microsoft.com`). Flags are computed from the value, never stored.
 
 - **`tlp: GREEN`** is the most restrictive label among *this indicator's* sources (CLEAR and GREEN). It is
   lower than the file's AMBER+STRICT, because no AMBER+STRICT report mentions this domain.

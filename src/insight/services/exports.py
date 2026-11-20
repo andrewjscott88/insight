@@ -8,7 +8,8 @@ from typing import Any, Final
 from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.orm import Session
 
-from ..ioc_export import IocMention, build_export
+from ..flags import flags
+from ..ioc_export import Assessment, IocMention, build_export
 from ..models import (
     Document,
     Entity,
@@ -21,6 +22,7 @@ from ..schemas import (
     TLP_LEVELS,
     IocExportQuery,
 )
+from .assessments import visible_assessments
 from .audit import audit
 from .search import _document_conditions, _kev_view
 
@@ -48,11 +50,42 @@ def _ioc_conditions(query: IocExportQuery) -> list[ColumnElement[bool]]:
     return conditions
 
 
-def ioc_export_counts(db: Session, query: IocExportQuery) -> dict[str, int]:
-    """``{'iocs', 'documents', 'mentions'}`` an export with ``query`` would contain. One query, not audited.
+def _by_meaning(
+    mentions: list[IocMention], query: IocExportQuery, verdicts: dict[str, str]
+) -> list[IocMention]:
+    """Keep mentions of indicators with a verdict ``query`` asks for and none of its excluded flags."""
+    if not query.filters_by_meaning():
+        return mentions
+    excluded = set(query.exclude_flags)
+    return [
+        mention
+        for mention in mentions
+        if verdicts.get(mention.entity_id, 'unknown') in query.verdicts
+        and not excluded.intersection(flags(mention.kind, mention.value))
+    ]
 
-    Used to preview an export before downloading it; compare ``mentions`` with ``MAX_EXPORT_MENTIONS``.
+
+def _meanings(db: Session, mentions: list[IocMention], query: IocExportQuery) -> dict[str, Assessment]:
+    """The verdicts an export may show: those whose label is within the export's TLP limit."""
+    found = visible_assessments(db, (m.entity_id for m in mentions), max_tlp=query.max_tlp)
+    return {entity_id: Assessment(row.verdict, row.valid_until) for entity_id, row in found.items()}
+
+
+def ioc_export_counts(db: Session, query: IocExportQuery) -> dict[str, int]:
+    """``{'iocs', 'documents', 'mentions'}`` an export with ``query`` would contain. Not audited.
+
+    Used to preview an export first; compare ``mentions`` with ``MAX_EXPORT_MENTIONS``. One SQL
+    query, unless verdicts or flags narrow the export: those are judged per indicator, like the export itself.
     """
+    if query.filters_by_meaning():
+        mentions = ioc_mentions(db, query)
+        meanings = _meanings(db, mentions, query)
+        kept = _by_meaning(mentions, query, {k: v.verdict for k, v in meanings.items()})
+        return {
+            'iocs': len({m.entity_id for m in kept}),
+            'documents': len({m.document_id for m in kept}),
+            'mentions': len(kept),
+        }
     row = db.execute(
         select(
             func.count(func.distinct(Entity.id)),
@@ -157,6 +190,8 @@ def export_iocs(db: Session, query: IocExportQuery) -> dict[str, Any]:
     ``export_id`` written into the file, so a file found later can be traced back to its audit record.
     """
     mentions = ioc_mentions(db, query)
+    meanings = _meanings(db, mentions, query)
+    mentions = _by_meaning(mentions, query, {k: v.verdict for k, v in meanings.items()})
     export_id = uid()
     filters = query.model_dump(mode='json', exclude={'defang'})
     result = build_export(
@@ -166,6 +201,7 @@ def export_iocs(db: Session, query: IocExportQuery) -> dict[str, Any]:
         export_id=export_id,
         generated_at=now(),
         include_evidence=query.include_evidence,
+        assessments=meanings,
     )
     audit_detail = {
         'iocs': result['counts']['iocs'],

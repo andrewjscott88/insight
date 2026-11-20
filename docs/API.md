@@ -112,7 +112,7 @@ operator have separate budgets, so a runaway script cannot lock the analyst out 
 | --- | --- | --- |
 | `read` | `GET`/`HEAD`, except the IOC export | 300 per minute |
 | `write` | `POST` (ingest, triage, notes, demo, sync, enrichment) | 60 per minute |
-| `ioc-export` | `GET /api/iocs/export` | 30 per hour |
+| `ioc-export` | `GET /api/iocs/export`, `GET /api/iocs/blocklist` | 30 per hour |
 | (invalid keys) | Requests with a wrong, revoked or expired key, per client address | 10 per minute |
 
 Budgets are token buckets: the full limit is available as a burst, then it refills evenly (`read`: 5 per
@@ -213,6 +213,8 @@ Query parameters (all optional; values are **case-sensitive**):
 | `document_id` (repeatable) | all reports | Only these reports. A chosen report is included even if it is a superseded revision |
 | `q` | none | Inbox search text (literal, folded like the inbox). At most 200 characters: longer text is rejected with `422`, whereas `GET /api/documents` shortens it |
 | `status` | any | The **report's** triage status: `new` / `reviewing` / `reviewed`. Not the mention review state |
+| `verdict` (repeatable) | all | Only indicators with this verdict: `unknown` `benign` `suspicious` `malicious` |
+| `exclude_flag` (repeatable) | none | Leave out indicators with this warning flag: `non-routable` `documentation` `reserved-name` `common-benign` |
 | `tlp` | any | Only reports with **exactly** this label (compare `max_tlp`) |
 | `include_superseded` | `false` | Also include superseded revisions of synced items |
 
@@ -249,6 +251,9 @@ Each IOC:
 | `first_ingested_at`, `last_ingested_at` | When the oldest/newest included source was added to Insight (not publication or sighting dates) |
 | `review_statuses` | Number of included mentions per review state, e.g. `{"unreviewed": 1, "accepted": 1}` |
 | `kev` | CISA KEV context for CVEs (`date_added`, `due_date`, `required_action`, `vendor`, `product`, `imported_at`) or `null` |
+| `verdict` | The analyst's verdict: `unknown` (none, or its own label is above the export's TLP limit), `benign`, `suspicious` or `malicious`. Review says a value was copied correctly; the verdict says what it means |
+| `verdict_valid_until` | When the verdict expires, or `null` |
+| `flags` | Warning flags: why the value is unsafe to block (`non-routable`, `documentation`, `reserved-name`, `common-benign`); `[]` for most |
 | `sources` | Included reports that mention it, oldest first (see below) |
 
 Each source: `document_id`, `title`, `source_name`, `source_url`, `tlp`, `status` (the report's **triage**
@@ -267,12 +272,29 @@ Errors:
   `max_tlp: Input should be 'CLEAR', …`;
 - `401` without a session.
 
+### `GET /api/iocs/blocklist`
+Values that are safe to load into a firewall, proxy, DNS filter or SIEM lookup, one `kind` at a time: `ip`,
+`domain`, `url`, `md5`, `sha1`, `sha256` or `sha512` (`422` otherwise). A value is listed only when all of
+these hold:
+
+- an analyst recorded a **`malicious` verdict** (`POST /api/entities/{id}/assessment`), and it has not
+  expired: its own `valid_until`, or else a default lifetime of 30 days for IP addresses and 90 days for
+  domains and URLs (file hashes do not expire);
+- at least one mention of it is **accepted**, in a report you can see;
+- it carries **no warning flag**: no private, reserved or documentation address, special-use name or vendor
+  domain, whatever its verdict;
+- the verdict's own TLP label is within your limit.
+
+`format=txt` (default): one value per line, sorted, never defanged. `format=csv`: `value,kind,decided_at,
+expires_at,tlp` with a header row. Audited as `ioc.blocklist`; shares the `ioc-export` budget.
+
 ## Entities
 
 | Route | Parameters | Result |
 | --- | --- | --- |
 | `GET /api/entities` | `q` | Up to 200 `{id, kind, value, document_count}` sorted by kind and value |
-| `GET /api/entities/{id}` | `offset` (0), `limit` (100, at most 200) | `{id, kind, value, document_count, offset, documents: [summaries]}`, newest first, paginated |
+| `GET /api/entities/{id}` | `offset` (0), `limit` (100, at most 200) | `{id, kind, value, flags, assessment, first_seen_at, last_seen_at, document_count, offset, documents: [summaries]}`, newest first, paginated. `assessment` is `null` or `{verdict, reason, tlp, valid_until, decided_at, actor}`; a TLP-limited key sees it only within its limit. `first_seen_at` / `last_seen_at`: when the oldest and newest report **you can see** that mentions it was added |
+| `POST /api/entities/{id}/assessment` | JSON `{verdict, reason, tlp, valid_until}`: `verdict` `unknown` (clears) / `benign` / `suspicious` / `malicious`; `reason` up to 2,000 characters; `tlp` (default `AMBER`) labels the reason; `valid_until` a date, today or later, or omitted | The recorded assessment, or `{"verdict": "unknown"}`. Audited as `entity.assess`. `404` if you cannot see the entity; `403` if a TLP-limited key would set, or replace, a verdict above its limit |
 
 ## Sources and enrichment
 

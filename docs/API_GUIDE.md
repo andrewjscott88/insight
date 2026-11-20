@@ -272,6 +272,9 @@ curl -sS "$INSIGHT_URL/api/iocs/export?document_id=$DOC_ID" -H "Authorization: B
 # `+` must be encoded (AMBER%2BSTRICT); --data-urlencode does it for you
 curl -sS -G "$INSIGHT_URL/api/iocs/export" -H "Authorization: Bearer $INSIGHT_API_KEY" \
   --data-urlencode 'max_tlp=AMBER+STRICT' | jq '.filters.max_tlp'
+# Only indicators an analyst judged malicious, without private or documentation addresses
+curl -sS "$INSIGHT_URL/api/iocs/export?verdict=malicious&exclude_flag=non-routable&exclude_flag=documentation" \
+  -H "Authorization: Bearer $INSIGHT_API_KEY" | jq -r '.iocs[] | "\(.kind)\t\(.value)\t\(.flags)"'
 rm -f insight-iocs-*.json
 ```
 
@@ -283,10 +286,24 @@ rm -f insight-iocs-*.json
 | `defang` | `true` / `false` | `false` |
 | `evidence` | `true` / `false` (`false`: no report text around mentions) | `true` |
 | `document_id` | report IDs | all reports |
+| `verdict` | `unknown` `benign` `suspicious` `malicious` | all |
+| `exclude_flag` | `non-routable` `documentation` `reserved-name` `common-benign` | none |
 | `q`, `status`, `tlp`, `include_superseded` | as for `GET /api/documents` | |
 
 An invalid value is a `422` naming it (`kind 'IP': Input should be 'cve', ...`); more than 100,000 matching
 mentions is a `422` too (narrow the filters).
+
+### Blocklists
+
+`GET /api/iocs/blocklist?kind=…`: values safe to block, one per line: a `malicious` verdict that has not
+expired, an accepted mention, no warning flag, within your TLP limit (full rules: [API](API.md)). Shares the
+export budget of 30 per hour.
+
+```sh
+curl -sS "$INSIGHT_URL/api/iocs/blocklist?kind=ip" -H "Authorization: Bearer $INSIGHT_API_KEY"
+# With the date of each verdict, when it expires and its label
+curl -sS "$INSIGHT_URL/api/iocs/blocklist?kind=domain&format=csv" -H "Authorization: Bearer $INSIGHT_API_KEY"
+```
 
 ### Entities (indicators and pivots)
 
@@ -296,7 +313,14 @@ curl -sS "$INSIGHT_URL/api/entities?q=example" -H "Authorization: Bearer $INSIGH
 ENTITY_ID=$(curl -sS "$INSIGHT_URL/api/entities?q=203.0.113.45" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq -r '.[0].id')
 # Pivot: every report mentioning it, newest first (offset/limit, at most 200 per page)
 curl -sS "$INSIGHT_URL/api/entities/$ENTITY_ID?offset=0&limit=50" -H "Authorization: Bearer $INSIGHT_API_KEY" \
-  | jq '{kind, value, document_count, reports: [.documents[] | {id, title, tlp}]}'
+  | jq '{kind, value, flags, assessment, first_seen_at, last_seen_at, document_count, reports: [.documents[] | {id, title, tlp}]}'
+# Record a verdict: what the indicator means (review only says it was copied correctly). Needs a read-write key.
+curl -sS -X POST "$INSIGHT_URL/api/entities/$ENTITY_ID/assessment" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"verdict": "malicious", "reason": "C2 in the March campaign", "tlp": "GREEN", "valid_until": "2027-06-30"}' | jq
+# "unknown" clears it
+curl -sS -X POST "$INSIGHT_URL/api/entities/$ENTITY_ID/assessment" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d '{"verdict": "unknown"}'
 ```
 
 ### Sources and enrichment (outbound internet)
@@ -347,10 +371,30 @@ curl -sS -X POST "$INSIGHT_URL/api/demo" -H "Authorization: Bearer $INSIGHT_API_
 
 ## 5. Recipes
 
-### 5.1 Pull IOCs into a SIEM on a schedule
+### 5.1 Feed a SIEM or firewall on a schedule
 
-A read-only key limited to what the SIEM may hold (`make api-key-create NAME=siem MAX_TLP=GREEN`), then one
-export per run. Every 5 minutes uses 12 of the 30 exports per hour.
+A read-only key limited to what the device may hold (`make api-key-create NAME=siem MAX_TLP=GREEN`), then one
+blocklist per kind per run. Every 15 minutes for two kinds uses 8 of the 30 requests per hour.
+
+```bash
+#!/usr/bin/env bash
+# Cron: */15 * * * * /opt/siem/pull-insight-blocklists.sh   (INSIGHT_URL and INSIGHT_API_KEY from a protected env file)
+set -euo pipefail
+for kind in ip domain; do
+  out=/var/lib/siem/insight-$kind.txt
+  curl -sS --fail-with-body --retry 3 "$INSIGHT_URL/api/iocs/blocklist?kind=$kind" \
+    -H "Authorization: Bearer $INSIGHT_API_KEY" -o "$out.tmp"
+  mv "$out.tmp" "$out"   # the firewall only ever reads a complete file
+done
+```
+
+The blocklist holds only values an analyst judged **malicious** (a verdict, recorded in the reader or with
+`POST /api/entities/{id}/assessment`), with an accepted mention and no warning flag, until the verdict expires.
+That is the safe input for a blocking control. **Accepted is not a verdict:** it means Insight copied the value
+correctly, and a report can name an indicator as a victim, a test address or a counter-example.
+
+For context in searches and alerts rather than blocking, pull the full export instead (every 5 minutes uses
+12 of the 30 requests per hour, so run one or the other at that rate):
 
 ```bash
 #!/usr/bin/env bash
@@ -363,11 +407,9 @@ curl -sS --fail-with-body --retry 3 \
 mv "$out.tmp" "$out"     # the SIEM only ever reads a complete file
 ```
 
-`--retry` also waits out `429` responses (curl honours `Retry-After`). `review_status=accepted` keeps only
-indicators an analyst has checked. **Accepted is not a verdict:** it means Insight copied the value correctly
-from the report, not that the indicator is malicious (see *What the words mean* in the workspace). A report can
-name an indicator as a victim, a test address or a counter-example. Use the export as context for searches and
-alerts, not as a blocklist to apply without review.
+`--retry` also waits out `429` responses (curl honours `Retry-After`). Each IOC in the export carries its
+`verdict` and `flags`, so the SIEM can weigh a `malicious` indicator differently from an `unknown` one and skip
+flagged values.
 
 ### 5.2 Ingest a text file
 

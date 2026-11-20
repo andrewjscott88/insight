@@ -27,7 +27,14 @@
     ],
     "max_tlp": null,
     "document_ids": [],
-    "include_evidence": true
+    "include_evidence": true,
+    "verdicts": [
+      "unknown",
+      "benign",
+      "suspicious",
+      "malicious"
+    ],
+    "exclude_flags": []
   },
   "counts": {
     "iocs": 6,
@@ -53,6 +60,9 @@
         "unreviewed": 1
       },
       "kev": null,
+      "verdict": "unknown",
+      "verdict_valid_until": null,
+      "flags": [],
       "sources": [
         {
           "document_id": "00000000-0000-4000-8000-000000000003",
@@ -80,6 +90,9 @@
         "unreviewed": 1
       },
       "kev": null,
+      "verdict": "unknown",
+      "verdict_valid_until": null,
+      "flags": [],
       "sources": [
         {
           "document_id": "00000000-0000-4000-8000-000000000005",
@@ -108,6 +121,11 @@
         "accepted": 1
       },
       "kev": null,
+      "verdict": "unknown",
+      "verdict_valid_until": null,
+      "flags": [
+        "reserved-name"
+      ],
       "sources": [
         {
           "document_id": "00000000-0000-4000-8000-000000000005",
@@ -149,6 +167,11 @@
         "accepted": 1
       },
       "kev": null,
+      "verdict": "unknown",
+      "verdict_valid_until": null,
+      "flags": [
+        "documentation"
+      ],
       "sources": [
         {
           "document_id": "00000000-0000-4000-8000-000000000005",
@@ -189,6 +212,9 @@
         "unreviewed": 1
       },
       "kev": null,
+      "verdict": "unknown",
+      "verdict_valid_until": null,
+      "flags": [],
       "sources": [
         {
           "document_id": "00000000-0000-4000-8000-000000000003",
@@ -216,6 +242,11 @@
         "unreviewed": 1
       },
       "kev": null,
+      "verdict": "unknown",
+      "verdict_valid_until": null,
+      "flags": [
+        "reserved-name"
+      ],
       "sources": [
         {
           "document_id": "00000000-0000-4000-8000-000000000005",

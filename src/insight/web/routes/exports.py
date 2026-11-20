@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Final
+import csv
+import io
+import json
+from typing import Annotated, Any, Final, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
+from starlette.responses import Response
 
 from ... import services
 from ...ioc_export import export_filename
@@ -24,6 +28,8 @@ IOC_EXPORT_PARAMETERS: Final = {
     'review_statuses': 'review_status',
     'document_ids': 'document_id',
     'include_evidence': 'evidence',
+    'verdicts': 'verdict',
+    'exclude_flags': 'exclude_flag',
 }
 
 
@@ -39,6 +45,8 @@ def ioc_export_query(
     defang: bool,
     document_ids: list[str] | None = None,
     include_evidence: bool = True,
+    verdicts: list[str] | None = None,
+    exclude_flags: list[str] | None = None,
 ) -> IocExportQuery:
     """Validate IOC export query parameters; empty strings and absent lists mean "use the default"."""
     params: dict[str, Any] = {
@@ -56,6 +64,10 @@ def ioc_export_query(
         params['review_statuses'] = review_statuses
     if document_ids:
         params['document_ids'] = document_ids
+    if verdicts:
+        params['verdicts'] = verdicts
+    if exclude_flags:
+        params['exclude_flags'] = exclude_flags
     try:
         return IocExportQuery.model_validate(params)
     except ValidationError as exc:
@@ -93,6 +105,8 @@ def _register_export_routes(app: FastAPI, sessions: SessionFactory, require_auth
         defang: bool = False,
         document_id: Annotated[list[str] | None, Query()] = None,
         evidence: bool = True,
+        verdict: Annotated[list[str] | None, Query()] = None,
+        exclude_flag: Annotated[list[str] | None, Query()] = None,
     ) -> JSONResponse:
         """Cross-report IOC export (``insight-ioc-v1``). List parameters may be repeated."""
         query = ioc_export_query(
@@ -106,6 +120,8 @@ def _register_export_routes(app: FastAPI, sessions: SessionFactory, require_auth
             defang=defang,
             document_ids=document_id,
             include_evidence=evidence,
+            verdicts=verdict,
+            exclude_flags=exclude_flag,
         )
         # A TLP-limited key exports at most its own limit, whatever `max_tlp` it asked for.
         limit = services.stricter_limit(query.max_tlp, reader_limit(request))
@@ -118,3 +134,37 @@ def _register_export_routes(app: FastAPI, sessions: SessionFactory, require_auth
             raise HTTPException(422, str(exc)) from exc
         filename = export_filename(result['generated_at'])
         return JSONResponse(result, headers={'Content-Disposition': f'attachment; filename="{filename}"'})
+
+    @app.get('/api/iocs/blocklist', dependencies=[Depends(require_auth)])
+    def blocklist(
+        request: Request,
+        kind: str,
+        output: Annotated[Literal['txt', 'csv'], Query(alias='format')] = 'txt',
+    ) -> Response:
+        """Values safe to block, one per line (``txt``) or with dates and labels (``csv``). Audited.
+
+        Only unexpired ``malicious`` verdicts, on indicators with an accepted mention and no warning
+        flag, within the caller's TLP limit. Values are never defanged: firewalls and SIEMs need them live.
+        """
+        limit = reader_limit(request)
+        try:
+            with acting(sessions, request) as db:
+                entries = services.blocklist(db, kind, max_tlp=limit)
+                detail = {'format': output, 'entries': len(entries), 'max_tlp': limit}
+                services.audit(db, 'ioc.blocklist', kind, json.dumps(detail, sort_keys=True))
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        if output == 'txt':
+            body = ''.join(f'{entry.value}\n' for entry in entries)
+            media_type = 'text/plain; charset=utf-8'
+        else:
+            buffer = io.StringIO()
+            writer = csv.writer(buffer, lineterminator='\n')
+            writer.writerow(['value', 'kind', 'decided_at', 'expires_at', 'tlp'])
+            writer.writerows((e.value, e.kind, e.decided_at, e.expires_at or '', e.tlp) for e in entries)
+            body = buffer.getvalue()
+            media_type = 'text/csv; charset=utf-8'
+        filename = f'insight-blocklist-{kind}.{output}'
+        return Response(
+            body, media_type=media_type, headers={'Content-Disposition': f'inline; filename="{filename}"'}
+        )

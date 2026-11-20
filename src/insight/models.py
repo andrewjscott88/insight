@@ -94,6 +94,24 @@ class Entity(Base):
     value: Mapped[str] = mapped_column(Text)
 
 
+class EntityAssessment(Base):
+    """An analyst's verdict on an indicator: whether it is harmful, separate from whether it was copied right.
+
+    Review (``Observation.review_status``) says a mention was extracted correctly; the verdict says what the
+    indicator means. The verdict is global, but its reason may quote a restricted report, so it carries its
+    own TLP label: a reader limited below that label does not see it. No row means the verdict is unknown.
+    """
+
+    __tablename__ = 'entity_assessments'
+    entity_id: Mapped[str] = mapped_column(ForeignKey('entities.id'), primary_key=True)
+    verdict: Mapped[str] = mapped_column(String(20))
+    reason: Mapped[str] = mapped_column(Text, default='')
+    tlp: Mapped[str] = mapped_column(String(20), default='AMBER')
+    valid_until: Mapped[str | None] = mapped_column(String(40), default=None)
+    decided_at: Mapped[str] = mapped_column(String(40), default=now)
+    actor: Mapped[str] = mapped_column(String(80))
+
+
 class Observation(Base):
     __tablename__ = 'observations'
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)

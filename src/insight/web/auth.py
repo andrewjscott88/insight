@@ -112,7 +112,7 @@ def api_key_verifier(sessions: SessionFactory) -> KeyVerifier:
 
 def rate_limit_policy(method: str, path: str) -> Policy:
     """Which budget a request draws from. IOC exports are the expensive read and get their own."""
-    if path == '/api/iocs/export':
+    if path in ('/api/iocs/export', '/api/iocs/blocklist'):
         return IOC_EXPORT
     return READ if method in SAFE_METHODS else WRITE
 

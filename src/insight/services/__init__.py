@@ -20,6 +20,16 @@ from .access import (
     verify_api_key,
     verify_mfa_code,
 )
+from .assessments import (
+    BLOCKLIST_KINDS,
+    DEFAULT_LIFETIME,
+    BlocklistEntry,
+    assess_entity,
+    blocklist,
+    entity_assessment,
+    entity_seen,
+    visible_assessments,
+)
 from .audit import DEFAULT_ACTOR, audit, audit_events, set_actor
 from .brief import (
     KEV_SOURCE,
@@ -83,7 +93,9 @@ from .triage import (
 
 __all__ = [
     'API_KEY_TOUCH_INTERVAL',
+    'BLOCKLIST_KINDS',
     'DEFAULT_ACTOR',
+    'DEFAULT_LIFETIME',
     'JOB_ACTIVE',
     'JOB_BACKOFF',
     'KEV_SOURCE',
@@ -98,6 +110,7 @@ __all__ = [
     'SCORED_SOURCES',
     'SOURCE_SYNC',
     'SUMMARY_LENGTH',
+    'BlocklistEntry',
     'BriefData',
     'BriefDocument',
     'BriefKev',
@@ -108,8 +121,10 @@ __all__ = [
     'add_note',
     'add_watch_term',
     'apply_tlp_policy',
+    'assess_entity',
     'audit',
     'audit_events',
+    'blocklist',
     'brief_data',
     'cached_enrichments',
     'claim_job',
@@ -119,7 +134,9 @@ __all__ = [
     'detail',
     'enqueue_due_schedules',
     'enqueue_job',
+    'entity_assessment',
     'entity_documents',
+    'entity_seen',
     'export_iocs',
     'fingerprint',
     'finish_job',
@@ -161,6 +178,7 @@ __all__ = [
     'tlp_permitted',
     'verify_api_key',
     'verify_mfa_code',
+    'visible_assessments',
     'visible_levels',
     'watch_matches',
 ]
