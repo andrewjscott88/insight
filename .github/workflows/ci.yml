@@ -1,5 +1,7 @@
 # Tier 1 - every push to main, every pull request and merge-queue entry. Blocks merging.
 # Also called by the milestone gate (workflow_call) so release candidates re-run exactly these checks.
+# Pushes and pull requests test the oldest and newest supported Python (3.11, 3.14); the nightly run tests
+# 3.12 and 3.13, and the milestone gate all four (review G1: fewer CI minutes, the same guarantees).
 name: CI
 
 on:
@@ -8,6 +10,11 @@ on:
   pull_request:
   merge_group:
   workflow_call:
+    inputs:
+      all-pythons:
+        description: Test every supported Python, not only the oldest and newest
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -60,7 +67,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.11', '3.12', '3.13', '3.14']
+        python-version: ${{ fromJSON(inputs.all-pythons && '["3.11", "3.12", "3.13", "3.14"]' || '["3.11", "3.14"]') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

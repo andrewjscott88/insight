@@ -21,6 +21,13 @@
   feed records `Unchanged since the last sync.` and nothing else, so KEV's 1.3 MB catalogue is no longer
   re-read and rewritten when nothing changed. After an upgrade, each source is read once in full.
 
+### Changed: a lighter pipeline, the same guarantees (review G1, first part)
+- Pull requests and pushes test Python 3.11 and 3.14; 3.12 and 3.13 run every night and in the milestone gate,
+  which still tests all four.
+- Mutation testing and the newest-dependency check run weekly (Sunday); live contracts, deep property tests and
+  the image re-scan stay daily. A manual *Nightly* run does everything.
+- Dependabot batches action and base-image updates into one pull request each per month.
+
 ### Added: verdicts, warning flags and a blocklist
 - **Verdicts.** An analyst can now say what an indicator *means*: `benign`, `suspicious` or `malicious`
   (`POST /api/entities/{id}/assessment`), with a reason, an optional expiry date and the reason's own TLP label

@@ -22,6 +22,8 @@ from insight.schemas import INDICATOR_KINDS, DocumentInput
 from insight.services import SourceRef, ingest
 
 pytestmark = pytest.mark.ui
+#: A sync runs in the background with several thread hops; the default 0.3 s ran out on busy CI runners.
+SYNC_RETRIES = 50  # 5 s
 
 
 def audit_actions(env: SimpleNamespace) -> list[str]:
@@ -286,7 +288,7 @@ async def test_source_sync_success_and_failure(
 
     monkeypatch.setattr(connectors, 'download', feed)
     user.find(kind=ui.button, content='Sync now').click()  # lowest id = first registry entry (CISA KEV)
-    await user.should_see('Updated 1 KEV records; 1 new reports')
+    await user.should_see('Updated 1 KEV records; 1 new reports', retries=SYNC_RETRIES)
     await user.should_see('cisa-kev · success')
 
     async def broken(*_: Any, **__: Any) -> bytes:
@@ -294,7 +296,7 @@ async def test_source_sync_success_and_failure(
 
     monkeypatch.setattr(connectors, 'download', broken)
     user.find(kind=ui.button, content='Sync now').click()
-    await user.should_see('Sync failed: OSError: offline')
+    await user.should_see('Sync failed: OSError: offline', retries=SYNC_RETRIES)
     await user.should_see('cisa-kev · error')
 
 
@@ -569,7 +571,8 @@ async def test_sync_all_sources_names_the_ones_that_failed(
     monkeypatch.setattr(connectors, 'download', download)
     user.find(kind=ui.button, content='Sync all sources').click()
     await user.should_see(
-        '3 of 4 sources synced. Failed: CISA Security Advisories. The Sources tab shows why.'
+        '3 of 4 sources synced. Failed: CISA Security Advisories. The Sources tab shows why.',
+        retries=SYNC_RETRIES,
     )
     await user.should_see('cisa-csaf · error')
     with user.scope(marker='brief-summary'):
@@ -600,7 +603,9 @@ async def test_sync_all_sources_success_feeds_the_brief(user: User, monkeypatch:
 
     monkeypatch.setattr(connectors, 'download', download)
     user.find(kind=ui.button, content='Sync all sources').click()
-    await user.should_see('All 4 sources synced. The Sources tab shows what each one added.')
+    await user.should_see(
+        'All 4 sources synced. The Sources tab shows what each one added.', retries=SYNC_RETRIES
+    )
     with user.scope(marker='brief-summary'):
         await user.should_see('In the last 7 days, 4 new reports came in from 4 sources.')
         await user.should_see(
