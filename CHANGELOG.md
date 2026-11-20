@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 - 2026-11-20
+
+**Upgrading from 0.5.0:** migrations `0006` (jobs, schedules, remembered feed downloads) and `0007` (verdicts)
+run at start-up, or with `make migrate`; nothing to do by hand. Take a backup first, as always. Schedules start
+**off**: nothing syncs by itself until you choose a schedule. Every 0.5.0 API field and the `insight-ioc-v1`
+export format are unchanged; new fields are additive.
 
 ### Changed: a restart no longer signs you out; **Sign out everywhere**
 - **Sessions are stored in the database** (migration `0008`, review B4), so restarting or upgrading Insight
@@ -45,6 +50,8 @@
 - Mutation testing and the newest-dependency check run weekly (Sunday); live contracts, deep property tests and
   the image re-scan stay daily. A manual *Nightly* run does everything.
 - Dependabot batches action and base-image updates into one pull request each per month.
+- The nightly image re-scan and mutation testing, which had failed since 17 November because of the pipeline
+  itself (an image tag with a stray `v`, and test settings mutmut lost), run again.
 - **One tag per release.** The release workflow now runs the whole milestone gate on the final tag, then waits
   for approval before publishing; a release-candidate tag is no longer required (it remains an optional dry
   run, as does running the gate by hand). See `docs/RELEASING.md`.
