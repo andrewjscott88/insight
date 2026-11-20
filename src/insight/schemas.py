@@ -4,16 +4,20 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
+from datetime import UTC, date, datetime
 from typing import Annotated, Literal, get_args
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError, field_validator
 
 from .extraction import Kind
+from .flags import FLAGS, Flag
 
 TLP = Literal['CLEAR', 'GREEN', 'AMBER', 'AMBER+STRICT', 'RED']
 DocumentStatus = Literal['new', 'reviewing', 'reviewed']
 ReviewStatus = Literal['unreviewed', 'accepted', 'rejected']
+#: What an indicator means (Design 1). ``unknown`` is the default: no assessment recorded.
+Verdict = Literal['unknown', 'benign', 'suspicious', 'malicious']
 
 TLP_LEVELS: tuple[str, ...] = get_args(TLP)  # least to most restrictive
 #: Default when a client does not choose a label. Deliberately not CLEAR: an unlabelled report must never end
@@ -22,6 +26,7 @@ DEFAULT_TLP: TLP = 'AMBER'
 _TLP_MARKING = re.compile(r'\bTLP\s*:\s*(CLEAR|WHITE|GREEN|AMBER\+STRICT|AMBER|RED)\b', re.IGNORECASE)
 DOCUMENT_STATUSES: tuple[str, ...] = get_args(DocumentStatus)
 REVIEW_STATUSES: tuple[str, ...] = get_args(ReviewStatus)
+VERDICTS: tuple[Verdict, ...] = get_args(Verdict)
 INDICATOR_KINDS: tuple[Kind, ...] = get_args(Kind)
 #: IOC exports leave out mentions an analyst rejected as wrong extractions, unless asked for explicitly.
 DEFAULT_EXPORT_REVIEW_STATUSES: tuple[ReviewStatus, ...] = ('unreviewed', 'accepted')  # canonical order
@@ -87,6 +92,35 @@ class ScheduleInput(BaseModel):
     at: str | None = Field(default=None, pattern=r'^([01]\d|2[0-3]):[0-5]\d$')
 
 
+class AssessmentInput(BaseModel):
+    """``POST /api/entities/{id}/assessment``: an analyst's verdict on an indicator.
+
+    ``reason`` says why (it may quote a restricted report, so it carries its own ``tlp``, default AMBER).
+    ``valid_until`` is the last day the verdict holds (addresses and domains change hands); omit it for no
+    expiry. ``unknown`` clears a recorded verdict.
+    """
+
+    model_config = ConfigDict(frozen=True, extra='forbid')
+
+    verdict: Verdict
+    reason: str = Field(default='', max_length=2_000)
+    tlp: TLP = DEFAULT_TLP
+    valid_until: date | None = None
+
+    @field_validator('valid_until')
+    @classmethod
+    def not_in_the_past(cls, value: date | None) -> date | None:
+        if value is not None and value < datetime.now(UTC).date():
+            raise ValueError('Must be today or later')
+        return value
+
+    def valid_until_timestamp(self) -> str | None:
+        """The end of ``valid_until`` (UTC), stored like every other timestamp."""
+        if self.valid_until is None:
+            return None
+        return datetime(*self.valid_until.timetuple()[:3], 23, 59, 59, tzinfo=UTC).isoformat()
+
+
 class NoteInput(BaseModel):
     body: str = Field(min_length=1, max_length=10_000)
 
@@ -107,6 +141,8 @@ class IocExportQuery(BaseModel):
     ``defang`` rewrites network indicators (``hxxps://example[.]com``) in values, titles and evidence.
     ``include_evidence=False`` leaves out the report text around each mention (``evidence: null``), which can
     carry victim details or indicators an analyst rejected; recommended when sharing.
+    ``verdicts`` keeps indicators with these verdicts (default: all); ``exclude_flags`` drops indicators
+    with any of these warning flags (``non-routable``, ``documentation``, ...).
     """
 
     model_config = ConfigDict(frozen=True, extra='forbid')
@@ -121,6 +157,8 @@ class IocExportQuery(BaseModel):
     document_ids: tuple[DocumentId, ...] = Field(default=(), max_length=MAX_EXPORT_DOCUMENT_IDS)
     include_evidence: bool = True
     defang: bool = False
+    verdicts: tuple[Verdict, ...] = Field(default=VERDICTS, min_length=1)
+    exclude_flags: tuple[Flag, ...] = ()
 
     @field_validator('kinds')
     @classmethod
@@ -137,6 +175,20 @@ class IocExportQuery(BaseModel):
     @classmethod
     def canonical_document_ids(cls, value: tuple[str, ...]) -> tuple[str, ...]:
         return tuple(sorted(set(value)))
+
+    @field_validator('verdicts')
+    @classmethod
+    def canonical_verdicts(cls, value: tuple[Verdict, ...]) -> tuple[Verdict, ...]:
+        return tuple(sorted(set(value), key=VERDICTS.index))
+
+    @field_validator('exclude_flags')
+    @classmethod
+    def canonical_flags(cls, value: tuple[Flag, ...]) -> tuple[Flag, ...]:
+        return tuple(sorted(set(value), key=FLAGS.index))
+
+    def filters_by_meaning(self) -> bool:
+        """Whether verdicts or flags narrow the export (judged per indicator, not by one SQL count)."""
+        return self.verdicts != VERDICTS or bool(self.exclude_flags)
 
 
 def validation_message(exc: ValidationError, names: Mapping[str, str] | None = None) -> str:

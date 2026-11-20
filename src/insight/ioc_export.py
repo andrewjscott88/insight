@@ -23,6 +23,7 @@ from typing import Any, Final
 
 from . import __version__
 from .extraction import AMBIGUOUS_TLDS, extract
+from .flags import flags
 from .schemas import DEFAULT_TLP, REVIEW_STATUSES, TLP_LEVELS
 
 FORMAT: Final = 'insight-ioc-v1'
@@ -71,6 +72,17 @@ class IocMention:
     is_current: bool
     kev: Mapping[str, str] | None = None
     extractor_version: str = ''
+
+
+@dataclass(frozen=True)
+class Assessment:
+    """The verdict an export may show for one indicator (already checked against the reader's TLP limit)."""
+
+    verdict: str
+    valid_until: str | None = None
+
+
+UNKNOWN: Final = Assessment('unknown')
 
 
 # --------------------------------------------------------------------------- defanging
@@ -187,7 +199,9 @@ def _review_order(status: str) -> int:
     return REVIEW_STATUSES.index(status) if status in REVIEW_STATUSES else len(REVIEW_STATUSES)
 
 
-def _ioc_view(mentions: list[IocMention], defanged: bool, evidence: bool) -> dict[str, Any]:
+def _ioc_view(
+    mentions: list[IocMention], defanged: bool, evidence: bool, assessment: Assessment = UNKNOWN
+) -> dict[str, Any]:
     first = mentions[0]
     by_document: dict[str, list[IocMention]] = {}
     for mention in mentions:
@@ -208,6 +222,9 @@ def _ioc_view(mentions: list[IocMention], defanged: bool, evidence: bool) -> dic
             status: statuses.count(status) for status in sorted(set(statuses), key=_review_order)
         },
         'kev': dict(first.kev) if first.kev is not None else None,
+        'verdict': assessment.verdict,
+        'verdict_valid_until': assessment.valid_until,
+        'flags': list(flags(first.kind, first.value)),
         'sources': sources,
     }
 
@@ -220,11 +237,14 @@ def build_export(
     export_id: str,
     generated_at: str,
     include_evidence: bool = True,
+    assessments: Mapping[str, Assessment] | None = None,
 ) -> dict[str, Any]:
     """Group ``mentions`` into one entry per indicator and wrap them with handling metadata.
 
     Mentions of one indicator within one report are counted; the first one (in the order given, normally
     by position in the report) supplies the evidence excerpt, or ``None`` when ``include_evidence`` is off.
+    ``assessments`` maps entity IDs to the verdicts this reader may see; every other indicator is ``unknown``.
+    Warning flags are computed from each canonical value, whether or not the export is defanged.
     """
     by_entity: dict[str, list[IocMention]] = {}
     document_tlp: dict[str, str] = {}
@@ -233,8 +253,12 @@ def build_export(
         by_entity.setdefault(mention.entity_id, []).append(mention)
         document_tlp[mention.document_id] = mention.tlp
         total += 1
+    known = assessments or {}
     iocs = sorted(
-        (_ioc_view(group, defanged, include_evidence) for group in by_entity.values()),
+        (
+            _ioc_view(group, defanged, include_evidence, known.get(entity_id, UNKNOWN))
+            for entity_id, group in by_entity.items()
+        ),
         key=lambda ioc: (ioc['kind'], ioc['value'], ioc['entity_id']),
     )
     by_kind: dict[str, int] = {}

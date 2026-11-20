@@ -280,6 +280,8 @@ def test_export_echoes_filters_and_handling_notice(db: Session, two_reports: Rep
         'max_tlp': None,
         'document_ids': [],
         'include_evidence': True,
+        'verdicts': ['unknown', 'benign', 'suspicious', 'malicious'],
+        'exclude_flags': [],
     }
 
 

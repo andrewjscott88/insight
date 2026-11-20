@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from insight import services
-from insight.schemas import DocumentInput
+from insight.schemas import AssessmentInput, DocumentInput
 from insight.services import SourceRef
 
 from .test_auth import PROTECTED
@@ -40,6 +40,11 @@ def world(app: FastAPI) -> dict[str, Any]:
         old, _ = services.ingest(db, report('Item v1', 'CVE-2024-11111 first.', 'GREEN'), ref=ref)
         new, _ = services.ingest(db, report(f'Item v2 {MARKER}', 'CVE-2024-11111 edited.', 'AMBER'), ref=ref)
         hidden_obs = next(o for o in services.detail(db, amber)['observations'] if o['value'] == HIDDEN_IP)
+        shared = next(o for o in services.detail(db, green)['observations'] if o['value'] == SHARED_IP)
+        # An AMBER verdict on an indicator the GREEN key can see: its reason must stay hidden.
+        services.assess_entity(
+            db, shared['entity_id'], AssessmentInput(verdict='malicious', reason=MARKER, tlp='AMBER')
+        )
         _, token = services.create_api_key(db, name='siem', access='read-write', max_tlp='GREEN')
     return {
         'green': green.id,
@@ -48,6 +53,7 @@ def world(app: FastAPI) -> dict[str, Any]:
         'new': new.id,
         'hidden_obs': hidden_obs['id'],
         'hidden_entity': hidden_obs['entity_id'],
+        'shared_entity': shared['entity_id'],
         'headers': {'Authorization': f'Bearer {token}'},
     }
 
@@ -71,6 +77,10 @@ def test_nothing_hidden_leaks_through_any_read_route(client: TestClient, world: 
         '/api/entities',
         f'/api/entities?q={HIDDEN_IP}',
         f'/api/entities/{world["hidden_entity"]}',
+        f'/api/entities/{world["shared_entity"]}',
+        '/api/iocs/blocklist?kind=ip',
+        '/api/iocs/blocklist?kind=ip&format=csv',
+        '/api/iocs/export?verdict=malicious',
         '/api/stats',
         '/api/brief',
         '/api/brief?days=30',

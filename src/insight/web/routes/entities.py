@@ -1,4 +1,4 @@
-"""Entities and pivots."""
+"""Entities and pivots, and analysts' verdicts on them."""
 
 from __future__ import annotations
 
@@ -7,8 +7,23 @@ from typing import Any
 from fastapi import Depends, FastAPI, HTTPException, Request
 
 from ... import services
-from ...models import SessionFactory
-from ..auth import AuthDependency, reader_limit
+from ...flags import flags
+from ...models import EntityAssessment, SessionFactory
+from ...schemas import AssessmentInput
+from ..auth import AuthDependency, acting, reader_limit
+
+
+def assessment_view(assessment: EntityAssessment | None) -> dict[str, Any] | None:
+    if assessment is None:
+        return None
+    return {
+        'verdict': assessment.verdict,
+        'reason': assessment.reason,
+        'tlp': assessment.tlp,
+        'valid_until': assessment.valid_until,
+        'decided_at': assessment.decided_at,
+        'actor': assessment.actor,
+    }
 
 
 def _register_entity_routes(app: FastAPI, sessions: SessionFactory, require_auth: AuthDependency) -> None:
@@ -32,11 +47,29 @@ def _register_entity_routes(app: FastAPI, sessions: SessionFactory, require_auth
             if e is None or (max_tlp is not None and count == 0):
                 raise HTTPException(404, 'Entity not found')
             docs = services.entity_documents(db, e.id, offset=offset, limit=limit, max_tlp=max_tlp)
+            first_seen, last_seen = services.entity_seen(db, e.id, max_tlp=max_tlp)
             return {
                 'id': e.id,
                 'kind': e.kind,
                 'value': e.value,
+                'flags': list(flags(e.kind, e.value)),
+                'assessment': assessment_view(services.entity_assessment(db, e.id, max_tlp=max_tlp)),
+                'first_seen_at': first_seen,
+                'last_seen_at': last_seen,
                 'document_count': count,
                 'offset': max(0, offset),
                 'documents': services.summaries(db, docs),
             }
+
+    @app.post('/api/entities/{entity_id}/assessment', dependencies=[Depends(require_auth)])
+    def assess(request: Request, entity_id: str, payload: AssessmentInput) -> dict[str, Any]:
+        """Record an analyst's verdict (``unknown`` clears it). Audited as ``entity.assess``."""
+        try:
+            with acting(sessions, request) as db:
+                assessment = services.assess_entity(db, entity_id, payload, max_tlp=reader_limit(request))
+                view = assessment_view(assessment)
+        except LookupError as exc:
+            raise HTTPException(404, 'Entity not found') from exc
+        except services.TlpNotPermitted as exc:
+            raise HTTPException(403, str(exc)) from exc
+        return view or {'verdict': 'unknown'}

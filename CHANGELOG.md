@@ -21,6 +21,26 @@
   feed records `Unchanged since the last sync.` and nothing else, so KEV's 1.3 MB catalogue is no longer
   re-read and rewritten when nothing changed. After an upgrade, each source is read once in full.
 
+### Added: verdicts, warning flags and a blocklist
+- **Verdicts.** An analyst can now say what an indicator *means*: `benign`, `suspicious` or `malicious`
+  (`POST /api/entities/{id}/assessment`), with a reason, an optional expiry date and the reason's own TLP label
+  (default AMBER, since it may quote a restricted report). Review still says only that a value was copied
+  correctly. Audited as `entity.assess`. A TLP-limited key sees a verdict only within its limit, and can neither
+  set nor replace one above it. Stored in the new `entity_assessments` table (migration 0007).
+- **Warning flags**, computed from each value and never stored: `non-routable` (private, loopback, shared,
+  multicast or reserved addresses), `documentation` (the RFC 5737, 3849 and 9637 example ranges),
+  `reserved-name` (`.local`, `.test`, `example.com` and other special-use names) and `common-benign` (a short
+  list of vendor domains that reports cite constantly).
+- **`GET /api/iocs/blocklist?kind=ip|domain|url|md5|sha1|sha256|sha512`**: values safe to load into a firewall
+  or SIEM, as text or CSV. Only `malicious` verdicts that have not expired (their own date, or 30 days for IP
+  addresses and 90 for domains and URLs; hashes do not expire), with an accepted mention and no warning flag,
+  within the caller's TLP limit. Audited as `ioc.blocklist`; shares the IOC-export budget.
+- **IOC export (`insight-ioc-v1`, additive):** each IOC gains `verdict`, `verdict_valid_until` and `flags`;
+  new filters `verdict` and `exclude_flag`. The JSON Schema and the example are updated.
+- `GET /api/entities/{id}` gains `flags`, `assessment`, `first_seen_at` and `last_seen_at`. First and last seen
+  are computed from the reports the caller can see, so a TLP-limited key learns nothing from restricted ones.
+- The SIEM recipe in the API guide now pulls the blocklist instead of the raw export (review finding C1).
+
 ### Changed: the service layer is a package (internal)
 - `services.py` (1,300 lines) is now `insight/services/`, one module per domain: `tlp`, `audit`, `common`,
   `documents`, `search`, `entities`, `triage`, `brief`, `exports`, `sources`, `jobs` and `access`. Every public

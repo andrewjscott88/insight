@@ -21,7 +21,7 @@ FRONT_ENDS = [*UI_MODULES, *WEB_MODULES, PACKAGE / 'main.py']
 SERVICE_MODULES = sorted((PACKAGE / 'services').glob('*.py'))
 SQL_BUILDERS = {'select', 'insert', 'update', 'delete', 'func', 'or_', 'and_', 'text'}
 ORM_CLASSES = {'Document', 'Entity', 'Observation', 'Note', 'AuditEvent', 'KEVRecord', 'WatchTerm'}
-ORM_CLASSES |= {'SourceRun', 'Enrichment', 'ApiKey', 'Job', 'Schedule', 'FetchState'}
+ORM_CLASSES |= {'SourceRun', 'Enrichment', 'ApiKey', 'Job', 'Schedule', 'FetchState', 'EntityAssessment'}
 
 
 def imports(path: Path) -> list[tuple[str, str]]:
@@ -110,6 +110,7 @@ def test_ui_does_not_depend_on_the_api_module(path: Path) -> None:
 TLP_AWARE_SERVICES = {
     'DocumentQuery', 'detail', 'list_entities', 'entity_documents', 'count_entity_documents', 'stats',
     'set_document_status', 'set_observation_status', 'add_note', 'ingest', 'brief_data',
+    'assess_entity', 'entity_assessment', 'entity_seen', 'blocklist',
 }  # fmt: skip
 
 
