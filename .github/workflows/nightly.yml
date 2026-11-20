@@ -148,7 +148,8 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           tag="$(gh release view --repo "$REPO" --json tagName --jq .tagName 2>/dev/null || true)"
-          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          # Releases are tagged v0.5.0; images are tagged 0.5.0 (docker/metadata-action semver patterns).
+          echo "tag=${tag#v}" >> "$GITHUB_OUTPUT"
       - name: Trivy (new CVEs in already shipped images)
         if: steps.release.outputs.tag != ''
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0

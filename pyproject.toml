@@ -183,6 +183,8 @@ also_copy = [
 pytest_add_cli_args_test_selection = ["tests/unit", "tests/api"]
 pytest_add_cli_args = [
     "-p", "no:cacheprovider", "-q", "-o", "pythonpath=src .", "-o", "addopts=", "-m", "not slow",
+    "--import-mode=importlib",  # as in addopts, which is cleared above; API tests import each other
     "--ignore=tests/unit/test_packaging.py",  # needs an installed distribution
     "--ignore=tests/unit/test_docs.py",  # checks repository documents, not the mutated code
+    "--ignore=tests/unit/test_makefile.py",  # checks the Makefile, which mutmut does not copy
 ]
