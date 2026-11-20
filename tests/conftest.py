@@ -54,6 +54,30 @@ hypothesis_settings.load_profile(os.environ.get('HYPOTHESIS_PROFILE', 'default')
 
 
 @pytest.fixture(autouse=True)
+def _dispose_app_databases(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Close the database of every app a test creates, also when the test never starts the app.
+
+    ``create_app`` reads the database once at start-up, so its pool holds an open connection. An app whose
+    lifespan never runs never disposes it, and Python 3.13 then reports the unclosed SQLite connection as a
+    ``ResourceWarning`` in whichever later test the garbage collector happens to run.
+    """
+    import insight.main as main
+
+    created: list[Engine] = []
+    real = database  # what insight.main imported from insight.models
+
+    def tracking(*args: Any, **kwargs: Any) -> tuple[Engine, sessionmaker[Session]]:
+        engine, sessions = real(*args, **kwargs)
+        created.append(engine)
+        return engine, sessions
+
+    monkeypatch.setattr(main, 'database', tracking)
+    yield
+    for engine in created:
+        engine.dispose()
+
+
+@pytest.fixture(autouse=True)
 def _no_network(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
     if request.node.get_closest_marker('live') or request.node.get_closest_marker('e2e'):
         return  # these talk to real services by design

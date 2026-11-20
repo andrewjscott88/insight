@@ -19,6 +19,8 @@ if TYPE_CHECKING:
 
 API_KEY_ACTIONS = ('create', 'rotate', 'revoke', 'status')
 MFA_ACTIONS = ('setup', 'reset', 'status')
+#: ``insight schedule SOURCE --every ...``: how often a source syncs by itself, in minutes.
+SCHEDULE_EVERY = {'off': 0, '1h': 60, '6h': 360, '24h': 1440}
 #: Attempts to type the first code when enrolling an authenticator app.
 MFA_ENROL_ATTEMPTS = 3
 
@@ -70,20 +72,21 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument('--version', action='version', version=f'%(prog)s {__version__}')
     parser.add_argument(
         'command',
-        choices=['init', 'serve', 'migrate', 'backup', 'export-iocs', 'api-key', 'mfa'],
+        choices=['init', 'serve', 'migrate', 'backup', 'export-iocs', 'api-key', 'mfa', 'schedule'],
         nargs='?',
         default='serve',
         help=(
             'init: create .env | serve: run (default) | migrate: upgrade the database | backup DEST | '
             'export-iocs DEST: write a JSON IOC export | api-key ACTION: manage the API key | '
-            'mfa ACTION: pair the sign-in authenticator app'
+            'mfa ACTION: pair the sign-in authenticator app | '
+            'schedule [SOURCE|all --every off|1h|6h|24h]: show or set scheduled syncs'
         ),
     )
     parser.add_argument(
         'destination',
         nargs='?',
         help='backup/export-iocs: file to write (must not exist) | api-key: create, rotate, revoke or '
-        'status | mfa: setup, reset or status',
+        'status | mfa: setup, reset or status | schedule: a source key, or all',
     )
     parser.add_argument('--host', default='127.0.0.1')
     parser.add_argument('--port', default=8080, type=int)
@@ -136,6 +139,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     export.add_argument(
         '--include-superseded', action='store_true', help='also include superseded revisions of synced items'
+    )
+    parser.add_argument(
+        '--every',
+        choices=list(SCHEDULE_EVERY),
+        help='schedule: how often the source syncs by itself while `insight serve` runs (off: when asked)',
+    )
+    parser.add_argument(
+        '--at',
+        metavar='HH:MM',
+        help='schedule: the time of day (UTC) the syncs start from, e.g. 00:00 (default: within a minute)',
     )
     keys = parser.add_argument_group('api-key options')
     keys.add_argument(
@@ -386,6 +399,45 @@ def _mfa_switch() -> bool:
         raise ValueError(str(exc)) from exc
 
 
+def schedule(source: str | None, every: str | None, at: str | None = None) -> str:
+    """Show every source's schedule, after setting ``source`` (a key, or ``all``) to ``every`` if given.
+
+    Raises ``ValueError`` for an unknown source or a missing ``--every``. Audited as ``schedule.update`` by
+    ``cli``.
+    """
+    from datetime import UTC, datetime
+
+    from . import services
+    from .connectors import SOURCES
+
+    labels = {minutes: name for name, minutes in SCHEDULE_EVERY.items()}
+    with _current_database() as sessions:
+        if source is not None:
+            if every is None:
+                raise ValueError(f'say how often: --every {"|".join(SCHEDULE_EVERY)}')
+            keys = list(SOURCES) if source == 'all' else [source]
+            if any(key not in SOURCES for key in keys):
+                raise ValueError(f'unknown source {source!r}; use all or one of: {", ".join(SOURCES)}')
+            now = datetime.now(UTC)
+            starts_at = services.time_of_day(at, now) if at else None
+            with sessions.begin() as db:
+                services.set_actor(db, 'cli')
+                for key in keys:
+                    services.set_schedule(db, key, SCHEDULE_EVERY[every], at=now, starts_at=starts_at)
+        with sessions() as db:
+            stored = services.list_schedules(db)
+            lines = []
+            for key in SOURCES:
+                s = stored.get(key)
+                if s is not None and s.enabled and s.next_run_at:
+                    when = s.next_run_at[:16].replace('T', ' ')
+                    lines.append(f'{key}: every {labels[s.interval_minutes]}; next sync {when} UTC')
+                else:
+                    lines.append(f'{key}: off (syncs only when asked)')
+    lines.append('Scheduled syncs run inside `insight serve` while INSIGHT_RUN_JOBS is on (the default).')
+    return '\n'.join(lines)
+
+
 def mfa(action: str, read_code: Callable[[str], str] | None = None) -> str:
     """Pair (interactively), reset or describe the sign-in authenticator app; raises ``ValueError``.
 
@@ -572,6 +624,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 1
         except (EOFError, KeyboardInterrupt):
             print('\nCancelled; no authenticator app was paired (nothing was saved).', file=sys.stderr)
+            return 1
+        return 0
+    if args.command == 'schedule':
+        try:
+            print(schedule(args.destination, args.every, args.at))
+        except ValueError as exc:
+            print(f'Schedule: {exc}', file=sys.stderr)
             return 1
         return 0
     serve(args.host, args.port)

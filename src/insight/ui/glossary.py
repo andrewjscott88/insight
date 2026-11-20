@@ -119,6 +119,11 @@ GLOSSARY: Final[tuple[tuple[str, str], ...]] = (
         'A score from 0 to 10 for how serious a weakness is. A score of 9 or more is critical.',
     ),
     (
+        'UTC',
+        'The time zone that clocks around the world are set from. It does not change in summer. Midnight UTC '
+        'is 7 pm in New York in winter.',
+    ),
+    (
         'EPSS (FIRST)',
         'A score from the FIRST organisation: how likely a weakness is to be used in an attack soon.',
     ),

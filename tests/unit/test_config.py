@@ -160,3 +160,20 @@ def test_theme_setting(value: str, expected: str) -> None:
 def test_an_invalid_theme_stops_start_up(value: str) -> None:
     with pytest.raises(RuntimeError, match='INSIGHT_THEME must be one of system, light, dark'):
         Settings.from_env({**GOOD, 'INSIGHT_THEME': value})
+
+
+# --------------------------------------------------------------------------- scheduled syncs (job runner)
+
+
+def test_insight_serve_runs_scheduled_syncs_unless_switched_off() -> None:
+    assert Settings.from_env(GOOD).run_jobs is True
+    assert Settings.from_env({**GOOD, 'INSIGHT_RUN_JOBS': 'OFF'}).run_jobs is False
+    assert Settings.from_env({**GOOD, 'INSIGHT_RUN_JOBS': ' on '}).run_jobs is True
+    # Settings built in code (tests, tools) never start a runner by accident.
+    assert Settings(database_url='sqlite://', password='x', session_secret='y').run_jobs is False
+
+
+@pytest.mark.parametrize('value', ['1', 'yes', 'true', 'onn'])
+def test_an_unclear_run_jobs_switch_stops_start_up(value: str) -> None:
+    with pytest.raises(RuntimeError, match='INSIGHT_RUN_JOBS must be "on" or "off"'):
+        Settings.from_env({**GOOD, 'INSIGHT_RUN_JOBS': value})

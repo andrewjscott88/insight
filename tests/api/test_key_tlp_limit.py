@@ -76,6 +76,8 @@ def test_nothing_hidden_leaks_through_any_read_route(client: TestClient, world: 
         '/api/brief?days=30',
         '/api/audit',
         '/api/sources',
+        '/api/schedules',
+        '/api/jobs',
         '/api/watch-terms',
     ]
     # Every GET route of the API is covered by the sweep.

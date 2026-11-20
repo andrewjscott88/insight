@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+### Added: scheduled syncs (off by default)
+- **Sources can sync by themselves**: *Off* (default), *Every hour*, *Every 6 hours* or *Every day*, per source
+  or for all sources at once, in the Sources tab, which also shows the next sync. **Start at** picks the time of
+  day (UTC) the syncs run from, and every next sync keeps that slot, so a daily sync stays at, say, 00:00 UTC.
+  On the host: `insight schedule SOURCE|all --every off|1h|6h|24h [--at HH:MM]` (`insight schedule` lists
+  them). Over the API:
+  `GET /api/schedules` for anyone signed in; `PUT /api/schedules/{key}` (with an optional `at`) from a browser
+  session only, never an API key. Changes are audited (`schedule.update`). [ADR 0018](docs/adr/0018-opt-in-scheduled-syncs.md).
+- **A job runner inside `insight serve`** runs them (`INSIGHT_RUN_JOBS`, default `on`; set `off` in every
+  process but one if you run several). Jobs are stored (migration `0006`), one at a time per source, and never
+  overlap a sync someone started. A failed scheduled sync is tried again after 5, then 10 minutes; every attempt
+  appears in *Recent sync activity*, and `GET /api/jobs` lists recent jobs. Jobs a stopped server left running
+  run again at the next start; finished jobs are kept 30 days.
+
+### Changed: an unchanged feed is not downloaded again
+- Every sync sends the feed's last `ETag` / `Last-Modified` and compares the bytes with last time. An unchanged
+  feed records `Unchanged since the last sync.` and nothing else, so KEV's 1.3 MB catalogue is no longer
+  re-read and rewritten when nothing changed. After an upgrade, each source is read once in full.
+
+### Fixed: documentation drift
+- The API reference and guide said a refused enrichment request for an unknown CVE starts the 6.5 s window;
+  since 0.5.0 it does not. The SIEM recipe implied that *accepted* means *malicious*; it now says accepted
+  means copied correctly, and warns against using the export as a blocklist without review. The runbook's
+  "Known limitations" heading no longer says 0.2.0.
+
 ### Added: Sync all sources and an intel brief on the landing page
 - **Sync all sources**, next to *Export IOCs*, syncs every source in turn and shows how far it has got
   (`Syncing 2 of 4: …`). A failing source does not stop the others; the message names it and the *Sources* tab

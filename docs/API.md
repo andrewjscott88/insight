@@ -280,10 +280,15 @@ Errors:
 | --- | --- |
 | `GET /api/sources` | Registry entries with the last 5 runs each |
 | `POST /api/sources/{key}/sync` | `{"message": …}`. Keys: `cisa-kev`, `cisa-csaf`, `sans-isc`, `ncsc`. `404` unknown key, `409` another sync running, `502` failure (recorded as an error run). |
+| `GET /api/schedules` | `[{source_key, interval_minutes, next_run_at, updated_at}]` for every source. `interval_minutes` is `0` (syncs only when asked, the default), `60`, `360` or `1440`. Times are ISO-8601 UTC. |
+| `PUT /api/schedules/{key}` | Body `{"interval_minutes": 0 \| 60 \| 360 \| 1440, "at": "HH:MM"}` (`at` optional, UTC: the time of day the syncs start from; every next sync keeps that slot); returns the schedule as above. **Browser session only**: API keys get `403` (how often Insight goes online by itself is the operator's decision; `insight schedule` on the host does the same). `404` unknown source, `422` other intervals. Without `at`, a schedule turned on runs within a minute, then every interval. Audited as `schedule.update`. Scheduled syncs run only in a process with `INSIGHT_RUN_JOBS=on` (the default for `insight serve`). |
+| `GET /api/jobs?limit=20` | Recent background jobs (scheduled syncs), newest first: `[{id, kind, key, status, attempts, run_after, started_at, finished_at, message, actor, created_at}]`. `status`: `queued`, `running`, `succeeded` or `failed`. A failed sync is tried again after 5, then 10 minutes, then marked `failed`. `limit` 1-100. Finished jobs are kept 30 days. |
 | `POST /api/sources/sync-all` | `{"results": [{key, name, status, message}]}`: every source in registry order, one at a time. `status` is `success` or `error`; a failing source does not stop the others and is recorded as an error run. Always `200` once it has run; `409` another sync running. |
-| `POST /api/enrichment/{provider}/{cve}` | Provider JSON (`epss`, `nvd`), cached. `422` invalid input or unknown CVE, `429` within 6.5 s of the last lookup (a well-formed unknown CVE also starts the window), `502` provider failure, `403` for TLP-limited keys. |
+| `POST /api/enrichment/{provider}/{cve}` | Provider JSON (`epss`, `nvd`), cached. `422` invalid input or unknown CVE, `429` within 6.5 s of the last lookup that passed these checks (a request refused with `422` does not start the window), `502` provider failure, `403` for TLP-limited keys. |
 
-Sync and enrichment are the only routes that cause outbound network traffic.
+Sync and enrichment are the only routes that cause outbound network traffic. A schedule makes the same syncs happen by
+themselves; an unchanged feed is skipped (conditional requests with `If-None-Match` / `If-Modified-Since`, then a
+payload hash), and its run says `Unchanged since the last sync.`
 
 ## Workspace
 

@@ -22,3 +22,4 @@ superseded ones are marked, never deleted.
 | [0015](0015-totp-second-factor.md) | TOTP second factor for the operator, managed from the CLI | Accepted |
 | [0016](0016-colour-themes-and-per-device-choice.md) | Light and dark themes from one set of tokens; per-device choice | Accepted |
 | [0017](0017-readability-standard.md) | Readability: WCAG 2.2 AA, its reading-related AAA criteria and dyslexia guidance | Accepted |
+| [0018](0018-opt-in-scheduled-syncs.md) | Opt-in scheduled syncs with an in-process job runner | Accepted |

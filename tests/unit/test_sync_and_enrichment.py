@@ -73,7 +73,7 @@ async def test_rss_sync_ingests_feed_items(
 ) -> None:
     monkeypatch.setattr(connectors, 'download', returning(RSS))
     assert await sync_source(session_factory, 'sans-isc') == 'Read 1 feed items; 1 new reports.'
-    assert await sync_source(session_factory, 'sans-isc') == 'Read 1 feed items; 0 new reports.'
+    assert await sync_source(session_factory, 'sans-isc') == connectors.UNCHANGED  # same feed: not read again
     with session_factory() as db:
         doc = db.scalar(select(Document))
         assert doc is not None

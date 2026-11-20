@@ -466,3 +466,52 @@ def test_mfa_setup_can_be_cancelled(
 def test_mfa_usage(capsys: pytest.CaptureFixture[str]) -> None:
     assert cli.main(['mfa']) == 2
     assert 'usage: insight mfa {setup,reset,status}' in capsys.readouterr().err
+
+
+# --------------------------------------------------------------------------- scheduled syncs
+
+
+def test_schedule_lists_and_sets_schedules(sqlite_env: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    assert cli.main(['schedule']) == 0
+    out = capsys.readouterr().out
+    assert 'cisa-kev: off (syncs only when asked)' in out
+    assert 'INSIGHT_RUN_JOBS' in out
+    assert cli.main(['schedule', 'all', '--every', '24h']) == 0
+    out = capsys.readouterr().out
+    assert out.count('every 24h; next sync ') == 4
+    assert cli.main(['schedule', 'ncsc', '--every', 'off']) == 0
+    assert 'ncsc: off (syncs only when asked)' in capsys.readouterr().out
+
+    from insight import services
+    from insight.models import AuditEvent, database
+
+    engine, sessions = database(f'sqlite:///{sqlite_env / "insight.db"}', migrate=False)
+    try:
+        with sessions() as db:
+            assert services.list_schedules(db)['cisa-kev'].interval_minutes == 1440
+            actors = {e.actor for e in db.query(AuditEvent).filter(AuditEvent.action == 'schedule.update')}
+            assert actors == {'cli'}
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.parametrize(
+    ('argv', 'message'),
+    [
+        (['schedule', 'nope', '--every', '6h'], "unknown source 'nope'"),
+        (['schedule', 'ncsc'], 'say how often: --every off|1h|6h|24h'),
+    ],
+)
+def test_schedule_usage_errors(
+    sqlite_env: Path, argv: list[str], message: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert cli.main(argv) == 1
+    assert message in capsys.readouterr().err
+
+
+def test_schedule_at_a_time_of_day(sqlite_env: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    assert cli.main(['schedule', 'all', '--every', '24h', '--at', '00:00']) == 0
+    out = capsys.readouterr().out
+    assert out.count(' 00:00 UTC') == 4
+    assert cli.main(['schedule', 'ncsc', '--every', '6h', '--at', '25:00']) == 1
+    assert 'HH:MM in UTC' in capsys.readouterr().err

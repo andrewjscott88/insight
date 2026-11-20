@@ -197,6 +197,70 @@ class OperatorMfa(Base):
     last_step: Mapped[int] = mapped_column(default=0)
 
 
+class Job(Base):
+    """A unit of background work, such as one scheduled source sync (``insight.jobs`` runs them).
+
+    At most one job per ``(kind, key)`` is queued or running at a time (a partial unique index), so a schedule
+    and a person pressing *Sync now* never start the same source twice. Finished jobs are kept for a while as
+    a record, then pruned.
+    """
+
+    __tablename__ = 'jobs'
+    __table_args__ = (
+        Index(
+            'uq_jobs_active',
+            'kind',
+            'key',
+            unique=True,
+            sqlite_where=text("status IN ('queued', 'running')"),
+            postgresql_where=text("status IN ('queued', 'running')"),
+        ),
+        Index('ix_jobs_due', 'status', 'run_after'),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    kind: Mapped[str] = mapped_column(String(40))
+    key: Mapped[str] = mapped_column(String(120))
+    #: ``queued``, ``running``, ``succeeded`` or ``failed``.
+    status: Mapped[str] = mapped_column(String(20))
+    attempts: Mapped[int] = mapped_column(default=0)
+    max_attempts: Mapped[int] = mapped_column(default=3)
+    run_after: Mapped[str] = mapped_column(String(40))
+    started_at: Mapped[str | None] = mapped_column(String(40), default=None)
+    finished_at: Mapped[str | None] = mapped_column(String(40), default=None)
+    message: Mapped[str] = mapped_column(Text, default='')
+    actor: Mapped[str] = mapped_column(String(80), default='')
+    created_at: Mapped[str] = mapped_column(String(40), default=now)
+
+
+class Schedule(Base):
+    """How often a source syncs by itself. No row, or ``enabled`` false, means never (the default)."""
+
+    __tablename__ = 'schedules'
+    source_key: Mapped[str] = mapped_column(String(80), primary_key=True)
+    interval_minutes: Mapped[int] = mapped_column(default=0)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    next_run_at: Mapped[str | None] = mapped_column(String(40), default=None)
+    updated_at: Mapped[str] = mapped_column(String(40), default=now)
+    actor: Mapped[str] = mapped_column(String(80), default='')
+
+
+class FetchState(Base):
+    """What a source URL returned last time, so the next fetch can be skipped when nothing changed.
+
+    ``etag`` and ``last_modified`` go back as ``If-None-Match`` / ``If-Modified-Since``, and
+    ``payload_sha256`` catches servers that ignore them. ``insight_version`` makes a new release re-read every
+    source once, in case its parsing changed.
+    """
+
+    __tablename__ = 'fetch_state'
+    url: Mapped[str] = mapped_column(String(500), primary_key=True)
+    etag: Mapped[str] = mapped_column(String(200), default='')
+    last_modified: Mapped[str] = mapped_column(String(100), default='')
+    payload_sha256: Mapped[str] = mapped_column(String(64), default='')
+    insight_version: Mapped[str] = mapped_column(String(40), default='')
+    updated_at: Mapped[str] = mapped_column(String(40), default=now)
+
+
 SessionFactory: TypeAlias = sessionmaker[Session]
 
 

@@ -311,13 +311,26 @@ curl -sS "$INSIGHT_URL/api/sources" -H "Authorization: Bearer $INSIGHT_API_KEY" 
 curl -sS -X POST "$INSIGHT_URL/api/sources/cisa-kev/sync" -H "Authorization: Bearer $INSIGHT_API_KEY"
 # Run every source in turn (read-write key); each result says success or error, and one failure does not stop the rest
 curl -sS -X POST "$INSIGHT_URL/api/sources/sync-all" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq '.results[] | {key, status}'
+# How often each source syncs by itself (0: only when asked, the default)
+curl -sS "$INSIGHT_URL/api/schedules" -H "Authorization: Bearer $INSIGHT_API_KEY"
+# Recent background jobs (scheduled syncs) and how they went
+curl -sS "$INSIGHT_URL/api/jobs?limit=5" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq '.[] | {key, status, message}'
 # Look up a CVE that a report mentions (provider: epss or nvd). Cached; one lookup per 6.5 s across all callers
 curl -sS -X POST "$INSIGHT_URL/api/enrichment/epss/CVE-2023-34362" -H "Authorization: Bearer $INSIGHT_API_KEY"
 ```
 
+Turning a schedule on or off is for a signed-in browser session (the *Sources* tab, or the cookie jar of §2.2)
+or the host's CLI, never an API key (`403`):
+
+```sh
+curl -sS -b "$JAR" -X PUT "$INSIGHT_URL/api/schedules/cisa-kev" -H "X-CSRF-Token: $CSRF" \
+  -H 'Content-Type: application/json' -d '{"interval_minutes": 1440, "at": "00:00"}'   # daily at midnight UTC
+insight schedule all --every 24h --at 00:00     # on the host: every source daily at 00:00 UTC (off: only when asked)
+```
+
 Enrichment answers `422` for a malformed or unknown CVE (`Import a report mentioning this CVE first`), `429`
-within 6.5 s of the previous lookup, and `502` when the provider fails. Note: a lookup for a well-formed but
-unknown CVE also starts the 6.5 s window. TLP-limited keys cannot use enrichment (`403`).
+within 6.5 s of the previous lookup, and `502` when the provider fails. A refused request (`422`) does not start
+the 6.5 s window. TLP-limited keys cannot use enrichment (`403`).
 
 ### Workspace
 
@@ -350,8 +363,11 @@ curl -sS --fail-with-body --retry 3 \
 mv "$out.tmp" "$out"     # the SIEM only ever reads a complete file
 ```
 
-`--retry` also waits out `429` responses (curl honours `Retry-After`). Only `accepted` indicators: an extracted
-indicator is not a maliciousness verdict until an analyst reviews it.
+`--retry` also waits out `429` responses (curl honours `Retry-After`). `review_status=accepted` keeps only
+indicators an analyst has checked. **Accepted is not a verdict:** it means Insight copied the value correctly
+from the report, not that the indicator is malicious (see *What the words mean* in the workspace). A report can
+name an indicator as a victim, a test address or a counter-example. Use the export as context for searches and
+alerts, not as a blocklist to apply without review.
 
 ### 5.2 Ingest a text file
 

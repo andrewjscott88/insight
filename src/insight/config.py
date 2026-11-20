@@ -41,6 +41,19 @@ def parse_mfa(value: str) -> bool:
     raise RuntimeError(f'INSIGHT_MFA must be "on" or "off"; got {value!r}')
 
 
+def parse_run_jobs(value: str) -> bool:
+    """``INSIGHT_RUN_JOBS``: ``on`` (default) runs scheduled syncs in this process; ``off`` does not.
+
+    Use ``off`` for every process but one if you ever run several. Strict, like ``INSIGHT_MFA``.
+    """
+    choice = value.strip().lower()
+    if choice in {'', 'on'}:
+        return True
+    if choice == 'off':
+        return False
+    raise RuntimeError(f'INSIGHT_RUN_JOBS must be "on" or "off"; got {value!r}')
+
+
 def parse_trusted_proxies(value: str) -> tuple[str, ...]:
     """``INSIGHT_TRUSTED_PROXIES``: comma-separated IP addresses or CIDR networks of the reverse proxy.
 
@@ -97,6 +110,9 @@ class Settings:
     #: Colour theme for browsers that have not picked one in the workspace (``INSIGHT_THEME``): ``system``
     #: follows the device's light/dark preference. A choice made in the workspace overrides it per device.
     theme: Theme = DEFAULT_THEME
+    #: Run the background job runner (scheduled syncs) in this process (``INSIGHT_RUN_JOBS``, default ``on``).
+    #: Off when constructed directly, so tests and tools never start it by accident.
+    run_jobs: bool = False
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None) -> Self:
@@ -127,4 +143,5 @@ class Settings:
             max_tlp=parse_max_tlp(env.get('INSIGHT_MAX_TLP', '')),
             mfa=parse_mfa(env.get('INSIGHT_MFA', '')),
             theme=parse_theme(env.get('INSIGHT_THEME', '')),
+            run_jobs=parse_run_jobs(env.get('INSIGHT_RUN_JOBS', '')),
         )
