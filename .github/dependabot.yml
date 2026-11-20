@@ -1,15 +1,19 @@
 # Python dependencies are refreshed by .github/workflows/lock-refresh.yml (uv keeps all hash-pinned lock files
-# consistent). Dependabot covers GitHub Actions and the container base image.
+# consistent). Dependabot covers GitHub Actions and the container base image, batched into one pull request
+# each per month (review G1). Dependabot security updates, when on in the repository settings, ignore this.
 version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
     groups:
       actions:
         patterns: ['*']
   - package-ecosystem: docker
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
+    groups:
+      base-image:
+        patterns: ['*']

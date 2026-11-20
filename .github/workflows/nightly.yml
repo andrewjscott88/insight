@@ -1,9 +1,12 @@
 # Tier 2 - nightly, advisory. Never blocks merges; any failure opens (or updates) a GitHub issue.
+# Daily: live contracts, deep property tests, the middle Python versions and the image re-scan. Weekly (Sunday):
+# mutation testing and the newest allowed dependencies, the two slow jobs (review G1). A manual run does both.
 name: Nightly
 
 on:
   schedule:
     - cron: '17 3 * * *'
+    - cron: '41 4 * * 0'
   workflow_dispatch:
 
 permissions:
@@ -17,6 +20,7 @@ env:
 jobs:
   live-sources:
     name: Live contract tests (real publishers)
+    if: github.event.schedule != '41 4 * * 0'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -33,6 +37,7 @@ jobs:
 
   deep-properties:
     name: Property tests (5,000 examples)
+    if: github.event.schedule != '41 4 * * 0'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -47,8 +52,28 @@ jobs:
         env:
           HYPOTHESIS_PROFILE: nightly
 
+  middle-pythons:
+    name: Tests (Python ${{ matrix.python-version }}, SQLite)
+    if: github.event.schedule != '41 4 * * 0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.12', '3.13']  # pull requests test 3.11 and 3.14 (ci.yml)
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install --require-hashes -r requirements-dev.lock && pip install --no-deps -e .
+      - run: pytest -q
+
   mutation:
     name: Mutation testing
+    if: github.event.schedule != '17 3 * * *'
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -87,6 +112,7 @@ jobs:
 
   fresh-dependencies:
     name: Newest allowed dependencies
+    if: github.event.schedule != '17 3 * * *'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -108,6 +134,7 @@ jobs:
 
   image-rescan:
     name: Re-scan the latest released image
+    if: github.event.schedule != '41 4 * * 0'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -133,7 +160,7 @@ jobs:
 
   report:
     name: Open or update the nightly-failure issue
-    needs: [live-sources, deep-properties, mutation, fresh-dependencies, image-rescan]
+    needs: [live-sources, deep-properties, middle-pythons, mutation, fresh-dependencies, image-rescan]
     if: failure()
     runs-on: ubuntu-latest
     permissions:
