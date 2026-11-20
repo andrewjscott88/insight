@@ -14,19 +14,6 @@ import pytest
 from insight import __version__, cli
 
 
-@pytest.fixture(autouse=True)
-def _isolated_insight_logger(monkeypatch: pytest.MonkeyPatch) -> None:
-    """``serve``/``migrate`` configure the process-wide ``insight`` logger; restore it after each test.
-
-    Without this, later tests that capture ``insight.*`` records saw nothing (found when mutmut ran tests in a
-    different order under pytest 8).
-    """
-    logger = logging.getLogger('insight')
-    monkeypatch.setattr(logger, 'handlers', list(logger.handlers))
-    monkeypatch.setattr(logger, 'propagate', logger.propagate)
-    monkeypatch.setattr(logger, 'level', logger.level)
-
-
 @pytest.fixture
 def in_tmp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.chdir(tmp_path)

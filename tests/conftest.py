@@ -15,6 +15,7 @@ Design rules for this suite:
 from __future__ import annotations
 
 import ipaddress
+import logging
 import os
 import re
 import shutil
@@ -51,6 +52,20 @@ hypothesis_settings.load_profile(os.environ.get('HYPOTHESIS_PROFILE', 'default')
 
 
 # --------------------------------------------------------------------------- network guard
+
+
+@pytest.fixture(autouse=True)
+def _isolated_insight_logger(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Restore the process-wide ``insight`` logger after every test, wherever the test is.
+
+    The CLI (``serve``, ``migrate``, ``export-iocs``) configures it to write to stderr instead of to pytest.
+    Restoring it only in ``test_cli.py`` was not enough: ``test_ioc_export.py`` also runs the CLI, and when
+    unit tests ran before API tests (as mutation testing runs them), the sign-in logging test saw nothing.
+    """
+    logger = logging.getLogger('insight')
+    monkeypatch.setattr(logger, 'handlers', list(logger.handlers))
+    monkeypatch.setattr(logger, 'propagate', logger.propagate)
+    monkeypatch.setattr(logger, 'level', logger.level)
 
 
 @pytest.fixture(autouse=True)
