@@ -21,6 +21,11 @@
   feed records `Unchanged since the last sync.` and nothing else, so KEV's 1.3 MB catalogue is no longer
   re-read and rewritten when nothing changed. After an upgrade, each source is read once in full.
 
+### Changed: CI actions updated
+- `actions/checkout` v5 → v7.0.1, `actions/setup-python` v6 → v7.1.0 and the CodeQL Action v3 → v4.39.3, in
+  every workflow (from Dependabot's #19). None of the workflows uses `pull_request_target`, `workflow_run` or
+  setup-python's removed `pip-install` input, the two breaking changes in these majors.
+
 ### Fixed: documentation drift
 - The API reference and guide said a refused enrichment request for an unknown CVE starts the 6.5 s window;
   since 0.5.0 it does not. The SIEM recipe implied that *accepted* means *malicious*; it now says accepted
