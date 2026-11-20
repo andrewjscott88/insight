@@ -1,5 +1,7 @@
-# Tier 4 - release gate. Final tags only (vX.Y.Z). Publishes a signed, attested image to GHCR and a GitHub
-# Release. "CD" for Insight means *publishing*: users pull the image; nothing is deployed to a server.
+# Tier 4 - release. Final tags only (vX.Y.Z): pre-release checks, then the whole milestone gate on this commit,
+# then publishing, which waits for a person's approval in the `release` environment. Publishes a signed,
+# attested image to GHCR and a GitHub Release. "CD" for Insight means *publishing*: users pull the image;
+# nothing is deployed to a server.
 name: Release
 
 on:
@@ -23,7 +25,6 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
-      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -37,21 +38,19 @@ jobs:
           TAG: ${{ github.ref_name }}
       - name: Everything pinned (base image digests, action SHAs)
         run: python scripts/check_pins.py --strict
-      - name: The same commit passed the milestone gate as a release candidate
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-        run: |
-          passed="$(gh run list --repo "$REPO" --workflow milestone-gate.yml --commit "$GITHUB_SHA" \
-            --status success --json databaseId --jq 'length')"
-          if [ "${passed}" -lt 1 ]; then
-            echo "::error::No successful milestone-gate run for ${GITHUB_SHA}. Tag vX.Y.Z-rc.N first."
-            exit 1
-          fi
+
+  gate:
+    name: Milestone gate
+    needs: verify
+    # Tier 1 on every supported Python, benchmarks, backup drill, browser E2E with axe, ZAP, licences, SBOM.
+    # Its reports are on this run, so the approver sees them before approving.
+    uses: ./.github/workflows/milestone-gate.yml
+    permissions:
+      contents: read
 
   publish:
     name: Build, sign, attest, publish
-    needs: verify
+    needs: [verify, gate]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: release  # configure required reviewers on this environment

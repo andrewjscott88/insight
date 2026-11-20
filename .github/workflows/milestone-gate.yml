@@ -1,11 +1,13 @@
-# Tier 3 - milestone gate. Runs for release-candidate tags (vX.Y.Z-rc.N) or on demand. A final release tag is
-# only publishable if the *same commit* passed this gate (enforced by release.yml).
+# Tier 3 - milestone gate. The release workflow runs it on every final tag (vX.Y.Z) before publishing can be
+# approved (workflow_call). Run it on its own as a dry run before tagging: on demand, or with an optional
+# release-candidate tag (vX.Y.Z-rc.N).
 name: Milestone gate
 
 on:
   push:
     tags: ['v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+']
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read

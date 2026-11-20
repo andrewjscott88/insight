@@ -1,8 +1,8 @@
 # Releasing
 
-Versioning is semantic. A milestone ships as one or more release candidates (`vX.Y.Z-rc.N`) followed by the
-final tag (`vX.Y.Z`). The final tag is only publishable for a commit that already passed the milestone gate as a
-release candidate.
+Versioning is semantic. A release is one tag, `vX.Y.Z`. The release workflow runs the whole milestone gate on
+that commit, then waits for your approval before it publishes anything. Release candidates (`vX.Y.Z-rc.N`) are
+optional dry runs of the gate.
 
 ## 1. Prepare (pull request)
 
@@ -21,28 +21,35 @@ release candidate.
    `python scripts/benchmark_extraction.py --update-baseline`.
 6. Merge once Tier 1 is green.
 
-## 2. Release candidate
+## 2. Optional dry run
+
+To see the gate's result before tagging, run it on `main` (or the release branch): **Actions → Milestone gate →
+Run workflow**. A release-candidate tag (`git tag -s vX.Y.Z-rc.1 && git push origin vX.Y.Z-rc.1`) does the same
+and also checks the release metadata. Neither is required.
+
+## 3. Release
 
 ```sh
-git tag -s vX.Y.Z-rc.1 && git push origin vX.Y.Z-rc.1
+git tag -s vX.Y.Z && git push origin vX.Y.Z
 ```
 
-The milestone gate runs Tier 1 plus benchmarks, the backup drill, browser E2E, ZAP, licences and SBOM.
-Fix anything it finds and tag `rc.2`, and so on.
+`release.yml` runs, in one workflow run:
 
-## 3. Final release
+1. **Pre-release checks**: version, changelog, validation report, upgrade fixture, strict pins (a minute).
+2. **Milestone gate**: Tier 1 on Python 3.11 to 3.14 and PostgreSQL, extraction benchmark, performance budget
+   on both databases, backup drill, browser E2E with axe, signed-in OWASP ZAP, licences and SBOM (about 15
+   minutes). Its reports are artifacts of this run.
+3. **Approval**: publishing waits in the `release` environment until a required reviewer approves.
+4. **Publish** (wheel, image with SBOM and provenance, cosign signature, attestations, GitHub Release), then
+   **verify** the published image by digest.
 
-```sh
-git tag -s vX.Y.Z <same commit as the passing rc> && git push origin vX.Y.Z
-```
-
-`release.yml` verifies metadata, pins and the rc result, then **waits for approval** in the `release`
-environment. After approval it builds, signs, attests and publishes, then verifies the published image by
-digest.
+Nothing is published before step 4. If the checks or the gate fail, delete the tag (`git push --delete origin
+vX.Y.Z && git tag -d vX.Y.Z`), fix the problem on `main`, and tag again. The tag was never released, so reusing
+it is safe; a dry run first avoids this.
 
 ## Checklist for the approver
 
-- [ ] Milestone-gate run for this commit is green; benchmark and ZAP reports reviewed.
+- [ ] The milestone gate in this release run is green; benchmark and ZAP reports reviewed.
 - [ ] `CHANGELOG.md` describes user-visible changes and any manual upgrade steps.
 - [ ] New migrations were reviewed (data-preserving, reversible, tested on both databases).
 - [ ] `docs/VALIDATION.md` is honest about what was *not* validated.
