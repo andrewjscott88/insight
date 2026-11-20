@@ -76,10 +76,12 @@ def test_csaf_source_fetches_only_from_cisas_raw_github_folders() -> None:
     assert SOURCE.kind == 'csaf'
     assert SOURCE.fetch_urls == SOURCE.indexes
     assert all(u.startswith(CSAF_BASE) and u.endswith('/white/changes.csv') for u in SOURCE.indexes)
-    assert 'raw.githubusercontent.com' in ALLOWED_HOSTS
+    # Set comparisons, not string containment: these are host names, not URLs (CodeQL's URL-substring rule).
+    assert {urlsplit(u).hostname for u in SOURCE.indexes} == {'raw.githubusercontent.com'}
+    assert {'raw.githubusercontent.com'} <= ALLOWED_HOSTS
     # The browse link is for people; it is never fetched, so its host is not allowed for downloads.
     assert urlsplit(SOURCE.url).hostname == 'github.com'
-    assert 'github.com' not in ALLOWED_HOSTS
+    assert ALLOWED_HOSTS.isdisjoint({'github.com'})
 
 
 def test_the_blocked_cisa_rss_feed_is_gone() -> None:
