@@ -14,6 +14,7 @@ from .mobile import show_reader
 from .reader import ReaderActions, render_empty, render_report
 from .theme import tlp_badge
 from .typography import heading
+from .verdicts import load_verdicts
 from .workspace import ALL_STATUSES, ALL_TLP, Workspace
 
 
@@ -98,6 +99,8 @@ def build_inbox(ws: Workspace) -> None:
         with ws.read() as db:
             doc = services.get_document(db, state.selected) if state.selected else None
             data = services.detail(db, doc) if doc else None
+            if data:
+                data['verdicts'] = load_verdicts(db, (o['entity_id'] for o in data['observations']))
         if data:
             render_report(ws, data, actions)
         else:

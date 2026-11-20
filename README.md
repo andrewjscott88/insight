@@ -14,6 +14,11 @@ A single-operator threat-intelligence workbench, run locally or published behind
 - TLP defaults to AMBER, and a `TLP:` marking inside a report can only raise its label, never lower it.
 - Exact character offsets and contextual evidence, canonical entities and cross-report pivots.
 - Accept/reject/reset observations, triage reports and add analyst notes with audit events.
+- **Verdicts and a safe blocklist.** Accept only says a value was copied correctly; a separate **verdict** (benign,
+  suspicious, malicious, with a reason, its own TLP label and an optional end date) says what it means, from the
+  reader or the entity explorer. **Warnings** mark values that must never be blocked (private, reserved and
+  example addresses, reserved names, big vendor sites). `GET /api/iocs/blocklist` lists only unexpired malicious
+  values with an accepted mention and no warning, for firewalls and SIEMs.
 - Organization watch terms highlight literal product, vendor or topic matches. These are transparent keyword matches, not calibrated risk scores.
 - Curated connectors: CISA KEV, CISA security advisories (CISA's machine-readable CSAF files), SANS ISC and UK
   NCSC feeds. **Sync now** per source, **Sync all sources** at the top of the workspace, and **opt-in

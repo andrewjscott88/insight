@@ -13,6 +13,7 @@ from nicegui import ui
 
 from .. import services
 from .typography import heading
+from .verdicts import Indicator, flag_badges, load_verdicts, render_verdict
 from .workspace import Workspace
 
 
@@ -45,6 +46,20 @@ def build_entities(ws: Workspace) -> None:
 
                 more.on_click(load_more)
 
+    def render_about(box: ui.column, target: Indicator) -> None:
+        """Warnings, when the value was seen and the verdict, for one entity (loaded when it is opened)."""
+        if not ws.authorized():
+            return
+        with ws.read() as db:
+            verdict = load_verdicts(db, [target.entity_id]).get(target.entity_id)
+            first, last = services.entity_seen(db, target.entity_id)
+        box.clear()
+        with box:
+            flag_badges(target.kind, target.value)
+            if first and last:
+                ui.label(f'In reports added from {first[:10]} to {last[:10]}').classes('muted text-sm')
+            render_verdict(ws, target, verdict, on_saved=lambda: render_about(box, target))
+
     @ui.refreshable
     def entity_list() -> None:
         if not ws.authorized():
@@ -54,6 +69,7 @@ def build_entities(ws: Workspace) -> None:
                 (e.id, e.kind, e.value, count) for e, count in services.list_entities(db, ws.state.entity_q)
             ]
         for entity_id, kind, value, count in rows:
+            indicator = Indicator(entity_id, kind, value)
             expansion = ui.expansion(f'{kind.upper()} · {value} · {count} source(s)').classes(
                 'panel w-full break-value'
             )
@@ -61,11 +77,18 @@ def build_entities(ws: Workspace) -> None:
                 ui.label(
                     'A match shows that reports mention the same value. It does not prove harm.'
                 ).classes('muted text-xs')
+                about = ui.column().classes('w-full gap-1')
                 container = ui.column().classes('w-full gap-1')
 
-            def on_open(event: Any, box: ui.column = container, target: str = entity_id) -> None:
+            def on_open(
+                event: Any,
+                box: ui.column = container,
+                info: ui.column = about,
+                target: Indicator = indicator,
+            ) -> None:
                 if event.value and not box.default_slot.children:
-                    render_page(box, target, 0)
+                    render_about(info, target)
+                    render_page(box, target.entity_id, 0)
 
             expansion.on_value_change(on_open)
         if not rows:

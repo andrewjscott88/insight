@@ -165,6 +165,11 @@ def screens(page: Any) -> Iterator[str]:
     expect(page.get_by_role('dialog', name='Look up CVE-2024-3400')).to_be_visible()
     yield 'CVE lookup dialog'
     page.get_by_role('button', name='Close').click()
+    page.locator('.document-reader').get_by_role('button', name='Set verdict').first.click()
+    expect(page.get_by_role('dialog', name='Verdict on this indicator')).to_be_visible()
+    yield 'Verdict dialog'
+    page.get_by_role('dialog', name='Verdict on this indicator').get_by_role('button', name='Cancel').click()
+    expect(page.get_by_role('dialog', name='Verdict on this indicator')).to_have_count(0)
     for button, dialog, close in (
         ('Ingest intelligence', 'Ingest intelligence', 'Cancel'),
         ('Export IOCs', 'Export indicators of compromise (IOCs)', 'Cancel'),

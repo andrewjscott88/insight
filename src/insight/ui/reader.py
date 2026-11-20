@@ -21,6 +21,7 @@ from .messages import tell
 from .mobile import back_to_list_button
 from .theme import tlp_badge
 from .typography import heading, new_tab_link
+from .verdicts import Indicator, VerdictView, flag_badges, render_verdict
 from .workspace import Workspace
 
 
@@ -72,8 +73,9 @@ def render_report(ws: Workspace, data: dict[str, Any], actions: ReaderActions) -
     ).classes('muted prose')
     if not data['observations']:
         ui.label('Insight found no indicators in this report.').classes('muted')
+    verdicts = data.get('verdicts', {})
     for obs in data['observations']:
-        _render_observation(ws, obs, actions)
+        _render_observation(ws, obs, actions, data['tlp'], verdicts.get(obs['entity_id']))
     with ui.row().classes('gap-x-6 gap-y-0'):
         new_tab_link('Download this report as JSON', f'/api/documents/{data["id"]}/export')
         new_tab_link("Export this report's IOCs", f'/api/iocs/export?document_id={data["id"]}')
@@ -110,11 +112,14 @@ def _render_revisions(data: dict[str, Any], actions: ReaderActions) -> None:
                 ).props('flat dense no-caps align=left')
 
 
-def _render_observation(ws: Workspace, obs: dict[str, Any], actions: ReaderActions) -> None:
+def _render_observation(
+    ws: Workspace, obs: dict[str, Any], actions: ReaderActions, report_tlp: str, verdict: VerdictView | None
+) -> None:
     with ui.column().classes('panel w-full p-4 gap-2'):
         with ui.row().classes('items-center w-full'):
             ui.badge(obs['kind']).props('outline')
             ui.label(obs['value']).classes('font-mono break-value flex-1')
+        flag_badges(obs['kind'], obs['value'])
         ui.label(obs['evidence']).classes('evidence text-sm w-full')
         ui.label(
             f'Position {obs["start_offset"]}–{obs["end_offset"]} in the text · {obs["review_status"]}'
@@ -131,6 +136,8 @@ def _render_observation(ws: Workspace, obs: dict[str, Any], actions: ReaderActio
                 icon='travel_explore',
                 on_click=lambda cve=obs['value']: open_enrichment_dialog(ws, cve),
             ).props('flat dense no-caps')
+        indicator = Indicator(obs['entity_id'], obs['kind'], obs['value'], report_tlp)
+        render_verdict(ws, indicator, verdict, on_saved=actions.refresh)
         with ui.row().classes('gap-2'):
             for value, label in (('accepted', 'Accept'), ('rejected', 'Reject'), ('unreviewed', 'Reset')):
                 current = obs['review_status'] == value
