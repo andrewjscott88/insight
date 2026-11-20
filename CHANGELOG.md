@@ -25,6 +25,16 @@
 - `actions/checkout` v5 → v7.0.1, `actions/setup-python` v6 → v7.1.0 and the CodeQL Action v3 → v4.39.3, in
   every workflow (from Dependabot's #19). None of the workflows uses `pull_request_target`, `workflow_run` or
   setup-python's removed `pip-install` input, the two breaking changes in these majors.
+- The release-only actions, also from #19: `docker/setup-buildx-action` v4.4.1, `docker/login-action` v4.8.0,
+  `docker/metadata-action` v6.2.0, `docker/build-push-action` v7.4.0, `sigstore/cosign-installer` v4.1.3 and
+  `actions/attest-build-provenance` v4.2.2. Releases are now signed with cosign v3; verify them with cosign v3
+  or later.
+- **A release rehearsal** (`release-rehearsal.yml`) runs on every pull request that touches `release.yml`, the
+  `Dockerfile` or its own files, because CI never runs the release workflow. It builds the image with its SBOM
+  and provenance, pushes it to a throwaway local registry, signs and verifies it with cosign, checks that this
+  cosign still verifies the last published release, then pulls by digest and smoke-tests the container, all
+  with the release's action versions and without publishing anything. `scripts/check_release_actions.py`
+  reads each pinned action's `action.yml` and fails if `release.yml` passes an input it no longer accepts.
 
 ### Fixed: documentation drift
 - The API reference and guide said a refused enrichment request for an unknown CVE starts the 6.5 s window;

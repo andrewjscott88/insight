@@ -239,7 +239,7 @@ yourself after changing the backup procedure.
 ### Before
 1. Read the new version's section of `CHANGELOG.md`, especially **Upgrade notes**.
 2. Take a backup (§5) and copy it off the host.
-3. Verify the published image's signature (releases are signed with cosign, keyless):
+3. Verify the published image's signature with cosign v3 or later (releases are signed with cosign, keyless):
    ```sh
    cosign verify ghcr.io/<org>/insight@sha256:<digest> \
      --certificate-identity-regexp '^https://github.com/<org>/insight/' \

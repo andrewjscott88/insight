@@ -168,7 +168,7 @@ enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["defusedxml.*", "playwright.*", "jsonschema.*"]
+module = ["defusedxml.*", "playwright.*", "jsonschema.*", "yaml", "yaml.*"]
 ignore_missing_imports = true
 
 # --------------------------------------------------------------------------- mutation testing (nightly)

@@ -1,0 +1,141 @@
+# Release rehearsal. CI never runs the release workflow, so a change to it, to the Dockerfile or to a
+# release-only action is rehearsed here, with the same action versions as release.yml: the image is built with
+# its SBOM and provenance, pushed to a throwaway local registry, signed and verified with cosign, then pulled by
+# digest and smoke-tested like post-release does. Nothing is published and nothing is written to a public log.
+# Only the keyless signature and the provenance attestations wait for a real release (post-release verifies the
+# signature); `scripts/check_release_actions.py` checks the inputs release.yml passes to every action.
+name: Release rehearsal
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+      - .github/workflows/release-rehearsal.yml
+      - Dockerfile
+      - scripts/check_release_actions.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-rehearsal-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IMAGE: localhost:5000/insight
+  REHEARSAL_VERSION: v9.9.9
+  # The last published release, signed by release.yml: this cosign must still verify it.
+  PUBLISHED_DIGEST: sha256:22779e2053bd5f015c737e012f60550f5f0d24ebb531029fbd141673ed672c7d
+
+jobs:
+  inputs:
+    name: Release actions accept their inputs
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13'
+      - run: pip install --require-hashes -r requirements-dev.lock
+      - run: python scripts/check_release_actions.py
+
+  rehearse:
+    name: Build, push, sign, verify, smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: read  # the published image, to verify its signature
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13'
+      - name: Build the wheel (same procedure as the release)
+        run: |
+          python -m venv /tmp/build && /tmp/build/bin/pip install --require-hashes -r requirements-build.lock
+          /tmp/build/bin/pip wheel --no-deps --no-build-isolation --wheel-dir dist .
+      - name: Throwaway local registry (a test fixture; nothing leaves the runner)
+        run: docker run -d --name registry -p 127.0.0.1:5000:5000 registry:3
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          driver-opts: network=host
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ env.REHEARSAL_VERSION }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ env.REHEARSAL_VERSION }}
+      - name: The release's tag patterns still give both tags
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          printf '%s\n' "${TAGS}"
+          grep -qx "${IMAGE}:9.9.9" <<< "${TAGS}"
+          grep -qx "${IMAGE}:9.9" <<< "${TAGS}"
+      - id: push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ env.REHEARSAL_VERSION }}
+            REVISION=${{ github.sha }}
+          sbom: true
+          provenance: mode=max
+      - name: The pushed image carries its SBOM and provenance
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          test -n "${DIGEST}"
+          sbom="$(docker buildx imagetools inspect "${IMAGE}@${DIGEST}" --format '{{json .SBOM}}')"
+          provenance="$(docker buildx imagetools inspect "${IMAGE}@${DIGEST}" --format '{{json .Provenance}}')"
+          for attestation in "${sbom}" "${provenance}"; do
+            test "${#attestation}" -gt 20 && test "${attestation}" != null
+          done
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+      - name: Sign and verify with a key made for this run (no transparency log)
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+          COSIGN_PASSWORD: ''
+        run: |
+          cosign version
+          cosign generate-key-pair
+          cosign sign --yes --key cosign.key --use-signing-config=false --tlog-upload=false "${IMAGE}@${DIGEST}"
+          cosign verify --key cosign.pub --insecure-ignore-tlog=true "${IMAGE}@${DIGEST}"
+          rm -f cosign.key cosign.pub
+      - name: This cosign verifies the last published release, as the release notes tell users to
+        run: |
+          cosign verify "ghcr.io/${GITHUB_REPOSITORY}@${PUBLISHED_DIGEST}" \
+            --certificate-identity-regexp "^https://github.com/${GITHUB_REPOSITORY}/" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com > /dev/null
+      - name: Pull by digest and run read-only (as post-release does)
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          password="$(openssl rand -hex 16)"
+          echo "::add-mask::${password}"
+          echo "SMOKE_PASSWORD=${password}" >> "$GITHUB_ENV"
+          docker run -d --name insight --read-only --tmpfs /tmp --cap-drop ALL -p 127.0.0.1:8080:8080 \
+            -e INSIGHT_PASSWORD="${password}" -e INSIGHT_SESSION_SECRET="$(openssl rand -hex 32)" \
+            "${IMAGE}@${DIGEST}"
+      - name: Smoke test
+        run: |
+          pip install --require-hashes -r requirements.lock
+          python scripts/smoke.py http://127.0.0.1:8080 --password "${SMOKE_PASSWORD}"
+      - if: failure()
+        run: docker logs insight || true

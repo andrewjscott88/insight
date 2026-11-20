@@ -18,6 +18,7 @@ from scripts import (
     check_licenses,
     check_pins,
     check_release,
+    check_release_actions,
     lock,
     make_ioc_example,
     make_release_fixture,
@@ -113,6 +114,83 @@ def test_pin_checker_strict_mode_fails_on_this_repository_until_pinned(
     assert check_pins.main([]) == 0
     if check_pins.problems():
         assert check_pins.main(['--strict']) == 1
+
+
+# --------------------------------------------------------------------------- release actions
+
+SHA_A, SHA_B, SHA_C = 'a' * 40, 'b' * 40, 'c' * 40
+RAW = 'https://raw.githubusercontent.com'
+ACTION_METADATA = {
+    f'{RAW}/docker/login-action/{SHA_A}/action.yml': (
+        'inputs:\n  registry: {}\n  username: {}\n  password:\n    required: true\n'
+        '  logout:\n    required: true\n    default: "true"\n'
+    ),
+    # Metadata in a sub-folder, under the other file name.
+    f'{RAW}/github/codeql-action/{SHA_B}/init/action.yaml': 'inputs:\n  languages:\n    required: "true"\n',
+}
+
+
+def write_workflow(path: Path, *steps: str) -> Path:
+    path.write_text('jobs:\n  publish:\n    steps:\n' + ''.join(steps))
+    return path
+
+
+def test_release_action_inputs_must_exist_at_the_pinned_commit(tmp_path: Path) -> None:
+    release = write_workflow(
+        tmp_path / 'release.yml',
+        f'      - uses: docker/login-action@{SHA_A}\n'
+        '        with: {registry: ghcr.io, username: me, password: secret, ecr: auto}\n',
+        f'      - uses: docker/login-action@{SHA_A}\n        with: {{registry: ghcr.io}}\n',
+        f'      - uses: github/codeql-action/init@{SHA_B}\n        with: {{languages: python}}\n',
+        f'      - uses: docker/metadata-action@{SHA_C}\n',
+        '      - uses: ./.github/actions/local\n      - run: echo hi\n',
+    )
+    assert check_release_actions.input_problems(release, ACTION_METADATA.get) == [
+        f'release.yml (publish): docker/login-action has no input "ecr" at {SHA_A[:12]}',
+        'release.yml (publish): docker/login-action requires the input "password"',
+        f'docker/metadata-action@{SHA_C[:12]} has no action.yml at that commit',
+    ]
+
+
+def test_release_rehearsal_must_run_the_release_versions(tmp_path: Path) -> None:
+    release = write_workflow(
+        tmp_path / 'release.yml',
+        f'      - uses: actions/checkout@{SHA_A}\n',
+        f'      - uses: docker/login-action@{SHA_A}\n',
+        f'      - uses: docker/build-push-action@{SHA_A}\n',
+        f'      - uses: example/new-action@{SHA_A}\n',
+    )
+    rehearsal = write_workflow(
+        tmp_path / 'release-rehearsal.yml',
+        f'      - uses: actions/checkout@{SHA_B}\n',
+        f'      - uses: docker/login-action@{SHA_B}\n',
+    )
+    assert check_release_actions.pin_problems(release, rehearsal) == [
+        'release-rehearsal.yml runs actions/checkout at a different commit than release.yml',
+        f"release-rehearsal.yml must run docker/build-push-action at the release's commit {SHA_A[:12]}",
+        f"release-rehearsal.yml must run docker/login-action at the release's commit {SHA_A[:12]}",
+        'example/new-action is new in release.yml: add it to the rehearsal (REHEARSED) or say why not '
+        '(NOT_REHEARSED) in scripts/check_release_actions.py',
+    ]
+    agreed = (
+        f'      - uses: actions/checkout@{SHA_A}\n',
+        f'      - uses: docker/login-action@{SHA_A}\n',
+        f'      - uses: docker/build-push-action@{SHA_A}\n',
+    )
+    write_workflow(rehearsal, *agreed)
+    write_workflow(release, *agreed)
+    assert check_release_actions.pin_problems(release, rehearsal) == []
+
+
+def test_this_repositorys_rehearsal_runs_the_release_versions(capsys: pytest.CaptureFixture[str]) -> None:
+    assert check_release_actions.pin_problems() == []
+    assert check_release_actions.main(['--offline']) == 0
+    assert "the rehearsal runs the release's versions" in capsys.readouterr().out
+
+
+def test_release_action_metadata_is_only_read_from_github() -> None:
+    with pytest.raises(ValueError, match='Refusing to fetch'):
+        check_release_actions.fetch_url('https://example.com/action.yml')
 
 
 # --------------------------------------------------------------------------- licences
