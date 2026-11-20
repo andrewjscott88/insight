@@ -16,7 +16,7 @@ from nicegui.element_filter import ElementFilter
 from nicegui.testing.user import User
 from sqlalchemy import select
 
-from insight import connectors
+from insight import connectors, services
 from insight.models import AuditEvent, Document, Note, Observation, WatchTerm
 from insight.schemas import INDICATOR_KINDS, DocumentInput
 from insight.services import SourceRef, ingest
@@ -522,16 +522,38 @@ RSS_ITEM = b'<rss><channel><item><title>Advisory CVE-2024-9999</title></item></c
 KEV_ONE = json.dumps({'vulnerabilities': [{'cveID': 'CVE-2024-12345', 'dateAdded': '2025-01-01'}]}).encode()
 
 
-async def test_intel_brief_starts_empty_and_links_to_the_evidence(user: User) -> None:
+def add_report(env: SimpleNamespace, title: str, source: str, body: str) -> None:
+    with env.app.state.session_factory.begin() as db:
+        ingest(db, DocumentInput(title=title, body=body, source_name=source, tlp='CLEAR'))
+
+
+async def test_intel_brief_starts_empty_and_links_to_the_evidence(
+    user: User, ui_env: SimpleNamespace
+) -> None:
+    with user.scope(marker='brief-summary'):
+        await user.should_see('Nothing new in the last 7 days. Sync your sources to get the latest.')
+    await load_demo(user)  # practice data: not part of the brief
+    with user.scope(marker='brief-summary'):
+        await user.should_see('Nothing new in the last 7 days.')
+    with ui_env.app.state.session_factory.begin() as db:
+        services.add_watch_term(db, 'Scanning')
+    add_report(ui_env, 'Scanning wave', 'SANS', 'Scanning from 198.51.100.23.')
+    add_report(ui_env, 'Partner note', 'NCSC', 'We also saw 198.51.100.23.')
+    await user.open('/')
+    with user.scope(marker='brief-summary'):
+        await user.should_see('In the last 7 days, 2 new reports came in from 2 sources.')
+        await user.should_see('1 new report mentions your watch terms: Scanning (1).')
     with user.scope(marker='intel-brief'):
-        await user.should_see('No new reports in the last 7 days. Sync your sources to get the latest.')
-    await load_demo(user)
-    with user.scope(marker='intel-brief'):
-        await user.should_see('3 new reports from 3 sources.')
-        user.find(kind=ui.button, content='192.0.2.44 · 2 sources, 2 reports').click()
+        user.find(kind=ui.button, content='198.51.100.23 · 2 sources, 2 reports').click()
     # The entity explorer opens, already searching for that indicator.
-    await user.should_see('IP · 192.0.2.44 · 2 source(s)')
-    await user.should_not_see('DOMAIN · relay.example.org')
+    await user.should_see('IP · 198.51.100.23 · 2 source(s)')
+    await user.should_not_see('IP · 192.0.2.44')
+    with user.scope(marker='intel-brief'):
+        user.find(kind=ui.button, content='Scanning · 1 new report').click()
+    # The inbox opens, already searching for the watch term.
+    with user.scope(marker='document-list'):
+        await user.should_see('Scanning wave')
+        await user.should_not_see('Partner note')
 
 
 async def test_sync_all_sources_names_the_ones_that_failed(
@@ -550,17 +572,20 @@ async def test_sync_all_sources_names_the_ones_that_failed(
         '3 of 4 sources synced. Failed: CISA Security Advisories. The Sources tab shows why.'
     )
     await user.should_see('cisa-csaf · error')
-    with user.scope(marker='intel-brief'):
-        await user.should_see('3 new reports from 3 sources.')
+    with user.scope(marker='brief-summary'):
+        # The KEV entry was added to CISA's list in 2025: received now, but not new.
+        await user.should_see('In the last 7 days, 2 new reports came in from 2 sources.')
     button = user.find(kind=ui.button, content='Sync all sources').elements.pop()
     assert button.enabled  # ready for the next run
 
 
 async def test_sync_all_sources_success_feeds_the_brief(user: User, monkeypatch: pytest.MonkeyPatch) -> None:
     ot_index, _ = connectors.SOURCES['cisa-csaf'].indexes
-    advisory = connectors.CSAF_BASE + 'OT/white/2026/icsa-26-323-03.json'
+    advisory_url = connectors.CSAF_BASE + 'OT/white/2026/icsa-26-323-03.json'
     today = datetime.now(UTC).date().isoformat()
     kev = {'cveID': 'CVE-2024-12345', 'vendorProject': 'Acme', 'product': 'Gateway', 'dateAdded': today}
+    advisory = json.loads(CSAF_FIXTURE.read_bytes())
+    advisory['document']['tracking'] |= {'initial_release_date': today, 'current_release_date': today}
 
     async def download(url: str, params: Any = None, **_: Any) -> bytes:
         if url == connectors.SOURCES['cisa-kev'].url:
@@ -569,18 +594,19 @@ async def test_sync_all_sources_success_feeds_the_brief(user: User, monkeypatch:
             return b'"2026/icsa-26-323-03.json","2026-11-19T06:00:00Z"\n'
         if url.endswith('changes.csv'):
             return b''
-        if url == advisory:
-            return CSAF_FIXTURE.read_bytes()
+        if url == advisory_url:
+            return json.dumps(advisory).encode()
         return RSS_ITEM
 
     monkeypatch.setattr(connectors, 'download', download)
     user.find(kind=ui.button, content='Sync all sources').click()
     await user.should_see('All 4 sources synced. The Sources tab shows what each one added.')
-    with user.scope(marker='intel-brief'):
+    with user.scope(marker='brief-summary'):
+        await user.should_see('In the last 7 days, 4 new reports came in from 4 sources.')
         await user.should_see(
-            '4 new reports from 4 sources. CISA says attackers are now using 1 more weakness.'
+            'CISA confirmed that attackers are using 1 more weakness, in products from Acme.'
         )
-        await user.should_see('Acme (1)')
+    with user.scope(marker='intel-brief'):
         await user.should_see('libumqtt (1)')
         user.find(kind=ui.button, content=f'CVE-2024-12345 · Acme Gateway · added {today}').click()
     with user.scope(marker='document-detail'):

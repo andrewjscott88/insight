@@ -11,7 +11,7 @@ import re
 import socket
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from html import unescape
 from itertools import islice
 from typing import Any, Final, Literal
@@ -45,6 +45,8 @@ MAX_CSAF_BODY: Final = 60_000
 #: ``changes.csv`` paths: a year folder and a file name. Nothing else (``..``, absolute URLs) is followed.
 CSAF_PATH_RE: Final = re.compile(r'\d{4}/[a-z0-9][a-z0-9._-]{0,99}\.json', re.ASCII)
 CSAF_ID_RE: Final = re.compile(r'[A-Za-z0-9][A-Za-z0-9._:-]{0,99}', re.ASCII)
+#: Advisory file names carry their publication date: ``icsa-26-323-03.json`` is 2026, day 323.
+CSAF_DATE_RE: Final = re.compile(r'[a-z]+-(\d{2})-(\d{3})-\d{2}', re.ASCII)
 #: CSAF 2.0 uses TLP 1.0 labels; TLP 2.0 renamed WHITE to CLEAR.
 CSAF_TLP: Final[dict[str, str]] = {
     'WHITE': 'CLEAR', 'CLEAR': 'CLEAR', 'GREEN': 'GREEN', 'AMBER': 'AMBER', 'RED': 'RED'
@@ -114,9 +116,9 @@ SOURCES: Final[dict[str, Source]] = {
             'CISA Security Advisories',
             'https://github.com/cisagov/CSAF',
             'csaf',
-            f'The {CSAF_INBOX_LIMIT} advisories CISA most recently published or updated, about weaknesses in '
-            "industrial control systems and other products, from CISA's machine-readable files (CSAF). "
-            'Advisories about attacker groups are not included.',
+            f'The {CSAF_INBOX_LIMIT} newest advisories CISA has published about weaknesses in industrial '
+            "control systems and other products, from CISA's machine-readable files (CSAF). Advisories about "
+            'attacker groups are not included.',
             indexes=(CSAF_BASE + 'OT/white/changes.csv', CSAF_BASE + 'IT/white/changes.csv'),
         ),
         Source(
@@ -254,6 +256,21 @@ class CsafEntry:
 
     url: str
     changed: datetime
+    #: The publication date in the advisory's file name, when it has one.
+    published: date | None = None
+
+
+def advisory_date(file_name: str) -> date | None:
+    """The publication date in a CISA advisory file name (``icsa-26-323-03.json``: 2026-11-19) or ``None``.
+
+    Two-digit years are 2000s; CISA's advisories start in 2010.
+    """
+    match = CSAF_DATE_RE.match(file_name)
+    if not match or not 1 <= (day := int(match.group(2))) <= 366:
+        return None
+    first = date(2000 + int(match.group(1)), 1, 1)
+    published = first + timedelta(days=day - 1)
+    return published if published.year == first.year else None
 
 
 def parse_csaf_changes(payload: bytes, index_url: str) -> list[CsafEntry]:
@@ -276,7 +293,8 @@ def parse_csaf_changes(payload: bytes, index_url: str) -> list[CsafEntry]:
             changed = datetime.fromisoformat(row[1].strip())
         except ValueError:
             continue
-        entries.append(CsafEntry(base + path, changed if changed.tzinfo else changed.replace(tzinfo=UTC)))
+        changed = changed if changed.tzinfo else changed.replace(tzinfo=UTC)
+        entries.append(CsafEntry(base + path, changed, advisory_date(path.rsplit('/', 1)[-1])))
     return entries
 
 
@@ -397,8 +415,11 @@ def parse_csaf(payload: bytes, source: Source, url: str) -> FeedItem:
 
 
 async def fetch_csaf(source: Source) -> tuple[list[FeedItem], int]:
-    """Read every index of ``source``, then fetch and parse the :data:`CSAF_INBOX_LIMIT` most recently changed
-    advisories (new ones and updates: ``changes.csv`` dates each file by its last change).
+    """Read every index of ``source``, then fetch and parse its :data:`CSAF_INBOX_LIMIT` newest advisories.
+
+    Newest by publication date (from the file name), then by last change. Ranking by change time alone let
+    CISA's bulk re-saves of years-old advisories crowd out new ones. Advisories already stored are fetched
+    again while they stay among the newest, so CISA's updates to them still become revisions.
 
     Returns ``(items, skipped)``. One unreadable advisory is skipped and counted; an unreadable index, or no
     readable advisory at all, raises.
@@ -407,7 +428,10 @@ async def fetch_csaf(source: Source) -> tuple[list[FeedItem], int]:
     for index_url in source.indexes:
         for entry in parse_csaf_changes(await download(index_url), index_url):
             entries.setdefault(entry.url, entry)
-    newest = sorted(entries.values(), key=lambda e: e.changed, reverse=True)[:CSAF_INBOX_LIMIT]
+    by_age = sorted(
+        entries.values(), key=lambda e: (e.published or e.changed.date(), e.changed), reverse=True
+    )
+    newest = by_age[:CSAF_INBOX_LIMIT]
     if not newest:
         raise ValueError('The CSAF index lists no advisories')
     items: list[FeedItem] = []

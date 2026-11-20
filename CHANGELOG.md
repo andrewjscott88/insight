@@ -7,18 +7,27 @@
   (`Syncing 2 of 4: …`). A failing source does not stop the others; the message names it and the *Sources* tab
   shows why. Same as `POST /api/sources/sync-all`. Nothing syncs by itself, as before.
 - **Intel brief**, under the counters: what the last 7 days add up to, built from the data rather than written by
-  AI, so it never says anything the reports do not. A headline (new reports and sources, weaknesses CISA newly
-  lists as exploited, critical ones), then four short sections: *Exploited now*, *Most severe* (CVSS 9 or
-  higher in new CISA advisories), *Seen in several sources* and *Most-mentioned vendors*. Each line opens its
-  report, or the indicator in the entity explorer. Also `GET /api/brief?days=7`, which honours the key's TLP
-  limit.
+  AI, so it never says anything the reports do not.
+  - An **executive summary** at the top, in a few plain sentences, most urgent first: what came in; how many
+    more weaknesses CISA says attackers are using, in whose products, and the next US federal fix-by date (or
+    that it has passed); exploited weaknesses that other sources also report; the most serious new weakness;
+    what matches your watch terms (or a nudge to add some); and a first step when something is urgent.
+  - Five short sections: *Exploited now*, *Most severe* (CVSS 9 or higher in new CISA advisories), *Your watch
+    terms*, *Seen in several sources* and *Most-mentioned vendors*. Each line opens its report, the indicator in
+    the entity explorer, or the inbox searching for that vendor or term.
+  - "New" means published in the window: KEV entries by the day CISA added them, CISA advisories by their first
+    release, other reports by the day Insight received them. A first sync of years of KEV history, or CISA
+    updating old advisories, does not flood it. The synthetic demo is left out, and vendor names that differ
+    only in capital letters count as one.
+  - Also `GET /api/brief?days=7`, which honours the key's TLP limit.
 
 ### Changed: CISA advisories now come from CISA's CSAF files
 - **CISA Security Advisories** (`cisa-csaf`) replaces **CISA Cybersecurity Advisories** (`cisa-advisories`).
   cisa.gov answers `403 Access Denied` to automated clients for its advisories RSS feed, whatever their request
   headers, so the old source never worked. The new one reads CISA's machine-readable CSAF 2.0 advisories from
-  its GitHub repository: per sync, the 25 industrial control system and other vulnerability advisories CISA
-  most recently published or updated.
+  its GitHub repository: per sync, the 25 newest industrial control system and other vulnerability advisories,
+  by the publication date in their file names (not by when CISA last re-saved a file, which it sometimes does
+  for years-old advisories in bulk).
   Each report keeps the advisory's summary, vendors, sectors and every CVE with its CVSS score, is TLP:CLEAR,
   and links to CISA's web page for the advisory. An updated advisory becomes a revision of its report. CISA does
   not publish threat-actor advisories as CSAF, so they are not included.

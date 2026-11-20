@@ -41,6 +41,9 @@ body.body--dark, body.body--light { background:var(--ins-bg);color:var(--ins-tex
   width:100%;cursor:pointer; }
 .source-card:hover { background:var(--ins-hover); }
 .source-selected { border-color:var(--ins-accent);border-width:2px;background:var(--ins-selected); }
+/* The intel brief's executive summary: set apart like a selected card, with an accent rule on the left. */
+.summary-box { border:1px solid var(--ins-line);border-left:4px solid var(--ins-accent);border-radius:8px;
+  background:var(--ins-selected); }
 .source-card .q-focus-helper { display:none; }
 .source-card .q-btn:hover .block { text-decoration:underline; }
 /* Reading width: about 70 characters per line (WCAG 1.4.8: at most 80; BDA: 60-70). 1ch is the width of "0",

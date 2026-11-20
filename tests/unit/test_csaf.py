@@ -9,6 +9,7 @@ from __future__ import annotations
 import copy
 import json
 from collections.abc import Callable, Coroutine
+from datetime import date
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -27,6 +28,7 @@ from insight.connectors import (
     MAX_CSAF_VULNERABILITIES,
     SOURCES,
     SourceSyncError,
+    advisory_date,
     parse_csaf,
     parse_csaf_changes,
     sync_source,
@@ -110,6 +112,23 @@ def test_index_rows_quoted_or_not_become_absolute_urls() -> None:
         '2026-11-13T16:45:20+00:00',
         '2025-01-02T03:04:05+00:00',
     ]
+    assert [e.published for e in entries] == [date(2026, 11, 19), date(2026, 11, 13), None]
+
+
+@pytest.mark.parametrize(
+    ('name', 'expected'),
+    [
+        ('icsa-26-323-03.json', date(2026, 11, 19)),
+        ('icsma-24-001-01.json', date(2024, 1, 1)),
+        ('va-24-366-01.json', date(2024, 12, 31)),  # a leap year
+        ('va-25-366-01.json', None),  # not a leap year
+        ('icsa-26-000-01.json', None),
+        ('icsa-26-367-01.json', None),
+        ('advisory.json', None),
+    ],
+)
+def test_advisory_file_names_carry_their_publication_date(name: str, expected: date | None) -> None:
+    assert advisory_date(name) == expected
 
 
 @pytest.mark.parametrize(
@@ -326,6 +345,27 @@ async def test_sync_takes_at_most_the_limit_newest_first(
     )
     fetched = [u.rsplit('-', 1)[-1] for u in calls[2:]]
     assert fetched == [f'{n:02d}.json' for n in range(total - 1, total - 1 - CSAF_INBOX_LIMIT, -1)]
+
+
+async def test_new_advisories_win_over_old_ones_that_cisa_re_saved(
+    session_factory: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression: CISA re-saved years-old advisories, and ranking by change time imported them as new."""
+    calls: list[str] = []
+    old_url = CSAF_BASE + 'OT/white/2017/icsa-17-082-01.json'
+    files: dict[str, bytes | BaseException] = {
+        OT_INDEX: index(
+            ('2017/icsa-17-082-01.json', '2026-11-20T00:00:00Z'),  # re-saved yesterday
+            ('2026/icsa-26-323-03.json', '2026-11-19T06:00:00Z'),
+        ),
+        IT_INDEX: b'',
+        ICS_URL: ICS,
+        old_url: encode(advisory(tracking={'id': 'ICSA-17-082-01', 'initial_release_date': '2017-03-23'})),
+    }
+    monkeypatch.setattr(connectors, 'download', serving(files, calls))
+    monkeypatch.setattr(connectors, 'CSAF_INBOX_LIMIT', 1)
+    assert await sync_source(session_factory, 'cisa-csaf') == 'Read 1 advisories; 1 new reports.'
+    assert calls == [OT_INDEX, IT_INDEX, ICS_URL]
 
 
 async def test_an_updated_advisory_becomes_a_revision(

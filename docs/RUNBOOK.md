@@ -312,8 +312,10 @@ most once every 6.5 s.
 
 **CISA Security Advisories** (`cisa-csaf`) reads CISA's machine-readable CSAF 2.0 files from its GitHub
 repository (`raw.githubusercontent.com/cisagov/CSAF`): the `changes.csv` index of the OT (industrial control
-systems) and IT folders, then the 25 advisories CISA most recently published or updated, so one sync makes
-about 27 requests. An updated advisory becomes a new revision of its report. Each report keeps the
+systems) and IT folders, then the 25 newest advisories, so one sync makes about 27 requests. Newest means by
+publication date, which is part of each file name (`icsa-26-323-03`: 2026, day 323), not by when CISA last
+saved the file: CISA sometimes re-saves years-old advisories in bulk. Advisories already stored are read again
+while they are among the newest, so an update becomes a new revision of its report. Each report keeps the
 advisory's summary, vendors, sectors and every CVE with its CVSS score (up to 100), and links to CISA's web page
 for the advisory. CISA does not publish its threat-actor advisories (AA-series, #StopRansomware) as CSAF, so they
 are not included. It replaced the CISA advisories RSS feed, which cisa.gov refuses to automated clients (`403`).

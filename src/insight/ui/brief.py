@@ -1,4 +1,4 @@
-"""Intel brief panel: what the last week of intelligence adds up to, each line linked to its evidence."""
+"""Intel brief panel: an executive summary of the last week, then short sections linked to their evidence."""
 
 from __future__ import annotations
 
@@ -21,6 +21,9 @@ def build_brief(ws: Workspace) -> None:
             ws.open_document(item.document_id)
         elif item.entity:
             ws.show_entity(item.entity)
+        elif item.search:
+            ws.show_inbox()
+            ws.search_reports(item.search)
 
     @ui.refreshable
     def brief() -> None:
@@ -29,7 +32,10 @@ def build_brief(ws: Workspace) -> None:
         with ws.read() as db:
             data = services.brief_data(db, since=window_start(datetime.now(UTC), DEFAULT_DAYS))
         result = compose(data, DEFAULT_DAYS)
-        ui.label(result.headline).classes('prose').mark('brief-headline')
+        with ui.column().classes('summary-box w-full gap-1 p-3 sm:p-4').mark('brief-summary'):
+            heading('Executive summary', 3)
+            for sentence in result.summary:
+                ui.label(sentence).classes('prose')
         with ui.element('div').classes('grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 w-full'):
             for section in result.sections:
                 with ui.column().classes('gap-1 min-w-0'):
@@ -37,12 +43,9 @@ def build_brief(ws: Workspace) -> None:
                     if not section.items:
                         ui.label(section.empty).classes('muted text-sm prose')
                     for item in section.items:
-                        if item.document_id or item.entity:
-                            ui.button(item.text, on_click=lambda i=item: open_item(i)).props(
-                                'flat dense no-caps align=left'
-                            ).classes('w-full break-value text-left')
-                        else:
-                            ui.label(item.text).classes('text-sm break-value')
+                        ui.button(item.text, on_click=lambda i=item: open_item(i)).props(
+                            'flat dense no-caps align=left'
+                        ).classes('w-full break-value text-left')
 
     ws.on_refresh(brief.refresh)
     with ui.column().classes('panel w-full p-4 sm:p-5 gap-3').mark('intel-brief'):

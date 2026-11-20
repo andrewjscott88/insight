@@ -56,6 +56,8 @@ class Workspace:
     find_entity: Callable[[str], None] = _noop
     #: Switch to the entity explorer and look up one indicator (set by the page).
     show_entity: Callable[[str], None] = _noop
+    #: Search the inbox for a word, as if typed into its search box (set by the inbox).
+    search_reports: Callable[[str], None] = _noop
 
     def authorized(self) -> bool:
         """Re-checked on every callback: signing out in another tab revokes this page immediately."""

@@ -44,10 +44,10 @@ curl -sS "$INSIGHT_URL/api/stats" -H "Authorization: Bearer $INSIGHT_API_KEY"
 {"documents":4,"entities":10,"unreviewed":4,"observations_unreviewed":12}
 ```
 
-The intel brief on the landing page is available too (headline plus sections, built from the data, no AI):
+The intel brief on the landing page is available too (executive summary plus sections, built from the data, no AI):
 
 ```sh
-curl -sS "$INSIGHT_URL/api/brief?days=7" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq -r '.headline, (.sections[] | .title, (.items[].text))'
+curl -sS "$INSIGHT_URL/api/brief?days=7" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq -r '.summary[], (.sections[] | .title, (.items[].text))'
 ```
 
 ## 2. Authentication
