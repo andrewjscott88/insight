@@ -1,7 +1,46 @@
-# Validation report · 0.5.0
+# Validation report · 0.6.0
 
 What was verified for each release, what was not, and how. Update this file for every release (see
 [RELEASING.md](RELEASING.md)).
+
+## 0.6.0: verdicts and a blocklist, report deletion, scheduled syncs, stored sessions, lighter pipeline
+
+Recorded while the work was done (pull requests #19–#34). Since 0.6.0 the release workflow runs the whole
+milestone gate on the tagged commit before publishing can be approved; its reports are attached to that run.
+
+- **Tests:** every pull request passed Tier 1 on SQLite and PostgreSQL 16 before it merged; `ruff`,
+  `ruff format`, `mypy --strict`, lock check, workflow schema and zizmor clean on each.
+- **Schema:** migrations `0006`, `0007` and `0008` reversible and equal to the models; the 0.1.0, 0.2.0 and
+  0.5.0 release databases upgrade to `0008` in CI. The 0.6.0 fixture holds rows in every table except the MFA
+  pairing (a test now requires that), so later migrations are tested against verdicts, schedules, jobs, feed
+  downloads, sessions and API keys too.
+- **TLP safety of the new outputs:** the key-limit sweep plants an AMBER verdict with a marker and checks that a
+  GREEN-limited key never sees it, through entity detail, the IOC export and both blocklist formats; a limited
+  key can neither set nor replace a verdict above its limit; first and last seen are computed from the reports
+  the caller can see.
+- **Blocklist rules,** each tested: only `malicious`, unexpired (own date, or 30 days for IP addresses and 90
+  for domains and URLs), with an accepted mention, no warning flag, within the caller's TLP limit. Property
+  tests cover every special-purpose address range.
+- **Report deletion:** tested for manual reports, middle and current revisions, and a reactivated first revision
+  (the old manual SQL left that item with no current revision); the audit event keeps the reason and hash,
+  never the title; `make delete-report` passes a reason containing quotes, commas, `;` and `$HOME` as one word.
+- **Stored sessions:** a restart keeps the operator signed in; a new password, or turning MFA on, ends every
+  session; **Sign out everywhere** ends sessions in two browsers and is audited; the database holds neither a
+  session ID nor its plain hash. Each has a test against the full app.
+- **Workspace:** verdict dialog, warning badges and glossary entries covered by the NiceGUI simulation and the
+  plain-language tests. A milestone-gate run on the workspace branch passed 45 browser tests with the verdict
+  dialog in the axe walk, and ZAP reported 0 FAIL, 8 WARN (as in 0.5.0).
+- **CodeQL:** all 13 open alerts reviewed and dismissed with reasons (false positives, intended one-time
+  output of a new key, test code); none was a vulnerability.
+- **Nightly pipeline:** mutation testing and the image re-scan had failed since 17 November for reasons in the
+  pipeline, not the product (mutmut's copy lacked the Makefile, pytest's import mode and the logger reset; the
+  re-scan used a `v`-prefixed image tag). Both are fixed (#33): the re-scan passes, and mutation testing runs
+  its 4,245 mutants again. It runs weekly now, so its first full score since 0.5.0 comes with the next Sunday
+  run, after this release.
+
+**Not verified for 0.6.0:** the Makefile's Docker targets against real containers (including `make
+delete-report`; verified only against a recording stand-in); a full mutation score (see above); the new
+release flow end to end, which the 0.6.0 tag itself exercises before anything is published.
 
 ## 0.5.0: API platform, deployment settings, MFA, Makefile, themes, readability
 
