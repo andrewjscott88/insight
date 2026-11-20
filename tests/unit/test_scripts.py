@@ -26,11 +26,11 @@ from scripts import (
     smoke,
     update_tlds,
 )
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from insight import services
 from insight.extraction import known_tlds
-from insight.models import Document, database
+from insight.models import Base, Document, database
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -414,6 +414,14 @@ def test_release_fixture_builder_produces_an_upgradeable_database(tmp_path: Path
             revisions = db.scalars(select(Document).where(Document.external_id == 'CVE-2024-3400')).all()
         assert stats['documents'] >= 6
         assert sorted(d.is_current for d in revisions) == [False, True]
+        with engine.connect() as connection:
+            empty = {
+                name
+                for name, table in Base.metadata.tables.items()
+                if not connection.execute(select(func.count()).select_from(table)).scalar()
+            }
+        # Every table holds data, so future migrations are tested against it; MFA would commit a secret.
+        assert empty == {'operator_mfa'}
     finally:
         engine.dispose()
 
