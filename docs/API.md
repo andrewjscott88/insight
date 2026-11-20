@@ -280,6 +280,7 @@ Errors:
 | --- | --- |
 | `GET /api/sources` | Registry entries with the last 5 runs each |
 | `POST /api/sources/{key}/sync` | `{"message": …}`. Keys: `cisa-kev`, `cisa-csaf`, `sans-isc`, `ncsc`. `404` unknown key, `409` another sync running, `502` failure (recorded as an error run). |
+| `POST /api/sources/sync-all` | `{"results": [{key, name, status, message}]}`: every source in registry order, one at a time. `status` is `success` or `error`; a failing source does not stop the others and is recorded as an error run. Always `200` once it has run; `409` another sync running. |
 | `POST /api/enrichment/{provider}/{cve}` | Provider JSON (`epss`, `nvd`), cached. `422` invalid input or unknown CVE, `429` within 6.5 s of the last lookup (a well-formed unknown CVE also starts the window), `502` provider failure, `403` for TLP-limited keys. |
 
 Sync and enrichment are the only routes that cause outbound network traffic.
@@ -289,6 +290,7 @@ Sync and enrichment are the only routes that cause outbound network traffic.
 | Route | Result |
 | --- | --- |
 | `GET /api/stats` | `{documents, entities, unreviewed, observations_unreviewed}` (current revisions only) |
+| `GET /api/brief?days=7` | The intel brief shown on the landing page, built from the data (no AI): `{days, since, summary: [sentence], sections: [{title, items: [{text, document_id, entity, search}], empty}]}`. `days` 1-30 (default 7). `summary` is the executive summary, most important first. Sections: *Exploited now* (CVEs added to CISA KEV in the window, then KEV CVEs that new reports from other sources mention), *Most severe* (CVSS 9 or higher in new CISA advisories), *Your watch terms*, *Seen in several sources* (indicators in new reports from two or more sources), *Most-mentioned vendors*. An item opens `document_id`, looks up the indicator `entity`, or searches reports for `search`. "New" means published in the window: KEV entries by the day CISA added them, CISA advisories by their first release, other reports by the day Insight received them; the synthetic demo is left out. Built only from reports the caller may see (TLP limit). |
 | `GET /api/audit` | Latest 200 audit events: `{action, object_id, detail, actor, created_at}`. Not available to TLP-limited keys |
 | `GET /api/watch-terms` | `[{id, term}]` |
 | `POST /api/demo` | `{"created": n}`; loads the synthetic demo, idempotent |

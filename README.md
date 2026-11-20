@@ -16,7 +16,13 @@ A single-operator threat-intelligence workbench, run locally or published behind
 - Accept/reject/reset observations, triage reports and add analyst notes with audit events.
 - Organization watch terms highlight literal product, vendor or topic matches. These are transparent keyword matches, not calibrated risk scores.
 - Explicit, on-demand connectors: CISA KEV, CISA security advisories (CISA's machine-readable CSAF files),
-  SANS ISC and UK NCSC feeds.
+  SANS ISC and UK NCSC feeds. **Sync all sources** at the top of the workspace runs them all in turn.
+- **Intel brief** on the landing page: what the last 7 days add up to, built from your reports (no AI). An
+  **executive summary** in a few plain sentences (what came in, what attackers are using now and the US federal
+  fix-by date, the most serious new weakness, what matches your watch terms, a first step), then *Exploited now*
+  (CISA KEV), *Most severe* (CVSS 9 or higher), *Your watch terms*, *Seen in several sources* and
+  *Most-mentioned vendors*. Every line opens its report, indicator or a search. "New" means published in the
+  last 7 days, so a first sync of old history does not flood it; the demo is left out. Also `GET /api/brief`.
 - On-demand NVD and FIRST EPSS CVE lookups; no API key required for this small-scale prototype. Provider throttling/outages still apply.
 - JSON report exports retain provenance and TLP; they are **not STIX** and do not authorize redistribution.
 - **IOC export**: one JSON file listing every indicator across your reports once, with its source reports, evidence, KEV context and the most restrictive TLP of the reports it includes. Filter by type, review status, highest TLP or report; defang for e-mail and tickets, and leave evidence out when sharing. **Export IOCs** in the workspace (with a live count preview), **Export this report's IOCs** in the reader, `insight export-iocs FILE` or `GET /api/iocs/export`. Not STIX and not a blocklist by itself: see [docs/IOC_EXPORT.md](docs/IOC_EXPORT.md).

@@ -131,15 +131,19 @@ def build_inbox(ws: Workspace) -> None:
     ws.on_refresh(document_list.refresh)
     ws.on_refresh(document_detail.refresh)
 
+    def search_reports(text: str) -> None:
+        search_box.set_value(text)  # Changing the value filters the list, as typing does.
+
     with ui.row().classes('w-full items-start gap-5 flex-wrap lg:flex-nowrap'):
         list_pane = 'panel document-list-pane p-3 sm:p-4 w-full lg:w-[22rem] lg:shrink-0 gap-3'
         with ui.column().classes(list_pane):
             with ui.row().classes('w-full justify-between items-center'):
                 heading('Reports', 2)
                 ui.button('Load demo', on_click=seed_demo).props('flat dense no-caps')
-            ui.input('Search intelligence', on_change=lambda e: set_filter(q=e.value)).props(
+            search_box = ui.input('Search intelligence', on_change=lambda e: set_filter(q=e.value)).props(
                 'outlined debounce=300 clearable'
-            ).classes('w-full')
+            )
+            search_box.classes('w-full')
             with ui.column().classes('w-full gap-3'):
                 ui.select(
                     [ALL_STATUSES, *DOCUMENT_STATUSES],
@@ -164,3 +168,4 @@ def build_inbox(ws: Workspace) -> None:
         reader_classes = 'panel document-reader p-4 sm:p-6 flex-1 min-w-0 w-full gap-3'
         with ui.column().classes(reader_classes).mark('document-detail'):
             document_detail()
+    ws.search_reports = search_reports

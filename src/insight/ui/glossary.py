@@ -106,8 +106,17 @@ GLOSSARY: Final[tuple[tuple[str, str], ...]] = (
         'The US Cybersecurity and Infrastructure Security Agency.',
     ),
     (
+        'AI',
+        'Short for artificial intelligence: programs, such as chatbots, that write text on their own. '
+        'Insight does not use them.',
+    ),
+    (
         'CSAF',
         'A way of writing security warnings so that computers can read them. CISA uses it for its warnings.',
+    ),
+    (
+        'CVSS',
+        'A score from 0 to 10 for how serious a weakness is. A score of 9 or more is critical.',
     ),
     (
         'EPSS (FIRST)',

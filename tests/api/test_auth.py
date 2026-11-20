@@ -35,6 +35,7 @@ PROTECTED = [
     ('GET', '/api/entities'),
     ('GET', '/api/entities/x'),
     ('GET', '/api/stats'),
+    ('GET', '/api/brief'),
     ('GET', '/api/sources'),
     ('GET', '/api/audit'),
     ('GET', '/api/watch-terms'),
@@ -44,6 +45,7 @@ PROTECTED = [
     ('POST', '/api/observations/x/review'),
     ('POST', '/api/demo'),
     ('POST', '/api/sources/cisa-kev/sync'),
+    ('POST', '/api/sources/sync-all'),
     ('POST', '/api/enrichment/epss/CVE-2024-12345'),
 ]
 

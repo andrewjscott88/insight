@@ -78,8 +78,14 @@ def build_entities(ws: Workspace) -> None:
     ws.on_refresh(entity_list.refresh)
     heading('Entity explorer', 2)
     ui.label('Trace every indicator back to the reports that mention it.').classes('muted prose')
-    ui.input('Search entity values', on_change=lambda e: search(e.value)).props(
+    search_box = ui.input('Search entity values', on_change=lambda e: search(e.value)).props(
         'outlined dense debounce=300 clearable'
-    ).classes('w-full max-w-xl')
+    )
+    search_box.classes('w-full max-w-xl')
+
+    def find(value: str) -> None:
+        search_box.set_value(value)  # Changing the value runs the search, as typing does.
+
+    ws.find_entity = find
     with ui.column().classes('w-full gap-3'):
         entity_list()
