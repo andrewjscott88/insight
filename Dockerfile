@@ -8,7 +8,7 @@
 # `python scripts/check_pins.py --strict` (release gate) fails until this is done; Dependabot keeps the
 # digests current afterwards. See docs/CI_CD.md.
 
-FROM python:3.13-slim@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90 AS build
+FROM python:3.15-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS build
 ENV PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 WORKDIR /src
 # The build backend is hash-pinned too, and used without build isolation so pip cannot fetch anything else.
@@ -18,7 +18,7 @@ COPY pyproject.toml README.md LICENSE NOTICE ./
 COPY src ./src
 RUN pip wheel --no-deps --no-build-isolation --wheel-dir /dist .
 
-FROM python:3.13-slim@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90 AS runtime
+FROM python:3.15-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS runtime
 ARG VERSION=dev
 ARG REVISION=unknown
 LABEL org.opencontainers.image.title="Insight" \
