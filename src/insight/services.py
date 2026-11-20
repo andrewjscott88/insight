@@ -17,7 +17,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, Final
 
-from sqlalchemy import ColumnElement, and_, func, or_, select
+from sqlalchemy import ColumnElement, and_, delete, func, or_, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from . import apikeys, totp
@@ -29,10 +30,13 @@ from .models import (
     Document,
     Enrichment,
     Entity,
+    FetchState,
+    Job,
     KEVRecord,
     Note,
     Observation,
     OperatorMfa,
+    Schedule,
     SourceRun,
     WatchTerm,
     now,
@@ -956,6 +960,156 @@ def recent_source_runs(db: Session, source_key: str | None = None, limit: int = 
 
 def cached_enrichments(db: Session, cve: str) -> list[Enrichment]:
     return list(db.scalars(select(Enrichment).where(Enrichment.cve == cve).order_by(Enrichment.provider)))
+
+
+# --------------------------------------------------------------------------- jobs, schedules, fetch state
+
+#: Choices for how often a source syncs by itself, in minutes (0: never, the default).
+SCHEDULE_INTERVALS: Final = (0, 60, 360, 1440)
+JOB_BACKOFF: Final = timedelta(minutes=5)
+JOB_ACTIVE: Final = ('queued', 'running')
+SOURCE_SYNC: Final = 'source.sync'
+
+
+def stamp(moment: datetime) -> str:
+    """The stored form of a moment: ISO-8601 in UTC, so strings sort in time order."""
+    return moment.astimezone(UTC).isoformat()
+
+
+def list_schedules(db: Session) -> dict[str, Schedule]:
+    return {s.source_key: s for s in db.scalars(select(Schedule))}
+
+
+def set_schedule(db: Session, source_key: str, interval_minutes: int, *, at: datetime) -> Schedule:
+    """Turn a source's schedule on (``interval_minutes`` from :data:`SCHEDULE_INTERVALS`) or off (``0``).
+
+    A schedule that is turned on runs at the next tick, then every interval. Callers check that the source
+    exists. Audited as ``schedule.update``.
+    """
+    if interval_minutes not in SCHEDULE_INTERVALS:
+        raise ValueError(f'Interval must be one of {", ".join(map(str, SCHEDULE_INTERVALS))} minutes')
+    schedule = db.get(Schedule, source_key) or Schedule(source_key=source_key)
+    was = schedule.interval_minutes if schedule.enabled else 0
+    schedule.interval_minutes = interval_minutes
+    schedule.enabled = interval_minutes > 0
+    if interval_minutes != was:  # Choosing the same interval again does not postpone the next run.
+        schedule.next_run_at = stamp(at) if schedule.enabled else None
+    schedule.updated_at = stamp(at)
+    schedule.actor = str(db.info.get('actor', DEFAULT_ACTOR))
+    db.add(schedule)
+    audit(
+        db, 'schedule.update', source_key, f'every {interval_minutes} minutes' if interval_minutes else 'off'
+    )
+    return schedule
+
+
+def enqueue_job(db: Session, kind: str, key: str, *, at: datetime, actor: str = '') -> Job:
+    """Queue ``kind`` for ``key`` to run now, or return the job already queued or running for it."""
+    if (active := _active_job(db, kind, key)) is not None:
+        return active
+    job = Job(kind=kind, key=key, status='queued', run_after=stamp(at), actor=actor)
+    try:
+        with db.begin_nested():
+            db.add(job)
+    except IntegrityError:  # Another process queued it between the check and the insert.
+        if (active := _active_job(db, kind, key)) is None:
+            raise
+        return active
+    return job
+
+
+def _active_job(db: Session, kind: str, key: str) -> Job | None:
+    return db.scalar(select(Job).where(Job.kind == kind, Job.key == key, Job.status.in_(JOB_ACTIVE)))
+
+
+def enqueue_due_schedules(db: Session, *, at: datetime) -> list[Job]:
+    """Queue a sync for every enabled schedule that is due, and move each one's next run on by its interval.
+
+    The next run counts from ``at``, not from the missed time, so a server that was off for days does not
+    catch up with a burst of syncs.
+    """
+    due = db.scalars(
+        select(Schedule)
+        .where(Schedule.enabled.is_(True), Schedule.next_run_at <= stamp(at))
+        .order_by(Schedule.source_key)
+    ).all()
+    jobs = []
+    for schedule in due:
+        jobs.append(enqueue_job(db, SOURCE_SYNC, schedule.source_key, at=at, actor='schedule'))
+        schedule.next_run_at = stamp(at + timedelta(minutes=schedule.interval_minutes))
+    return jobs
+
+
+def claim_job(db: Session, *, at: datetime) -> Job | None:
+    """Mark the oldest due queued job as running and return it, or ``None``.
+
+    The update only succeeds while the job is still queued, so of two runners that pick the same job exactly
+    one gets it (the other sees no row changed). Commit straight after, before running the job.
+    """
+    while (
+        candidate := db.scalar(
+            select(Job.id)
+            .where(Job.status == 'queued', Job.run_after <= stamp(at))
+            .order_by(Job.run_after, Job.created_at, Job.id)
+            .limit(1)
+        )
+    ) is not None:
+        claimed = db.execute(
+            update(Job)
+            .where(Job.id == candidate, Job.status == 'queued')
+            .values(status='running', started_at=stamp(at), attempts=Job.attempts + 1)
+            .execution_options(synchronize_session=False)
+        )
+        if claimed.rowcount == 1:  # type: ignore[attr-defined]
+            return db.get(Job, candidate, populate_existing=True)
+    return None
+
+
+def finish_job(db: Session, job_id: str, *, ok: bool, message: str, at: datetime) -> Job:
+    """Record how a running job ended. A failure with attempts left is queued again after a growing wait
+    (5, 10, 20 minutes ...); the last failure marks the job ``failed``."""
+    job = db.get(Job, job_id, populate_existing=True)
+    if job is None:
+        raise ValueError('Unknown job')
+    job.message = message[:2000]
+    if ok or job.attempts >= job.max_attempts:
+        job.status, job.finished_at = ('succeeded' if ok else 'failed'), stamp(at)
+    else:
+        job.status = 'queued'
+        job.run_after = stamp(at + JOB_BACKOFF * 2 ** (job.attempts - 1))
+    return job
+
+
+def requeue_running_jobs(db: Session) -> int:
+    """At start-up: jobs left ``running`` by a stopped process run again (their attempt still counts)."""
+    result = db.execute(update(Job).where(Job.status == 'running').values(status='queued'))
+    return int(result.rowcount)  # type: ignore[attr-defined]
+
+
+def prune_jobs(db: Session, *, before: datetime) -> int:
+    """Delete finished jobs that ended before ``before``; returns how many."""
+    result = db.execute(
+        delete(Job).where(Job.status.in_(('succeeded', 'failed')), Job.finished_at < stamp(before))
+    )
+    return int(result.rowcount)  # type: ignore[attr-defined]
+
+
+def recent_jobs(db: Session, limit: int = 20) -> list[Job]:
+    return list(db.scalars(select(Job).order_by(Job.created_at.desc(), Job.id).limit(limit)))
+
+
+def get_fetch_state(db: Session, url: str) -> FetchState | None:
+    return db.get(FetchState, url)
+
+
+def save_fetch_state(
+    db: Session, url: str, *, etag: str, last_modified: str, payload_sha256: str, version: str
+) -> None:
+    """Remember what ``url`` returned; call in the transaction that stores what was read from it."""
+    state = db.get(FetchState, url) or FetchState(url=url)
+    state.etag, state.last_modified = etag[:200], last_modified[:100]
+    state.payload_sha256, state.insight_version, state.updated_at = payload_sha256, version, now()
+    db.add(state)
 
 
 # --------------------------------------------------------------------------- API key (one active at a time)

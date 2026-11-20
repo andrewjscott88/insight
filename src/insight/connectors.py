@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import csv
+import hashlib
 import io
 import ipaddress
 import json
@@ -25,7 +26,7 @@ from sqlalchemy.orm import Session
 from . import __version__
 from .models import Enrichment, Entity, KEVRecord, SessionFactory, SourceRun, now
 from .schemas import DocumentInput
-from .services import SourceRef, ingest, set_actor
+from .services import SourceRef, get_fetch_state, ingest, save_fetch_state, set_actor
 
 MAX_BYTES: Final = 8_000_000
 MAX_FEED_ITEMS: Final = 100
@@ -149,15 +150,40 @@ async def _assert_public(hostname: str) -> None:
         raise ValueError('Source resolves to a non-public destination')
 
 
+#: The run message when a source has not changed since its last successful sync.
+UNCHANGED: Final = 'Unchanged since the last sync.'
+
+
+@dataclass(slots=True)
+class Validators:
+    """HTTP cache validators for one URL: sent as ``If-None-Match`` / ``If-Modified-Since`` and replaced by
+    what the response carries."""
+
+    etag: str = ''
+    last_modified: str = ''
+
+
+class NotModified(Exception):
+    """The server answered ``304 Not Modified`` to a request that carried :class:`Validators`."""
+
+
+def _validator(response: httpx.Response, name: str, limit: int) -> str:
+    value = response.headers.get(name, '').strip()
+    return value if len(value) <= limit and value.isprintable() else ''
+
+
 async def download(
     url: str,
     params: Mapping[str, str] | None = None,
     *,
     transport: httpx.AsyncBaseTransport | None = None,
+    validators: Validators | None = None,
 ) -> bytes:
     """Fetch ``url`` from the curated HTTPS registry with strict size and redirect limits.
 
-    ``transport`` exists for offline testing; production code never passes it.
+    With ``validators``, the request is conditional: an unchanged resource raises :class:`NotModified`, and a
+    changed one updates ``validators`` from the response. ``transport`` exists for offline testing; production
+    code never passes it.
     """
     parts = urlsplit(url)
     if parts.scheme != 'https' or parts.hostname not in ALLOWED_HOSTS or parts.username or parts.password:
@@ -169,19 +195,29 @@ async def download(
     if port not in (None, 443):
         raise ValueError('Outbound URL is not in the curated HTTPS source registry')
     await _assert_public(parts.hostname)
+    headers = {'User-Agent': USER_AGENT, 'Accept-Encoding': 'identity'}
+    if validators is not None and validators.etag:
+        headers['If-None-Match'] = validators.etag
+    if validators is not None and validators.last_modified:
+        headers['If-Modified-Since'] = validators.last_modified
     # Fixed application-owned hosts only. An egress firewall remains recommended against DNS rebinding.
     async with (
         httpx.AsyncClient(
             timeout=httpx.Timeout(25), follow_redirects=False, trust_env=False, transport=transport
         ) as client,
-        client.stream(
-            'GET', url, params=params, headers={'User-Agent': USER_AGENT, 'Accept-Encoding': 'identity'}
-        ) as response,
+        client.stream('GET', url, params=params, headers=headers) as response,
     ):
+        if response.status_code == 304:
+            if validators is not None:
+                raise NotModified(url)
+            raise ValueError('The server answered 304 Not Modified to a request that asked for no validation')
         # Check before raise_for_status(): httpx treats 3xx as an error, which would hide this message.
         if response.is_redirect:
             raise ValueError('Redirects are disabled; update the registry after reviewing the source')
         response.raise_for_status()
+        if validators is not None:
+            validators.etag = _validator(response, 'etag', 200)
+            validators.last_modified = _validator(response, 'last-modified', 100)
         data = bytearray()
         async for chunk in response.aiter_bytes():
             data.extend(chunk)
@@ -414,7 +450,9 @@ def parse_csaf(payload: bytes, source: Source, url: str) -> FeedItem:
     return FeedItem(document, advisory_id, truncated=cut)
 
 
-async def fetch_csaf(source: Source) -> tuple[list[FeedItem], int]:
+async def fetch_csaf(
+    source: Source, prefetched: Mapping[str, bytes] | None = None
+) -> tuple[list[FeedItem], int]:
     """Read every index of ``source``, then fetch and parse its :data:`CSAF_INBOX_LIMIT` newest advisories.
 
     Newest by publication date (from the file name), then by last change. Ranking by change time alone let
@@ -422,11 +460,12 @@ async def fetch_csaf(source: Source) -> tuple[list[FeedItem], int]:
     again while they stay among the newest, so CISA's updates to them still become revisions.
 
     Returns ``(items, skipped)``. One unreadable advisory is skipped and counted; an unreadable index, or no
-    readable advisory at all, raises.
+    readable advisory at all, raises. ``prefetched`` holds index payloads the caller already downloaded.
     """
     entries: dict[str, CsafEntry] = {}
     for index_url in source.indexes:
-        for entry in parse_csaf_changes(await download(index_url), index_url):
+        index = (prefetched or {}).get(index_url)
+        for entry in parse_csaf_changes(index if index is not None else await download(index_url), index_url):
             entries.setdefault(entry.url, entry)
     by_age = sorted(
         entries.values(), key=lambda e: (e.published or e.changed.date(), e.changed), reverse=True
@@ -514,9 +553,66 @@ def import_kev(db: Session, payload: bytes) -> tuple[int, int]:
     return len(validated), added
 
 
-def _store_source(session_factory: SessionFactory, source: Source, payload: bytes) -> str:
+@dataclass(frozen=True, slots=True)
+class Fetched:
+    """A changed payload of one URL, with what to remember about it once it is stored."""
+
+    url: str
+    payload: bytes
+    validators: Validators
+    sha256: str
+
+
+def _remember(db: Session, fetched: list[Fetched]) -> None:
+    for f in fetched:
+        save_fetch_state(
+            db,
+            f.url,
+            etag=f.validators.etag,
+            last_modified=f.validators.last_modified,
+            payload_sha256=f.sha256,
+            version=__version__,
+        )
+
+
+def _load_validators(session_factory: SessionFactory, url: str) -> tuple[Validators, str] | None:
+    """Validators and payload hash stored for ``url`` by this version of Insight, or ``None``."""
+    with session_factory() as db:
+        state = get_fetch_state(db, url)
+        if state is None or state.insight_version != __version__:
+            return None  # A new release re-reads every source once, in case its parsing changed.
+        return Validators(state.etag, state.last_modified), state.payload_sha256
+
+
+async def fetch_if_changed(session_factory: SessionFactory, url: str) -> Fetched | None:
+    """Download ``url`` unless it is unchanged since it was last stored: ``None`` then.
+
+    Unchanged means a ``304`` to a conditional request, or the same bytes as last time (for servers that
+    ignore ``If-None-Match`` and ``If-Modified-Since``).
+    """
+    stored = await asyncio.to_thread(_load_validators, session_factory, url)
+    validators = Validators(stored[0].etag, stored[0].last_modified) if stored else Validators()
+    try:
+        payload = await download(url, validators=validators)
+    except NotModified:
+        return None
+    digest = hashlib.sha256(payload).hexdigest()
+    if stored is not None and digest == stored[1]:
+        return None
+    return Fetched(url, payload, validators, digest)
+
+
+def _record_unchanged(session_factory: SessionFactory, source: Source) -> str:
+    with session_factory.begin() as db:
+        db.add(SourceRun(source_key=source.key, status='success', message=UNCHANGED))
+    return UNCHANGED
+
+
+def _store_source(session_factory: SessionFactory, source: Source, fetched: Fetched) -> str:
+    payload = fetched.payload
     with session_factory.begin() as db:
         set_actor(db, f'connector:{source.key}')
+        _remember(db, [fetched])
         if source.kind == 'kev':
             count, added = import_kev(db, payload)
             message = (
@@ -542,9 +638,17 @@ def _ingest_items(db: Session, source: Source, items: list[FeedItem]) -> int:
     )
 
 
-def _store_csaf(session_factory: SessionFactory, source: Source, items: list[FeedItem], skipped: int) -> str:
+def _store_csaf(
+    session_factory: SessionFactory,
+    source: Source,
+    items: list[FeedItem],
+    skipped: int,
+    indexes: list[Fetched],
+) -> str:
     with session_factory.begin() as db:
         set_actor(db, f'connector:{source.key}')
+        if not skipped:  # With advisories left unread, keep reading the index until they are all in.
+            _remember(db, indexes)
         message = f'Read {len(items)} advisories; {_ingest_items(db, source, items)} new reports.'
         if skipped:
             message += f' {skipped} could not be read.'
@@ -560,6 +664,8 @@ def _record_failure(session_factory: SessionFactory, key: str, message: str) -> 
 async def sync_source(session_factory: SessionFactory, key: str) -> str:
     """Download, validate and store one curated source. Every attempt is recorded as a ``SourceRun``.
 
+    A source that has not changed since its last successful sync is not read again (:data:`UNCHANGED`).
+
     Raises ``ValueError`` for an unknown source and :class:`SourceSyncError` for any sync failure.
     """
     source = SOURCES.get(key)
@@ -568,10 +674,15 @@ async def sync_source(session_factory: SessionFactory, key: str) -> str:
     try:
         # Database work is synchronous; keep it off the event loop so the UI stays responsive.
         if source.kind == 'csaf':
-            items, skipped = await fetch_csaf(source)
-            return await asyncio.to_thread(_store_csaf, session_factory, source, items, skipped)
-        payload = await download(source.url)
-        return await asyncio.to_thread(_store_source, session_factory, source, payload)
+            changed = [f for url in source.indexes if (f := await fetch_if_changed(session_factory, url))]
+            if not changed:
+                return await asyncio.to_thread(_record_unchanged, session_factory, source)
+            items, skipped = await fetch_csaf(source, {f.url: f.payload for f in changed})
+            return await asyncio.to_thread(_store_csaf, session_factory, source, items, skipped, changed)
+        fetched = await fetch_if_changed(session_factory, source.url)
+        if fetched is None:
+            return await asyncio.to_thread(_record_unchanged, session_factory, source)
+        return await asyncio.to_thread(_store_source, session_factory, source, fetched)
     except Exception as exc:
         # Store a bounded diagnostic, never response bodies or credentials.
         message = f'{type(exc).__name__}: {str(exc)[:350]}'

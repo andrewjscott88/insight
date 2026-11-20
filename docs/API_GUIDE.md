@@ -311,8 +311,21 @@ curl -sS "$INSIGHT_URL/api/sources" -H "Authorization: Bearer $INSIGHT_API_KEY" 
 curl -sS -X POST "$INSIGHT_URL/api/sources/cisa-kev/sync" -H "Authorization: Bearer $INSIGHT_API_KEY"
 # Run every source in turn (read-write key); each result says success or error, and one failure does not stop the rest
 curl -sS -X POST "$INSIGHT_URL/api/sources/sync-all" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq '.results[] | {key, status}'
+# How often each source syncs by itself (0: only when asked, the default)
+curl -sS "$INSIGHT_URL/api/schedules" -H "Authorization: Bearer $INSIGHT_API_KEY"
+# Recent background jobs (scheduled syncs) and how they went
+curl -sS "$INSIGHT_URL/api/jobs?limit=5" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq '.[] | {key, status, message}'
 # Look up a CVE that a report mentions (provider: epss or nvd). Cached; one lookup per 6.5 s across all callers
 curl -sS -X POST "$INSIGHT_URL/api/enrichment/epss/CVE-2023-34362" -H "Authorization: Bearer $INSIGHT_API_KEY"
+```
+
+Turning a schedule on or off is for a signed-in browser session (the *Sources* tab, or the cookie jar of §2.2)
+or the host's CLI, never an API key (`403`):
+
+```sh
+curl -sS -b "$JAR" -X PUT "$INSIGHT_URL/api/schedules/cisa-kev" -H "X-CSRF-Token: $CSRF" \
+  -H 'Content-Type: application/json' -d '{"interval_minutes": 360}'
+insight schedule all --every 24h      # on the host: every source once a day (off: only when asked)
 ```
 
 Enrichment answers `422` for a malformed or unknown CVE (`Import a report mentioning this CVE first`), `429`

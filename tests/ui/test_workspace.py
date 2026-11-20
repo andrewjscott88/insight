@@ -621,3 +621,37 @@ async def test_sync_all_waits_for_a_running_sync(user: User, ui_env: SimpleNames
         await user.should_see('Another source sync is running. Try again when it finishes.')
     finally:
         lock.release()
+
+
+# --------------------------------------------------------------------------- scheduled syncs
+
+
+def scheduled(env: SimpleNamespace) -> dict[str, int]:
+    with env.app.state.session_factory() as db:
+        return {k: (s.interval_minutes if s.enabled else 0) for k, s in services.list_schedules(db).items()}
+
+
+async def test_a_source_can_sync_by_itself(user: User, ui_env: SimpleNamespace) -> None:
+    import dataclasses
+
+    ui_env.app.state.settings = dataclasses.replace(ui_env.app.state.settings, run_jobs=True)
+    # Created in registry order, so the lowest element ID is the first source (CISA KEV).
+    selects = sorted(user.find(kind=ui.select, content='Sync by itself').elements, key=lambda e: e.id)
+    assert len(selects) == len(connectors.SOURCES)
+    assert all(s.value == 0 for s in selects)
+    await user.should_see('Syncs only when you ask.')
+    selects[0].set_value(360)
+    await user.should_see('CISA Known Exploited Vulnerabilities syncs by itself every 6 hours.')
+    await user.should_see('Next sync: ')
+    assert scheduled(ui_env) == {'cisa-kev': 360}
+    selects[0].set_value(0)
+    await user.should_see('CISA Known Exploited Vulnerabilities syncs now only when you press Sync now.')
+    assert scheduled(ui_env) == {'cisa-kev': 0}
+
+
+async def test_one_choice_schedules_every_source(user: User, ui_env: SimpleNamespace) -> None:
+    user.find(kind=ui.select, content='Sync all sources by themselves').elements.pop().set_value(1440)
+    # The test server runs no job runner, and the workspace says so rather than pretending.
+    await user.should_see('The schedule is saved, but this server does not run scheduled syncs')
+    assert scheduled(ui_env) == dict.fromkeys(connectors.SOURCES, 1440)
+    assert all(s.value == 1440 for s in user.find(kind=ui.select, content='Sync by itself').elements)

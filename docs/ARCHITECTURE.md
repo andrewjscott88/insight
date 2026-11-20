@@ -18,15 +18,19 @@ The narrower first release trades the research report's React, RabbitMQ/Celery, 
 - `schemas.py`: bounded validated inputs.
 - `extraction.py`: deterministic mention extraction (`regex-v2`: refanging, TLD validation, context rules). See [EXTRACTION.md](EXTRACTION.md).
 - `data/tlds.txt`: bundled ICANN TLD list (from the Public Suffix List; see `NOTICE`).
-- `services.py`: ingestion, revisions, search, read models, the intel brief's facts, IOC export queries and analyst
+- `services.py`: ingestion, revisions, search, read models, the intel brief's facts, the job queue and schedules,
+  IOC export queries and analyst
   actions (the only SQL layer).
 - `ioc_export.py`: the cross-report IOC export format (`insight-ioc-v1`): grouping, TLP labelling and defanging. Pure functions, no SQL.
 - `connectors.py`: curated feed/KEV/CSAF/NVD/EPSS integration, one source at a time or all in turn (`sync_all`).
+  Conditional fetching (`ETag` / `Last-Modified`, then a payload hash) skips unchanged feeds.
+- `jobs.py`: the in-process job runner for opt-in scheduled syncs ([ADR 0018](adr/0018-opt-in-scheduled-syncs.md)).
+  No SQL: the queue, schedules and fetch state are service functions.
 - `brief.py`: the intel brief's wording (headline and sections) from facts that `services.brief_data` gathers.
   Pure functions, no SQL, no AI.
 - `apikeys.py`: API key format, generation and hashing (pure functions). `totp.py`: RFC 6238 codes for the sign-in second factor (pure, standard library only). `ratelimit.py`: in-process per-caller token buckets and the API's policies ([ADR 0012](adr/0012-single-api-key-and-rate-limits.md)).
 - `main.py`: authentication, sessions, CSRF, API and security boundary. `create_app` only composes: state, middleware, then one `_register_*` function per route group (pages, login, workspace, documents, triage, exports, entities, sources, enrichment). Shared pieces (`session_checker`, `auth_dependency`, `start_session`, `get_document_or_404`, `ioc_export_query`) are module-level so they can be tested alone (`tests/api/test_app_factory.py`).
-- `ui/`: NiceGUI workspace, one module per panel (`inbox`, `entities`, `watch_terms`, `sources`, `enrichment`, `ingest`, `ioc_export`, `stats`, `brief`), plus `workspace.py` (typed per-tab state and cross-panel hooks), `page.py` (layout), `reader.py` (the report reader), `theme.py` (light and dark colour tokens), `styles.py` (the style sheet: type scale, reading width, focus outline, phone rules), `typography.py` (real headings, new-tab links), `messages.py` (messages that stay until dismissed), `glossary.py` ("What the words mean"), `appearance.py` (the Light/Dark/System and "Larger text" buttons) and `mobile.py` (phone inbox navigation). Readability rules: [ADR 0017](adr/0017-readability-standard.md).
+- `ui/`: NiceGUI workspace, one module per panel (`inbox`, `entities`, `watch_terms`, `sources`, `enrichment`, `ingest`, `ioc_export`, `stats`, `brief`, `schedules`), plus `workspace.py` (typed per-tab state and cross-panel hooks), `page.py` (layout), `reader.py` (the report reader), `theme.py` (light and dark colour tokens), `styles.py` (the style sheet: type scale, reading width, focus outline, phone rules), `typography.py` (real headings, new-tab links), `messages.py` (messages that stay until dismissed), `glossary.py` ("What the words mean"), `appearance.py` (the Light/Dark/System and "Larger text" buttons) and `mobile.py` (phone inbox navigation). Readability rules: [ADR 0017](adr/0017-readability-standard.md).
 - `appearance.py`: the theme vocabulary shared by the configuration, the sign-in pages and the workspace (`INSIGHT_THEME`, the per-device `insight_theme` cookie). See [ADR 0016](adr/0016-colour-themes-and-per-device-choice.md).
 - `templates/`, `static/app.css`: the sign-in and sign-out pages, in the same themes.
 - `demo.py`: synthetic reserved-namespace examples.

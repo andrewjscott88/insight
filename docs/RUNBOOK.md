@@ -25,6 +25,7 @@ The Makefile wraps these (`make help`); the commands it runs are the ones in the
 | Version | `make version` · `make health` | `docker compose exec insight insight --version` · `curl -s http://127.0.0.1:8080/health` |
 | API key | `make api-key-create NAME=siem` · `make api-key-status` · `-rotate` · `-revoke` | `docker compose exec insight insight api-key …` |
 | Sign-in MFA (off by default) | `make mfa-enable` · `make mfa-disable` · `make mfa-status` · `make mfa-reset` | §4, "Sign-in second factor" |
+| Scheduled syncs (off by default) | Sources tab: *Sync by itself* | `docker compose exec insight insight schedule all --every 24h` · `insight schedule` lists them (§8) |
 | Default colour theme (System by default) | `make theme THEME=dark` · `make up THEME=light` | Set `INSIGHT_THEME` in `.env`, then `docker compose up -d` (§4, "Colour theme") |
 
 ## 1. System overview
@@ -36,7 +37,7 @@ Browser ──HTTP (127.0.0.1:8080)──► uvicorn (1 worker)
                                          │
                                   services.py (only SQL layer) ──► SQLite /data/insight.db
                                          │                          (or PostgreSQL)
-                                  connectors.py ──HTTPS (on demand only)──► CISA, SANS ISC, UK NCSC, FIRST, NVD
+                                  connectors.py ──HTTPS (on demand or on a schedule you set)──► CISA, GitHub (CISA CSAF), SANS ISC, UK NCSC, FIRST, NVD
 ```
 
 | Item | Location / value |
@@ -64,12 +65,13 @@ Set in `.env` (Compose reads it) or the process environment. Real environment va
 | `INSIGHT_TRUSTED_PROXIES` | no | none | Reverse proxy address(es), IPs or CIDRs (`172.18.0.1`, `10.0.0.0/24`). See "Reverse proxy" below. `*` and malformed entries stop start-up. |
 | `INSIGHT_MFA` | no | `off` | `on` requires an authenticator-app code at sign-in (`make mfa-enable` pairs the app and sets it). Anything other than on/off stops start-up. |
 | `INSIGHT_MAX_TLP` | no | `AMBER+STRICT` | Most restrictive label stored. Reports at or raised to a higher label (i.e. TLP:RED) are refused on upload. `RED` allows everything. |
+| `INSIGHT_RUN_JOBS` | no | `on` | Run scheduled syncs in this process ([ADR 0018](adr/0018-opt-in-scheduled-syncs.md)). Nothing is scheduled until you choose a schedule (§8). Set `off` in every process but one if you run several. Anything other than on/off stops start-up. |
 | `INSIGHT_THEME` | no | `system` | Colour theme for browsers that have not picked one: `system` (follow each device's light/dark setting), `light` or `dark`. Each browser can override it with the Light/Dark/System buttons in the workspace header (`make theme THEME=dark` sets it). Anything else stops start-up. |
 | `NICEGUI_STORAGE_PATH` | no | `/data/.nicegui` in the image | Must be writable |
 
 Never commit `.env`: a pre-commit hook and CI block it. Treat the file like the password it contains.
 
-Invalid values for `INSIGHT_TRUSTED_PROXIES`, `INSIGHT_MAX_TLP`, `INSIGHT_MFA` or `INSIGHT_THEME` stop start-up with a message naming the
+Invalid values for `INSIGHT_TRUSTED_PROXIES`, `INSIGHT_MAX_TLP`, `INSIGHT_MFA`, `INSIGHT_RUN_JOBS` or `INSIGHT_THEME` stop start-up with a message naming the
 variable, rather than running with a setting that silently does nothing.
 
 ### Reverse proxy (public deployment)
@@ -291,9 +293,23 @@ does not start.
 
 ## 8. Sources, enrichment and their failures
 
-Nothing syncs automatically. **Sync now** contacts exactly one publisher and records a run (success or error)
-under *Recent sync activity*. **Sync all sources** (top of the workspace, or `POST /api/sources/sync-all`) does
-the same for every source in turn; a failing source does not stop the others, and the message names it. Enrichment (EPSS/NVD) sends only the CVE identifier, after explicit consent, at
+Nothing syncs automatically unless you turn on a schedule. **Sync now** contacts exactly one publisher and
+records a run (success or error) under *Recent sync activity*. **Sync all sources** (top of the workspace, or
+`POST /api/sources/sync-all`) does the same for every source in turn; a failing source does not stop the
+others, and the message names it.
+
+**Schedules** ([ADR 0018](adr/0018-opt-in-scheduled-syncs.md)) make a source sync by itself: *Off* (default),
+*Every hour*, *Every 6 hours* or *Every day*, per source or for all at once, in the Sources tab (which also
+shows the next sync), or on the host with `insight schedule SOURCE|all --every off|1h|6h|24h` (`insight
+schedule` alone lists them). API keys may read schedules (`GET /api/schedules`) but not change them. A schedule
+you turn on syncs within a minute, then every interval. Scheduled syncs run inside `insight serve` while
+`INSIGHT_RUN_JOBS` is on (the default); the start-up log names every enabled schedule. A failed scheduled sync
+is tried again after 5, then 10 minutes, and each attempt appears in *Recent sync activity*. `GET /api/jobs`
+lists recent jobs.
+
+Every sync, by hand or by schedule, first asks the publisher whether the feed has changed (`If-None-Match`,
+`If-Modified-Since`) and compares the bytes with last time. An unchanged feed records `Unchanged since the last
+sync.` and nothing else. After an upgrade, every source is read once in full. Enrichment (EPSS/NVD) sends only the CVE identifier, after explicit consent, at
 most once every 6.5 s.
 
 | Message (run history / API 502) | Meaning | Action |
@@ -305,6 +321,7 @@ most once every 6.5 s.
 | `ValueError: Source exceeds the 8 MB payload limit` | Feed grew | Confirm it is legitimate; raise `MAX_BYTES` in a release |
 | `ValueError: Invalid CVE in KEV input` / `Invalid KEV record field` | KEV format changed | Nothing was imported (all-or-nothing). Report it; the nightly live tests should also flag it. |
 | `Read N advisories; … X could not be read.` (success) | Some CISA advisory files failed to download or are not valid CSAF | The others were imported; the next sync tries again. Report it if it persists. |
+| `Unchanged since the last sync.` (success) | The publisher's feed has not changed since the last successful sync | Nothing to do; nothing was re-imported. |
 | `ValueError: The CSAF index lists no advisories` / `None of the N newest CSAF advisories could be read` | CISA moved or changed its CSAF repository | Nothing was imported. Report it; the nightly live tests should also flag it. |
 | `OSError` / `ConnectError` | No network or DNS | Check host egress (an egress firewall is recommended) |
 | Enrichment `429` | Less than 6.5 s since the last lookup | Wait |

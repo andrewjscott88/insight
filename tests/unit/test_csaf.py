@@ -318,7 +318,8 @@ async def test_sync_reads_the_newest_advisories_across_folders(
     message = await sync_source(session_factory, 'cisa-csaf')
     assert message == 'Read 2 advisories; 2 new reports.'
     assert calls == [OT_INDEX, IT_INDEX, ICS_URL, IT_URL]  # indexes first, then newest first
-    assert await sync_source(session_factory, 'cisa-csaf') == 'Read 2 advisories; 0 new reports.'
+    # Nothing changed in either index: the advisories are not read again.
+    assert await sync_source(session_factory, 'cisa-csaf') == connectors.UNCHANGED
     with session_factory() as db:
         docs = db.scalars(select(Document).order_by(Document.external_id)).all()
         assert [(d.source_key, d.external_id, d.tlp) for d in docs] == [
@@ -381,6 +382,7 @@ async def test_an_updated_advisory_becomes_a_revision(
     updated = advisory()
     updated['document']['tracking'] |= {'version': '2', 'current_release_date': '2026-12-01T00:00:00Z'}
     files[ICS_URL] = encode(updated)
+    files[OT_INDEX] = index(('2026/icsa-26-323-03.json', '2026-12-01T00:00:00Z'))  # CISA dates the change
     assert await sync_source(session_factory, 'cisa-csaf') == 'Read 1 advisories; 1 new reports.'
     with session_factory() as db:
         docs = db.scalars(select(Document).order_by(Document.created_at)).all()

@@ -79,6 +79,12 @@ class ObservationReview(BaseModel):
     status: ReviewStatus
 
 
+class ScheduleInput(BaseModel):
+    """``PUT /api/schedules/{key}``: how often the source syncs by itself, in minutes (0: off)."""
+
+    interval_minutes: int
+
+
 class NoteInput(BaseModel):
     body: str = Field(min_length=1, max_length=10_000)
 

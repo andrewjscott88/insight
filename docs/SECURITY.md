@@ -42,7 +42,7 @@ For one operator reaching their own instance (and their scripts/SIEM) over the i
 | Data on the server | TLP:RED refused by default (`INSIGHT_MAX_TLP`) | Review reports stored before the limit (start-up logs the count) |
 | Accountability | Audit actor per event; key ID in logs | Ship logs somewhere you monitor (RUNBOOK section 11) |
 | Backups | `make backup`, tested restore drill | Store backups encrypted, off the host |
-| Egress | Fixed connector hosts, no redirects | An outbound firewall (DNS rebinding, section above) |
+| Egress | Fixed connector hosts, no redirects; scheduled syncs only for sources the operator scheduled, never set by an API key, every run recorded ([ADR 0018](adr/0018-opt-in-scheduled-syncs.md)) | An outbound firewall (DNS rebinding, section above); `INSIGHT_RUN_JOBS=off` if no process should go online by itself |
 
 Still missing before any **multi-user** or shared use: SSO/OIDC, per-user accounts and roles, TLP recipient
 enforcement, durable shared sessions and rate limits (several workers or hosts), tamper-evident audit logs, and

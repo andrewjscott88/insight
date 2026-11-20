@@ -19,7 +19,7 @@ UI_MODULES = sorted((PACKAGE / 'ui').glob('*.py'))
 FRONT_ENDS = [*UI_MODULES, PACKAGE / 'main.py']
 SQL_BUILDERS = {'select', 'insert', 'update', 'delete', 'func', 'or_', 'and_', 'text'}
 ORM_CLASSES = {'Document', 'Entity', 'Observation', 'Note', 'AuditEvent', 'KEVRecord', 'WatchTerm'}
-ORM_CLASSES |= {'SourceRun', 'Enrichment', 'ApiKey'}
+ORM_CLASSES |= {'SourceRun', 'Enrichment', 'ApiKey', 'Job', 'Schedule', 'FetchState'}
 
 
 def imports(path: Path) -> list[tuple[str, str]]:

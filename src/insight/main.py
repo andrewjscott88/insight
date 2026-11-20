@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hmac
 import logging
 import secrets
@@ -50,6 +51,7 @@ from .schemas import (
     IocExportQuery,
     NoteInput,
     ObservationReview,
+    ScheduleInput,
     validation_message,
 )
 
@@ -64,6 +66,9 @@ ENRICHMENT_INTERVAL_SECONDS: Final = 6.5
 SAFE_METHODS: Final = frozenset({'GET', 'HEAD', 'OPTIONS'})
 #: Routes only a signed-in browser session may use (an API key has no CSRF token to fetch).
 SESSION_ONLY_ROUTES: Final = frozenset({'/api/session'})
+#: Settings only a signed-in browser session (or the host's CLI) may change: how often Insight goes online by
+#: itself is the operator's decision, not a script's.
+SESSION_ONLY_WRITE_PREFIXES: Final = ('/api/schedules',)
 #: Routes a TLP-limited key may not use: the audit log and CVE enrichment reveal things about reports the
 #: key cannot see (audit details, whether a CVE is mentioned anywhere).
 UNLIMITED_READER_PREFIXES: Final = ('/api/audit', '/api/enrichment/')
@@ -301,6 +306,10 @@ def auth_dependency(
                 raise HTTPException(403, 'Not available to API keys')
             if method not in SAFE_METHODS and caller.access != 'read-write':
                 raise HTTPException(403, 'This API key is read-only')
+            if method not in SAFE_METHODS and path.startswith(SESSION_ONLY_WRITE_PREFIXES):
+                raise HTTPException(
+                    403, 'Schedules can be changed in the workspace or with `insight schedule` only'
+                )
             if caller.max_tlp is not None and path.startswith(UNLIMITED_READER_PREFIXES):
                 raise HTTPException(403, 'Not available to TLP-limited API keys')
         else:
@@ -749,7 +758,8 @@ def _register_entity_routes(app: FastAPI, sessions: SessionFactory, require_auth
 
 
 def _register_source_routes(app: FastAPI, sessions: SessionFactory, require_auth: AuthDependency) -> None:
-    """Curated connectors. Sync is the only route besides enrichment that makes outbound requests."""
+    """Curated connectors and their schedules. Sync is the only route besides enrichment that makes outbound
+    requests; schedules make the job runner sync by itself (``insight.jobs``)."""
 
     @app.get('/api/sources', dependencies=[Depends(require_auth)])
     def sources() -> list[dict[str, Any]]:
@@ -779,6 +789,55 @@ def _register_source_routes(app: FastAPI, sessions: SessionFactory, require_auth
                 return {'message': await sync_source(sessions, key)}
             except SourceSyncError as exc:
                 raise HTTPException(502, str(exc)) from exc
+
+    def schedule_view(key: str, schedule: Any) -> dict[str, Any]:
+        on = schedule is not None and schedule.enabled
+        return {
+            'source_key': key,
+            'interval_minutes': schedule.interval_minutes if on else 0,
+            'next_run_at': schedule.next_run_at if on else None,
+            'updated_at': schedule.updated_at if schedule is not None else None,
+        }
+
+    @app.get('/api/schedules', dependencies=[Depends(require_auth)])
+    def schedules() -> list[dict[str, Any]]:
+        """How often each source syncs by itself (0: only when asked, the default)."""
+        with sessions() as db:
+            stored = services.list_schedules(db)
+        return [schedule_view(key, stored.get(key)) for key in SOURCES]
+
+    @app.put('/api/schedules/{key}', dependencies=[Depends(require_auth)])
+    def set_schedule(key: str, body: ScheduleInput, request: Request) -> dict[str, Any]:
+        """Browser session only (see ``SESSION_ONLY_WRITE_PREFIXES``); audited as ``schedule.update``."""
+        if key not in SOURCES:
+            raise HTTPException(404, 'Unknown source')
+        try:
+            with acting(sessions, request) as db:
+                schedule = services.set_schedule(db, key, body.interval_minutes, at=datetime.now(UTC))
+                return schedule_view(key, schedule)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @app.get('/api/jobs', dependencies=[Depends(require_auth)])
+    def jobs(limit: Annotated[int, Query(ge=1, le=100)] = 20) -> list[dict[str, Any]]:
+        """Recent background jobs (scheduled syncs), newest first."""
+        with sessions() as db:
+            return [
+                {
+                    'id': j.id,
+                    'kind': j.kind,
+                    'key': j.key,
+                    'status': j.status,
+                    'attempts': j.attempts,
+                    'run_after': j.run_after,
+                    'started_at': j.started_at,
+                    'finished_at': j.finished_at,
+                    'message': j.message,
+                    'actor': j.actor,
+                    'created_at': j.created_at,
+                }
+                for j in services.recent_jobs(db, limit)
+            ]
 
     @app.post('/api/sources/sync-all', dependencies=[Depends(require_auth)])
     async def sync_every_source() -> dict[str, list[dict[str, str]]]:
@@ -871,10 +930,21 @@ def create_app(settings: Settings | None = None, *, with_ui: bool = True) -> Fas
     engine, sessions = database(settings.database_url)
 
     @asynccontextmanager
-    async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
+    async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
+        stop = asyncio.Event()
+        runner = None
+        if settings.run_jobs:
+            from .jobs import run_forever  # Deferred: keeps `import insight.main` light for tools and tests.
+
+            runner = asyncio.create_task(run_forever(sessions, application.state.sync_lock, stop))
         try:
             yield
         finally:
+            stop.set()
+            if runner is not None:
+                # A sync in progress gets a moment to finish; an unfinished job runs again at the next start.
+                with contextlib.suppress(TimeoutError, asyncio.CancelledError):
+                    await asyncio.wait_for(runner, timeout=30)
             engine.dispose()  # Also on a failed shutdown, so pooled connections are always released.
 
     app = FastAPI(

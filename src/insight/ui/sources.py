@@ -9,6 +9,7 @@ from nicegui import ui
 from .. import services
 from ..connectors import SOURCES, Source, sync_all, sync_source
 from .messages import tell
+from .schedules import build_all_sources_schedule, build_schedule_control
 from .typography import heading, new_tab_link
 from .workspace import Workspace
 
@@ -23,9 +24,10 @@ def build_sources(ws: Workspace) -> None:
                 (r.source_key, r.status, r.created_at, r.message) for r in services.recent_source_runs(db)
             ]
         if not runs:
-            ui.label('No source syncs yet. Insight only goes online when you press Sync now.').classes(
-                'muted prose'
+            nothing = (
+                'No source syncs yet. Insight only goes online when you press Sync now or turn on a schedule.'
             )
+            ui.label(nothing).classes('muted prose')
         for source_key, status, created_at, message in runs:
             with ui.column().classes('panel p-3 w-full gap-1'):
                 ui.label(f'{source_key} · {status} · {created_at[:16]}').classes('text-sm')
@@ -55,17 +57,22 @@ def build_sources(ws: Workspace) -> None:
     ws.on_refresh(source_history.refresh)
     heading('Public sources', 2)
     ui.label(
-        'Nothing syncs by itself. When you press Sync now, Insight fetches public reports from that '
-        'publisher and keeps them here. Sync all sources, at the top of the page, does this for each one in '
-        'turn. It never sends your own reports anywhere.'
+        'Nothing syncs by itself unless you turn on a schedule. When you press Sync now, Insight fetches '
+        'public reports from that publisher and keeps them here. Sync all sources, at the top of the page, '
+        'does this for each one in turn. A schedule does it for you, and skips a feed that has not changed. '
+        'Insight never sends your own reports anywhere.'
     ).classes('muted prose')
+    selects: dict[str, ui.select] = {}
+    build_all_sources_schedule(ws, selects)
     for source in SOURCES.values():
         with ui.column().classes('panel w-full p-4 my-3'):
             heading(source.name, 3)
             ui.label(source.note).classes('muted text-sm prose')
             new_tab_link(f'View the {source.name} feed', source.url)
-            sync_button = ui.button('Sync now')
-            sync_button.on_click(lambda key=source.key, button=sync_button: run(key, button))
+            with ui.row().classes('items-center gap-3 flex-wrap'):
+                sync_button = ui.button('Sync now')
+                sync_button.on_click(lambda key=source.key, button=sync_button: run(key, button))
+                selects[source.key] = build_schedule_control(ws, source)
     heading('Recent sync activity', 3, 'subsection-title mt-4')
     with ui.column().classes('w-full gap-3'):
         source_history()

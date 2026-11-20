@@ -193,3 +193,25 @@ def test_a_route_group_can_be_mounted_and_tested_alone(session_factory: sessionm
         }
         assert client.get('/api/watch-terms').json() == []
     assert calls == ['/api/stats', '/api/watch-terms']  # the injected auth dependency guarded both routes
+
+
+def test_the_job_runner_starts_and_stops_with_the_app(settings: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    import asyncio
+    import dataclasses
+
+    from insight import jobs
+
+    seen: list[str] = []
+
+    async def fake_runner(sessions: Any, lock: asyncio.Lock, stop: asyncio.Event, **_: Any) -> None:
+        seen.append('started')
+        await stop.wait()
+        seen.append('stopped')
+
+    monkeypatch.setattr(jobs, 'run_forever', fake_runner)
+    with TestClient(main.create_app(dataclasses.replace(settings, run_jobs=True), with_ui=False)):
+        assert seen == ['started']
+    assert seen == ['started', 'stopped']
+    with TestClient(main.create_app(settings, with_ui=False)):
+        pass
+    assert seen == ['started', 'stopped']  # run_jobs off: no runner
