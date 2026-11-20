@@ -1,7 +1,7 @@
 """Cross-report indicator-of-compromise export (``insight-ioc-v1``): pure formatting, no database access.
 
 ``services.export_iocs`` loads the matching mentions and calls :func:`build_export`. Keeping this module free
-of SQL makes the output format easy to test and keeps ``services.py`` the only query layer (ADR 0003).
+of SQL makes the output format easy to test and keeps ``insight.services`` the only query layer (ADR 0003).
 
 Output rules:
 

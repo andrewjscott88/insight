@@ -17,6 +17,7 @@ import insight
 PACKAGE = Path(insight.__file__).parent
 UI_MODULES = sorted((PACKAGE / 'ui').glob('*.py'))
 FRONT_ENDS = [*UI_MODULES, PACKAGE / 'main.py']
+SERVICE_MODULES = sorted((PACKAGE / 'services').glob('*.py'))
 SQL_BUILDERS = {'select', 'insert', 'update', 'delete', 'func', 'or_', 'and_', 'text'}
 ORM_CLASSES = {'Document', 'Entity', 'Observation', 'Note', 'AuditEvent', 'KEVRecord', 'WatchTerm'}
 ORM_CLASSES |= {'SourceRun', 'Enrichment', 'ApiKey', 'Job', 'Schedule', 'FetchState'}
@@ -37,6 +38,39 @@ def imports(path: Path) -> list[tuple[str, str]]:
 def test_ui_package_was_split() -> None:
     assert len(UI_MODULES) >= 8
     assert all(len(p.read_text().splitlines()) < 300 for p in UI_MODULES), 'keep UI modules small'
+
+
+def test_services_is_a_package_of_small_domain_modules() -> None:
+    """B3: one module per domain, so new features land in their own module instead of a 1,300-line file."""
+    assert not (PACKAGE / 'services.py').exists()
+    names = {p.stem for p in SERVICE_MODULES}
+    assert {'tlp', 'audit', 'documents', 'search', 'entities', 'exports', 'triage', 'jobs', 'access'} <= names
+    assert all(len(p.read_text().splitlines()) < 400 for p in SERVICE_MODULES), 'keep service modules small'
+
+
+def test_the_tlp_core_imports_nothing_from_its_siblings() -> None:
+    """``services.tlp`` decides what a reader may see; keep it small and free of other domains' logic."""
+    sibling = {p.stem for p in SERVICE_MODULES} - {'__init__'}
+    for module, name in imports(PACKAGE / 'services' / 'tlp.py'):
+        assert module.lstrip('.') not in sibling, module
+        assert not (module == '.' and name in sibling), name
+
+
+def test_every_public_service_name_is_re_exported() -> None:
+    """Callers write ``services.ingest(...)``; a name missing from ``__init__`` would break them silently."""
+    from insight import services
+
+    for path in SERVICE_MODULES:
+        if path.stem == '__init__':
+            continue
+        tree = ast.parse(path.read_text())
+        public = {
+            node.name
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef | ast.ClassDef) and not node.name.startswith('_')
+        }
+        missing = sorted(name for name in public if name not in services.__all__)
+        assert missing == [], f'services/{path.name}: add {missing} to services/__init__.py'
 
 
 @pytest.mark.parametrize('path', FRONT_ENDS, ids=lambda p: p.name)

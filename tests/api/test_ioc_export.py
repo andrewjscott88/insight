@@ -120,7 +120,7 @@ def test_invalid_filters_are_rejected(authed: TestClient, params: dict[str, str]
 def test_oversized_exports_ask_for_narrower_filters(
     authed: TestClient, reports: tuple[dict[str, Any], ...], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(services, 'MAX_EXPORT_MENTIONS', 1)
+    monkeypatch.setattr(services.exports, 'MAX_EXPORT_MENTIONS', 1)
     response = authed.get('/api/iocs/export')
     assert response.status_code == 422
     assert 'narrow the filters' in response.json()['detail']

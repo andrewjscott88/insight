@@ -4,7 +4,7 @@
 
 Browser → NiceGUI Python page callbacks / FastAPI API → **services** → SQLAlchemy → SQLite or PostgreSQL.
 
-`services.py` is the only query and command layer. Neither front end (`main.py` for the JSON API, `ui/` for the workspace) builds SQL or, in the UI's case, imports ORM classes. `tests/unit/test_architecture.py` enforces this, so search semantics, revision handling and auditing cannot drift apart between the API and the UI again.
+The `insight.services` package is the only query and command layer. Neither front end (`main.py` for the JSON API, `ui/` for the workspace) builds SQL or, in the UI's case, imports ORM classes. `tests/unit/test_architecture.py` enforces this, so search semantics, revision handling and auditing cannot drift apart between the API and the UI again.
 
 Explicit source sync → fixed HTTPS connector → bounded parse → document/entity/observation transaction.
 
@@ -18,9 +18,13 @@ The narrower first release trades the research report's React, RabbitMQ/Celery, 
 - `schemas.py`: bounded validated inputs.
 - `extraction.py`: deterministic mention extraction (`regex-v2`: refanging, TLD validation, context rules). See [EXTRACTION.md](EXTRACTION.md).
 - `data/tlds.txt`: bundled ICANN TLD list (from the Public Suffix List; see `NOTICE`).
-- `services.py`: ingestion, revisions, search, read models, the intel brief's facts, the job queue and schedules,
-  IOC export queries and analyst
-  actions (the only SQL layer).
+- `services/`: the only SQL layer, one module per domain. `__init__` re-exports every public name, so callers
+  write `services.ingest(...)` without knowing the module. `tlp` (levels and visibility, the security core;
+  imports nothing from its siblings), `audit`, `common` (text folding, LIKE patterns, timestamps),
+  `documents` (ingest, fingerprints, revisions), `search` (search, summaries, the reader view, stats),
+  `entities` (pivots), `triage` (review, notes, watch terms), `brief` (the intel brief's facts), `exports`
+  (IOC export queries), `sources` (source runs, enrichment cache, fetch state), `jobs` (queue and schedules)
+  and `access` (API keys, MFA).
 - `ioc_export.py`: the cross-report IOC export format (`insight-ioc-v1`): grouping, TLP labelling and defanging. Pure functions, no SQL.
 - `connectors.py`: curated feed/KEV/CSAF/NVD/EPSS integration, one source at a time or all in turn (`sync_all`).
   Conditional fetching (`ETag` / `Last-Modified`, then a payload hash) skips unchanged feeds.

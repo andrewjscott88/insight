@@ -21,6 +21,13 @@
   feed records `Unchanged since the last sync.` and nothing else, so KEV's 1.3 MB catalogue is no longer
   re-read and rewritten when nothing changed. After an upgrade, each source is read once in full.
 
+### Changed: the service layer is a package (internal)
+- `services.py` (1,300 lines) is now `insight/services/`, one module per domain: `tlp`, `audit`, `common`,
+  `documents`, `search`, `entities`, `triage`, `brief`, `exports`, `sources`, `jobs` and `access`. Every public
+  name is re-exported, so `services.ingest(...)` and every other call site work unchanged. New architecture
+  tests keep the modules small, keep `services.tlp` free of other domains' logic, and fail if a public name is
+  not re-exported (review finding B3). No behaviour changes.
+
 ### Changed: CI actions updated
 - `actions/checkout` v5 → v7.0.1, `actions/setup-python` v6 → v7.1.0 and the CodeQL Action v3 → v4.39.3, in
   every workflow (from Dependabot's #19). None of the workflows uses `pull_request_target`, `workflow_run` or

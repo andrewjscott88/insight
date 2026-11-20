@@ -35,7 +35,7 @@ Browser ──HTTP (127.0.0.1:8080)──► uvicorn (1 worker)
                                     ├─ FastAPI: /login, /logout, /api/*, /health, /static
                                     └─ NiceGUI workspace (/) over a WebSocket
                                          │
-                                  services.py (only SQL layer) ──► SQLite /data/insight.db
+                                  services/ (only SQL layer) ────► SQLite /data/insight.db
                                          │                          (or PostgreSQL)
                                   connectors.py ──HTTPS (on demand or on a schedule you set)──► CISA, GitHub (CISA CSAF), SANS ISC, UK NCSC, FIRST, NVD
 ```
