@@ -13,7 +13,8 @@ A single-operator threat-intelligence workbench, run locally or published behind
 - Deterministic extraction of CVEs, IPv4/IPv6, URLs, domains and MD5/SHA1/SHA256/SHA512 mentions, including defanged (`hxxp`, `[.]`) and international (punycode) forms. It is precision-first: about 98% precision and recall on the labelled corpus ([docs/EXTRACTION.md](docs/EXTRACTION.md)).
 - TLP defaults to AMBER, and a `TLP:` marking inside a report can only raise its label, never lower it.
 - Exact character offsets and contextual evidence, canonical entities and cross-report pivots.
-- Accept/reject/reset observations, triage reports and add analyst notes with audit events.
+- Accept/reject/reset observations, triage reports and add analyst notes with audit events. Delete a report
+  for legal or retention reasons with `make delete-report` (CLI only; audited, repairs revisions).
 - **Verdicts and a safe blocklist.** Accept only says a value was copied correctly; a separate **verdict** (benign,
   suspicious, malicious, with a reason, its own TLP label and an optional end date) says what it means, from the
   reader or the entity explorer. **Warnings** mark values that must never be blocked (private, reserved and
@@ -88,6 +89,7 @@ the reference. Common ones:
 | First run | `make env` (creates `.env`, never overwrites) · `make up` |
 | Run | `make up` · `make stop` · `make restart` · `make down` · `make logs` · `make ps` · `make health` |
 | Back up / restore | `make backup` (into `backups/`) · `make restore BACKUP=backups/backup-....db` (asks first) |
+| Delete a report (legal or retention reasons) | `make delete-report ID=... REASON='ticket 42'` (asks first; back up first) |
 | Export IOCs | `make export-iocs EXPORT_ARGS="--max-tlp GREEN --review-status accepted --defang --no-evidence"` (into `exports/`) |
 | API key | `make api-key-create NAME=siem [ACCESS=read-write] [MAX_TLP=GREEN]` · `make api-key-status` · `make api-key-rotate` · `make api-key-revoke` |
 | Sign-in MFA (off by default) | `make mfa-enable` · `make mfa-disable` · `make mfa-status` · `make mfa-reset` |

@@ -250,6 +250,22 @@ def test_restore_stops_copies_the_backup_in_and_starts(project: Path, args: list
 # --------------------------------------------------------------------------- API key
 
 
+def test_delete_report_needs_an_id_and_a_reason(project: Path) -> None:
+    for args in (['delete-report'], ['delete-report', 'ID=abc'], ['delete-report', 'REASON=ticket 42']):
+        result = make(project, *args)
+        assert result.returncode != 0
+        assert 'usage: make delete-report ID=<report id> REASON=' in result.stderr
+    assert calls(project) == []
+
+
+def test_delete_report_passes_the_reason_as_one_word(project: Path) -> None:
+    result = make(project, 'delete-report', 'ID=abc-123', 'REASON=it\'s ticket 42, "done"; rm -rf / $$HOME')
+    assert result.returncode == 0, result.stderr
+    assert calls(project) == [
+        'run --rm insight insight delete-report abc-123 --reason it\'s ticket 42, "done"; rm -rf / $HOME'
+    ]
+
+
 def test_api_key_create_needs_a_name(project: Path) -> None:
     result = make(project, 'api-key-create')
     assert result.returncode != 0

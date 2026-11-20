@@ -360,7 +360,7 @@ shows history.
   So by default TLP:RED never reaches the server. A text that only *mentions* "TLP:RED" is refused too: reword
   the marking if it is not the report's own handling label. Connector items (public feeds) and the synthetic
   demo are not limited. Reports stored before the limit are kept and stay readable; at start-up Insight logs
-  how many exceed it. Review them and delete any that must not stay (procedure below) before exposing the
+  how many exceed it. Review them and delete any that must not stay (`make delete-report`, below) before exposing the
   instance.
 
 **Exports** keep provenance and TLP. They are not permission to share.
@@ -375,38 +375,28 @@ shows history.
 - CLI exports are written owner-only (`0600`). Browser and API downloads follow your normal file permissions.
   Exports written into the Docker volume stay there until you remove them, so copy them out and delete them.
 
-**Deleting a document** (legal or retention obligations). There is no delete function yet, so use this tested
-procedure. It preserves the revision chain and audits the deletion.
+**Deleting a report** (legal or retention obligations). Reports can carry victims' names, addresses and hosts,
+so the law may require you to delete one. Deletion has no undo and needs shell access, like API keys and MFA
+(no API route or button).
 
-1. Stop Insight and **take a backup** (§5).
-2. Find the document ID (shown in the export file name, or `GET /api/documents?q=…`).
-3. Run this in the data volume. Replace `DOC_ID` and the reason; `python -m sqlite3` ships with the image.
+1. **Take a backup** (§5).
+2. Find the report ID (in the export file name, `GET /api/documents?q=…`, or the reader's URL).
+3. Run, with a reason your records can trace (a ticket, the retention rule):
    ```sh
-   docker compose run --rm --no-deps --entrypoint python insight -m sqlite3 /data/insight.db   # or: make db-shell
+   make delete-report ID=<report id> REASON='ticket 1234: retention period ended'
+   # without Docker: insight delete-report <report id> --reason '...'   (add --yes for scripts)
    ```
-   ```sql
-   PRAGMA foreign_keys = ON;
-   BEGIN IMMEDIATE;
-   CREATE TEMP TABLE target AS SELECT id, supersedes_id, is_current FROM documents WHERE id = 'DOC_ID';
-   UPDATE documents SET supersedes_id = (SELECT supersedes_id FROM target) WHERE supersedes_id = 'DOC_ID';
-   DELETE FROM observations WHERE document_id = 'DOC_ID';
-   DELETE FROM notes WHERE document_id = 'DOC_ID';
-   DELETE FROM documents WHERE id = 'DOC_ID';
-   UPDATE documents SET is_current = 1 WHERE id = (SELECT supersedes_id FROM target WHERE is_current = 1);
-   DELETE FROM entities WHERE id NOT IN (SELECT DISTINCT entity_id FROM observations);
-   INSERT INTO audit_events (id, action, object_id, detail, created_at)
-   VALUES (lower(hex(randomblob(16))), 'document.delete', 'DOC_ID', 'manual deletion: <reason / ticket>',
-           strftime('%Y-%m-%dT%H:%M:%f+00:00', 'now'));
-   DROP TABLE target;
-   COMMIT;
-   PRAGMA foreign_key_check;
-   PRAGMA integrity_check;
-   ```
-4. Start Insight. Backups taken before the deletion still contain the document, so apply your retention policy
-   to them too.
+   It shows the report and what goes with it, and deletes only after you type `delete`.
 
-The order matters: the predecessor is re-activated only after the target is gone, because of the "one
-current revision per item" index. This procedure was tested for current, superseded and manual documents.
+In one transaction it deletes the report, its observations and notes, and every indicator that no other report
+mentions, with any verdict on it. It repairs the revision chain: later revisions point past the deleted one, and
+when it was the current revision of a synced item, the newest remaining revision becomes current. One
+`document.delete` audit event (actor `cli`) keeps the reason, the content hash and the counts, never the title or
+the text. Insight can stay running.
+
+Two things it cannot reach: **backups** taken before the deletion still contain the report, so apply your
+retention policy to them; and a report **synced from a public source** comes back if the publisher still lists
+the item and the feed changes, so remove it at the source too or turn that source's schedule off.
 
 ## 10. Troubleshooting
 
@@ -481,7 +471,7 @@ verify the signature (§6).
 - One API key at a time; rotation takes effect immediately (no overlap), so update the client right after
   `make api-key-rotate`.
 - `make smoke` and `scripts/smoke.py` sign in with the password only, so they need MFA off.
-- No delete function (use §9); audit events are not tamper-proof.
+- Deleting a report is CLI-only (`make delete-report`, §9); audit events are not tamper-proof.
 - Extraction is deterministic regex plus validation (about 98% precision and recall on the labelled corpus).
   Known gaps:
   - a hash split evenly into two valid lengths stays two hashes;

@@ -515,3 +515,106 @@ def test_schedule_at_a_time_of_day(sqlite_env: Path, capsys: pytest.CaptureFixtu
     assert out.count(' 00:00 UTC') == 4
     assert cli.main(['schedule', 'ncsc', '--every', '6h', '--at', '25:00']) == 1
     assert 'HH:MM in UTC' in capsys.readouterr().err
+
+
+def _seed_report(data: Path, body: str = 'Beacons to evil-one.net') -> str:
+    from insight import services
+    from insight.models import database
+    from insight.schemas import DocumentInput
+
+    engine, sessions = database(f'sqlite:///{data / "insight.db"}', migrate=False)
+    try:
+        with sessions.begin() as db:
+            doc, _ = services.ingest(db, DocumentInput(title='Victim report', body=body, source_name='S'))
+            return doc.id
+    finally:
+        engine.dispose()
+
+
+def _stored(data: Path, document_id: str) -> tuple[bool, set[str]]:
+    from insight.models import AuditEvent, Document, database
+
+    engine, sessions = database(f'sqlite:///{data / "insight.db"}', migrate=False)
+    try:
+        with sessions() as db:
+            actors = {e.actor for e in db.query(AuditEvent).filter(AuditEvent.action == 'document.delete')}
+            return db.get(Document, document_id) is not None, actors
+    finally:
+        engine.dispose()
+
+
+def test_delete_report_shows_what_goes_and_asks_first(
+    sqlite_env: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    doc_id = _seed_report(sqlite_env)
+    prompts: list[str] = []
+
+    def answer(prompt: str) -> str:
+        prompts.append(prompt)
+        return 'delete'
+
+    monkeypatch.setattr('builtins.input', answer)
+    assert cli.main(['delete-report', doc_id, '--reason', 'ticket 9']) == 0
+    out = capsys.readouterr().out
+    assert 'This deletes, with no undo:' in out
+    assert 'Victim report' in out
+    assert '1 observation' in out
+    assert prompts == ['Type delete to go ahead: ']
+    assert f'Deleted report {doc_id}' in out
+    assert 'Audited as document.delete' in out
+    assert 'Backups taken before now still contain the report' in out
+    assert _stored(sqlite_env, doc_id) == (False, {'cli'})
+
+
+@pytest.mark.parametrize('answer', ['', 'no', 'y'])
+def test_delete_report_can_be_cancelled(
+    sqlite_env: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], answer: str
+) -> None:
+    doc_id = _seed_report(sqlite_env)
+    monkeypatch.setattr('builtins.input', lambda _prompt: answer)
+    assert cli.main(['delete-report', doc_id, '--reason', 'ticket 9']) == 0
+    assert 'Cancelled; nothing was deleted.' in capsys.readouterr().out
+    assert _stored(sqlite_env, doc_id) == (True, set())
+
+
+def test_delete_report_yes_skips_the_question(
+    sqlite_env: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    doc_id = _seed_report(sqlite_env)
+
+    def no_questions(_prompt: str) -> str:
+        raise AssertionError('--yes must not ask')
+
+    monkeypatch.setattr('builtins.input', no_questions)
+    assert cli.main(['delete-report', doc_id, '--reason', 'ticket 9', '--yes']) == 0
+    assert _stored(sqlite_env, doc_id)[0] is False
+
+
+def test_delete_report_cancelled_by_end_of_input(
+    sqlite_env: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    doc_id = _seed_report(sqlite_env)
+
+    def end_of_input(_prompt: str) -> str:
+        raise EOFError
+
+    monkeypatch.setattr('builtins.input', end_of_input)
+    assert cli.main(['delete-report', doc_id, '--reason', 'ticket 9']) == 1
+    assert 'Cancelled; nothing was deleted.' in capsys.readouterr().err
+    assert _stored(sqlite_env, doc_id)[0] is True
+
+
+@pytest.mark.parametrize(
+    ('argv', 'code', 'message'),
+    [
+        (['delete-report'], 2, 'usage: insight delete-report ID --reason TEXT'),
+        (['delete-report', 'some-id'], 2, 'usage: insight delete-report ID --reason TEXT'),
+        (['delete-report', 'nope', '--reason', 'r', '--yes'], 1, 'no report with ID nope'),
+        (['delete-report', 'nope', '--reason', '   ', '--yes'], 1, 'say why'),
+    ],
+)
+def test_delete_report_usage_errors(
+    sqlite_env: Path, capsys: pytest.CaptureFixture[str], argv: list[str], code: int, message: str
+) -> None:
+    assert cli.main(argv) == code
+    assert message in capsys.readouterr().err
