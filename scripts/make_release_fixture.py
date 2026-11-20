@@ -6,8 +6,8 @@ fixture, so a migration that breaks real user data fails CI long before it reach
 The database is written through the normal services (not raw SQL) and exercises every table: demo reports,
 a KEV entry with a publisher edit (revisions), an RSS item, a reviewed manual report with an accepted
 observation, a note and a verdict, a watch term, a source run, a cached enrichment, a schedule, a queued job,
-a remembered feed download and an API key (its token is thrown away). All data is synthetic. Only the MFA
-pairing is left out: it would put an authenticator secret in the repository.
+a remembered feed download, an API key and a signed-in session (their secrets are thrown away). All data is
+synthetic. Only the MFA pairing is left out: it would put an authenticator secret in the repository.
 """
 
 from __future__ import annotations
@@ -79,7 +79,7 @@ def build(path: Path) -> None:
             services.add_watch_term(db, 'GlobalProtect')
             db.add(SourceRun(source_key='cisa-kev', status='success', message='fixture'))
             db.add(Enrichment(cve='CVE-2024-3400', provider='epss', payload='{"data": []}'))
-            # Tables added in 0.6.0 (and api_keys, added in 0.5.0), so later migrations are tested against them.
+            # Tables added in 0.5.0 and 0.6.0, so later migrations are tested against data in them.
             beacon = db.scalar(select(Entity).where(Entity.value == '198.51.100.7'))
             if beacon is None:
                 raise RuntimeError('fixture report produced no beacon address')
@@ -88,10 +88,12 @@ def build(path: Path) -> None:
             when = datetime(2026, 11, 20, tzinfo=UTC)
             services.set_schedule(db, 'cisa-kev', 1440, at=when)
             services.enqueue_job(db, services.SOURCE_SYNC, 'sans-isc', at=when, actor='fixture')
+            kev_url = SOURCES['cisa-kev'].url
             services.save_fetch_state(
-                db, SOURCES['cisa-kev'].url, etag='"fixture"', last_modified='', payload_sha256='0' * 64, version='1'
+                db, kev_url, etag='"fixture"', last_modified='', payload_sha256='0' * 64, version='1'
             )
             services.create_api_key(db, name='fixture', access='read', max_tlp='GREEN')
+            services.start_operator_session(db, binding='fixture', at=when)  # its ID is thrown away
     finally:
         engine.dispose()
 
