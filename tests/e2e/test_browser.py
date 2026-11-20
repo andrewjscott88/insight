@@ -134,9 +134,30 @@ def test_sign_out_revokes_other_tabs(context: Any) -> None:
     expect(workspace.get_by_text('Intelligence workspace', exact=True)).to_be_visible()
     other = context.new_page()
     other.goto('/logout')
-    other.get_by_role('button', name='Sign out').click()
+    # exact: the page also has "Sign out everywhere", and Playwright matches names by substring.
+    other.get_by_role('button', name='Sign out', exact=True).click()
     expect(other).to_have_url(re.compile(r'/login$'))
     # The first tab is still open; its next action must be refused and bounce to the sign-in page.
+    workspace.get_by_role('button', name='Load demo').click()
+    expect(workspace).to_have_url(re.compile(r'/login'))
+
+
+def test_sign_out_everywhere_reaches_another_browser(browser: Any, context: Any) -> None:
+    """Review B4: a second browser (its own cookies, like another device) signs this one out too."""
+    workspace = context.new_page()
+    sign_in(workspace)
+    expect(workspace.get_by_text('Intelligence workspace', exact=True)).to_be_visible()
+    other_device = browser.new_context(base_url=BASE_URL)
+    other_device.set_default_timeout(TIMEOUT)
+    try:
+        page = other_device.new_page()
+        sign_in(page)
+        expect(page.get_by_text('Intelligence workspace', exact=True)).to_be_visible()
+        page.goto('/logout')
+        page.get_by_role('button', name='Sign out everywhere', exact=True).click()
+        expect(page).to_have_url(re.compile(r'/login$'))
+    finally:
+        other_device.close()
     workspace.get_by_role('button', name='Load demo').click()
     expect(workspace).to_have_url(re.compile(r'/login'))
 
