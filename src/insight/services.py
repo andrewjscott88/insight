@@ -596,6 +596,163 @@ def count_entity_documents(db: Session, entity_id: str, *, max_tlp: str | None =
     return db.scalar(stmt) or 0
 
 
+# --------------------------------------------------------------------------- intel brief
+
+#: Sources whose report bodies carry CVSS scores and vendor lines (the CSAF connector's format); ``brief.py``
+#: reads them. Bodies of other reports are not loaded for the brief.
+SCORED_SOURCES: Final = ('cisa-csaf',)
+KEV_SOURCE: Final = 'cisa-kev'
+MAX_BRIEF_DOCUMENTS: Final = 2_000
+MAX_BRIEF_ITEMS: Final = 10
+
+
+@dataclass(frozen=True, slots=True)
+class BriefDocument:
+    """A current report created in the brief's window. ``body`` is loaded for :data:`SCORED_SOURCES` only."""
+
+    id: str
+    title: str
+    source_name: str
+    source_key: str | None
+    created_at: str
+    body: str
+
+
+@dataclass(frozen=True, slots=True)
+class BriefKev:
+    """A CVE on CISA's Known Exploited Vulnerabilities list, and the report to open for it (``''``: none)."""
+
+    cve: str
+    vendor: str
+    product: str
+    date_added: str
+    document_id: str
+    reports: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class BriefShared:
+    """An indicator that reports from at least two different sources mention."""
+
+    kind: str
+    value: str
+    sources: int
+    reports: int
+
+
+@dataclass(frozen=True, slots=True)
+class BriefData:
+    """Everything the intel brief is built from (``brief.compose`` turns it into words)."""
+
+    since: str
+    documents: list[BriefDocument]
+    kev_added: list[BriefKev]
+    kev_mentioned: list[BriefKev]
+    shared: list[BriefShared]
+
+
+def brief_data(db: Session, *, since: str, max_tlp: str | None = None) -> BriefData:
+    """Facts for the intel brief: current reports created at or after ``since`` (ISO-8601 UTC), newest first.
+
+    * ``kev_added``: CVEs CISA added to its exploited list on or after ``since``'s date.
+    * ``kev_mentioned``: CVEs on that list that reports in the window from *other* sources mention.
+    * ``shared``: indicators that window reports from two or more sources mention.
+
+    ``max_tlp`` leaves out reports above the reader's limit, so nothing in the brief comes from them. The KEV
+    list itself is public.
+    """
+    window = [Document.is_current.is_(True), Document.created_at >= since, *_visible(max_tlp)]
+    scored = Document.source_key.in_(SCORED_SOURCES)
+    rows = db.execute(
+        select(
+            Document.id,
+            Document.title,
+            Document.source_name,
+            Document.source_key,
+            Document.created_at,
+            scored,
+        )
+        .where(*window)
+        .order_by(Document.created_at.desc(), Document.id)
+        .limit(MAX_BRIEF_DOCUMENTS)
+    ).all()
+    bodies = dict(
+        db.execute(
+            select(Document.id, Document.body).where(Document.id.in_([r[0] for r in rows if r[5]]))
+        ).all()
+    )
+    documents = [BriefDocument(i, t, n, k, c, bodies.get(i, '')) for i, t, n, k, c, _ in rows]
+
+    added = db.scalars(
+        select(KEVRecord)
+        .where(KEVRecord.date_added >= since[:10])
+        .order_by(KEVRecord.date_added.desc(), KEVRecord.cve)
+        .limit(MAX_BRIEF_ITEMS)
+    ).all()
+    kev_reports = dict(
+        db.execute(
+            select(Document.external_id, Document.id).where(
+                Document.source_key == KEV_SOURCE,
+                Document.external_id.in_([k.cve for k in added]),
+                Document.is_current.is_(True),
+                *_visible(max_tlp),
+            )
+        ).all()
+    )
+    kev_added = [
+        BriefKev(k.cve, k.vendor, k.product, k.date_added, kev_reports.get(k.cve, '')) for k in added
+    ]
+
+    elsewhere = [*window, or_(Document.source_key.is_(None), Document.source_key != KEV_SOURCE)]
+    reports = func.count(func.distinct(Document.id))
+    mentioned = db.execute(
+        select(Entity.id, KEVRecord, reports)
+        .join(Observation, Observation.entity_id == Entity.id)
+        .join(Document, Observation.document_id == Document.id)
+        .join(KEVRecord, KEVRecord.cve == Entity.value)
+        .where(Entity.kind == 'cve', *elsewhere)
+        .group_by(Entity.id, KEVRecord.cve)
+        .order_by(reports.desc(), KEVRecord.date_added.desc(), KEVRecord.cve)
+        .limit(MAX_BRIEF_ITEMS)
+    ).all()
+    kev_mentioned = [
+        BriefKev(k.cve, k.vendor, k.product, k.date_added, _newest_mention(db, entity_id, elsewhere), count)
+        for entity_id, k, count in mentioned
+    ]
+
+    sources = func.count(func.distinct(Document.source_name))
+    shared = db.execute(
+        select(Entity.kind, Entity.value, sources, reports)
+        .join(Observation, Observation.entity_id == Entity.id)
+        .join(Document, Observation.document_id == Document.id)
+        .where(*window)
+        .group_by(Entity.id, Entity.kind, Entity.value)
+        .having(sources >= 2)
+        .order_by(sources.desc(), reports.desc(), Entity.kind, Entity.value)
+        .limit(MAX_BRIEF_ITEMS)
+    ).all()
+    return BriefData(
+        since=since,
+        documents=documents,
+        kev_added=kev_added,
+        kev_mentioned=kev_mentioned,
+        shared=[BriefShared(kind, value, n, count) for kind, value, n, count in shared],
+    )
+
+
+def _newest_mention(db: Session, entity_id: str, conditions: list[ColumnElement[bool]]) -> str:
+    return (
+        db.scalar(
+            select(Document.id)
+            .join(Observation, Observation.document_id == Document.id)
+            .where(Observation.entity_id == entity_id, *conditions)
+            .order_by(Document.created_at.desc(), Document.id)
+            .limit(1)
+        )
+        or ''
+    )
+
+
 # --------------------------------------------------------------------------- IOC export
 
 

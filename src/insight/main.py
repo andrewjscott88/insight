@@ -9,7 +9,8 @@ import secrets
 import time
 from collections.abc import AsyncGenerator, Callable, Iterator, Mapping
 from contextlib import asynccontextmanager, contextmanager
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any, Final, Literal, TypeAlias
 
@@ -28,12 +29,14 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from . import __version__, apikeys, services
 from .appearance import PAGE_BACKGROUND, TEXT_SIZE_COOKIE, THEME_COOKIE, text_size_choice, theme_choice
+from .brief import DEFAULT_DAYS, MAX_DAYS, compose, window_start
 from .config import Settings
 from .connectors import (
     SOURCES,
     ProviderError,
     SourceSyncError,
     enrich_cve,
+    sync_all,
     sync_source,
     validate_enrichment,
 )
@@ -777,6 +780,20 @@ def _register_source_routes(app: FastAPI, sessions: SessionFactory, require_auth
             except SourceSyncError as exc:
                 raise HTTPException(502, str(exc)) from exc
 
+    @app.post('/api/sources/sync-all', dependencies=[Depends(require_auth)])
+    async def sync_every_source() -> dict[str, list[dict[str, str]]]:
+        """Every source in turn; one failing source does not stop the rest (each result says how it went)."""
+        if app.state.sync_lock.locked():
+            raise HTTPException(409, 'Another source job is running')
+        async with app.state.sync_lock:
+            results = await sync_all(sessions)
+        return {
+            'results': [
+                {'key': r.key, 'name': r.name, 'status': 'success' if r.ok else 'error', 'message': r.message}
+                for r in results
+            ]
+        }
+
 
 def _register_enrichment_route(app: FastAPI, sessions: SessionFactory, require_auth: AuthDependency) -> None:
     """Explicit, globally throttled CVE lookups (sends only the CVE identifier to the provider)."""
@@ -802,7 +819,7 @@ def _register_enrichment_route(app: FastAPI, sessions: SessionFactory, require_a
 
 
 def _register_workspace_routes(app: FastAPI, sessions: SessionFactory, require_auth: AuthDependency) -> None:
-    """Session token, counters, demo data, audit log and watch terms."""
+    """Session token, counters, intel brief, demo data, audit log and watch terms."""
 
     @app.get('/api/session', dependencies=[Depends(require_auth)])
     def session_info(request: Request) -> dict[str, str]:
@@ -812,6 +829,16 @@ def _register_workspace_routes(app: FastAPI, sessions: SessionFactory, require_a
     def stats(request: Request) -> dict[str, int]:
         with sessions() as db:
             return services.stats(db, max_tlp=reader_limit(request))
+
+    @app.get('/api/brief', dependencies=[Depends(require_auth)])
+    def brief(
+        request: Request, days: Annotated[int, Query(ge=1, le=MAX_DAYS)] = DEFAULT_DAYS
+    ) -> dict[str, Any]:
+        """The intel brief for the last ``days`` days, from the reports this caller may see."""
+        since = window_start(datetime.now(UTC), days)
+        with sessions() as db:
+            data = services.brief_data(db, since=since, max_tlp=reader_limit(request))
+        return asdict(compose(data, days))
 
     @app.post('/api/demo', dependencies=[Depends(require_auth)])
     def demo(request: Request) -> dict[str, int]:

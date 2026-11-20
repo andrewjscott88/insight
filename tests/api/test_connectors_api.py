@@ -98,6 +98,31 @@ def test_failed_sync_is_502_recorded_and_not_partially_imported(
     assert source['runs'][0]['status'] == 'error'
 
 
+def test_sync_all_reports_each_source_and_records_every_run(
+    authed: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def download(url: str, params: Any = None, **_: Any) -> bytes:
+        if url == connectors.SOURCES['cisa-kev'].url:
+            return KEV
+        if url.endswith('changes.csv'):
+            raise OSError('offline')
+        return b'<rss/>'
+
+    monkeypatch.setattr(connectors, 'download', download)
+    response = authed.post('/api/sources/sync-all')
+    assert response.status_code == 200, response.text
+    results = response.json()['results']
+    assert [(r['key'], r['status']) for r in results] == [
+        ('cisa-kev', 'success'), ('cisa-csaf', 'error'), ('sans-isc', 'success'), ('ncsc', 'success')
+    ]  # fmt: skip
+    assert results[1] == {
+        'key': 'cisa-csaf', 'name': connectors.SOURCES['cisa-csaf'].name, 'status': 'error',
+        'message': 'OSError: offline',
+    }  # fmt: skip
+    listed = {s['key']: s['runs'][0]['status'] for s in authed.get('/api/sources').json()}
+    assert listed == {'cisa-kev': 'success', 'cisa-csaf': 'error', 'sans-isc': 'success', 'ncsc': 'success'}
+
+
 def test_unknown_source_is_404(authed: TestClient) -> None:
     assert authed.post('/api/sources/arbitrary/sync').status_code == 404
 
@@ -110,8 +135,8 @@ def test_concurrent_sync_is_rejected(app: FastAPI, authed: TestClient) -> None:
 
     asyncio.run(hold())  # The lock is not bound to a loop until contended, so this is safe.
     try:
-        response = authed.post('/api/sources/cisa-kev/sync')
-        assert response.status_code == 409
+        assert authed.post('/api/sources/cisa-kev/sync').status_code == 409
+        assert authed.post('/api/sources/sync-all').status_code == 409
     finally:
         lock.release()
 

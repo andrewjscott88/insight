@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Added: Sync all sources and an intel brief on the landing page
+- **Sync all sources**, next to *Export IOCs*, syncs every source in turn and shows how far it has got
+  (`Syncing 2 of 4: …`). A failing source does not stop the others; the message names it and the *Sources* tab
+  shows why. Same as `POST /api/sources/sync-all`. Nothing syncs by itself, as before.
+- **Intel brief**, under the counters: what the last 7 days add up to, built from the data rather than written by
+  AI, so it never says anything the reports do not. A headline (new reports and sources, weaknesses CISA newly
+  lists as exploited, critical ones), then four short sections: *Exploited now*, *Most severe* (CVSS 9 or
+  higher in new CISA advisories), *Seen in several sources* and *Most-mentioned vendors*. Each line opens its
+  report, or the indicator in the entity explorer. Also `GET /api/brief?days=7`, which honours the key's TLP
+  limit.
+
 ### Changed: CISA advisories now come from CISA's CSAF files
 - **CISA Security Advisories** (`cisa-csaf`) replaces **CISA Cybersecurity Advisories** (`cisa-advisories`).
   cisa.gov answers `403 Access Denied` to automated clients for its advisories RSS feed, whatever their request

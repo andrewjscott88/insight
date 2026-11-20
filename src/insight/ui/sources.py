@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from typing import Final
+
 from nicegui import ui
 
 from .. import services
-from ..connectors import SOURCES, sync_source
+from ..connectors import SOURCES, Source, sync_all, sync_source
 from .messages import tell
 from .typography import heading, new_tab_link
 from .workspace import Workspace
@@ -54,7 +56,8 @@ def build_sources(ws: Workspace) -> None:
     heading('Public sources', 2)
     ui.label(
         'Nothing syncs by itself. When you press Sync now, Insight fetches public reports from that '
-        'publisher and keeps them here. It never sends your own reports anywhere.'
+        'publisher and keeps them here. Sync all sources, at the top of the page, does this for each one in '
+        'turn. It never sends your own reports anywhere.'
     ).classes('muted prose')
     for source in SOURCES.values():
         with ui.column().classes('panel w-full p-4 my-3'):
@@ -66,3 +69,48 @@ def build_sources(ws: Workspace) -> None:
     heading('Recent sync activity', 3, 'subsection-title mt-4')
     with ui.column().classes('w-full gap-3'):
         source_history()
+
+
+SYNC_ALL: Final = 'Sync all sources'
+
+
+def build_sync_all_button(ws: Workspace) -> ui.button:
+    """One button that syncs every source in turn, shows how far it has got, and sums up the results."""
+
+    async def run_all(button: ui.button) -> None:
+        if not ws.authorized():
+            return
+        lock = ws.app.state.sync_lock
+        if lock.locked():
+            tell('Another source sync is running. Try again when it finishes.', 'warning')
+            return
+
+        def started(position: int, total: int, source: Source) -> None:
+            button.set_text(f'Syncing {position} of {total}: {source.name}')
+
+        button.disable()
+        try:
+            async with lock:
+                results = await sync_all(ws.sessions, on_start=started)
+            if not ws.authorized():
+                return
+            failed = [r.name for r in results if not r.ok]
+            if failed:
+                tell(
+                    f'{len(results) - len(failed)} of {len(results)} sources synced. Failed: '
+                    f'{", ".join(failed)}. The Sources tab shows why.',
+                    'warning',
+                )
+            else:
+                tell(
+                    f'All {len(results)} sources synced. The Sources tab shows what each one added.',
+                    'success',
+                )
+            ws.refresh_all()
+        finally:
+            button.set_text(SYNC_ALL)
+            button.enable()
+
+    button = ui.button(SYNC_ALL, icon='sync').props('outline').classes('flex-1 sm:flex-none')
+    button.on_click(lambda: run_all(button))
+    return button

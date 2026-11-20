@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -512,3 +513,85 @@ async def test_truncated_feed_items_are_labelled(user: User, ui_env: SimpleNames
     await user.open('/')
     await open_document(user, 'Long feed item')
     await user.should_see('Only part of this report was saved.')
+
+
+# --------------------------------------------------------------------------- intel brief and sync all
+
+CSAF_FIXTURE = Path(__file__).parents[1] / 'fixtures' / 'csaf' / 'icsa-26-323-03.json'
+RSS_ITEM = b'<rss><channel><item><title>Advisory CVE-2024-9999</title></item></channel></rss>'
+KEV_ONE = json.dumps({'vulnerabilities': [{'cveID': 'CVE-2024-12345', 'dateAdded': '2025-01-01'}]}).encode()
+
+
+async def test_intel_brief_starts_empty_and_links_to_the_evidence(user: User) -> None:
+    with user.scope(marker='intel-brief'):
+        await user.should_see('No new reports in the last 7 days. Sync your sources to get the latest.')
+    await load_demo(user)
+    with user.scope(marker='intel-brief'):
+        await user.should_see('3 new reports from 3 sources.')
+        user.find(kind=ui.button, content='192.0.2.44 · 2 sources, 2 reports').click()
+    # The entity explorer opens, already searching for that indicator.
+    await user.should_see('IP · 192.0.2.44 · 2 source(s)')
+    await user.should_not_see('DOMAIN · relay.example.org')
+
+
+async def test_sync_all_sources_names_the_ones_that_failed(
+    user: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def download(url: str, params: Any = None, **_: Any) -> bytes:
+        if url == connectors.SOURCES['cisa-kev'].url:
+            return KEV_ONE
+        if url.endswith('changes.csv'):
+            raise OSError('offline')
+        return RSS_ITEM
+
+    monkeypatch.setattr(connectors, 'download', download)
+    user.find(kind=ui.button, content='Sync all sources').click()
+    await user.should_see(
+        '3 of 4 sources synced. Failed: CISA Security Advisories. The Sources tab shows why.'
+    )
+    await user.should_see('cisa-csaf · error')
+    with user.scope(marker='intel-brief'):
+        await user.should_see('3 new reports from 3 sources.')
+    button = user.find(kind=ui.button, content='Sync all sources').elements.pop()
+    assert button.enabled  # ready for the next run
+
+
+async def test_sync_all_sources_success_feeds_the_brief(user: User, monkeypatch: pytest.MonkeyPatch) -> None:
+    ot_index, _ = connectors.SOURCES['cisa-csaf'].indexes
+    advisory = connectors.CSAF_BASE + 'OT/white/2026/icsa-26-323-03.json'
+    today = datetime.now(UTC).date().isoformat()
+    kev = {'cveID': 'CVE-2024-12345', 'vendorProject': 'Acme', 'product': 'Gateway', 'dateAdded': today}
+
+    async def download(url: str, params: Any = None, **_: Any) -> bytes:
+        if url == connectors.SOURCES['cisa-kev'].url:
+            return json.dumps({'vulnerabilities': [kev]}).encode()
+        if url == ot_index:
+            return b'"2026/icsa-26-323-03.json","2026-11-19T06:00:00Z"\n'
+        if url.endswith('changes.csv'):
+            return b''
+        if url == advisory:
+            return CSAF_FIXTURE.read_bytes()
+        return RSS_ITEM
+
+    monkeypatch.setattr(connectors, 'download', download)
+    user.find(kind=ui.button, content='Sync all sources').click()
+    await user.should_see('All 4 sources synced. The Sources tab shows what each one added.')
+    with user.scope(marker='intel-brief'):
+        await user.should_see(
+            '4 new reports from 4 sources. CISA says attackers are now using 1 more weakness.'
+        )
+        await user.should_see('Acme (1)')
+        await user.should_see('libumqtt (1)')
+        user.find(kind=ui.button, content=f'CVE-2024-12345 · Acme Gateway · added {today}').click()
+    with user.scope(marker='document-detail'):
+        await user.should_see(kind=ui.label, content='CVE-2024-12345 · Acme Gateway')
+
+
+async def test_sync_all_waits_for_a_running_sync(user: User, ui_env: SimpleNamespace) -> None:
+    lock: asyncio.Lock = ui_env.app.state.sync_lock
+    await lock.acquire()
+    try:
+        user.find(kind=ui.button, content='Sync all sources').click()
+        await user.should_see('Another source sync is running. Try again when it finishes.')
+    finally:
+        lock.release()

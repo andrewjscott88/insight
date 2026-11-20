@@ -12,12 +12,13 @@ from nicegui import ui
 from ..appearance import TEXT_SIZE_COOKIE, THEME_COOKIE, dark_mode_value, text_size_choice, theme_choice
 from ..models import SessionFactory
 from .appearance import TextSizeSwitch, ThemeSwitch
+from .brief import build_brief
 from .entities import build_entities
 from .glossary import open_glossary
 from .inbox import build_inbox
 from .ingest import build_ingest_dialog
 from .ioc_export import open_ioc_export_dialog
-from .sources import build_sources
+from .sources import build_sources, build_sync_all_button
 from .stats import build_stats
 from .theme import apply_theme
 from .typography import heading
@@ -74,6 +75,7 @@ def register_ui(app: FastAPI, session_factory: SessionFactory) -> None:
                     ui.button('What the words mean', icon='help_outline', on_click=open_glossary).props(
                         'flat no-caps'
                     ).classes('w-full sm:w-auto')
+                    build_sync_all_button(ws)
                     ui.button('Export IOCs', on_click=lambda: open_ioc_export_dialog(ws)).props(
                         'outline'
                     ).classes('flex-1 sm:flex-none')
@@ -81,6 +83,7 @@ def register_ui(app: FastAPI, session_factory: SessionFactory) -> None:
                         'flex-1 sm:flex-none'
                     )
             build_stats(ws)
+            build_brief(ws)
             with ui.tabs().props('mobile-arrows align=left no-caps').classes('w-full') as tabs:
                 inbox_tab = _tab('Intelligence inbox', 'Inbox')
                 entities_tab = _tab('Entity explorer', 'Entities')
@@ -90,7 +93,12 @@ def register_ui(app: FastAPI, session_factory: SessionFactory) -> None:
             def show_inbox() -> None:
                 tabs.set_value(inbox_tab)
 
+            def show_entity(value: str) -> None:
+                tabs.set_value(entities_tab)
+                ws.find_entity(value)
+
             ws.show_inbox = show_inbox
+            ws.show_entity = show_entity
             with ui.tab_panels(tabs, value=inbox_tab).classes('w-full bg-transparent p-0'):
                 with ui.tab_panel(inbox_tab).classes('p-0'):
                     build_inbox(ws)

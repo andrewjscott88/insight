@@ -41,7 +41,8 @@ class Workspace:
     """Shared context handed to every panel.
 
     Panels register their refresh functions with :meth:`on_refresh` and publish navigation hooks
-    (``open_document``, ``show_inbox``) so other panels can use them without importing each other.
+    (``open_document``, ``show_inbox``, ``show_entity``) so other panels can use them without importing each
+    other.
     """
 
     app: FastAPI
@@ -51,6 +52,10 @@ class Workspace:
     refreshers: list[Callable[[], Any]] = field(default_factory=list)
     open_document: Callable[[str], None] = _noop
     show_inbox: Callable[[], None] = _noop
+    #: Look up one indicator in the entity explorer (set by the entities panel).
+    find_entity: Callable[[str], None] = _noop
+    #: Switch to the entity explorer and look up one indicator (set by the page).
+    show_entity: Callable[[str], None] = _noop
 
     def authorized(self) -> bool:
         """Re-checked on every callback: signing out in another tab revokes this page immediately."""

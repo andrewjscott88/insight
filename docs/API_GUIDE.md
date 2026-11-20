@@ -44,6 +44,12 @@ curl -sS "$INSIGHT_URL/api/stats" -H "Authorization: Bearer $INSIGHT_API_KEY"
 {"documents":4,"entities":10,"unreviewed":4,"observations_unreviewed":12}
 ```
 
+The intel brief on the landing page is available too (headline plus sections, built from the data, no AI):
+
+```sh
+curl -sS "$INSIGHT_URL/api/brief?days=7" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq -r '.headline, (.sections[] | .title, (.items[].text))'
+```
+
 ## 2. Authentication
 
 Every `/api/*` route needs either the API key or a signed-in browser session. `/health` needs neither.
@@ -303,6 +309,8 @@ sends only the CVE identifier to FIRST EPSS or NIST NVD.
 curl -sS "$INSIGHT_URL/api/sources" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq '.[] | {key, name, last_run: .runs[0]}'
 # Run one source now (read-write key). 409: another sync is running; 502: the source failed (recorded as a run)
 curl -sS -X POST "$INSIGHT_URL/api/sources/cisa-kev/sync" -H "Authorization: Bearer $INSIGHT_API_KEY"
+# Run every source in turn (read-write key); each result says success or error, and one failure does not stop the rest
+curl -sS -X POST "$INSIGHT_URL/api/sources/sync-all" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq '.results[] | {key, status}'
 # Look up a CVE that a report mentions (provider: epss or nvd). Cached; one lookup per 6.5 s across all callers
 curl -sS -X POST "$INSIGHT_URL/api/enrichment/epss/CVE-2023-34362" -H "Authorization: Bearer $INSIGHT_API_KEY"
 ```

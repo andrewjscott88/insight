@@ -292,7 +292,8 @@ does not start.
 ## 8. Sources, enrichment and their failures
 
 Nothing syncs automatically. **Sync now** contacts exactly one publisher and records a run (success or error)
-under *Recent sync activity*. Enrichment (EPSS/NVD) sends only the CVE identifier, after explicit consent, at
+under *Recent sync activity*. **Sync all sources** (top of the workspace, or `POST /api/sources/sync-all`) does
+the same for every source in turn; a failing source does not stop the others, and the message names it. Enrichment (EPSS/NVD) sends only the CVE identifier, after explicit consent, at
 most once every 6.5 s.
 
 | Message (run history / API 502) | Meaning | Action |

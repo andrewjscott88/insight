@@ -12,7 +12,15 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from insight import connectors
-from insight.connectors import ProviderError, SourceSyncError, enrich_cve, enrichment_request, sync_source
+from insight.connectors import (
+    SOURCES,
+    ProviderError,
+    SourceSyncError,
+    enrich_cve,
+    enrichment_request,
+    sync_all,
+    sync_source,
+)
 from insight.models import Document, Enrichment, KEVRecord, SourceRun
 from insight.schemas import DocumentInput
 from insight.services import ingest
@@ -102,6 +110,33 @@ async def test_invalid_payload_rolls_back_and_records_error(
     with session_factory() as db:
         assert db.get(KEVRecord, 'CVE-2024-12345') is None
     assert [r.status for r in runs(session_factory)] == ['error']
+
+
+async def test_sync_all_runs_every_source_in_order_and_keeps_going_after_failures(
+    session_factory: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def fake(url: str, params: Any = None, **_: Any) -> bytes:
+        if 'sans' in url:
+            raise OSError('offline')
+        if url == SOURCES['cisa-kev'].url:
+            return KEV
+        if url.endswith('changes.csv'):
+            return b''  # a CSAF index that lists nothing fails that source
+        return RSS
+
+    monkeypatch.setattr(connectors, 'download', fake)
+    started: list[tuple[int, int, str]] = []
+    results = await sync_all(session_factory, on_start=lambda n, total, s: started.append((n, total, s.key)))
+    assert started == [(n, len(SOURCES), key) for n, key in enumerate(SOURCES, start=1)]
+    assert [(r.key, r.ok) for r in results] == [
+        ('cisa-kev', True), ('cisa-csaf', False), ('sans-isc', False), ('ncsc', True)
+    ]  # fmt: skip
+    by_key = {r.key: r for r in results}
+    assert by_key['sans-isc'].message == 'OSError: offline'
+    assert by_key['cisa-csaf'].message == 'ValueError: The CSAF index lists no advisories'
+    assert by_key['ncsc'].message == 'Read 1 feed items; 1 new reports.'
+    assert by_key['ncsc'].name == SOURCES['ncsc'].name
+    assert sorted(r.status for r in runs(session_factory)) == ['error', 'error', 'success', 'success']
 
 
 async def test_unknown_source_is_rejected(session_factory: sessionmaker[Session]) -> None:

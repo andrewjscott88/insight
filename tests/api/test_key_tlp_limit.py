@@ -72,6 +72,8 @@ def test_nothing_hidden_leaks_through_any_read_route(client: TestClient, world: 
         f'/api/entities?q={HIDDEN_IP}',
         f'/api/entities/{world["hidden_entity"]}',
         '/api/stats',
+        '/api/brief',
+        '/api/brief?days=30',
         '/api/audit',
         '/api/sources',
         '/api/watch-terms',

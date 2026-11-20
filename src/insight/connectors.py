@@ -9,7 +9,7 @@ import ipaddress
 import json
 import re
 import socket
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from html import unescape
@@ -553,6 +553,38 @@ async def sync_source(session_factory: SessionFactory, key: str) -> str:
         message = f'{type(exc).__name__}: {str(exc)[:350]}'
         await asyncio.to_thread(_record_failure, session_factory, key, message)
         raise SourceSyncError(message) from exc
+
+
+@dataclass(frozen=True, slots=True)
+class SyncResult:
+    """How one source fared in :func:`sync_all`: its run message, or the failure that was recorded."""
+
+    key: str
+    name: str
+    ok: bool
+    message: str
+
+
+async def sync_all(
+    session_factory: SessionFactory, *, on_start: Callable[[int, int, Source], None] | None = None
+) -> list[SyncResult]:
+    """Sync every curated source in registry order, one at a time, and report each result.
+
+    A failing source does not stop the others: its failure is recorded as a ``SourceRun`` (as for
+    :func:`sync_source`) and returned. ``on_start(position, total, source)`` is called before each source,
+    so a front end can show progress. Callers hold the sync lock, as for a single sync.
+    """
+    results: list[SyncResult] = []
+    for position, source in enumerate(SOURCES.values(), start=1):
+        if on_start is not None:
+            on_start(position, len(SOURCES), source)
+        try:
+            results.append(
+                SyncResult(source.key, source.name, True, await sync_source(session_factory, source.key))
+            )
+        except SourceSyncError as exc:
+            results.append(SyncResult(source.key, source.name, False, str(exc)))
+    return results
 
 
 def enrichment_request(cve: str, provider: str) -> tuple[str, dict[str, str]]:
