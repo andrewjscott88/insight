@@ -1,0 +1,292 @@
+"""Callers, sessions, API keys and sign-in."""
+
+from __future__ import annotations
+
+import asyncio
+import hmac
+import logging
+import secrets
+import time
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
+from dataclasses import dataclass
+from typing import Any, Final, Literal, TypeAlias
+
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import RedirectResponse
+from fastapi.templating import Jinja2Templates
+from sqlalchemy.orm import Session
+from starlette.responses import Response
+
+from .. import apikeys, services
+from ..config import Settings
+from ..models import SessionFactory
+from ..ratelimit import AUTH_FAILURES, IOC_EXPORT, READ, WRITE, Policy, RateLimiter
+from .boundary import (
+    SAFE_METHODS,
+    SESSION_ONLY_ROUTES,
+    SESSION_ONLY_WRITE_PREFIXES,
+    UNLIMITED_READER_PREFIXES,
+    tokens_match,
+)
+
+log = logging.getLogger('insight.auth')
+
+SESSION_TTL_SECONDS: Final = 8 * 60 * 60
+
+LOGIN_WINDOW_SECONDS: Final = 60
+
+#: Backstop only. The primary brute-force control is the per-failure delay with serialised checks, which
+#: slows guessing without letting a third party lock the operator out (see docs/SECURITY.md).
+LOGIN_MAX_FAILURES: Final = 30
+
+#: Shown on the sign-in page while INSIGHT_MFA=on but no authenticator app is paired (sign-in is refused).
+MFA_UNPAIRED: Final = (
+    'Sign-in is locked: MFA is on (INSIGHT_MFA=on) but no authenticator app is paired yet. On the host, run '
+    '"make mfa-enable" (Docker) or "insight mfa setup", or set INSIGHT_MFA=off.'
+)
+
+MFA_UNPAIRED_LOG: Final = (
+    'INSIGHT_MFA=on but no authenticator app is paired: sign-in is refused until you run `make mfa-enable` '
+    '(Docker) or `insight mfa setup`'
+)
+
+INVALID_KEY_HEADERS: Final = {'WWW-Authenticate': 'Bearer error="invalid_token"'}
+
+SessionCheck: TypeAlias = Callable[[Mapping[str, Any]], bool]
+
+AuthDependency: TypeAlias = Callable[[Request], None]
+
+
+@dataclass(frozen=True, slots=True)
+class Caller:
+    """Who made an API request: the signed-in operator, or the API key (named by its public key ID)."""
+
+    kind: Literal['session', 'api_key']
+    key_id: str | None = None
+    access: apikeys.Access = 'read-write'
+    #: Most restrictive TLP label this caller may read or write (``None``: no per-caller limit).
+    max_tlp: str | None = None
+
+    @property
+    def limit_key(self) -> str:
+        """Rate-limit bucket: the operator's browser and the API key never share a budget."""
+        return 'session' if self.key_id is None else f'key:{self.key_id}'
+
+    @property
+    def actor(self) -> str:
+        """How audit events name this caller."""
+        return 'operator' if self.key_id is None else f'api-key:{self.key_id}'
+
+
+SESSION_CALLER: Final = Caller('session')
+
+#: ``verify(token) -> (caller or None, reason)``; ``reason`` is for logs only.
+KeyVerifier: TypeAlias = Callable[[str], tuple[Caller | None, str]]
+
+
+def session_checker(app: FastAPI) -> SessionCheck:
+    """``check(session)``: True while the signed cookie names a live, unexpired server-side session."""
+
+    def authenticated(session: Mapping[str, Any]) -> bool:
+        sid = session.get('sid', '')
+        expiry: float = app.state.active_sessions.get(sid, 0)
+        return bool(session.get('authenticated') and expiry > time.time())
+
+    return authenticated
+
+
+def api_key_verifier(sessions: SessionFactory) -> KeyVerifier:
+    """Check a presented key against the database (one indexed lookup; hash comparison in constant time)."""
+
+    def verify(token: str) -> tuple[Caller | None, str]:
+        with sessions.begin() as db:
+            key, reason = services.verify_api_key(db, token)
+            if key is None:
+                return None, reason
+            access: apikeys.Access = 'read-write' if key.access == 'read-write' else 'read'
+            return Caller('api_key', key.key_id, access, key.max_tlp), reason
+
+    return verify
+
+
+def rate_limit_policy(method: str, path: str) -> Policy:
+    """Which budget a request draws from. IOC exports are the expensive read and get their own."""
+    if path == '/api/iocs/export':
+        return IOC_EXPORT
+    return READ if method in SAFE_METHODS else WRITE
+
+
+def _client_address(request: Request) -> str:
+    return request.client.host if request.client else 'unknown'
+
+
+def auth_dependency(
+    authenticated: SessionCheck,
+    *,
+    verify_key: KeyVerifier | None = None,
+    limiter: RateLimiter | None = None,
+    failure_limiter: RateLimiter | None = None,
+) -> AuthDependency:
+    """FastAPI dependency for every ``/api`` route.
+
+    * ``Authorization: Bearer <key>``: the API key. No CSRF token is needed (a browser never attaches this
+      header on its own, so a cross-site page cannot use it); a read-only key gets ``403`` for writes. Any
+      cookie sent alongside is ignored.
+    * Otherwise the browser session: ``401`` without one, ``403`` for a write without the matching CSRF
+      header.
+
+    Then the caller's rate limit is applied (``429`` with ``Retry-After`` when exhausted).
+    """
+
+    def key_caller(request: Request, token: str) -> Caller:
+        caller, reason = verify_key(token) if verify_key is not None else (None, 'api keys disabled')
+        if caller is None:
+            client = _client_address(request)
+            log.warning(
+                'Rejected API key %s from %s: %s',
+                apikeys.parse_key_id(token) or '(malformed)',
+                client,
+                reason,
+            )
+            if failure_limiter is not None:
+                decision = failure_limiter.hit(client, AUTH_FAILURES)
+                if not decision.allowed:
+                    raise HTTPException(429, 'Too many invalid API key attempts', headers=decision.headers())
+            # One answer for unknown, revoked, expired and malformed keys: nothing to learn by probing.
+            raise HTTPException(401, 'Invalid or expired API key', headers=INVALID_KEY_HEADERS)
+        return caller
+
+    def require_auth(request: Request) -> None:
+        method = request.method
+        path: str = request.scope.get('path', '')
+        token = apikeys.bearer_token(request.headers.get('authorization', ''))
+        if token is not None:
+            caller = key_caller(request, token)
+            if path in SESSION_ONLY_ROUTES:
+                raise HTTPException(403, 'Not available to API keys')
+            if method not in SAFE_METHODS and caller.access != 'read-write':
+                raise HTTPException(403, 'This API key is read-only')
+            if method not in SAFE_METHODS and path.startswith(SESSION_ONLY_WRITE_PREFIXES):
+                raise HTTPException(
+                    403, 'Schedules can be changed in the workspace or with `insight schedule` only'
+                )
+            if caller.max_tlp is not None and path.startswith(UNLIMITED_READER_PREFIXES):
+                raise HTTPException(403, 'Not available to TLP-limited API keys')
+        else:
+            if not authenticated(request.session):
+                raise HTTPException(401, 'Sign in required')
+            if method not in SAFE_METHODS and not tokens_match(
+                request.headers.get('X-CSRF-Token'), request.session.get('csrf')
+            ):
+                raise HTTPException(403, 'Invalid CSRF token')
+            caller = SESSION_CALLER
+        request.state.caller = caller
+        if limiter is not None:
+            decision = limiter.hit(caller.limit_key, rate_limit_policy(method, path))
+            request.state.rate_limit_headers = decision.headers()
+            if not decision.allowed:
+                log.warning('Rate limit %r exceeded by %s', decision.policy.name, caller.limit_key)
+                raise HTTPException(
+                    429,
+                    f'Rate limit exceeded ({decision.policy.name}); retry in '
+                    f'{decision.headers()["Retry-After"]} s',
+                    headers=decision.headers(),
+                )
+        if caller.key_id is not None and method not in SAFE_METHODS:
+            log.info('API key %s: %s %s', caller.key_id, method, path)
+
+    return require_auth
+
+
+def caller_of(request: Request) -> Caller:
+    """The authenticated caller (set by the auth dependency; the operator's session if absent)."""
+    caller = getattr(request.state, 'caller', None)
+    return caller if isinstance(caller, Caller) else SESSION_CALLER
+
+
+def reader_limit(request: Request) -> str | None:
+    """The caller's TLP limit, passed to every service read so hidden reports never appear."""
+    return caller_of(request).max_tlp
+
+
+@contextmanager
+def acting(sessions: SessionFactory, request: Request) -> Iterator[Session]:
+    """A write transaction whose audit events name the caller (operator or API key)."""
+    with sessions.begin() as db:
+        yield services.set_actor(db, caller_of(request).actor)
+
+
+def start_session(app: FastAPI, request: Request, now: float) -> None:
+    """Replace the caller's session with a fresh server-side one (prevents session fixation)."""
+    app.state.active_sessions.pop(request.session.get('sid'), None)
+    app.state.active_sessions = {k: v for k, v in app.state.active_sessions.items() if v > now}
+    sid = secrets.token_urlsafe(32)
+    app.state.active_sessions[sid] = now + SESSION_TTL_SECONDS
+    request.session.clear()
+    request.session.update(authenticated=True, sid=sid, csrf=secrets.token_urlsafe(32))
+
+
+def _mfa_paired(sessions: SessionFactory) -> bool:
+    with sessions() as db:
+        return services.mfa_paired(db)
+
+
+def _check_code(sessions: SessionFactory, code: str) -> bool:
+    """One transaction, so an accepted code is marked used atomically (False if no app is paired)."""
+    with sessions.begin() as db:
+        services.set_actor(db, 'operator')
+        return services.verify_mfa_code(db, code)
+
+
+def _register_login(app: FastAPI, settings: Settings, templates: Jinja2Templates) -> None:
+    sessions: SessionFactory = app.state.session_factory
+
+    @app.post('/login')
+    async def login(request: Request) -> Response:
+        form = await request.form(max_fields=4)
+        csrf = request.session.get('csrf')
+        if not tokens_match(form.get('csrf_token'), csrf):
+            raise HTTPException(403, 'Invalid CSRF token')
+        password = str(form.get('password', ''))
+        code = str(form.get('otp', ''))
+        mfa = settings.mfa
+        if mfa and not await asyncio.to_thread(_mfa_paired, sessions):
+            # Fail closed, before any password check: a switched-on second factor never silently disappears.
+            log.error(MFA_UNPAIRED_LOG)
+            return templates.TemplateResponse(
+                request=request,
+                name='login.html',
+                status_code=503,
+                context={'csrf_token': csrf, 'error': MFA_UNPAIRED, 'mfa': mfa},
+            )
+        # Checks run one at a time and each failure waits before answering: online guessing is slowed to
+        # roughly one attempt per `failed_login_delay`, while the operator can always still sign in.
+        async with app.state.login_lock:
+            current = time.time()
+            app.state.failures[:] = [t for t in app.state.failures if current - t < LOGIN_WINDOW_SECONDS]
+            if len(app.state.failures) >= LOGIN_MAX_FAILURES:
+                log.warning('Sign-in refused: %d failures in the last minute', len(app.state.failures))
+                raise HTTPException(429, 'Too many login attempts; wait one minute')
+            password_ok = hmac.compare_digest(password.encode(), settings.password.encode())
+            # The code is only checked (and consumed) once the password is right, so wrong guesses never burn
+            # a valid code. One answer for either mistake: nothing tells a guesser which factor was wrong.
+            code_ok = not mfa
+            if password_ok and mfa:
+                code_ok = await asyncio.to_thread(_check_code, sessions, code)
+            if not (password_ok and code_ok):
+                app.state.failures.append(current)
+                reason = 'password' if not password_ok else 'authentication code'
+                failures = len(app.state.failures)
+                log.warning('Failed sign-in attempt: wrong %s (%d in the last minute)', reason, failures)
+                await asyncio.sleep(settings.failed_login_delay)
+                error = 'Incorrect password or authentication code.' if mfa else 'Incorrect password.'
+                return templates.TemplateResponse(
+                    request=request,
+                    name='login.html',
+                    status_code=401,
+                    context={'csrf_token': csrf, 'error': error, 'mfa': mfa},
+                )
+        start_session(app, request, current)
+        log.info('Operator signed in%s', ' (password and authentication code)' if mfa else '')
+        return RedirectResponse('/', status_code=303)

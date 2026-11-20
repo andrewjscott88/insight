@@ -33,7 +33,7 @@ clean install). `make help` lists the rest (`test-postgres`, `drill`, `locks`, `
 
 | Rule | Enforced by |
 | --- | --- |
-| Front ends (`main.py`, `ui/`) never build SQL; the UI never imports ORM classes | `tests/unit/test_architecture.py` |
+| Front ends (`web/`, `ui/`) never build SQL; the UI never imports ORM classes | `tests/unit/test_architecture.py` |
 | Models and migrations agree; every migration is reversible; every released database upgrades | `tests/unit/test_migrations.py` |
 | Lock files match `pyproject.toml` | `scripts/lock.py --check` (pre-push and CI) |
 | No `.env`, databases, keys or credentials in git | `scripts/check_forbidden_files.py`, gitleaks |

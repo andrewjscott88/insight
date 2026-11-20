@@ -27,6 +27,10 @@
   name is re-exported, so `services.ingest(...)` and every other call site work unchanged. New architecture
   tests keep the modules small, keep `services.tlp` free of other domains' logic, and fail if a public name is
   not re-exported (review finding B3). No behaviour changes.
+- The same for `main.py` (990 lines): the API now lives in `insight/web/`: `app` (the factory), `boundary` (the
+  ASGI boundary and security headers), `auth` (callers, sessions, sign-in) and `routes/`, one module per area.
+  `main.py` remains as a compatibility module, so `insight.main:create_app` and existing imports keep working.
+  The TLP-limit architecture test now checks every route module.
 
 ### Changed: CI actions updated
 - `actions/checkout` v5 → v7.0.1, `actions/setup-python` v6 → v7.1.0 and the CodeQL Action v3 → v4.39.3, in

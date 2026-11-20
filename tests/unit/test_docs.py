@@ -43,8 +43,14 @@ def test_every_adr_is_indexed() -> None:
         assert adr.name in index, f'{adr.name} missing from docs/adr/README.md'
 
 
+def web_routes() -> list[str]:
+    """Every route path the web application registers (``@app.get('/api/...')`` in ``insight/web/``)."""
+    sources = sorted((ROOT / 'src' / 'insight' / 'web').rglob('*.py'))
+    return [r for path in sources for r in re.findall(r"@app\.(?:get|post|put)\('([^']+)'", path.read_text())]
+
+
 def test_api_reference_covers_every_route() -> None:
-    routes = re.findall(r"@app\.(?:get|post)\('([^']+)'", (ROOT / 'src' / 'insight' / 'main.py').read_text())
+    routes = web_routes()
     reference = (ROOT / 'docs' / 'API.md').read_text(encoding='utf-8')
     normalise = re.compile(r'\{(?:doc_id|obs_id|entity_id)\}')
     undocumented = [route for route in routes if normalise.sub('{id}', route) not in reference]
@@ -57,7 +63,7 @@ def test_readme_states_the_current_version() -> None:
 
 def test_api_guide_has_a_curl_command_for_every_route() -> None:
     """docs/API_GUIDE.md shows every route with a concrete path (`/api/documents/$DOC_ID/review`)."""
-    routes = re.findall(r"@app\.(?:get|post)\('([^']+)'", (ROOT / 'src' / 'insight' / 'main.py').read_text())
+    routes = web_routes()
     guide = (ROOT / 'docs' / 'API_GUIDE.md').read_text(encoding='utf-8')
     missing = []
     for route in routes:

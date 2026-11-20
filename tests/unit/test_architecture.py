@@ -16,7 +16,8 @@ import insight
 
 PACKAGE = Path(insight.__file__).parent
 UI_MODULES = sorted((PACKAGE / 'ui').glob('*.py'))
-FRONT_ENDS = [*UI_MODULES, PACKAGE / 'main.py']
+WEB_MODULES = sorted((PACKAGE / 'web').rglob('*.py'))
+FRONT_ENDS = [*UI_MODULES, *WEB_MODULES, PACKAGE / 'main.py']
 SERVICE_MODULES = sorted((PACKAGE / 'services').glob('*.py'))
 SQL_BUILDERS = {'select', 'insert', 'update', 'delete', 'func', 'or_', 'and_', 'text'}
 ORM_CLASSES = {'Document', 'Entity', 'Observation', 'Note', 'AuditEvent', 'KEVRecord', 'WatchTerm'}
@@ -73,6 +74,14 @@ def test_every_public_service_name_is_re_exported() -> None:
         assert missing == [], f'services/{path.name}: add {missing} to services/__init__.py'
 
 
+def test_the_web_front_end_is_split_by_area() -> None:
+    """B3: ``main.py`` only re-exports; routes live in one module per area under ``insight/web/routes/``."""
+    assert not re.search(r'@app\.(get|post|put|delete)\(', (PACKAGE / 'main.py').read_text())
+    routes = {p.stem for p in (PACKAGE / 'web' / 'routes').glob('*.py')} - {'__init__'}
+    assert {'documents', 'triage', 'exports', 'entities', 'sources', 'workspace'} <= routes
+    assert all(len(p.read_text().splitlines()) < 400 for p in WEB_MODULES), 'keep web modules small'
+
+
 @pytest.mark.parametrize('path', FRONT_ENDS, ids=lambda p: p.name)
 def test_front_ends_do_not_build_sql(path: Path) -> None:
     for module, name in imports(path):
@@ -93,6 +102,7 @@ def test_ui_does_not_touch_orm_classes(path: Path) -> None:
 @pytest.mark.parametrize('path', UI_MODULES, ids=lambda p: p.name)
 def test_ui_does_not_depend_on_the_api_module(path: Path) -> None:
     assert all(not module.endswith('main') for module, _ in imports(path))
+    assert all('web' not in module.split('.') for module, _ in imports(path))
 
 
 #: Service functions that read or change reports. Every call from the API must pass the caller's TLP limit
@@ -104,7 +114,9 @@ TLP_AWARE_SERVICES = {
 
 
 def test_api_routes_pass_the_callers_tlp_limit_to_services() -> None:
-    tree = ast.parse((PACKAGE / 'main.py').read_text())
+    tree = ast.Module(
+        body=[node for p in WEB_MODULES for node in ast.parse(p.read_text()).body], type_ignores=[]
+    )
     calls = [
         node
         for node in ast.walk(tree)
