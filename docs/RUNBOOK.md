@@ -454,7 +454,7 @@ Insight is published, not deployed: signed images in GHCR plus GitHub Releases. 
 [RELEASING.md](RELEASING.md). Pipeline: [CI_CD.md](CI_CD.md). In production, pin the image **by digest** and
 verify the signature (§6).
 
-## 14. Known limitations (0.2.0)
+## 14. Known limitations
 
 - Single operator; no SSO, RBAC or recipient-level TLP enforcement; in-memory sessions and rate limits (one
   worker; a restart signs everyone out and resets the limits).

@@ -316,8 +316,8 @@ curl -sS -X POST "$INSIGHT_URL/api/enrichment/epss/CVE-2023-34362" -H "Authoriza
 ```
 
 Enrichment answers `422` for a malformed or unknown CVE (`Import a report mentioning this CVE first`), `429`
-within 6.5 s of the previous lookup, and `502` when the provider fails. Note: a lookup for a well-formed but
-unknown CVE also starts the 6.5 s window. TLP-limited keys cannot use enrichment (`403`).
+within 6.5 s of the previous lookup, and `502` when the provider fails. A refused request (`422`) does not start
+the 6.5 s window. TLP-limited keys cannot use enrichment (`403`).
 
 ### Workspace
 
@@ -350,8 +350,11 @@ curl -sS --fail-with-body --retry 3 \
 mv "$out.tmp" "$out"     # the SIEM only ever reads a complete file
 ```
 
-`--retry` also waits out `429` responses (curl honours `Retry-After`). Only `accepted` indicators: an extracted
-indicator is not a maliciousness verdict until an analyst reviews it.
+`--retry` also waits out `429` responses (curl honours `Retry-After`). `review_status=accepted` keeps only
+indicators an analyst has checked. **Accepted is not a verdict:** it means Insight copied the value correctly
+from the report, not that the indicator is malicious (see *What the words mean* in the workspace). A report can
+name an indicator as a victim, a test address or a counter-example. Use the export as context for searches and
+alerts, not as a blocklist to apply without review.
 
 ### 5.2 Ingest a text file
 
