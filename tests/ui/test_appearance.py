@@ -9,6 +9,7 @@ import pytest
 from nicegui import ui
 from nicegui.testing.user import User
 
+from insight import services
 from insight.appearance import THEME_COOKIE
 
 from .conftest import sign_in
@@ -118,7 +119,8 @@ async def test_a_revoked_session_cannot_change_the_theme(
     navigated: list[str] = []
     monkeypatch.setattr(user.navigate, 'to', lambda target, new_tab=False: navigated.append(target))
     scripts = record_scripts(monkeypatch)
-    ui_env.app.state.active_sessions.clear()  # signed out in another tab
+    with ui_env.app.state.session_factory.begin() as db:  # signed out in another tab
+        services.end_all_operator_sessions(db)
     user.find(marker='theme-dark').click()
     assert navigated == ['/login']
     assert matching(scripts, THEME_COOKIE) == []

@@ -47,7 +47,10 @@ ROOT: Final = Path(__file__).resolve().parent.parent  # the insight package: tem
 def _init_state(app: FastAPI, settings: Settings, sessions: SessionFactory) -> None:
     app.state.settings = settings
     app.state.session_factory = sessions
-    app.state.active_sessions = {}
+    # Stored session hashes are keyed to this, so a new password or MFA setting ends every session (B4).
+    app.state.session_binding = services.session_binding(
+        settings.session_secret, settings.password, settings.mfa
+    )
     app.state.failures = []
     app.state.login_lock = asyncio.Lock()
     app.state.sync_lock = asyncio.Lock()

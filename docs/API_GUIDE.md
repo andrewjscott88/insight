@@ -93,8 +93,8 @@ curl -sS -o /dev/null -w 'sign-out: %{http_code}\n' -b "$JAR" -c "$JAR" "$INSIGH
 rm -f "$JAR"
 ```
 
-Browser sessions last 8 hours, are held in server memory and end when Insight restarts. A request from a browser
-page on another site is refused (`Origin` check, `SameSite=Strict` cookie, CSRF token).
+Browser sessions last 8 hours and survive a restart; changing the password or the MFA setting ends them all. A
+request from a browser page on another site is refused (`Origin` check, `SameSite=Strict` cookie, CSRF token).
 
 ## 3. Conventions: errors, rate limits, TLP, paging
 
@@ -496,7 +496,7 @@ print('read budget left:', client.get('/api/stats').headers['ratelimit'])
 | Response | Cause | Fix |
 | --- | --- | --- |
 | `401 Invalid or expired API key` | Typo, expired, revoked or rotated key | `make api-key-status`; rotate if needed. Check for a missing `Bearer ` |
-| `401 Sign in required` | No `Authorization: Bearer` header, or the session ended (restart, 8 h) | Send the key, or sign in again |
+| `401 Sign in required` | No `Authorization: Bearer` header, or the session ended (8 h, sign-out, new password) | Send the key, or sign in again |
 | `403 This API key is read-only` | `POST` with a read key | `make api-key-rotate ACCESS=read-write` |
 | `403 Not available to TLP-limited API keys` | Audit log or enrichment with a `MAX_TLP` key | Use an unlimited key (`make api-key-rotate MAX_TLP=RED` lifts the limit) |
 | `403 Invalid CSRF token` | Session write without `X-CSRF-Token` | Fetch it from `/api/session` (section 2.2) |

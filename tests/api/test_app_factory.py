@@ -8,14 +8,17 @@ full stack (middleware order, real sign-in) stays covered by ``test_auth.py`` an
 from __future__ import annotations
 
 import time
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.testclient import TestClient
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from insight import main
+from insight import main, services
+from insight.models import OperatorSession
 from insight.schemas import DocumentInput
 from insight.services import ingest
 from insight.web.routes import workspace
@@ -26,23 +29,38 @@ def request(method: str = 'GET', session: dict[str, Any] | None = None, csrf: st
     return Request({'type': 'http', 'method': method, 'headers': headers, 'session': session or {}})
 
 
-def app_with_sessions(**sessions: float) -> FastAPI:
+BINDING = 'test-binding'
+
+
+@pytest.fixture
+def session_app(session_factory: sessionmaker[Session]) -> FastAPI:
     app = FastAPI()
-    app.state.active_sessions = dict(sessions)
+    app.state.session_factory = session_factory
+    app.state.session_binding = BINDING
     return app
+
+
+def stored_session(app: FastAPI, *, at: float) -> str:
+    with app.state.session_factory.begin() as db:
+        return services.start_operator_session(db, binding=BINDING, at=datetime.fromtimestamp(at, UTC))
 
 
 # --------------------------------------------------------------------------- sessions and auth
 
 
-def test_session_checker_requires_a_live_server_side_session() -> None:
-    app = app_with_sessions(live=time.time() + 60, expired=time.time() - 1)
-    authenticated = main.session_checker(app)
-    assert authenticated({'authenticated': True, 'sid': 'live'})
-    assert not authenticated({'authenticated': True, 'sid': 'expired'})
+def test_session_checker_requires_a_live_stored_session(session_app: FastAPI) -> None:
+    now = time.time()
+    live = stored_session(session_app, at=now)
+    expired = stored_session(session_app, at=now - main.SESSION_TTL_SECONDS - 1)
+    authenticated = main.session_checker(session_app)
+    assert authenticated({'authenticated': True, 'sid': live})
+    assert not authenticated({'authenticated': True, 'sid': expired})
     assert not authenticated({'authenticated': True, 'sid': 'unknown'})
-    assert not authenticated({'authenticated': False, 'sid': 'live'})  # signed cookie alone is not enough
+    assert not authenticated({'authenticated': False, 'sid': live})  # signed cookie alone is not enough
+    assert not authenticated({'authenticated': True, 'sid': ['not', 'a', 'string']})
     assert not authenticated({})
+    session_app.state.session_binding = 'after a password change'
+    assert not authenticated({'authenticated': True, 'sid': live})
 
 
 @pytest.mark.parametrize(
@@ -127,17 +145,31 @@ def test_caller_limit_keys_are_distinct() -> None:
     assert main.Caller('api_key', 'abc').limit_key == 'key:abc'
 
 
-def test_start_session_rotates_identity_and_prunes_expired_sessions() -> None:
+def test_start_session_rotates_identity_and_prunes_expired_sessions(session_app: FastAPI) -> None:
     now = time.time()
-    app = app_with_sessions(old=now + 100, stale=now - 1, other=now + 100)
-    session: dict[str, Any] = {'sid': 'old', 'csrf': 'pre-login', 'planted': 'by attacker'}
-    main.start_session(app, request('POST', session), now)
+    stored_session(session_app, at=now - main.SESSION_TTL_SECONDS - 1)  # stale
+    old = stored_session(session_app, at=now)
+    other = stored_session(session_app, at=now)
+    session: dict[str, Any] = {'sid': old, 'csrf': 'pre-login', 'planted': 'by attacker'}
+    main.start_session(session_app, request('POST', session), now)
     assert session['authenticated'] is True
-    assert session['sid'] not in {'old', 'other'}
+    assert session['sid'] not in {old, other}
     assert session['csrf'] != 'pre-login'
     assert 'planted' not in session  # everything from before sign-in is discarded
-    assert set(app.state.active_sessions) == {'other', session['sid']}
-    assert app.state.active_sessions[session['sid']] == now + main.SESSION_TTL_SECONDS
+    authenticated = main.session_checker(session_app)
+    assert authenticated(session)
+    assert authenticated({'authenticated': True, 'sid': other})  # another browser keeps its own session
+    assert not authenticated({'authenticated': True, 'sid': old})
+    with session_app.state.session_factory() as db:
+        rows = db.scalars(select(OperatorSession)).all()
+        assert len(rows) == 2, 'the stale session was deleted'
+        assert {r.expires_at for r in rows} >= {
+            services.stamp(datetime.fromtimestamp(now, UTC) + services.SESSION_TTL)
+        }
+        assert (
+            db.scalar(select(func.count()).where(OperatorSession.id_hash.in_([old, other, session['sid']])))
+            == 0
+        )
 
 
 # --------------------------------------------------------------------------- request parsing and lookups

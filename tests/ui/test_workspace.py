@@ -327,7 +327,8 @@ async def test_revoked_session_stops_callbacks(
 ) -> None:
     navigated: list[str] = []
     monkeypatch.setattr(user.navigate, 'to', lambda target, new_tab=False: navigated.append(target))
-    ui_env.app.state.active_sessions.clear()  # e.g. signed out in another tab
+    with ui_env.app.state.session_factory.begin() as db:  # e.g. signed out in another tab
+        services.end_all_operator_sessions(db)
     user.find('Load demo').click()
     assert navigated
     assert set(navigated) == {'/login'}

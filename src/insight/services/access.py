@@ -1,24 +1,29 @@
-"""API keys and the operator's second factor."""
+"""API keys, the operator's second factor and signed-in sessions."""
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
+import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Final
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from .. import apikeys, totp
 from ..models import (
     ApiKey,
     OperatorMfa,
+    OperatorSession,
     now,
 )
 from ..schemas import (
     TLP_LEVELS,
 )
 from .audit import audit
+from .common import stamp
 
 #: ``api_keys.last_used_at`` is written at most this often, so API traffic does not become a stream of writes.
 API_KEY_TOUCH_INTERVAL: Final = timedelta(minutes=5)
@@ -191,3 +196,71 @@ def verify_mfa_code(db: Session, code: str, at: float | None = None) -> bool:
         return False
     row.last_step = step
     return True
+
+
+# --------------------------------------------------------------------------- signed-in sessions (review B4)
+
+#: How long a sign-in lasts, whatever the browser does in between (also the cookie's lifetime).
+SESSION_TTL: Final = timedelta(hours=8)
+
+
+def session_binding(session_secret: str, password: str, mfa: bool) -> str:
+    """A keyed fingerprint of what a sign-in proved. Stored session hashes include it, so changing the
+    password or turning MFA on or off ends every session, as the restart such a change needs always did."""
+    message = f'{password}\0{"mfa" if mfa else "password"}'.encode()
+    return hmac.new(session_secret.encode(), message, hashlib.sha256).hexdigest()
+
+
+def _session_hash(session_id: str, binding: str) -> str:
+    return hashlib.sha256(f'{binding}:{session_id}'.encode()).hexdigest()
+
+
+def start_operator_session(db: Session, *, binding: str, at: datetime, replaces: str | None = None) -> str:
+    """Store a new session and return its ID for the cookie; only a keyed hash of the ID is stored.
+
+    ``replaces`` is the ID the browser had before, which ends here, so a sign-in never keeps an old ID
+    (session fixation). Expired sessions are deleted on the way.
+    """
+    if replaces:
+        end_operator_session(db, replaces, binding=binding)
+    db.execute(delete(OperatorSession).where(OperatorSession.expires_at <= stamp(at)))
+    session_id = secrets.token_urlsafe(32)
+    db.add(
+        OperatorSession(
+            id_hash=_session_hash(session_id, binding),
+            created_at=stamp(at),
+            expires_at=stamp(at + SESSION_TTL),
+        )
+    )
+    return session_id
+
+
+def operator_session_valid(db: Session, session_id: str, *, binding: str, at: datetime) -> bool:
+    """True while ``session_id`` names a stored, unexpired session made under the current credentials."""
+    if not session_id:
+        return False
+    row = db.get(OperatorSession, _session_hash(session_id, binding))
+    return row is not None and row.expires_at > stamp(at)
+
+
+def end_operator_session(db: Session, session_id: str, *, binding: str) -> None:
+    """Sign one browser out (nothing happens for an unknown ID)."""
+    db.execute(delete(OperatorSession).where(OperatorSession.id_hash == _session_hash(session_id, binding)))
+
+
+def end_all_operator_sessions(db: Session) -> int:
+    """Sign every browser out. Audited as ``session.end_all`` with the number of sessions that were open."""
+    count = db.scalar(select(func.count()).select_from(OperatorSession)) or 0
+    db.execute(delete(OperatorSession))
+    audit(db, 'session.end_all', 'operator', f'{count} session(s) ended')
+    return count
+
+
+def count_operator_sessions(db: Session, *, at: datetime) -> int:
+    """Unexpired sessions (some may belong to an earlier password and no longer work)."""
+    return (
+        db.scalar(
+            select(func.count()).select_from(OperatorSession).where(OperatorSession.expires_at > stamp(at))
+        )
+        or 0
+    )

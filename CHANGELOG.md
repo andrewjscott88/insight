@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Changed: a restart no longer signs you out; **Sign out everywhere**
+- **Sessions are stored in the database** (migration `0008`, review B4), so restarting or upgrading Insight
+  keeps the operator signed in. Only a hash of each session ID is stored, keyed to the password and MFA setting:
+  a copy of the database cannot sign anyone in, and **changing the password or turning MFA on or off still
+  signs everyone out**, as the restart it needs always did. Sessions still last 8 hours.
+- **Sign out everywhere** on the sign-out page ends every session on every browser and device (audited as
+  `session.end_all`), for example after using a shared computer.
+- Rate limits and the sign-in throttle stay in memory, so still run one worker.
+
 ### Added: scheduled syncs (off by default)
 - **Sources can sync by themselves**: *Off* (default), *Every hour*, *Every 6 hours* or *Every day*, per source
   or for all sources at once, in the Sources tab, which also shows the next sync. **Start at** picks the time of

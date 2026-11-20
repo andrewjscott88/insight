@@ -12,6 +12,12 @@
 <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 <button class="primary" type="submit">Sign out</button>
 </form>
+<p class="muted">Used Insight on a computer that is not yours, or think someone else signed in? Sign out every
+browser and device at once.</p>
+<form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<input type="hidden" name="everywhere" value="1">
+<button class="secondary" type="submit">Sign out everywhere</button>
+</form>
 <p class="login-footer"><a href="/">Return to workspace</a></p>
 </main>
 </body>

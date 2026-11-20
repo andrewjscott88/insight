@@ -47,7 +47,7 @@ Browser ──HTTP (127.0.0.1:8080)──► uvicorn (1 worker)
 | NiceGUI storage | `/data/.nicegui` |
 | Volume | `<project>_insight-data` (`docker volume ls`) |
 | Port | `127.0.0.1:8080` only |
-| Sessions | In memory: a restart signs everyone out. Run exactly **one** worker. |
+| Sessions | In the database (8 hours): a restart or upgrade keeps you signed in; a new password or MFA setting signs everyone out. **Sign out everywhere** on the sign-out page ends every session. Rate limits stay in memory, so run exactly **one** worker. |
 | Outbound network | Only when an operator presses **Sync now** or approves a CVE lookup |
 
 ## 2. Configuration
@@ -405,7 +405,7 @@ the item and the feed changes, so remove it at the source too or turn that sourc
 | Browser shows `Forbidden` on sign-in | Request `Origin` does not match `Host` (reverse proxy, different host name) | Use http://localhost:8080 or http://127.0.0.1:8080 exactly. Behind a proxy, keep the `Host` header and terminate TLS consistently. |
 | `Invalid host header` (400) | Host not in `INSIGHT_ALLOWED_HOSTS` | Add it, and understand the exposure first |
 | `Too many login attempts` (429) | More than 30 failed sign-ins in a minute | Wait 60 s. Check logs for unknown sources (§11). |
-| Signed out unexpectedly | Restart, 8-hour session expiry, sign-out in another tab, or rotated secret | Sign in again (expected) |
+| Signed out unexpectedly | 8-hour session expiry, sign-out in another tab, **Sign out everywhere**, or a new password, MFA setting or session secret | Sign in again (expected) |
 | Container `unhealthy` | Start-up failure (often a migration, or bad credentials) | `docker compose logs insight`. A `RuntimeError: Set INSIGHT_PASSWORD…` means `.env` is missing or values are too short. |
 | `Read-only file system` in logs | Something writes outside `/data` or `/tmp` | Check `NICEGUI_STORAGE_PATH` and `INSIGHT_DATA_DIR` point into `/data` |
 | `database is locked` | Another process holds a write lock (manual `sqlite3` session, backup script) | Close it. Insight waits 5 s (`busy_timeout`). |
@@ -466,8 +466,8 @@ verify the signature (§6).
 
 ## 14. Known limitations
 
-- Single operator; no SSO, RBAC or recipient-level TLP enforcement; in-memory sessions and rate limits (one
-  worker; a restart signs everyone out and resets the limits).
+- Single operator; no SSO, RBAC or recipient-level TLP enforcement; rate limits and the sign-in throttle live
+  in memory (one worker; a restart resets them). Sessions are stored in the database and survive restarts.
 - One API key at a time; rotation takes effect immediately (no overlap), so update the client right after
   `make api-key-rotate`.
 - `make smoke` and `scripts/smoke.py` sign in with the password only, so they need MFA off.
