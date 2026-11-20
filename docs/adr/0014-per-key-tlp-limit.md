@@ -17,6 +17,6 @@ refused for limited keys. The operator's session is never limited.
 
 ## Consequences
 A leaked GREEN key exposes GREEN and CLEAR reports only. Two tests guard it: a sweep of every API route for a
-marker planted in an AMBER report, and an architecture test that fails when `main.py` calls a report query
+marker planted in an AMBER report, and an architecture test that fails when an API route (`insight/web/`, formerly `main.py`) calls a report query
 without `max_tlp`. New report queries must accept the parameter. Watch terms and source-run messages are not
 report data and stay visible.

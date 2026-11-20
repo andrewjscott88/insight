@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from insight import main
 from insight.schemas import DocumentInput
 from insight.services import ingest
+from insight.web.routes import workspace
 
 
 def request(method: str = 'GET', session: dict[str, Any] | None = None, csrf: str | None = None) -> Request:
@@ -181,7 +182,7 @@ def test_a_route_group_can_be_mounted_and_tested_alone(session_factory: sessionm
     def record_auth(request: Request) -> None:  # stands in for the real session/CSRF check
         calls.append(request.url.path)
 
-    main._register_workspace_routes(app, session_factory, record_auth)
+    workspace._register_workspace_routes(app, session_factory, record_auth)
     with session_factory.begin() as db:
         ingest(db, DocumentInput(title='T', body='CVE-2024-12345 at 192.0.2.8', source_name='S'))
     with TestClient(app) as client:

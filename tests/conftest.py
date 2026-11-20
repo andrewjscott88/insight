@@ -61,17 +61,17 @@ def _dispose_app_databases(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     lifespan never runs never disposes it, and Python 3.13 then reports the unclosed SQLite connection as a
     ``ResourceWarning`` in whichever later test the garbage collector happens to run.
     """
-    import insight.main as main
+    from insight.web import app as web_app
 
     created: list[Engine] = []
-    real = database  # what insight.main imported from insight.models
+    real = database  # what insight.web.app imported from insight.models
 
     def tracking(*args: Any, **kwargs: Any) -> tuple[Engine, sessionmaker[Session]]:
         engine, sessions = real(*args, **kwargs)
         created.append(engine)
         return engine, sessions
 
-    monkeypatch.setattr(main, 'database', tracking)
+    monkeypatch.setattr(web_app, 'database', tracking)
     yield
     for engine in created:
         engine.dispose()
