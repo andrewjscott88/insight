@@ -2,10 +2,11 @@
 
 ## 0.6.0 - 2026-11-20
 
-**Upgrading from 0.5.0:** migrations `0006` (jobs, schedules, remembered feed downloads) and `0007` (verdicts)
-run at start-up, or with `make migrate`; nothing to do by hand. Take a backup first, as always. Schedules start
-**off**: nothing syncs by itself until you choose a schedule. Every 0.5.0 API field and the `insight-ioc-v1`
-export format are unchanged; new fields are additive.
+**Upgrading from 0.5.0:** migrations `0006` (jobs, schedules, remembered feed downloads), `0007` (verdicts) and
+`0008` (sessions) run at start-up, or with `make migrate`; nothing to do by hand. Take a backup first, as always.
+The upgrade's restart signs you out once; after that, restarts keep you signed in. Schedules start **off**:
+nothing syncs by itself until you choose a schedule. Every 0.5.0 API field and the `insight-ioc-v1` export
+format are unchanged; new fields are additive.
 
 ### Changed: a restart no longer signs you out; **Sign out everywhere**
 - **Sessions are stored in the database** (migration `0008`, review B4), so restarting or upgrading Insight
