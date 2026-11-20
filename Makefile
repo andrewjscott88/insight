@@ -80,7 +80,7 @@ version: env-file ## Print the version of the built image
 
 ##@ Data (Docker)
 
-.PHONY: backup restore export-iocs migrate db-shell
+.PHONY: backup restore export-iocs migrate db-shell delete-report
 backup: env-file ## Online, integrity-checked backup (safe while running) into backups/
 	@umask 077; mkdir -p $(BACKUP_DIR)
 	$(COMPOSE) exec -T $(SERVICE) insight backup /data/backup-$(STAMP).db
@@ -115,6 +115,13 @@ migrate: env-file ## Apply database migrations explicitly (start-up does this to
 
 db-shell: env-file ## SQL shell on the database (RUNBOOK section 9: stop and back up first)
 	$(COMPOSE) run --rm --no-deps --entrypoint python $(SERVICE) -m sqlite3 /data/insight.db
+
+delete-report: env-file ## Delete a report (legal/retention): ID=... REASON='ticket 42' (asks first)
+	@test -n $(call shell-quote,$(ID)) && test -n $(call shell-quote,$(REASON)) || { echo "usage: make delete-report ID=<report id> REASON='ticket 42: retention ended'" >&2; exit 2; }
+	$(COMPOSE) run --rm $(SERVICE) insight delete-report $(call shell-quote,$(ID)) --reason $(call shell-quote,$(REASON))
+
+# One argument as a single-quoted shell word, whatever it contains (a quote becomes '\'').
+shell-quote = '$(subst ','\'',$(1))'
 
 ##@ API key (Docker; one key at a time, see docs/API.md)
 

@@ -21,6 +21,15 @@
   feed records `Unchanged since the last sync.` and nothing else, so KEV's 1.3 MB catalogue is no longer
   re-read and rewritten when nothing changed. After an upgrade, each source is read once in full.
 
+### Added: deleting a report (`insight delete-report`)
+- **`make delete-report ID=... REASON='...'`** (or `insight delete-report ID --reason TEXT [--yes]`) deletes one
+  report for legal or retention reasons (review finding C4): its observations and notes, and indicators no
+  other report mentions, with their verdicts. It shows what will go and asks you to type `delete` first.
+- The revision chain is repaired, and a synced item always keeps a current revision. The runbook's manual
+  SQL procedure left an item with none when its first revision had been made current again, and it now
+  failed on indicators with a verdict. The command replaces it.
+- Audited as `document.delete` (actor `cli`) with the reason, content hash and counts, never the title or
+  text. CLI only, like API keys and MFA.
 ### Changed: a lighter pipeline, the same guarantees (review G1, first part)
 - Pull requests and pushes test Python 3.11 and 3.14; 3.12 and 3.13 run every night and in the milestone gate,
   which still tests all four.

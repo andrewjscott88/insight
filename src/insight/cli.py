@@ -72,21 +72,32 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument('--version', action='version', version=f'%(prog)s {__version__}')
     parser.add_argument(
         'command',
-        choices=['init', 'serve', 'migrate', 'backup', 'export-iocs', 'api-key', 'mfa', 'schedule'],
+        choices=[
+            'init',
+            'serve',
+            'migrate',
+            'backup',
+            'export-iocs',
+            'api-key',
+            'mfa',
+            'schedule',
+            'delete-report',
+        ],
         nargs='?',
         default='serve',
         help=(
             'init: create .env | serve: run (default) | migrate: upgrade the database | backup DEST | '
             'export-iocs DEST: write a JSON IOC export | api-key ACTION: manage the API key | '
             'mfa ACTION: pair the sign-in authenticator app | '
-            'schedule [SOURCE|all --every off|1h|6h|24h]: show or set scheduled syncs'
+            'schedule [SOURCE|all --every off|1h|6h|24h]: show or set scheduled syncs | '
+            'delete-report ID --reason TEXT: delete one report for legal or retention reasons'
         ),
     )
     parser.add_argument(
         'destination',
         nargs='?',
         help='backup/export-iocs: file to write (must not exist) | api-key: create, rotate, revoke or '
-        'status | mfa: setup, reset or status | schedule: a source key, or all',
+        'status | mfa: setup, reset or status | schedule: a source key, or all | delete-report: a report ID',
     )
     parser.add_argument('--host', default='127.0.0.1')
     parser.add_argument('--port', default=8080, type=int)
@@ -150,6 +161,17 @@ def build_parser() -> argparse.ArgumentParser:
         metavar='HH:MM',
         help='schedule: the time of day (UTC) the syncs start from, e.g. 00:00 (default: within a minute)',
     )
+    removal = parser.add_argument_group(
+        'delete-report options',
+        'Deletes the report, its observations and notes, and indicators no other report mentions (with their '
+        'verdicts). Take a backup first: there is no undo.',
+    )
+    removal.add_argument(
+        '--reason',
+        metavar='TEXT',
+        help='delete-report: why, e.g. a ticket number (required; kept in the audit log)',
+    )
+    removal.add_argument('--yes', action='store_true', help='delete-report: do not ask for confirmation')
     keys = parser.add_argument_group('api-key options')
     keys.add_argument(
         '--name', metavar='NAME', help='create/rotate: label, e.g. siem (default on rotate: keep)'
@@ -504,6 +526,52 @@ def mfa(action: str, read_code: Callable[[str], str] | None = None) -> str:
     raise ValueError('no matching code; no authenticator app was paired (nothing was saved)')
 
 
+def delete_report(document_id: str, reason: str, confirm: Callable[[str], bool] | None = None) -> str:
+    """Delete one report (``services.delete_document``), after ``confirm`` agrees to the summary it is shown.
+
+    Raises ``ValueError`` for an unknown ID or a missing reason. Audited as ``document.delete`` by ``cli``.
+    """
+    from . import services
+
+    if not reason.strip():
+        raise ValueError('say why: --reason "ticket 1234: retention period ended"')
+    with _current_database() as sessions:
+        with sessions() as db:
+            preview = services.deletion_preview(db, document_id)
+        if preview is None:
+            raise ValueError(f'no report with ID {document_id}')
+        summary = (
+            f'{preview.title}\n'
+            f'  TLP:{preview.tlp} · {preview.source_name} · added {preview.created_at[:10]}\n'
+            f'  {_plural(preview.observations, "observation")} and {_plural(preview.notes, "note")} '
+            'are deleted with it'
+        )
+        if preview.revisions:
+            summary += f'; {_plural(preview.revisions, "other revision")} of this item stay'
+        if confirm is not None and not confirm(summary):
+            return 'Cancelled; nothing was deleted.'
+        try:
+            with sessions.begin() as db:
+                services.set_actor(db, 'cli')
+                result = services.delete_document(db, document_id, reason)
+        except LookupError as exc:
+            raise ValueError(str(exc)) from exc
+    lines = [
+        f'Deleted report {document_id}: {_plural(result.observations, "observation")}, '
+        f'{_plural(result.notes, "note")}, {_plural(result.entities, "indicator")} no other report mentions '
+        f'and {_plural(result.verdicts, "verdict")} on them. Audited as document.delete.',
+    ]
+    if result.now_current:
+        lines.append(f'Revision {result.now_current} of the same item is current again.')
+    if preview.source_key:
+        lines.append(
+            f'It came from the {preview.source_key} source: if the publisher still lists the item and the '
+            'feed changes, the next sync adds it again.'
+        )
+    lines.append('Backups taken before now still contain the report; apply your retention policy to them.')
+    return '\n'.join(lines)
+
+
 def _plural(count: int, noun: str) -> str:
     return f'{count} {noun}' if count == 1 else f'{count} {noun}s'
 
@@ -633,8 +701,26 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f'Schedule: {exc}', file=sys.stderr)
             return 1
         return 0
+    if args.command == 'delete-report':
+        if not args.destination or not args.reason:
+            print('usage: insight delete-report ID --reason TEXT [--yes]', file=sys.stderr)
+            return 2
+        try:
+            print(delete_report(args.destination, args.reason, None if args.yes else _ask_to_delete))
+        except ValueError as exc:
+            print(f'Delete report: {exc}', file=sys.stderr)
+            return 1
+        except (EOFError, KeyboardInterrupt):
+            print('\nCancelled; nothing was deleted.', file=sys.stderr)
+            return 1
+        return 0
     serve(args.host, args.port)
     return 0
+
+
+def _ask_to_delete(summary: str) -> bool:
+    print(f'This deletes, with no undo:\n  {summary}')
+    return input('Type delete to go ahead: ').strip().lower() == 'delete'
 
 
 if __name__ == '__main__':

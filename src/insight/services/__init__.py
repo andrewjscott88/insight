@@ -60,6 +60,7 @@ from .jobs import (
     set_schedule,
     time_of_day,
 )
+from .retention import MAX_REASON_LENGTH, DeletionPreview, DeletionResult, delete_document, deletion_preview
 from .search import (
     MAX_PAGE_SIZE,
     MAX_QUERY_LENGTH,
@@ -104,6 +105,7 @@ __all__ = [
     'MAX_EXPORT_MENTIONS',
     'MAX_PAGE_SIZE',
     'MAX_QUERY_LENGTH',
+    'MAX_REASON_LENGTH',
     'MAX_WATCH_TERM_LENGTH',
     'PIVOT_PAGE_SIZE',
     'SCHEDULE_INTERVALS',
@@ -114,6 +116,8 @@ __all__ = [
     'BriefData',
     'BriefDocument',
     'BriefKev',
+    'DeletionPreview',
+    'DeletionResult',
     'DocumentQuery',
     'SourceRef',
     'TlpNotPermitted',
@@ -131,6 +135,8 @@ __all__ = [
     'count_documents_above',
     'count_entity_documents',
     'create_api_key',
+    'delete_document',
+    'deletion_preview',
     'detail',
     'enqueue_due_schedules',
     'enqueue_job',
