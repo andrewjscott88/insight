@@ -3,19 +3,27 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import contextlib
 import dataclasses
+import hashlib
+import json
 import logging
 import re
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from datetime import UTC, datetime
+from typing import Any
 
 import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
-from insight import __version__, main
+from insight import __version__, main, services
 from insight.config import Settings
+from insight.models import AuditEvent, OperatorSession
 
 CSRF = re.compile(r'name="csrf_token"[^>]*value="([^"]+)"')
 
@@ -145,15 +153,89 @@ def test_logout_page(client: TestClient, login: Callable[..., str]) -> None:
     assert 'Sign out of Insight?' in page.text
 
 
+def stored_sessions(app: FastAPI) -> int:
+    with app.state.session_factory() as db:
+        return services.count_operator_sessions(db, at=datetime.now(UTC))
+
+
+def session_id(client: TestClient) -> str:
+    """The session ID inside the signed cookie (its payload is base64 JSON before the signature)."""
+    payload = client.cookies['insight_session'].split('.')[0]
+    sid: str = json.loads(base64.b64decode(payload + '=' * (-len(payload) % 4)))['sid']
+    return sid
+
+
 def test_second_login_revokes_previous_session_id(
     app: FastAPI, client: TestClient, login: Callable[..., str]
 ) -> None:
     login(client)
-    (first_sid,) = app.state.active_sessions
+    assert stored_sessions(app) == 1
     client.cookies.clear()
-    login(client)
-    assert first_sid in app.state.active_sessions  # a different browser keeps its own session
-    assert len(app.state.active_sessions) == 2
+    login(client)  # a different browser keeps its own session
+    assert stored_sessions(app) == 2
+
+
+@pytest.fixture
+def restarted(settings: Settings) -> Callable[..., contextlib.AbstractContextManager[TestClient]]:
+    """``with restarted(client, **changes) as again``: a new app on the same database, with this cookie."""
+
+    @contextlib.contextmanager
+    def restart(client: TestClient, **changes: Any) -> Iterator[TestClient]:
+        with TestClient(main.create_app(dataclasses.replace(settings, **changes), with_ui=False)) as again:
+            again.cookies.set('insight_session', client.cookies['insight_session'])
+            yield again
+
+    return restart
+
+
+def test_a_restart_keeps_the_operator_signed_in(
+    authed: TestClient, restarted: Callable[..., contextlib.AbstractContextManager[TestClient]]
+) -> None:
+    """Review B4: sessions were held in memory, so every restart or upgrade signed the operator out."""
+    with restarted(authed) as again:
+        assert again.get('/api/session').status_code == 200
+
+
+@pytest.mark.parametrize(
+    'changes', [{'password': 'a-new-long-password'}, {'mfa': True}], ids=['password', 'mfa']
+)
+def test_new_credentials_sign_everyone_out(
+    authed: TestClient,
+    restarted: Callable[..., contextlib.AbstractContextManager[TestClient]],
+    changes: dict[str, Any],
+) -> None:
+    """A changed password or MFA setting still ends every session, as the restart it needs always did."""
+    with restarted(authed, **changes) as again:
+        assert again.get('/api/session').status_code == 401
+
+
+def test_sign_out_everywhere_ends_every_session(
+    app: FastAPI, client: TestClient, login: Callable[..., str], caplog: pytest.LogCaptureFixture
+) -> None:
+    token = login(client)
+    with TestClient(app, follow_redirects=False) as other_browser:
+        login(other_browser)
+        assert stored_sessions(app) == 2
+        assert 'Sign out everywhere' in client.get('/logout').text
+        with caplog.at_level(logging.INFO, logger='insight.auth'):
+            response = client.post('/logout', data={'csrf_token': token, 'everywhere': '1'})
+        assert (response.status_code, response.headers['location']) == (303, '/login')
+        assert other_browser.get('/api/session').status_code == 401
+    assert client.get('/api/session').status_code == 401
+    assert stored_sessions(app) == 0
+    assert 'Operator signed out everywhere: 2 session(s) ended' in caplog.text
+    with app.state.session_factory() as db:
+        event = db.scalars(select(AuditEvent).where(AuditEvent.action == 'session.end_all')).one()
+        assert (event.actor, event.detail) == ('operator', '2 session(s) ended')
+
+
+def test_the_database_cannot_sign_anyone_in(app: FastAPI, authed: TestClient) -> None:
+    """Only a keyed hash of the session ID is stored, so a copy of the database cannot sign anyone in."""
+    sid = session_id(authed)
+    with app.state.session_factory() as db:
+        (row,) = db.scalars(select(OperatorSession)).all()
+    assert sid not in (row.id_hash, row.created_at, row.expires_at)
+    assert row.id_hash != hashlib.sha256(sid.encode()).hexdigest()
 
 
 def test_expired_session_is_rejected(

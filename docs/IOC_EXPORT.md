@@ -428,7 +428,7 @@ mappings. Convert from an export **without** defanging:
 | --- | --- | --- |
 | Preview says *Too large: … mentions match* (API 422, CLI: `More than 100,000 indicator mentions match…`) | One export is capped at 100,000 mentions | Export in parts: by type, by TLP, by report or with a search |
 | Preview says *Nothing matches these filters.* (CLI: `Exported 0 IOCs … Nothing matched the filters …`) | Rejected mentions and superseded revisions are left out by default; accepted-only needs accepted mentions | Loosen the filters, or review mentions first |
-| The download tab shows `{"detail":"Sign in required"}` | Your session expired (8 hours, or a restart) | Sign in again and repeat the export |
+| The download tab shows `{"detail":"Sign in required"}` | Your session ended (8 hours, a sign-out, or a new password) | Sign in again and repeat the export |
 | ``max_tlp: Input should be 'CLEAR', 'GREEN', 'AMBER', 'AMBER+STRICT' or 'RED'``, even though you wrote `AMBER+STRICT` | In a URL, `+` means a space | Write `AMBER%2BSTRICT`, or let your client encode it (`curl --get --data-urlencode`, httpx `params`) |
 | ``kind 'IP': Input should be 'cve', 'url', …`` (API) or ``--kind 'ipv4': …`` (CLI) | Unknown type, or upper case in the API | Use the names from [§2](#2-quick-start). The CLI accepts any case |
 | ``--status: Input should be 'new', 'reviewing' or 'reviewed'`` | `--status`/`status` is the **report's** triage status | For mention verdicts use `--review-status`/`review_status` |

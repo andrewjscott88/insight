@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import secrets
 
 from fastapi import FastAPI, HTTPException, Request
@@ -10,8 +12,10 @@ from fastapi.templating import Jinja2Templates
 from starlette.responses import Response
 
 from ... import __version__
-from ..auth import MFA_UNPAIRED, SessionCheck, _mfa_paired
+from ..auth import MFA_UNPAIRED, SessionCheck, _mfa_paired, end_sessions
 from ..boundary import tokens_match
+
+log = logging.getLogger('insight.auth')
 
 
 def _register_page_routes(app: FastAPI, templates: Jinja2Templates) -> None:
@@ -52,6 +56,9 @@ def _register_page_routes(app: FastAPI, templates: Jinja2Templates) -> None:
         form = await request.form(max_fields=4)
         if not tokens_match(form.get('csrf_token'), request.session.get('csrf')):
             raise HTTPException(403, 'Invalid CSRF token')
-        app.state.active_sessions.pop(request.session.get('sid'), None)
+        everywhere = form.get('everywhere') == '1'
+        ended = await asyncio.to_thread(end_sessions, app, request.session.get('sid'), everywhere=everywhere)
+        if everywhere:
+            log.info('Operator signed out everywhere: %d session(s) ended', ended)
         request.session.clear()
         return RedirectResponse('/login', status_code=303)

@@ -10,6 +10,7 @@ import time
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any, Final, Literal, TypeAlias
 
 from fastapi import FastAPI, HTTPException, Request
@@ -32,7 +33,7 @@ from .boundary import (
 
 log = logging.getLogger('insight.auth')
 
-SESSION_TTL_SECONDS: Final = 8 * 60 * 60
+SESSION_TTL_SECONDS: Final = int(services.SESSION_TTL.total_seconds())
 
 LOGIN_WINDOW_SECONDS: Final = 60
 
@@ -85,13 +86,25 @@ SESSION_CALLER: Final = Caller('session')
 KeyVerifier: TypeAlias = Callable[[str], tuple[Caller | None, str]]
 
 
+def _moment(seconds: float) -> datetime:
+    return datetime.fromtimestamp(seconds, UTC)
+
+
 def session_checker(app: FastAPI) -> SessionCheck:
-    """``check(session)``: True while the signed cookie names a live, unexpired server-side session."""
+    """``check(session)``: True while the signed cookie names a stored, unexpired session (review B4).
+
+    Sessions live in the database, so a restart keeps the operator signed in; ending one there ends it in
+    every tab at once. The check is one primary-key lookup.
+    """
 
     def authenticated(session: Mapping[str, Any]) -> bool:
-        sid = session.get('sid', '')
-        expiry: float = app.state.active_sessions.get(sid, 0)
-        return bool(session.get('authenticated') and expiry > time.time())
+        sid = session.get('sid')
+        if not (session.get('authenticated') and isinstance(sid, str) and sid):
+            return False
+        with app.state.session_factory() as db:
+            return services.operator_session_valid(
+                db, sid, binding=app.state.session_binding, at=_moment(time.time())
+            )
 
     return authenticated
 
@@ -217,14 +230,36 @@ def acting(sessions: SessionFactory, request: Request) -> Iterator[Session]:
         yield services.set_actor(db, caller_of(request).actor)
 
 
-def start_session(app: FastAPI, request: Request, now: float) -> None:
-    """Replace the caller's session with a fresh server-side one (prevents session fixation)."""
-    app.state.active_sessions.pop(request.session.get('sid'), None)
-    app.state.active_sessions = {k: v for k, v in app.state.active_sessions.items() if v > now}
-    sid = secrets.token_urlsafe(32)
-    app.state.active_sessions[sid] = now + SESSION_TTL_SECONDS
+def new_session_id(app: FastAPI, replaces: Any, now: float) -> str:
+    """Store a fresh session, ending the one it replaces, and return its ID (blocking: database)."""
+    with app.state.session_factory.begin() as db:
+        return services.start_operator_session(
+            db,
+            binding=app.state.session_binding,
+            at=_moment(now),
+            replaces=replaces if isinstance(replaces, str) else None,
+        )
+
+
+def end_sessions(app: FastAPI, sid: Any, *, everywhere: bool) -> int:
+    """Sign this browser out, or every browser (audited); returns how many sessions ended everywhere."""
+    with app.state.session_factory.begin() as db:
+        services.set_actor(db, 'operator')
+        if everywhere:
+            return services.end_all_operator_sessions(db)
+        if isinstance(sid, str) and sid:
+            services.end_operator_session(db, sid, binding=app.state.session_binding)
+        return 0
+
+
+def set_session_cookie(request: Request, sid: str) -> None:
     request.session.clear()
     request.session.update(authenticated=True, sid=sid, csrf=secrets.token_urlsafe(32))
+
+
+def start_session(app: FastAPI, request: Request, now: float) -> None:
+    """Replace the caller's session with a fresh stored one (prevents session fixation)."""
+    set_session_cookie(request, new_session_id(app, request.session.get('sid'), now))
 
 
 def _mfa_paired(sessions: SessionFactory) -> bool:
@@ -287,6 +322,7 @@ def _register_login(app: FastAPI, settings: Settings, templates: Jinja2Templates
                     status_code=401,
                     context={'csrf_token': csrf, 'error': error, 'mfa': mfa},
                 )
-        start_session(app, request, current)
+        sid = await asyncio.to_thread(new_session_id, app, request.session.get('sid'), current)
+        set_session_cookie(request, sid)
         log.info('Operator signed in%s', ' (password and authentication code)' if mfa else '')
         return RedirectResponse('/', status_code=303)

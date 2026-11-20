@@ -201,6 +201,21 @@ class ApiKey(Base):
     max_tlp: Mapped[str | None] = mapped_column(String(20), default=None)
 
 
+class OperatorSession(Base):
+    """A signed-in browser (review B4), stored so that a restart keeps it and sign-out reaches everywhere.
+
+    The cookie carries a random session ID. Only a hash of that ID, keyed to the current password and MFA
+    setting (``services.session_binding``), is stored: the database alone cannot sign anyone in, and changing
+    the password or the MFA setting ends every session. Rows are deleted when a session ends; expired ones
+    are deleted at the next sign-in.
+    """
+
+    __tablename__ = 'operator_sessions'
+    id_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    created_at: Mapped[str] = mapped_column(String(40), default=now)
+    expires_at: Mapped[str] = mapped_column(String(40), index=True)
+
+
 class OperatorMfa(Base):
     """The operator's TOTP second factor (at most one row; no row means MFA is off). See ``insight.totp``.
 

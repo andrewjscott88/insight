@@ -104,7 +104,7 @@ versioned yet; breaking changes are listed in the CHANGELOG. Usage: [API_GUIDE](
 TLS reverse proxy (optional; the container listens on loopback)
  → ProxyHeaders       only from INSIGHT_TRUSTED_PROXIES: real client address and scheme (uvicorn's middleware)
  → TrustedHost        Host must be in INSIGHT_ALLOWED_HOSTS
- → Session            signed cookie; the session ID must be live in server memory
+ → Session            signed cookie; the session ID must be stored and unexpired (operator_sessions)
  → Boundary           Origin check, 2 MB body limit, security headers (+ HSTS, RateLimit headers)
  → require_auth       one FastAPI dependency on every /api route, in this order:
       1. credential   Bearer key (hash lookup; uniform 401; invalid keys throttled per address)
