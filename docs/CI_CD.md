@@ -104,7 +104,19 @@ Final tags `vX.Y.Z` only. See `docs/RELEASING.md` for the step-by-step procedure
 3. **post-release**: `cosign verify` against this repository's workflow identity; pull **by digest**,
    run read-only, smoke test.
 
-Operators verify an image with:
+### Release rehearsal
+
+CI never runs the release workflow, so `release-rehearsal.yml` runs on every pull request that touches
+`release.yml`, the `Dockerfile`, the rehearsal or `scripts/check_release_actions.py` (and on demand). With the
+release's exact action versions, it builds the wheel and the image with its SBOM and `provenance: mode=max`,
+pushes to a throwaway registry on the runner, signs and verifies with a cosign key made for that run (no
+transparency log), checks that the same cosign verifies the last published release, then pulls by digest and
+smoke-tests the read-only container. `scripts/check_release_actions.py` fails the rehearsal if `release.yml`
+passes an input that a pinned action does not declare, if the rehearsal runs a different version than the
+release, or if the release gains an action nobody has classified. Only the keyless signature and the
+provenance attestations wait for a real release, because they publish; post-release verifies the signature.
+
+Operators verify an image with cosign v3 or later:
 
 ```sh
 cosign verify ghcr.io/<org>/insight@sha256:<digest> \
@@ -124,7 +136,8 @@ cosign verify ghcr.io/<org>/insight@sha256:<digest> \
 - Every workflow defaults to `contents: read`; jobs add only what they need (`packages: write`,
   `id-token: write`, `attestations: write`, `issues: write`, `security-events: write`).
 - `actions/checkout` never persists credentials.
-- No long-lived signing keys: cosign and attestations use GitHub OIDC.
+- No long-lived signing keys: cosign and attestations use GitHub OIDC (the release rehearsal signs with a
+  key it makes and throws away in the same run).
 - Untrusted values (tag names, run URLs) reach shell scripts only through `env:`, never inline `${{ }}`
   (zizmor enforces this).
 - Only the nightly live job and the E2E/DAST job use the network during tests.
@@ -135,7 +148,7 @@ cosign verify ghcr.io/<org>/insight@sha256:<digest> \
 | --- | --- | --- |
 | 1 | **Repository layout**: `insight/` must be the git repository root | GitHub only reads `.github/` at the root. |
 | 2 | ~~**Pin actions to commit SHAs and the base image to a digest**~~ | Done for 0.5.0: every `uses:` is pinned to a commit SHA with its tag in a comment, both `FROM` lines carry the `python:3.13-slim` index digest, and `.github/zizmor.yml` enforces `hash-pin`. Dependabot keeps the SHAs and digest current. `trivy-action` moved from the deleted `0.28.0` tag to `v0.36.0` (the old tags were removed after the March 2026 tag-hijack incident, GHSA-69fq-xp46-6x23). |
-| 3 | **Confirm action and tool versions** | Written against `checkout@v7`, `setup-python@v7`, `upload-artifact@v4`, `docker/*@v3/v5/v6`, `cosign-installer@v3`, `attest-build-provenance@v2`, `codeql-action@v4`, `trivy-action@0.28.0`, `gitleaks v8.18.4`, `uv 0.13.7`. Pinning (2) also confirms these exist. |
+| 3 | **Confirm action and tool versions** | Written against `checkout@v7`, `setup-python@v7`, `upload-artifact@v4`, `docker/*@v4/v6/v7`, `cosign-installer@v4`, `attest-build-provenance@v4`, `codeql-action@v4`, `trivy-action@0.28.0`, `gitleaks v8.18.4`, `uv 0.13.7`. Pinning (2) also confirms these exist. |
 | 4 | **Branch protection** on `main` | Required checks listed under Tier 1; require PR review; block force-push. |
 | 5 | **`release` environment** with required reviewers | Settings → Environments. Publishing waits for a named approver. |
 | 6 | **GHCR visibility** | Private by default; decide who may pull. |
