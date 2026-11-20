@@ -4,7 +4,7 @@
 # tools, no source tree, runs as an unprivileged user and works with a read-only root filesystem.
 #
 # SUPPLY CHAIN: pin both FROM lines by digest before a release, e.g.
-#   FROM python:3.13-slim@sha256:<digest> AS build
+#   FROM python:3.15-slim@sha256:<digest> AS build
 # `python scripts/check_pins.py --strict` (release gate) fails until this is done; Dependabot keeps the
 # digests current afterwards. See docs/CI_CD.md.
 

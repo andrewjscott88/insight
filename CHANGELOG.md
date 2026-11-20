@@ -8,6 +8,11 @@ The upgrade's restart signs you out once; after that, restarts keep you signed i
 nothing syncs by itself until you choose a schedule. Every 0.5.0 API field and the `insight-ioc-v1` export
 format are unchanged; new fields are additive.
 
+### Changed: the container image runs Python 3.15
+- The Docker image's base moves from `python:3.13-slim` to `python:3.15-slim` (pinned by digest; Dependabot #1).
+  The container build, vulnerability scan, read-only smoke test and the release gate's browser and ZAP tests
+  run against it. The Python package itself still supports 3.11 and later and is tested on 3.11 to 3.14.
+
 ### Changed: a restart no longer signs you out; **Sign out everywhere**
 - **Sessions are stored in the database** (migration `0008`, review B4), so restarting or upgrading Insight
   keeps the operator signed in. Only a hash of each session ID is stored, keyed to the password and MFA setting:
