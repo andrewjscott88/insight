@@ -75,7 +75,7 @@ an upgrade note. With any format change:
 - regenerate the example with `python scripts/make_ioc_example.py` (a test fails while it is stale);
 - update [docs/IOC_EXPORT.md](docs/IOC_EXPORT.md) and [docs/API.md](docs/API.md).
 
-**UI change.** Put data access in `services.py`, and put new UI in the relevant `ui/` panel module (keep
+**UI change.** Put data access in the `insight/services/` package (in the module for its domain), and put new UI in the relevant `ui/` panel module (keep
 modules under 300 lines). Test with the NiceGUI user simulation (`tests/ui/`). Use `should_see()` before
 `find()`: refreshes run asynchronously. For readability ([ADR 0017](docs/adr/0017-readability-standard.md)):
 use `typography.heading()` for headings, `messages.tell()` for messages (inside an open dialog, write problems in

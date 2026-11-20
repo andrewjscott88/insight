@@ -175,7 +175,7 @@ ignore_missing_imports = true
 # Run in a separate environment: `pip install -r requirements-dev.lock "pytest<9" mutmut==3.8.0` *without*
 # installing the project (mutmut 3.8 is not yet compatible with pytest 9). See docs/CI_CD.md.
 [tool.mutmut]
-source_paths = ["src/insight/extraction.py", "src/insight/connectors.py", "src/insight/services.py"]
+source_paths = ["src/insight/extraction.py", "src/insight/connectors.py", "src/insight/services/"]
 also_copy = [
     "src/insight", "scripts", "benchmarks", "docs", ".github", "CHANGELOG.md", "Dockerfile",
     "requirements.lock", "requirements-dev.lock", "requirements-e2e.lock", "requirements-build.lock",

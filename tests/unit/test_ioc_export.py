@@ -388,7 +388,7 @@ def test_empty_workspace_exports_an_empty_amber_file(db: Session) -> None:
 
 
 def test_export_size_is_bounded(db: Session, two_reports: Reports, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(services, 'MAX_EXPORT_MENTIONS', 5)  # the two reports hold 6 mentions
+    monkeypatch.setattr(services.exports, 'MAX_EXPORT_MENTIONS', 5)  # the two reports hold 6 mentions
     with pytest.raises(ValueError, match='narrow the filters'):
         export_iocs(db, IocExportQuery())
 
@@ -505,7 +505,7 @@ def test_cli_requires_a_current_schema(
 def test_cli_removes_the_file_and_audits_nothing_when_the_export_fails(
     workspace_url: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(services, 'MAX_EXPORT_MENTIONS', 0)
+    monkeypatch.setattr(services.exports, 'MAX_EXPORT_MENTIONS', 0)
     target = tmp_path / 'iocs.json'
     assert cli.main(['export-iocs', str(target)]) == 1
     assert not target.exists()
