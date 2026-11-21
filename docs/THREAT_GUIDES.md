@@ -32,6 +32,23 @@ It is an order, not a likelihood score. Naming is not attribution: a report that
 ..." counts as naming APT29. Insight never decides that a group is behind activity from indicators, techniques
 or co-occurrence.
 
+## Track actors and campaigns
+
+Open **Industry threats → Actors and campaigns you track**. Use **New campaign** to record a campaign
+name, aliases, description and TLP. **Track your own actor** creates an actor. Search for the record by
+name and open it. Choose **Report**, **Indicator** or **Technique**, search by title, value or technique
+ID, set the link’s sharing label and select the matching item. Use **Remove link** to retract a decision.
+A shared name, indicator or technique between two reports creates no link.
+
+Each link inherits the strictest label of the record, target and analyst’s chosen link label. An indicator
+is visible only while a report within the reader’s limit mentions it. The label on a saved link can be
+raised by saving it again. A more restricted link stays out of the lists and guides of limited readers.
+A report belongs to a specific revision. Deleting a report removes its links. Deleting the last report
+that mentions an indicator also removes links to that indicator.
+
+STIX exports can carry local actors, campaigns and links for targets already selected for export.
+Each relationship carries its own sharing label. See the [STIX export guide](IOC_EXPORT.md#stix-21-export).
+
 ## What a guide contains
 
 | Section | Source |
