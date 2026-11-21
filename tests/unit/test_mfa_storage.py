@@ -5,11 +5,11 @@ from __future__ import annotations
 import base64
 
 import pytest
-from insight.mfa_crypto import decrypt_seed
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from insight import services, totp
+from insight.mfa_crypto import decrypt_seed
 from insight.models import OperatorMfa
 
 SEED = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP'
