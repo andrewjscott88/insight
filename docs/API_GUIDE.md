@@ -44,9 +44,13 @@ curl -sS "$INSIGHT_URL/api/stats" -H "Authorization: Bearer $INSIGHT_API_KEY"
 {"documents":4,"entities":10,"unreviewed":4,"observations_unreviewed":12}
 ```
 
-The intel brief on the landing page is available too (executive summary plus sections, built from the data, no AI):
+The threat landscape that opens the workspace (what is trending and why it matters, built from the data, no
+AI), as JSON or as a Markdown briefing to share; and the intel brief alone:
 
 ```sh
+curl -sS "$INSIGHT_URL/api/landscape?days=7" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  | jq -r '.tlp, .summary[], (.threats[] | "\(.name): \(.change.label), \(.change.current) reports")'
+curl -sS -OJ "$INSIGHT_URL/api/landscape/briefing?days=30" -H "Authorization: Bearer $INSIGHT_API_KEY"
 curl -sS "$INSIGHT_URL/api/brief?days=7" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq -r '.summary[], (.sections[] | .title, (.items[].text))'
 ```
 

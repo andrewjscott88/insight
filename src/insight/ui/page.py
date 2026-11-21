@@ -12,12 +12,12 @@ from nicegui import ui
 from ..appearance import TEXT_SIZE_COOKIE, THEME_COOKIE, dark_mode_value, text_size_choice, theme_choice
 from ..models import SessionFactory
 from .appearance import TextSizeSwitch, ThemeSwitch
-from .brief import build_brief
 from .entities import build_entities
 from .glossary import open_glossary
 from .inbox import build_inbox
 from .ingest import build_ingest_dialog
 from .ioc_export import open_ioc_export_dialog
+from .landscape import build_landscape
 from .sources import build_sources, build_sync_all_button
 from .stats import build_stats
 from .techniques import build_techniques
@@ -84,7 +84,7 @@ def register_ui(app: FastAPI, session_factory: SessionFactory) -> None:
                         'flex-1 sm:flex-none'
                     )
             build_stats(ws)
-            build_brief(ws)
+            build_landscape(ws)
             with ui.tabs().props('align=left no-caps').classes('w-full') as tabs:
                 inbox_tab = _tab('Intelligence inbox', 'Inbox')
                 entities_tab = _tab('Entity explorer', 'Entities')

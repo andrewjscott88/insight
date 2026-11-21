@@ -59,6 +59,8 @@ PROTECTED = [
     ('GET', '/api/attack/summary'),
     ('GET', '/api/attack/techniques/x/documents'),
     ('GET', '/api/attack/navigator'),
+    ('GET', '/api/landscape'),
+    ('GET', '/api/landscape/briefing'),
     ('GET', '/api/documents/x/techniques'),
     ('POST', '/api/documents/x/techniques'),
     ('DELETE', '/api/documents/x/techniques/T1486'),

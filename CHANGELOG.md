@@ -6,6 +6,23 @@
 Reports stored before the upgrade get their technique tags when you run `make attack-backfill` once (safe to run
 again). Every 0.6.0 API field is unchanged.
 
+### Added: a threat landscape that opens the workspace
+- **An executive summary of what is trending and why it matters**, in plain English, for the last 7 or 30 days,
+  compared with the 4 weeks or months before ([ADR 0020](docs/adr/0020-threat-landscape.md)). It says how busy
+  the period was, which kinds of threat are **rising**, **new** or **quieter**, what attackers are doing by ATT&CK
+  tactic ("getting in (Initial Access)"), then the brief's lines: weaknesses CISA says attackers use (now with
+  "more than usual"), deadlines, the most severe weakness, your watch terms and a first step.
+- **Trending threats**: 13 kinds of threat (ransomware, phishing, data theft and extortion, password and account
+  theft, supply-chain attacks, zero-days, state-backed spying, wipers, DDoS, botnets, hacktivism, cryptomining,
+  insider threats), each with what it is, why it matters, what to check, its newest reports and **How Insight
+  spots this** (the words and ATT&CK techniques it counts).
+- A rise must show in the **share** of reports as well as the count, so a new or busy source does not make
+  everything look like it is rising. Without earlier reports, the landscape says it cannot show trends yet.
+- The landscape carries the **most restrictive TLP** of the reports it counted. **Download as a briefing to
+  share** gives the same as Markdown, TLP-marked; downloads are audited (`landscape.briefing`).
+- API: `GET /api/landscape` and `GET /api/landscape/briefing` (`days` 1-30), limited to the reports the key may
+  see. `GET /api/brief` is unchanged.
+
 ### Added: MITRE ATT&CK® techniques on reports
 - **Tags from the report text.** A report is tagged with every Enterprise ATT&CK technique ID written in it
   (`T1059`, `T1059.001`), with the words around it as evidence. Insight never guesses a technique from prose and
@@ -24,6 +41,8 @@ again). Every 0.6.0 API field is unchanged.
   deprecated ones left out), so tagging works offline. `scripts/update_attack.py` regenerates it from MITRE's
   `attack-stix-data`. Reproduced under MITRE's terms of use; see `NOTICE`.
 - `insight attack-backfill` / `make attack-backfill` tags reports stored before this release.
+- Workspace tabs that do not fit now wrap onto a second line instead of scrolling sideways, which keyboard
+  users could not reach.
 
 ### Documentation: a roadmap toward a premium TIP; corrected session and schedule notes
 - `ROADMAP.md` now plans releases 0.7.0 to 1.0 and later from a detailed gap analysis against premium threat
