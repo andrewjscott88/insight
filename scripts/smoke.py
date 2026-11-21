@@ -61,14 +61,19 @@ def sign_in(client: HttpClient, password: str) -> str:
         raise SmokeFailure('login form has no CSRF token')
     response = client.post('/login', data={'csrf_token': match.group(1), 'password': password})
     check(response.status_code == 303, f'sign-in failed with HTTP {response.status_code}')
-    token: str = client.get('/api/session').json()['csrf_token']
+    response = client.get('/api/session')
+    check(response.status_code == 200, f'GET /api/session returned {response.status_code} after sign-in')
+    session = response.json()
+    version = session.get('version')
+    check(isinstance(version, str) and version.strip(), 'signed-in session is missing the version')
+    token: str = session['csrf_token']
     return token
 
 
 def run(client: HttpClient, password: str, *, load_demo: bool = True, ui: bool = True) -> dict[str, Any]:
     """Run every smoke check; returns the final ``/api/stats``. ``ui=False`` skips the NiceGUI page checks."""
     health = wait_until_healthy(client)
-    check(health.get('status') == 'ok', f'unexpected /health payload {health}')
+    check(health == {'status': 'ok'}, 'public /health must return only the liveness status')
     response = client.get('/health')
     missing = [h for h in REQUIRED_HEADERS if h not in response.headers]
     check(not missing, f'security headers missing: {missing}')
@@ -76,6 +81,7 @@ def run(client: HttpClient, password: str, *, load_demo: bool = True, ui: bool =
         anonymous = client.get('/', follow_redirects=False)
         check(anonymous.status_code == 303, f'anonymous workspace access returned {anonymous.status_code}')
     check(client.get('/api/stats').status_code == 401, 'API is reachable without signing in')
+    check(client.get('/api/session').status_code == 401, 'session information is public')
     check(
         client.post('/login', data={'csrf_token': 'missing', 'password': password}).status_code == 403,
         'forged CSRF sign-in was not rejected',
