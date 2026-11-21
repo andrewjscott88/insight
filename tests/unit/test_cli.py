@@ -749,3 +749,35 @@ def test_attack_backfill_tags_reports_from_before_0_7_0(
             assert event.actor == 'cli'
     finally:
         engine.dispose()
+
+
+def test_backup_removes_incomplete_destination_and_preserves_existing_file(
+    monkeypatch: pytest.MonkeyPatch, in_tmp: Path
+) -> None:
+    source = in_tmp / 'invalid # data.db'
+    source.write_bytes(b'Synthetic invalid database')
+    monkeypatch.setenv('INSIGHT_DATABASE_URL', f'sqlite:///{source}')
+    target = in_tmp / 'backup.db'
+    assert cli.main(['backup', str(target)]) == 1
+    assert not target.exists()
+    target.write_bytes(b'Existing backup')
+    assert cli.main(['backup', str(target)]) == 1
+    assert target.read_bytes() == b'Existing backup'
+
+
+def test_backup_captures_committed_snapshot_while_wal_writer_is_open(
+    monkeypatch: pytest.MonkeyPatch, in_tmp: Path
+) -> None:
+    path = in_tmp / 'snapshot #1.db'
+    monkeypatch.setenv('INSIGHT_DATABASE_URL', f'sqlite:///{path}')
+    target = in_tmp / 'live.db'
+    with closing(sqlite3.connect(path)) as writer:
+        writer.execute('PRAGMA journal_mode=WAL')
+        writer.execute('CREATE TABLE records (value INTEGER PRIMARY KEY)')
+        writer.execute('INSERT INTO records VALUES (1)')
+        writer.commit()
+        writer.execute('INSERT INTO records VALUES (2)')
+        assert cli.main(['backup', str(target)]) == 0
+        writer.rollback()
+    with closing(sqlite3.connect(target)) as copy:
+        assert copy.execute('SELECT value FROM records').fetchall() == [(1,)]

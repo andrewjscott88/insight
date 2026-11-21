@@ -11,7 +11,7 @@ import os
 import secrets
 import sys
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -335,17 +335,23 @@ def backup(destination: Path) -> str:
     if not source_path.is_file():
         raise ValueError(f'No database at {source_path}')
     # Exclusive create: never overwrite an existing backup.
-    os.close(os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600))
-    source = sqlite3.connect(f'file:{source_path}?mode=ro', uri=True)
-    target = sqlite3.connect(destination)
+    fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:
-        source.backup(target)
-        status = target.execute('PRAGMA integrity_check').fetchone()[0]
-    finally:
-        source.close()
-        target.close()
-    if status != 'ok':
-        raise ValueError(f'Backup integrity check failed: {status}')
+        os.close(fd)
+        # VACUUM INTO creates a consistent snapshot of live records. Unlike a page-for-page copy, the
+        # destination never contains free pages that might still hold data deleted before an upgrade.
+        source_uri = source_path.resolve().as_uri() + '?mode=ro'
+        with closing(sqlite3.connect(source_uri, uri=True)) as source:
+            source.execute('VACUUM INTO ?', (str(destination.resolve()),))
+        with closing(sqlite3.connect(destination.resolve().as_uri() + '?mode=ro', uri=True)) as target:
+            status = target.execute('PRAGMA integrity_check').fetchone()[0]
+            if status != 'ok':
+                raise ValueError(f'Backup integrity check failed: {status}')
+    except BaseException as exc:
+        destination.unlink(missing_ok=True)
+        if isinstance(exc, sqlite3.Error):
+            raise ValueError(f'SQLite could not complete the backup: {exc}') from None
+        raise
     return f'Backed up {source_path} to {destination} (integrity ok).'
 
 

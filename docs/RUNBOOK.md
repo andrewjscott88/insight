@@ -277,7 +277,8 @@ docker compose exec insight insight backup /data/backup-$(date +%F).db     # ref
 docker compose cp insight:/data/backup-$(date +%F).db ./backups/
 docker compose exec insight rm /data/backup-$(date +%F).db                  # optional: free volume space
 ```
-`insight backup` uses SQLite's online backup API and runs `PRAGMA integrity_check` on the copy. It prints
+`insight backup` takes a consistent snapshot of live records with SQLite's `VACUUM INTO`. This leaves historical
+free pages out of the copy. It runs `PRAGMA integrity_check` on the destination and prints
 `integrity ok` on success. Store backups with the same protection as the data (they contain TLP:RED material
 if you do). For PostgreSQL, use `pg_dump --format=custom` instead.
 
