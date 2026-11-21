@@ -202,7 +202,7 @@ class IocExportQuery(BaseModel):
 
 ClaimDecision = Literal['added', 'removed']
 RuleKind = Literal['yara', 'sigma']
-RuleTarget = Literal['group', 'technique', 'document']
+RuleTarget = Literal['group', 'technique', 'document', 'cve', 'malware']
 HuntStatus = Literal['open', 'closed']
 HuntResult = Literal['not-checked', 'nothing-found', 'suspicious', 'confirmed']
 HUNT_RESULTS: tuple[str, ...] = get_args(HuntResult)

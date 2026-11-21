@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Detection rule files
+
+- Attach YARA or Sigma rules to reports, actors, techniques, CVEs and malware families. Download the original
+  text with its SHA-256, licence, source and sharing label. [Rule files](docs/THREAT_GUIDES.md#rules)
+
 ### STIX 2.1 export
 
 - Export indicators, CVEs and report provenance with TLP 2.0 markings from the workspace, the CLI

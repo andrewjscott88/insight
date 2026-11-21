@@ -315,6 +315,8 @@ opt-in schedules and the job runner, and `ROADMAP.md` marks #10 done.
 
 ### 2.7 Link YARA and Sigma as artifacts
 
+- **Status (unreleased):** Built, including individual rule downloads with a handling manifest. [Using rule files](THREAT_GUIDES.md#rules)
+
 - **What to build:** Attach rule text (YARA or Sigma) to a report, CVE, actor, or malware-family label. Do **not** build a detection engine.
 - **Why / which TIP capability:** Detection content. CrowdStrike documents YARA rule download; MISP exports Suricata/Snort/Zeek; Google TI describes YARA hunting. Insight should *carry* rules, not execute them.
 - **Implementation notes:** Table `detection_rules` (id, kind=`yara|sigma`, name, body, source_url, content_hash, tlp, created_at) and `detection_rule_links`. Service + UI in the reader. Optional import from a local file. Hash and display; syntax-check if a library is already acceptable to pin. Include rules in STIX as `file` + `note` or a documented custom object, or export sidecar files. CLI `insight rule-add`.
@@ -542,7 +544,7 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
 - [x] **2.4** MISP export/import (host CLI). [Event files and trusted instance exchange](MISP.md)
 - [ ] **2.5** Manual actor and campaign entities (no inferred attribution): *minimum done with 2.10* (actors, report links, industry decisions; campaigns and STIX remain)
 - [ ] **2.6** Optional GreyNoise community IP enrichment
-- [ ] **2.7** YARA/Sigma rules as linked artifacts (not an engine): *minimum done with 2.10* (store, link to group/technique/report, export in guides, delete; CVE links and STIX remain)
+- [x] **2.7** YARA and Sigma rules with report, actor, technique, CVE and malware-family links and a downloadable rule file and manifest
 - [ ] **2.8** PDF advisory ingest with file hash (`ROADMAP` #13)
 - [x] **2.9** Suricata and Snort 3 alert rules for the IP and domain blocklists
 - [x] **2.10** Industry threat profiles (top ten groups per industry, with evidence) and exportable actor threat guides with a threat hunt section (hypotheses, data sources, indicator sweep list, linked rules, hunt record); needs a bundled threat-group library: done, ADR 0025, [THREAT_GUIDES.md](THREAT_GUIDES.md)

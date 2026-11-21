@@ -192,7 +192,7 @@ def guide_data(
     }
     swept = [r for r in reports if r.via == 'linked'] if linked_only else reports
     sweep, truncated = sweep_list(db, swept, max_tlp=max_tlp, now=now)
-    rules = rules_for_group(db, subject.ref, techniques, max_tlp=max_tlp)
+    rules = rules_for_group(db, subject.ref, techniques, reports=linked_ids, max_tlp=max_tlp)
     hunts = tuple(HuntView(h, hunt_checks(db, h.id)) for h in hunts_for(db, subject.ref, max_tlp=max_tlp))
     # Every label of what the guide shows or counts: the banner is never less restrictive than its content.
     labels = (
