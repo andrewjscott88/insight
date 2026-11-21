@@ -18,11 +18,18 @@ fields are additive. TLP-limited API keys may now read cached CVE scores (`GET /
 CVEs in reports they can see; starting a lookup stays refused to them. The new password-free access
 (`INSIGHT_DEV_NO_AUTH`) is off unless you set it to `on`.
 
+### More defanged indicators in reports
+
+- The extractor now recognizes web links beginning with `[http]://` or `[https]://`, plus e-mail addresses
+  written with `[at]` or `(at)`. The highlighted text keeps the spelling from the source report.
+- New reports and revisions record extractor version `regex-v5`. The benchmark includes three attributed
+  U.S. government advisory excerpts and four new synthetic cases.
+
 ### E-mail addresses in reports
 
 - Insight can highlight an e-mail address in its source report and show other reports that mention the same
   mailbox. Each address carries a personal-data warning. IOC exports can filter out entries with that flag.
-- New reports and revisions use `regex-v4`. Earlier reports keep their original observations and review decisions.
+- E-mail support was introduced with `regex-v4`. Earlier reports keep their original observations and review decisions.
 
 ### Network ranges in reports
 
