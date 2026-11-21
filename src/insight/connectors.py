@@ -6,11 +6,9 @@ import asyncio
 import csv
 import hashlib
 import io
-import ipaddress
 import json
 import os
 import re
-import socket
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
@@ -24,7 +22,7 @@ from defusedxml import ElementTree
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from . import __version__
+from . import __version__, egress
 from .models import Enrichment, Entity, KEVRecord, SessionFactory, SourceRun, now
 from .schemas import DocumentInput
 from .services import SourceRef, get_fetch_state, ingest, save_fetch_state, set_actor, source_switches
@@ -113,10 +111,21 @@ ALLOWED_HOSTS: Final[frozenset[str]] = frozenset(
 )
 
 
-async def _assert_public(hostname: str) -> None:
-    addresses = await asyncio.to_thread(socket.getaddrinfo, hostname, 443, 0, socket.SOCK_STREAM)
-    if not addresses or any(not ipaddress.ip_address(str(a[4][0])).is_global for a in addresses):
+async def _public_addresses(hostname: str) -> list[egress.IPAddress]:
+    """The addresses of ``hostname``, all of them public, or ``ValueError`` (review L1: the request then goes
+    to one of these exact addresses, so a second DNS answer cannot redirect it)."""
+    addresses = await egress.resolve(hostname, 443)
+    if not addresses or not all(egress.is_public(a) for a in addresses):
         raise ValueError('Source resolves to a non-public destination')
+    return addresses
+
+
+def _status_error(response: httpx.Response, url: str) -> httpx.HTTPStatusError:
+    """httpx's error for a failed answer, naming the host the operator knows rather than its address."""
+    code = response.status_code
+    kind = 'Client error' if code < 500 else 'Server error'
+    message = f"{kind} '{code} {response.reason_phrase}' for url '{url}'"
+    return httpx.HTTPStatusError(message, request=response.request, response=response)
 
 
 #: The run message when a source has not changed since its last successful sync.
@@ -164,36 +173,52 @@ async def download(
         port = -1
     if port not in (None, 443):
         raise ValueError('Outbound URL is not in the curated HTTPS source registry')
-    await _assert_public(parts.hostname)
+    addresses = await _public_addresses(parts.hostname)
     request_headers = {**(headers or {}), 'User-Agent': USER_AGENT, 'Accept-Encoding': 'identity'}
     if validators is not None and validators.etag:
         request_headers['If-None-Match'] = validators.etag
     if validators is not None and validators.last_modified:
         request_headers['If-Modified-Since'] = validators.last_modified
-    # Fixed application-owned hosts only. An egress firewall remains recommended against DNS rebinding.
-    async with (
-        httpx.AsyncClient(
-            timeout=httpx.Timeout(25), follow_redirects=False, trust_env=False, transport=transport
-        ) as client,
-        client.stream('GET', url, params=params, headers=request_headers) as response,
-    ):
-        if response.status_code == 304:
-            if validators is not None:
-                raise NotModified(url)
-            raise ValueError('The server answered 304 Not Modified to a request that asked for no validation')
-        # Check before raise_for_status(): httpx treats 3xx as an error, which would hide this message.
-        if response.is_redirect:
-            raise ValueError('Redirects are disabled; update the registry after reviewing the source')
-        response.raise_for_status()
+    # Fixed application-owned hosts only, reached at the addresses just checked (review L1).
+    async with httpx.AsyncClient(
+        timeout=httpx.Timeout(25), follow_redirects=False, trust_env=False, transport=transport
+    ) as client:
+        for index, address in enumerate(addresses):
+            target = egress.pin(url, address)
+            try:
+                async with client.stream(
+                    'GET',
+                    target.url,
+                    params=params,
+                    headers={**request_headers, **target.headers},
+                    extensions=target.extensions,
+                ) as response:
+                    return await _read(response, url, validators)
+            except httpx.ConnectError:
+                if index == len(addresses) - 1:  # Every checked address refused: report the last error.
+                    raise
+    raise AssertionError('unreachable')  # pragma: no cover - the loop returns or raises
+
+
+async def _read(response: httpx.Response, url: str, validators: Validators | None) -> bytes:
+    if response.status_code == 304:
         if validators is not None:
-            validators.etag = _validator(response, 'etag', 200)
-            validators.last_modified = _validator(response, 'last-modified', 100)
-        data = bytearray()
-        async for chunk in response.aiter_bytes():
-            data.extend(chunk)
-            if len(data) > MAX_BYTES:
-                raise ValueError('Source exceeds the 8 MB payload limit')
-        return bytes(data)
+            raise NotModified(url)
+        raise ValueError('The server answered 304 Not Modified to a request that asked for no validation')
+    # Check before the status: httpx treats 3xx as an error, which would hide this message.
+    if response.is_redirect:
+        raise ValueError('Redirects are disabled; update the registry after reviewing the source')
+    if not response.is_success:
+        raise _status_error(response, url)
+    if validators is not None:
+        validators.etag = _validator(response, 'etag', 200)
+        validators.last_modified = _validator(response, 'last-modified', 100)
+    data = bytearray()
+    async for chunk in response.aiter_bytes():
+        data.extend(chunk)
+        if len(data) > MAX_BYTES:
+            raise ValueError('Source exceeds the 8 MB payload limit')
+    return bytes(data)
 
 
 def text_only(value: str | None) -> str:

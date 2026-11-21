@@ -28,6 +28,10 @@ CVEs in reports they can see; starting a lookup stays refused to them. The new p
 - **M3, the image's Python was not fully tested:** the container ships Python 3.15 (a Dependabot bump), but
   pull requests ran the full suite on 3.11 and 3.14 only. 3.15 is now in the test matrix and the package
   classifiers. Add `Tests (Python 3.15, SQLite)` to the required checks on `main` (docs/CI_CD.md).
+- **L1, DNS rebinding (TIP 0.4):** source syncs, CVE lookups and alert webhooks resolved a host to check it and
+  again to connect, so a changing DNS answer could reach loopback, a private network or cloud metadata. They
+  now connect to the checked address, keeping the host name for TLS and the `Host` header, and judge
+  IPv4-mapped IPv6 addresses (`::ffff:127.0.0.1`) by the address they reach.
 
 ### Changed: a clearer executive brief (from #39)
 - Keep the **Insight** name and symbol; use **Cyber Threat Intelligence Feed** as the tagline and remove
