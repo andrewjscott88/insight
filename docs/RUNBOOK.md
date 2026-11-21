@@ -542,7 +542,7 @@ verify the signature (§6).
   - CIDR ranges must start at a network boundary;
   - IPv6 zone IDs are dropped.
   See [EXTRACTION.md](EXTRACTION.md).
-- Stored reports keep their original observations. New reports and revisions use `regex-v4`, which adds e-mail addresses.
+- Stored reports keep their original observations. New reports and revisions use `regex-v5`, which also recognizes bracketed web schemes and word-form e-mail separators.
   Look for the personal-data warning when reviewing an address or choosing indicators to share.
 - Feed summaries are capped at 500 characters (flagged as truncated).
 - IOC export:

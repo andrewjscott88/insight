@@ -527,7 +527,7 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
 - [x] **1.4** Webhook/email notifications for watch-term hits and new KEV (`ROADMAP` #15)
 - [ ] **1.5** abuse.ch URLhaus, ThreatFox, and MalwareBazaar connectors (metadata/IOCs only)
 - [ ] **1.6** AlienVault OTX connector (operator API key)
-- [ ] **1.7** Extraction-quality corpus and benchmark ratchet (`ROADMAP` #9)
+- [x] **1.7** 0.8.0 extraction-quality corpus expansion and benchmark ratchet (`ROADMAP` #9, ongoing)
 
 ### Phase 2 — Core TIP features (10)
 

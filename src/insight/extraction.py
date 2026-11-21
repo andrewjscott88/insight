@@ -24,7 +24,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 Kind = Literal['cve', 'url', 'sha512', 'sha256', 'sha1', 'md5', 'ip', 'domain', 'cidr', 'email']
 
-EXTRACTOR_VERSION: Final = 'regex-v4'
+EXTRACTOR_VERSION: Final = 'regex-v5'
 MAX_MENTIONS: Final = 2000
 EVIDENCE_CONTEXT: Final = 90
 
@@ -84,7 +84,8 @@ _DEFANG = re.compile(
     re.IGNORECASE,
 )
 _CVE = re.compile(r'\bCVE-\d{4}-\d{4,}\b', _ASCII_I)
-_URL = re.compile(r'\bhttps?://[^\s<>"\'`|]+', re.IGNORECASE)
+_BRACKETED_SCHEME = r'(?<![\w.+-])\[(?i:https?)\]'
+_URL = re.compile(rf'(?:\bhttps?|{_BRACKETED_SCHEME})://[^\s<>"\'`|]+', re.IGNORECASE)
 _HEX = re.compile(r'\b[0-9a-f]{32,128}\b', _ASCII_I)
 # A hash wrapped onto the next line (PDF/e-mail export): first part ends a line, second part starts the next.
 _WRAPPED_HEX = re.compile(r'\b([0-9a-f]{8,124})[ \t]*\r?\n[ \t]*([0-9a-f]{4,124})\b', _ASCII_I)
@@ -102,14 +103,17 @@ _DOMAIN_FULL = re.compile(rf'(?:{_LABEL}\.)+{_TLD}', _ASCII_I)
 _WORDISH = r'\w\u0300-\u036f\u200b-\u200d\u2060\ufeff\u00ad'
 _IDN = re.compile(rf'(?<![{_WORDISH}@.\-])(?:[{_WORDISH}-]+\.)+[{_WORDISH}-]{{2,63}}(?![{_WORDISH}-])')
 # Accept common unquoted mailboxes; the wider left boundary prevents taking the tail of an unsupported one.
+EMAIL_SEPARATOR = re.compile(r'@|\[@\]|(?ai:\[at\]|\(at\))')
 _EMAIL = re.compile(
-    rf"(?<![{_WORDISH}.!#$%&'*+/=?^`{{|}}~@\\-])(?<!\[@\])(?P<local>[A-Za-z0-9_.'%+-]{{1,65}})"
-    rf'(?:@|\[@\])(?P<host>[{_WORDISH}-]+(?:\.[{_WORDISH}-]+)+)(?![{_WORDISH}@-]|\[@\]|\.+[{_WORDISH}-])'
+    rf"(?<![{_WORDISH}.!#$%&'*+/=?^`{{|}}~@\\-])(?<!\[@\])(?<!(?ai:\[at\]|\(at\)))"
+    rf"(?P<local>[A-Za-z0-9_.'%+-]{{1,65}})(?:{EMAIL_SEPARATOR.pattern})"
+    rf'(?P<host>[{_WORDISH}-]+(?:\.[{_WORDISH}-]+)+)(?![{_WORDISH}-]|{EMAIL_SEPARATOR.pattern}|\.+[{_WORDISH}-])'
 )
 _EMAIL_LOCAL = re.compile(r"[A-Za-z0-9_%+-]+(?:[.'][A-Za-z0-9_%+-]+)*")
 # Scan URI tokens and bare mailboxes in one pass: userinfo, query strings and paths are not recipients.
 _URI_OR_EMAIL = re.compile(
-    r'(?P<uri>\b(?:(?P<mailto>(?i:mailto:))|[A-Za-z][A-Za-z0-9+.\-]{0,31}://)[^\s<>"`|]+)|' + _EMAIL.pattern
+    rf'(?P<uri>(?:\b(?P<mailto>(?i:mailto:))|(?:\b[A-Za-z][A-Za-z0-9+.\-]{{0,31}}|{_BRACKETED_SCHEME})://)'
+    r'[^\s<>"`|]+)|' + _EMAIL.pattern
 )
 _IPV4_SHAPE = re.compile(r'\d{1,3}(?:\.\d{1,3}){3}', re.ASCII)
 _VERSION_CONTEXT = re.compile(
@@ -225,7 +229,10 @@ def _canonical_email(value: str) -> str:
 
 
 def _canonical_url(value: str) -> str:
-    parts = urlsplit(_strip_zero_width(refang(value)))
+    raw = _strip_zero_width(refang(value))
+    # Only the outer scheme is syntax. A bracketed word later in the path or query is literal evidence.
+    raw = re.sub(r'^\[(https?)\](?=://)', r'\1', raw, flags=_ASCII_I)
+    parts = urlsplit(raw)
     if parts.scheme.lower() not in ('http', 'https') or not parts.hostname:
         raise ValueError('Invalid URL')
     host = unicodedata.normalize('NFC', parts.hostname).rstrip('.').encode('idna').decode('ascii').lower()
@@ -402,7 +409,7 @@ def _add_urls(mentions: _Mentions) -> list[Span]:
 
 def _add_emails(mentions: _Mentions) -> None:
     """Record a whole mailbox once, then mask it so later passes cannot extract any of its parts."""
-    if '@' not in mentions.work:
+    if not EMAIL_SEPARATOR.search(mentions.work):
         return
 
     def record(match: re.Match[str]) -> str:

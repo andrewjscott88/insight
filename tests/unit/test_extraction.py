@@ -573,6 +573,44 @@ def test_bracketed_scheme_separator_is_refanged() -> None:
     assert values('payload at hxxps[://]evil.example/p', 'url') == ['https://evil.example/p']
 
 
+@pytest.mark.parametrize('raw_scheme', ['[http]', '[HTTPS]'])
+def test_bracketed_web_scheme_preserves_offsets_and_authority(raw_scheme: str) -> None:
+    """Regression: bracketed schemes lost the URL and exposed domain-like fragments from its path."""
+    raw = f'{raw_scheme}://reports[.]example/notes/sibling.example'
+    text = f'📄 URL ({raw}).'
+    found = extract(text)
+    assert [(m.kind, m.value) for m in found] == [
+        ('url', f'{raw_scheme[1:-1].lower()}://reports.example/notes/sibling.example'),
+        ('domain', 'reports.example'),
+    ]
+    url, host = found
+    assert text[url.start : url.end] == raw
+    assert text[host.start : host.end] == 'reports[.]example'
+    assert all(canonical(m.kind, text[m.start : m.end]) == m.value for m in found)
+
+
+def test_bracketed_scheme_only_applies_at_the_start_of_an_indicator() -> None:
+    url = 'https://files.example/notes/[https]://else.example'
+    assert [(m.kind, m.value) for m in extract(url)] == [('url', url), ('domain', 'files.example')]
+    assert values('see the [https] heading', 'url') == []
+
+
+@pytest.mark.parametrize('separator', ['[at]', '(AT)'])
+def test_word_at_defanging_is_limited_to_mailboxes(separator: str) -> None:
+    raw = f'Ops.Team{separator}Bücher[.]example'
+    text = f'📄 Mail to <{raw}>, or use [https]://desk[.]example/query?address={raw}'
+    found = extract(text)
+    email = found[0]
+    assert (email.kind, email.value, text[email.start : email.end]) == (
+        'email',
+        'Ops.Team@xn--bcher-kva.example',
+        raw,
+    )
+    assert [m.kind for m in found] == ['email', 'url', 'domain']
+    assert separator in found[1].value  # a query is part of a URL and remains literal
+    assert values(f'a{separator}b{separator}example.org', 'email') == []
+
+
 @pytest.mark.parametrize(('kind', 'raw'), [('md5', 'z' * 32), ('sha1', 'g' * 40), ('sha256', 'x' * 64)])
 def test_non_hex_strings_of_hash_length_are_rejected(kind: str, raw: str) -> None:
     with pytest.raises(ValueError, match='digest'):

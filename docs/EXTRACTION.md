@@ -1,4 +1,4 @@
-# Indicator extraction (`regex-v4`)
+# Indicator extraction (`regex-v5`)
 
 `insight/extraction.py` turns report text into **mentions**: kind, canonical value, exact character offsets and
 surrounding evidence. It is deterministic. It never judges maliciousness or attributes activity; accepting an
@@ -15,6 +15,8 @@ uncertain candidate over emitting something that was not in the source.
 1. **Refang.** A working copy replaces defanging with the real characters: `hxxp`/`hxxps`/`h**p` → `http(s)`;
    `[.]`, `(.)`, `{.}`, `[dot]`, `(dot)` → `.`; `[:]` → `:`; `[://]` → `://`. A position map keeps every
    match tied to the **original** text, so offsets and evidence show what the author wrote.
+   The URL pass also recognizes a bracketed web scheme such as `[https]://` at the start of a URL.
+   Only the mailbox pass treats `[@]`, `[at]` or `(at)` as an at-sign.
 2. **Match** candidates per kind (patterns are ASCII-only, except for international names).
 3. **Validate and canonicalise** each candidate (table below). Invalid candidates are dropped.
 4. **Context rules** (below) remove candidates that are fragments or misreadings.
@@ -76,8 +78,10 @@ emoji. The API therefore also returns `start_offset_utf16`/`end_offset_utf16`. U
 
 ## Measuring quality
 
-`tests/corpus/extraction.json` holds labelled snippets plus the two full synthetic reports in
-`tests/corpus/reports/`. Their ground truth is what an analyst **should** get, not what the extractor produces.
+`tests/corpus/extraction.json` holds labelled snippets and points to two full synthetic reports. Three snippets
+quote U.S. government-authored advisories. Each carries its author, page, source URL and reuse basis.
+The defanged examples are synthetic and use reserved names. The bracketed scheme follows the
+[Safe-IOC Internet-Draft](https://www.ietf.org/archive/id/draft-grimminck-safe-ioc-sharing-14.html).
 
 ```sh
 python scripts/benchmark_extraction.py                    # compare with benchmarks/extraction-baseline.json
@@ -86,8 +90,10 @@ python scripts/benchmark_extraction.py --update-baseline  # after a reviewed, in
 ```
 
 CI fails if any kind loses more than one point of precision or recall. If the corpus itself changed, it says
-"corpus changed" instead of reporting false regressions. 0.2.0 baseline: precision 97.9%, recall 98.9% (was
-67.8% / 78.4% with `regex-v1`).
+"corpus changed" instead of reporting false regressions. On the same 39 corpus entries, `regex-v4` scored
+94.8% precision and 95.7% recall. `regex-v5` scored 98.3% precision and 99.1% recall.
+Its remaining miss is the SHA-256 split across two table
+rows in SALT MERIDIAN. The two halves appear as MD5 values. These scores describe this corpus.
 
 ## Maintaining the TLD list
 

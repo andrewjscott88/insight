@@ -22,7 +22,7 @@ from datetime import datetime
 from typing import Any, Final
 
 from . import __version__
-from .extraction import AMBIGUOUS_TLDS, extract
+from .extraction import AMBIGUOUS_TLDS, EMAIL_SEPARATOR, extract
 from .flags import flags
 from .schemas import DEFAULT_TLP, REVIEW_STATUSES, TLP_LEVELS
 
@@ -94,8 +94,9 @@ def _defang_span(kind: str, text: str) -> str:
     if kind not in NETWORK_KINDS:
         return text
     if kind == 'email':
-        mailbox, separator, domain = text.rpartition('@')
-        return mailbox + separator + _BARE_DOT.sub('[.]', domain)
+        separator = EMAIL_SEPARATOR.search(text)
+        domain_start = separator.end() if separator else 0
+        return text[:domain_start] + _BARE_DOT.sub('[.]', text[domain_start:])
     text = _BARE_DOT.sub('[.]', text)
     if kind in ('ip', 'cidr'):
         text = _BARE_COLON.sub('[:]', text)

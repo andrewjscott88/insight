@@ -292,7 +292,7 @@ How to read it:
   It is cut at fixed character positions, so it can start or end mid-word ("raining data…"). It can also contain
   other indicators and any other text that happened to be nearby. It is `null` when the export was made without
   evidence.
-- **`extractor_version`** names the extractor that produced the report's observations (`regex-v4` adds e-mail addresses).
+- **`extractor_version`** names the extractor that produced the report's observations (`regex-v4` adds e-mail addresses, `regex-v5` recognizes additional defanged forms).
   Reports ingested before 0.2.0 say `regex-v1`, and their values can differ slightly in form.
 - **`first_ingested_at` / `last_ingested_at`** are when the oldest and newest source reports were **added to
   Insight**. They are not publication dates, and not dates the indicator was seen in the wild.

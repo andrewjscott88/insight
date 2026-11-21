@@ -67,9 +67,10 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
 - [ ] **TIP 1.6 AlienVault OTX pulses** with the operator's own key.
 - [x] **Review D2 CIDR indicator kind:** IPv4 and IPv6 network ranges in report review, search and IOC export.
 - [x] **Review D2 E-mail indicator kind:** review and find full addresses across reports, with a personal-data warning on each address.
-- [ ] [#9](https://github.com/andrewjscott88/insight/issues/9) **TIP 1.7 Extraction quality (M1),** ongoing: a
-      larger labelled corpus, the defanged-indicator gaps in [docs/EXTRACTION.md](docs/EXTRACTION.md), a
-      ratcheted benchmark.
+- [x] [#9](https://github.com/andrewjscott88/insight/issues/9) **TIP 1.7 Extraction quality (M1), 0.8.0:**
+      three attributed government advisory excerpts, four labelled syntax cases, bracketed HTTP(S) schemes,
+      word-form e-mail separators, and an updated [benchmark](docs/EXTRACTION.md#measuring-quality).
+      Corpus expansion is ongoing.
 
 ## 0.9.0: speaks STIX, ATT&CK and MISP
 

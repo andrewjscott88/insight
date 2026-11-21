@@ -535,6 +535,7 @@ def test_observation_model_is_untouched_by_exports(db: Session, two_reports: Rep
     ('text', 'expected'),
     [
         ('mail from billing@invoices.example.net today', 'mail from billing@invoices[.]example[.]net today'),
+        ('send to Report.Team[at]mail.example', 'send to Report.Team[at]mail[.]example'),
         ('subnet 203.0.113.0/24 scanned', 'subnet 203[.]0[.]113[.]0/24 scanned'),
         ('range 2001:db8::/32 advertised', 'range 2001[:]db8[:][:]/32 advertised'),
         ('fetched update.zip and setup.py', 'fetched update[.]zip and setup[.]py'),
@@ -602,7 +603,7 @@ def test_sources_record_their_extractor_version(db: Session, two_reports: Report
     versions = {
         s['extractor_version'] for ioc in export_iocs(db, IocExportQuery())['iocs'] for s in ioc['sources']
     }
-    assert versions == {'regex-v4'}
+    assert versions == {'regex-v5'}
 
 
 @pytest.mark.parametrize(
