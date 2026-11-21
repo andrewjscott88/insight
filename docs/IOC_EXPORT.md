@@ -441,11 +441,18 @@ offline with the OASIS STIX 2.1 validator before recording the `stix.export` eve
 | MD5, SHA-1, SHA-256, SHA-512 | An `indicator` with a `file:hashes` pattern |
 | CVE | A `vulnerability` with the CVE external reference and, where available, CISA KEV context |
 | Source report | A `report` with the source document UUID, selected object references and publisher provenance |
+| Tagged ATT&CK technique | An `attack-pattern` in the report's `object_refs`, with the MITRE technique ID, URL, tactics and copyright notice |
 
 Each report carries its own TLP 2.0 marking. An indicator shared by several selected reports carries the
 strictest source marking. Handle the whole bundle at its highest marking, including AMBER+STRICT where
 present. Indicator IDs identify the projected values in this bundle. Report IDs retain the original document
 UUID for exchange. Empty selections produce a bundle with no objects.
+
+Technique tags come from the selected report revision. For example, if the report is tagged with
+`T1059.001`, its `object_refs` includes the PowerShell technique. A technique shared by two reports with
+the same marking appears once in the bundle. Different markings get separate copies. Use the `mitre-attack`
+external ID to match techniques across exports. Only active tags in the bundled Enterprise catalog qualify.
+Tag evidence and analyst names stay in Insight. Each STIX export supports up to 100,000 active report tags.
 
 Only permitted excerpts enter report descriptions. Turn evidence off to omit all excerpts. Feed items whose
 publisher permits metadata only carry `x_insight_metadata_only: true` and omit their text. Source titles,

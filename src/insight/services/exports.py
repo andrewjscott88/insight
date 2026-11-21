@@ -28,6 +28,7 @@ from ..stix_validation import validate_stix_bundle
 from .assessments import visible_assessments
 from .audit import audit
 from .search import _document_conditions, _kev_view
+from .stix_techniques import add_stix_techniques
 
 #: Upper bound on indicator mentions in one IOC export, so a single request cannot exhaust memory.
 MAX_EXPORT_MENTIONS: Final = 100_000
@@ -232,6 +233,7 @@ def export_stix(db: Session, query: IocExportQuery) -> dict[str, Any]:
         raise ValueError('STIX indicator patterns require original values. Turn off defanging.')
     export, metadata_only_ids = _selected_export(db, query)
     bundle = build_stix_bundle(export, metadata_only_ids)
+    add_stix_techniques(db, bundle, max_tlp=query.max_tlp)
     validate_stix_bundle(bundle)
     detail = {'counts': export['counts'], 'tlp': export['tlp'], 'filters': export['filters']}
     audit(db, 'stix.export', bundle['id'], json.dumps(detail, sort_keys=True))

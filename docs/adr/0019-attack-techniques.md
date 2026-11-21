@@ -39,6 +39,15 @@ Three constraints shape the answer:
    layer (format 4.5), scored by report count, so analysts use the tool they already know.
 7. **Backfill on request.** Reports stored before 0.7.0 get their tags from `insight attack-backfill`
    (`make attack-backfill`); a migration never imports application code.
+8. **STIX report tags.** After the export filters select reports, each STIX Report links to its active,
+   catalog-backed techniques through `object_refs`. This link means the report was tagged with that
+   technique. A tag alone gives no basis for an actor attribution or an indicator-to-technique relationship.
+   Each `attack-pattern` carries the catalog name, tactics, MITRE technique ID and URL, catalog version,
+   copyright notice and terms. Tag evidence and analyst names stay in Insight. An export supports up to
+   100,000 active report tags.
+   Reports with the same sharing label reuse one object per technique in a bundle. A technique mentioned
+   at two sharing levels gets two objects, each with the corresponding report marking. Match a technique
+   across exports by its `mitre-attack` external ID. Each Insight catalog projection has a fresh STIX UUID.
 
 ## Consequences
 - Analysts can see which techniques their intake describes, over any period, pivot from a technique to its
@@ -47,4 +56,3 @@ Three constraints shape the answer:
   need a reviewed model (the opt-in LLM contract in `docs/LLM_EXTENSION.md`) and is not part of this decision.
 - The catalog ages: a new ATT&CK release needs `scripts/update_attack.py` and an Insight release. Tags on a
   technique that leaves the catalog stay, marked `in_catalog: false`.
-- Actors, campaigns and STIX `attack-pattern` objects can now link to stored techniques (TIP items 2.1 and 2.5).

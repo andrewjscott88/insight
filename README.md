@@ -25,7 +25,9 @@ A single-operator threat-intelligence workbench, run locally or published behind
   and remove the rest in the reader, and new revisions keep those decisions. The **ATT&CK techniques** tab groups
   the techniques in your reports by tactic over a period you choose, opens the reports behind each one, and
   downloads a layer for ATT&CK Navigator. Never guessed from prose; no attribution. `make attack-backfill` tags
-  reports stored before 0.7.0. API: `/api/attack/*` and `/api/documents/{id}/techniques`.
+  reports stored before 0.7.0. STIX exports link each included report to its current catalog-backed tags,
+  with the report's sharing label and a link to the technique on MITRE's site.
+  API: `/api/attack/*` and `/api/documents/{id}/techniques`.
 - **Alerts** ([docs/ALERTS.md](docs/ALERTS.md)): when a new report mentions a watch term, or CISA adds a KEV
   entry, Insight tells a chat channel (Slack, Mattermost, Google Chat), your own tool (signed JSON webhook) or
   an e-mail address, within about 15 seconds of the sync. Each alert fires once; report titles go only up to
