@@ -59,6 +59,9 @@ A single-operator threat-intelligence workbench, run locally or published behind
 - **Temporary password-free access** for development and demos (`INSIGHT_DEV_NO_AUTH=on`; **off by default**,
   refused together with MFA, announced on every page). While on, anyone who can reach the site can read and
   change everything; see the [runbook](docs/RUNBOOK.md#temporary-password-free-access) before using it.
+- **Prioritised CVEs** ([ADR 0024](docs/adr/0024-prioritised-cves.md)): the CVEs in your reports, most urgent
+  first by stated rules (used in ransomware, known exploited, likely to be attacked soon, critical, high), each
+  saying why. The brief names ransomware-linked and likely-to-be-attacked weaknesses too. `GET /api/cves`.
 - **CVE severity and attack likelihood** ([ADR 0023](docs/adr/0023-automatic-cve-lookups.md)): NIST NVD (CVSS)
   and FIRST EPSS scores shown in plain words beside each CVE, looked up on request or, once switched on in
   **Sources**, automatically for CVEs in TLP:CLEAR and GREEN reports. Only CVE numbers are sent. No key is

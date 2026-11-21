@@ -92,7 +92,9 @@ error details and do not trigger a check. Synchronization remains the way to bri
 | Signal | What it supports | What it does not establish |
 | --- | --- | --- |
 | Known exploitation | A vulnerability is on the stored CISA KEV list, including recent additions and older entries discussed in included reports. | Current attack frequency, a new attack wave, or compromise of the operator's systems. |
-| Technical severity | A CISA advisory supplies a CVSS base score of at least 9 for the **Most severe** section. | Proof that the vulnerability is being exploited or is present in the operator's environment. |
+| Ransomware use | CISA's KEV entry says it knows of ransomware campaigns that use the weakness (**Used in ransomware attacks**). | That the operator is targeted, or that a campaign is active today. |
+| Technical severity | A CISA advisory or NIST NVD supplies a CVSS base score of at least 9 for the **Most severe** section. | Proof that the vulnerability is being exploited or is present in the operator's environment. |
+| Attack likelihood | FIRST's EPSS estimates a 10% or higher chance of exploitation attempts in the next 30 days (**Likely to be attacked soon**). | That the operator uses the product, or that an attempt will reach them. |
 | Repeated reporting | A vulnerability, indicator or product appears repeatedly in the selected collection. | More attacks than last week, independent corroboration, or broader prevalence outside the collection. |
 | Watch-term match | A configured literal term occurs in an included report. | An asset inventory match, exposure assessment or risk score. |
 | Recent receipt | Insight received an included report in the last 24 hours. | The event's time, a fresh vulnerability disclosure or a verified current threat. |

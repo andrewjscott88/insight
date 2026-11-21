@@ -66,6 +66,7 @@ from .brief import (
     brief_data,
 )
 from .common import fold, like_pattern, stamp
+from .cves import MAX_CVE_MENTIONS, CveSignal, CveSignals, cve_signals
 from .documents import SourceRef, count_documents_above, fingerprint, get_document, ingest, revisions
 from .entities import PIVOT_PAGE_SIZE, count_entity_documents, entity_documents, get_entity, list_entities
 from .exports import MAX_EXPORT_MENTIONS, export_iocs, ioc_export_counts, ioc_mentions
@@ -165,6 +166,7 @@ __all__ = [
     'LOOKUP_PROVIDERS',
     'MAX_API_KEY_NAME_LENGTH',
     'MAX_BRIEF_DOCUMENTS',
+    'MAX_CVE_MENTIONS',
     'MAX_EXPORT_MENTIONS',
     'MAX_LANDSCAPE_DOCUMENTS',
     'MAX_PAGE_SIZE',
@@ -182,6 +184,8 @@ __all__ = [
     'BriefData',
     'BriefDocument',
     'BriefKev',
+    'CveSignal',
+    'CveSignals',
     'DeletionPreview',
     'DeletionResult',
     'DocumentQuery',
@@ -212,6 +216,7 @@ __all__ = [
     'create_api_key',
     'cve_score_view',
     'cve_scores',
+    'cve_signals',
     'cves_to_look_up',
     'delete_document',
     'delete_target',
