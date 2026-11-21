@@ -84,6 +84,43 @@ def ioc_export_query(
         raise HTTPException(422, validation_message(exc, IOC_EXPORT_PARAMETERS)) from exc
 
 
+def _selected_iocs(
+    request: Request,
+    q: str = '',
+    status: str = '',
+    tlp: str = '',
+    include_superseded: bool = False,
+    kind: Annotated[list[str] | None, Query()] = None,
+    review_status: Annotated[list[str] | None, Query()] = None,
+    max_tlp: str = '',
+    defang: bool = False,
+    document_id: Annotated[list[str] | None, Query()] = None,
+    evidence: bool = True,
+    verdict: Annotated[list[str] | None, Query()] = None,
+    exclude_flag: Annotated[list[str] | None, Query()] = None,
+) -> IocExportQuery:
+    """Use the requested filters and cap every export at the authenticated caller's TLP limit."""
+    query = ioc_export_query(
+        q=q,
+        status=status,
+        tlp=tlp,
+        include_superseded=include_superseded,
+        kinds=kind,
+        review_statuses=review_status,
+        max_tlp=max_tlp,
+        defang=defang,
+        document_ids=document_id,
+        include_evidence=evidence,
+        verdicts=verdict,
+        exclude_flags=exclude_flag,
+    )
+    # A TLP-limited key exports at most its own limit, whatever `max_tlp` it asked for.
+    limit = services.stricter_limit(query.max_tlp, reader_limit(request))
+    if limit != query.max_tlp:
+        query = query.model_copy(update={'max_tlp': limit})
+    return query
+
+
 def _register_export_routes(app: FastAPI, sessions: SessionFactory, require_auth: AuthDependency) -> None:
     """Audited JSON downloads: one report, or indicators across reports."""
 
@@ -111,39 +148,9 @@ def _register_export_routes(app: FastAPI, sessions: SessionFactory, require_auth
 
     @app.get('/api/iocs/export', dependencies=[Depends(require_auth)])
     def export_iocs(
-        request: Request,
-        q: str = '',
-        status: str = '',
-        tlp: str = '',
-        include_superseded: bool = False,
-        kind: Annotated[list[str] | None, Query()] = None,
-        review_status: Annotated[list[str] | None, Query()] = None,
-        max_tlp: str = '',
-        defang: bool = False,
-        document_id: Annotated[list[str] | None, Query()] = None,
-        evidence: bool = True,
-        verdict: Annotated[list[str] | None, Query()] = None,
-        exclude_flag: Annotated[list[str] | None, Query()] = None,
+        request: Request, query: Annotated[IocExportQuery, Depends(_selected_iocs)]
     ) -> JSONResponse:
         """Cross-report IOC export (``insight-ioc-v1``). List parameters may be repeated."""
-        query = ioc_export_query(
-            q=q,
-            status=status,
-            tlp=tlp,
-            include_superseded=include_superseded,
-            kinds=kind,
-            review_statuses=review_status,
-            max_tlp=max_tlp,
-            defang=defang,
-            document_ids=document_id,
-            include_evidence=evidence,
-            verdicts=verdict,
-            exclude_flags=exclude_flag,
-        )
-        # A TLP-limited key exports at most its own limit, whatever `max_tlp` it asked for.
-        limit = services.stricter_limit(query.max_tlp, reader_limit(request))
-        if limit != query.max_tlp:
-            query = query.model_copy(update={'max_tlp': limit})
         try:
             with acting(sessions, request) as db:
                 result = services.export_iocs(db, query)
@@ -151,6 +158,24 @@ def _register_export_routes(app: FastAPI, sessions: SessionFactory, require_auth
             raise HTTPException(422, str(exc)) from exc
         filename = export_filename(result['generated_at'])
         return JSONResponse(result, headers={'Content-Disposition': f'attachment; filename="{filename}"'})
+
+    @app.get('/api/iocs/stix', dependencies=[Depends(require_auth)])
+    def export_stix(
+        request: Request, query: Annotated[IocExportQuery, Depends(_selected_iocs)]
+    ) -> JSONResponse:
+        """Download the selected reports and indicators as a validated STIX 2.1 bundle."""
+        limit = services.stricter_limit(query.max_tlp, app.state.settings.max_tlp)
+        try:
+            with acting(sessions, request) as db:
+                bundle = services.export_stix(db, query.model_copy(update={'max_tlp': limit}))
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        filename = f'insight-stix-{bundle["id"].removeprefix("bundle--")}.json'
+        return JSONResponse(
+            bundle,
+            media_type='application/stix+json;version=2.1',
+            headers={'Content-Disposition': f'attachment; filename="{filename}"'},
+        )
 
     @app.get('/api/iocs/blocklist', dependencies=[Depends(require_auth)])
     def blocklist(

@@ -230,7 +230,7 @@ GLOSSARY: Final[tuple[tuple[str, str], ...]] = (
     ),
     (
         'STIX',
-        'A standard format for sharing threat information. Insight does not use it yet.',
+        'A standard format for sharing threat information. You can export a STIX file for other tools.',
     ),
     (
         'VPN (virtual private network)',

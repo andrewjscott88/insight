@@ -69,7 +69,7 @@ from .common import fold, like_pattern, stamp
 from .cves import MAX_CVE_MENTIONS, CveSignal, CveSignals, cve_signals
 from .documents import SourceRef, count_documents_above, fingerprint, get_document, ingest, revisions
 from .entities import PIVOT_PAGE_SIZE, count_entity_documents, entity_documents, get_entity, list_entities
-from .exports import MAX_EXPORT_MENTIONS, export_iocs, ioc_export_counts, ioc_mentions
+from .exports import MAX_EXPORT_MENTIONS, export_iocs, export_stix, ioc_export_counts, ioc_mentions
 from .jobs import (
     JOB_ACTIVE,
     JOB_BACKOFF,
@@ -234,6 +234,7 @@ __all__ = [
     'entity_documents',
     'entity_seen',
     'export_iocs',
+    'export_stix',
     'fingerprint',
     'finish_job',
     'fold',

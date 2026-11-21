@@ -42,8 +42,10 @@ ALIASES = {
     'public domain': 'Public-Domain',
     'gnu general public license (gpl)': 'GPL',
 }
-#: Packages whose metadata is ambiguous, with the human review that cleared them.
-REVIEWED: dict[str, str] = {}
+#: Owner-reviewed exceptions are specific to the package, installed version and declared licence.
+REVIEWED = {
+    ('cpe', '1.3.1', 'LGPLv3'): 'LGPLv3: matching source and both licence texts ship with Insight (NOTICE)',
+}
 
 
 @dataclass(frozen=True)
@@ -83,13 +85,24 @@ def evaluate_spdx(expression: str, is_allowed: Callable[[str], bool]) -> bool:
         position += 1
         if token == '(':  # noqa: S105 - an SPDX token, not a secret
             result = parse_or()
-            position += 1  # ')'
+            if tokens[position] != ')':
+                raise ValueError('unbalanced parentheses')
+            position += 1
             return result
+        if not re.fullmatch(r'[A-Za-z0-9.+-]+', token) or token.upper() in ('WITH', 'AND', 'OR'):
+            raise ValueError('expected licence identifier')
         if position < len(tokens) and tokens[position].upper() == 'WITH':
+            exception = tokens[position + 1]
+            if not re.fullmatch(r'[A-Za-z0-9.+-]+', exception) or exception.upper() in ('WITH', 'AND', 'OR'):
+                raise ValueError('expected exception identifier')
             position += 2  # licence exceptions only ever relax terms
         return is_allowed(token)
 
-    return parse_or()
+    try:
+        result = parse_or()
+        return position == len(tokens) and result
+    except (ValueError, IndexError):
+        return False
 
 
 def normalise(name: str) -> str:
@@ -98,14 +111,17 @@ def normalise(name: str) -> str:
 
 def verdict(package: str, meta: metadata.PackageMetadata) -> Verdict:
     fields = meta.json  # normalised keys: license_expression, license, classifier
-    if package in REVIEWED:
-        return Verdict(package, f'reviewed: {REVIEWED[package]}', True, 'review')
     if expression := str(fields.get('license_expression') or ''):
         return Verdict(package, expression, evaluate_spdx(expression, lambda t: t in ALLOWED), 'spdx')
     legacy = str(fields.get('license') or '').strip()
-    if legacy and len(legacy) < 80 and '\n' not in legacy:
+    reviewed = REVIEWED.get((package, str(fields.get('version')), legacy))
+    if reviewed is not None:
+        return Verdict(package, reviewed, True, 'review')
+    if legacy and legacy.upper() != 'UNKNOWN' and len(legacy) < 80 and '\n' not in legacy:
         name = normalise(legacy)
-        return Verdict(package, name, name in ALLOWED, 'license-field')
+        # In free text, "WITH" can introduce extra restrictions, rather than a standard SPDX exception.
+        allowed = 'WITH' not in name.upper().split() and evaluate_spdx(name, ALLOWED.__contains__)
+        return Verdict(package, name, allowed, 'license-field')
     raw_classifiers = fields.get('classifier') or []
     classifiers = [
         normalise(c.split('::')[-1])

@@ -420,18 +420,36 @@ To validate files automatically, use the JSON Schema
 ([schemas/insight-ioc-v1.schema.json](schemas/insight-ioc-v1.schema.json)), for example
 `check-jsonschema --schemafile docs/schemas/insight-ioc-v1.schema.json insight-iocs.json`.
 
-**Converting to STIX 2.1 yourself.** Insight does not produce STIX. If you convert, these are the usual
-mappings. Convert from an export **without** defanging:
+### STIX 2.1 export
 
-| Insight `kind` | STIX 2.1 |
+In **Export IOCs**, choose **STIX 2.1 bundle** and select the reports, indicator kinds, review states and TLP
+limit to include. From the command line, for example:
+
+```sh
+insight export-stix partner-bundle.json --max-tlp GREEN --review-status accepted --no-evidence
+```
+
+The authenticated `GET /api/iocs/stix` endpoint accepts the IOC export filters. The caller's API-key limit and
+the instance TLP ceiling also apply. Defanging is refused because it changes the values consumers match.
+The CLI writes an owner-only file and refuses to overwrite an existing one. Insight validates each bundle
+offline with the OASIS STIX 2.1 validator before recording the `stix.export` event with the bundle ID.
+
+| Report content | STIX representation |
 | --- | --- |
-| `ip`, `cidr` | `ipv4-addr` or `ipv6-addr` (a `:` in the value means IPv6) |
-| `domain` | `domain-name` |
-| `email` | `email-addr` |
-| `url` | `url` |
-| `md5`, `sha1`, `sha256`, `sha512` | `file` with `hashes` keys `MD5`, `SHA-1`, `SHA-256`, `SHA-512` |
-| `cve` | `vulnerability` (with an external reference to the CVE), not an indicator |
-| file and entry `tlp` | the matching TLP 2.0 marking definition |
+| IPv4, IPv6 and CIDR | An `indicator` with an `ipv4-addr:value` or `ipv6-addr:value` pattern |
+| Domain, URL, e-mail address | An `indicator` with a `domain-name`, `url` or `email-addr` value pattern |
+| MD5, SHA-1, SHA-256, SHA-512 | An `indicator` with a `file:hashes` pattern |
+| CVE | A `vulnerability` with the CVE external reference and, where available, CISA KEV context |
+| Source report | A `report` with the source document UUID, selected object references and publisher provenance |
+
+Each report carries its own TLP 2.0 marking. An indicator shared by several selected reports carries the
+strictest source marking. Handle the whole bundle at its highest marking, including AMBER+STRICT where
+present. Indicator IDs identify the projected values in this bundle. Report IDs retain the original document
+UUID for exchange. Empty selections produce a bundle with no objects.
+
+Only permitted excerpts enter report descriptions. Turn evidence off to omit all excerpts. Feed items whose
+publisher permits metadata only carry `x_insight_metadata_only: true` and omit their text. Source titles,
+links and indicator values can still identify people. Honor the original publisher's terms when sharing.
 
 ## 9. Limits and troubleshooting
 

@@ -7,6 +7,7 @@ key: the marker, the report's ID and its unique indicator must not appear in any
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from typing import Any
 
 import pytest
@@ -86,6 +87,8 @@ def test_nothing_hidden_leaks_through_any_read_route(client: TestClient, world: 
         f'/api/documents/{world["amber"]}/export',
         '/api/iocs/export',
         '/api/iocs/export?include_superseded=true&max_tlp=RED',
+        '/api/iocs/stix?include_superseded=true&max_tlp=RED',
+        f'/api/iocs/stix?document_id={world["amber"]}',
         f'/api/iocs/export?document_id={world["amber"]}',
         '/api/entities',
         f'/api/entities?q={HIDDEN_IP}',
@@ -157,6 +160,20 @@ def test_ioc_exports_are_capped_at_the_key_limit(client: TestClient, world: dict
     assert export['filters']['max_tlp'] == 'GREEN'  # the stricter of the request and the key
     assert export['tlp'] == 'GREEN'
     assert {ioc['value'] for ioc in export['iocs']} == {SHARED_IP}
+
+
+def test_stix_exports_apply_the_key_and_instance_limits(
+    app: FastAPI, client: TestClient, world: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    visible = get(client, world, '/api/iocs/stix', max_tlp='RED', evidence='false')
+    assert visible.status_code == 200
+    assert SHARED_IP in visible.text
+    assert HIDDEN_IP not in visible.text
+    monkeypatch.setattr(app.state, 'settings', replace(app.state.settings, max_tlp='CLEAR'))
+    hidden = get(client, world, '/api/iocs/stix', max_tlp='RED')
+    assert hidden.status_code == 200
+    assert SHARED_IP not in hidden.text
+    assert HIDDEN_IP not in hidden.text
 
 
 def test_the_landscape_counts_only_reports_within_the_limit(
