@@ -23,12 +23,13 @@ from ..schemas import (
     IocExportQuery,
 )
 from ..source_registry import metadata_only
-from ..stix_export import build_stix_bundle
+from ..stix_export import build_stix_bundle, stix_timestamp
 from ..stix_validation import validate_stix_bundle
 from .assessments import visible_assessments
 from .audit import audit
 from .search import _document_conditions, _kev_view
 from .stix_techniques import _add_stix_techniques
+from .stix_threats import _add_stix_threats
 
 #: Upper bound on indicator mentions in one IOC export, so a single request cannot exhaust memory.
 MAX_EXPORT_MENTIONS: Final = 100_000
@@ -232,9 +233,19 @@ def export_stix(db: Session, query: IocExportQuery) -> dict[str, Any]:
     if query.defang:
         raise ValueError('STIX indicator patterns require original values. Turn off defanging.')
     export, metadata_only_ids = _selected_export(db, query)
-    bundle = build_stix_bundle(export, metadata_only_ids)
-    _add_stix_techniques(db, bundle, max_tlp=query.max_tlp)
+    entities: dict[str, dict[str, Any]] = {}
+    bundle = build_stix_bundle(export, metadata_only_ids, entities=entities)
+    techniques = _add_stix_techniques(db, bundle, max_tlp=query.max_tlp)
+    highest = _add_stix_threats(
+        db,
+        bundle,
+        entities,
+        techniques,
+        max_tlp=query.max_tlp,
+        initial_tlp=export['tlp'],
+        modified=stix_timestamp(export['generated_at']),
+    )
     validate_stix_bundle(bundle)
-    detail = {'counts': export['counts'], 'tlp': export['tlp'], 'filters': export['filters']}
+    detail = {'counts': export['counts'], 'tlp': highest, 'filters': export['filters']}
     audit(db, 'stix.export', export['export_id'], json.dumps(detail, sort_keys=True))
     return bundle

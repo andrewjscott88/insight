@@ -75,9 +75,8 @@ def test_hidden_link_cannot_be_read_changed_or_removed_through_either_actor_rout
     assert services.linked_reports(db, actor.id, max_tlp='GREEN') == []
     assert services.report_groups(db, doc, max_tlp='GREEN') == []
     assert services.guide_data(db, actor.id, now=datetime.now(UTC)).tlp == 'RED'
-    for item in [ActorLinkInput(document_id=doc, note='Overwrite')]:
-        with pytest.raises(LookupError):
-            services.link_report(db, actor.id, item, max_tlp='GREEN')
+    with pytest.raises(LookupError):
+        services.link_report(db, actor.id, ActorLinkInput(document_id=doc, note='Overwrite'), max_tlp='GREEN')
     with pytest.raises(LookupError):
         services.unlink_report(db, actor.id, doc, max_tlp='GREEN')
     with pytest.raises(LookupError):

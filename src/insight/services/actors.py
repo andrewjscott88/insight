@@ -15,10 +15,12 @@ from dataclasses import dataclass
 from typing import Final
 
 from sqlalchemy import or_, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from ..industries import BY_KEY
-from ..models import ActorDocument, Document, IndustryClaim, ThreatActor, now
+from ..models import ActorDocument, Document, IndustryClaim, ThreatActor, ThreatLink, now
 from ..schemas import ActorInput, ActorLinkInput, IndustryClaimInput, most_restrictive, tlp_markings
 from ..threat_library import Group, library
 from .audit import DEFAULT_ACTOR, audit
@@ -143,29 +145,44 @@ def _visible_report(db: Session, document_id: str, max_tlp: str | None) -> Docum
     return doc
 
 
+def _insert_link(db: Session, model: type[ActorDocument] | type[ThreatLink], values: dict[str, str]) -> bool:
+    """Let the database arbitrate concurrent additions to the same pair of records."""
+    insert = sqlite_insert if db.get_bind().dialect.name == 'sqlite' else pg_insert
+    stmt = insert(model).values(**values).on_conflict_do_nothing().returning(model.id)
+    return db.scalar(stmt) is not None
+
+
 def link_report(
-    db: Session, ref: str, payload: ActorLinkInput, *, max_tlp: str | None = None
+    db: Session, ref: str, payload: ActorLinkInput, *, max_tlp: str | None = None, preserve_note: bool = False
 ) -> ActorDocument:
-    """Link a report to a group or actor (idempotent). Audited as ``actor.link``."""
+    """Link a report to a group or actor. The general links editor preserves existing report notes."""
     subject = resolve_group(db, ref, max_tlp=max_tlp)
     doc = _visible_report(db, payload.document_id, max_tlp)
-    row = db.scalar(
-        select(ActorDocument).where(
-            ActorDocument.group_ref == subject.ref, ActorDocument.document_id == doc.id
-        )
-    )
     label = most_restrictive(subject.tlp, doc.tlp, payload.tlp, *tlp_markings(payload.note))
     _check_label(label, max_tlp, 'links')
-    if row is None:
-        row = ActorDocument(group_ref=subject.ref, document_id=doc.id, actor=_who(db), tlp=label)
-        db.add(row)
-    else:
-        if row.tlp not in visible_levels(max_tlp):
-            raise LookupError('Report link unavailable')
-        label = most_restrictive(label, row.tlp)
-        if row.note == payload.note.strip() and row.tlp == label:
-            return row
-    row.note = payload.note.strip()
+    created = _insert_link(
+        db,
+        ActorDocument,
+        {
+            'group_ref': subject.ref,
+            'document_id': doc.id,
+            'actor': _who(db),
+            'tlp': label,
+            'note': payload.note.strip(),
+        },
+    )
+    row = db.scalars(
+        select(ActorDocument)
+        .where(ActorDocument.group_ref == subject.ref, ActorDocument.document_id == doc.id)
+        .with_for_update()
+    ).one()
+    if row.tlp not in visible_levels(max_tlp):
+        raise LookupError('Report link unavailable')
+    label = most_restrictive(label, row.tlp)
+    note = row.note if preserve_note else payload.note.strip()
+    if not created and row.note == note and row.tlp == label:
+        return row
+    row.note = note
     row.tlp = label
     db.flush()
     audit(db, 'actor.link', subject.ref, doc.id)

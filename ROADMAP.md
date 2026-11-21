@@ -87,10 +87,8 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
 
 ## 1.0: context around the indicators
 
-- [ ] **TIP 2.5 Actors and campaigns, created by the analyst.** ATT&CK groups only as a labelled catalog; never
-      attribution from shared indicators.
-      *Partly done (unreleased, with TIP 2.10):* actors the analyst creates, report links and industry decisions
-      ([ADR 0025](docs/adr/0025-threat-guides.md)); campaigns, indicator links and STIX export remain.
+- [x] **TIP 2.5 Actors and campaigns.** Analysts create records and explicitly link them to reports,
+      indicators and ATT&CK techniques. STIX exports include the selected, visible links.
 - [x] **TIP 2.10 Industry threat profiles and actor threat guides** (requested by Andrew, 2026-11-21): pick an
       industry and see the top ten threat groups known to target it, each with its evidence; open one and export
       a threat guide (aliases, targets, ATT&CK techniques and Navigator layer, tools, mitigations, your reports

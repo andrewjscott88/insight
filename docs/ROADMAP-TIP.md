@@ -542,7 +542,7 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
 - [x] **2.2** STIX 2.1 import with TLP enforcement
 - [x] **2.3** ATT&CK catalog, report and analyst tags, and TLP-marked technique references in STIX Reports
 - [x] **2.4** MISP export/import (host CLI). [Event files and trusted instance exchange](MISP.md)
-- [ ] **2.5** Manual actor and campaign entities (no inferred attribution): *minimum done with 2.10* (actors, report links, industry decisions; campaigns and STIX remain)
+- [x] **2.5** Manual actors and campaigns with TLP-marked report, indicator and technique links in STIX exports
 - [x] **2.6** Optional GreyNoise community IP enrichment
 - [x] **2.7** YARA and Sigma rules with report, actor, technique, CVE and malware-family links and a downloadable rule file and manifest
 - [x] **2.8** PDF advisory ingest with file hash (`ROADMAP` #13)

@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request
 from ... import services
 from ...models import Campaign, SessionFactory
 from ...schemas import CampaignInput, ThreatLinkInput, ThreatSubjectKind, ThreatTargetKind
-from ..auth import AuthDependency, acting, reader_limit
+from ..auth import AuthDependency, acting
 from .threats import write_limit
 
 Offset = Annotated[int, Query(ge=0)]
@@ -35,7 +35,7 @@ def _register_campaign_routes(app: FastAPI, sessions: SessionFactory, require_au
     @router.get('/api/campaigns')
     def campaigns(request: Request, offset: Offset = 0, limit: PageSize = 100) -> dict[str, Any]:
         with sessions() as db:
-            rows = services.list_campaigns(db, max_tlp=reader_limit(request), offset=offset, limit=limit)
+            rows = services.list_campaigns(db, max_tlp=write_limit(app, request), offset=offset, limit=limit)
             return {'campaigns': [_view(row) for row in rows]}
 
     @router.post('/api/campaigns', status_code=201)
@@ -50,7 +50,7 @@ def _register_campaign_routes(app: FastAPI, sessions: SessionFactory, require_au
     def campaign(request: Request, ref: str) -> dict[str, Any]:
         try:
             with sessions() as db:
-                return _view(services.get_campaign(db, ref, max_tlp=reader_limit(request)))
+                return _view(services.get_campaign(db, ref, max_tlp=write_limit(app, request)))
         except LookupError as exc:
             raise HTTPException(404, str(exc)) from exc
 
@@ -62,7 +62,7 @@ def _register_campaign_routes(app: FastAPI, sessions: SessionFactory, require_au
             try:
                 with sessions() as db:
                     found = services.list_threat_links(
-                        db, kind, ref, max_tlp=reader_limit(request), offset=offset, limit=limit
+                        db, kind, ref, max_tlp=write_limit(app, request), offset=offset, limit=limit
                     )
                     return {'links': [asdict(row) for row in found]}
             except LookupError as exc:
