@@ -77,8 +77,9 @@ CVEs in reports they can see; starting a lookup stays refused to them. The new p
   `LIMIT`) instead of loading every CVE and cache row.
 - **N3, a stale gitleaks exemption:** the test's fake API key carries an inline `gitleaks:allow`, so scans of
   the working tree stay clean wherever the line moves; the history fingerprint stays for `gitleaks detect`.
-- **N4, the password's length:** sign-in compares fixed-length HMAC tags of the password (random per-process
-  key) instead of the raw values, so response times no longer hint at its length.
+- **N4, the password's length:** sign-in pads the supplied and stored password to one fixed width before the
+  constant-time comparison (no hashing), so response times no longer hint at its length. (The first version
+  compared SHA-256 digests, which CodeQL flags as weak password hashing.)
 - **N5, formatting:** the Python examples in docs/ALERTS.md, docs/API.md and docs/LLM_EXTENSION.md are
   formatted, so `ruff format --check .` passes on the whole repository.
 

@@ -375,13 +375,15 @@ def test_failed_sign_ins_are_logged_without_the_password(
         ('', False),
         ('longtestpassword!', False),
         ('ü', False),
+        ('longtestpassword\0', False),
+        ('longtestpassword' + 'x' * 400, False),
     ],
 )
 def test_regression_n4_the_password_check_compares_fixed_length_digests(
     supplied: str, same: bool, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Review N4: compare_digest on the raw values leaked the password's length through timing; the
-    comparison now sees two HMAC tags of the same length."""
+    comparison now always sees two values of one fixed width, whatever the guess's length."""
     from insight.web import auth
 
     lengths: list[tuple[int, int]] = []
@@ -393,4 +395,14 @@ def test_regression_n4_the_password_check_compares_fixed_length_digests(
 
     monkeypatch.setattr('insight.web.auth.hmac.compare_digest', spy)
     assert auth.same_secret(supplied, 'longtestpassword') is same
-    assert lengths == [(32, 32)]
+    assert lengths == [(auth.SECRET_WIDTH, auth.SECRET_WIDTH)]
+
+
+def test_regression_n4_a_long_stored_secret_sets_the_width() -> None:
+    """A password longer than SECRET_WIDTH still compares correctly, at its own width."""
+    from insight.web import auth
+
+    secret = 'p' * (auth.SECRET_WIDTH + 10)
+    assert auth.same_secret(secret, secret) is True
+    assert auth.same_secret(secret[:-1], secret) is False
+    assert auth.same_secret(secret + 'p', secret) is False

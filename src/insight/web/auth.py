@@ -130,22 +130,27 @@ def rate_limit_policy(method: str, path: str) -> Policy:
     return READ if method in SAFE_METHODS else WRITE
 
 
-#: A random key for :func:`same_secret`, new in every process; never stored or logged.
-_COMPARE_KEY: Final = secrets.token_bytes(32)
+#: The width both values are padded to before comparing; a longer stored secret sets its own width.
+SECRET_WIDTH: Final = 256
 
 
 def same_secret(supplied: str, expected: str) -> bool:
     """Constant-time comparison that does not reveal the expected secret's length (code review N4).
 
     ``hmac.compare_digest`` on the raw values returns early when the lengths differ, so response times could
-    tell a guesser how long the password is. Both values are first turned into HMAC-SHA256 tags under a
-    random per-process key (the "double HMAC" comparison), which always have the same length. Nothing is
-    stored: this is a comparison, not password hashing.
+    tell a guesser how long the password is. Both values are padded to one width that depends only on the
+    stored secret (``SECRET_WIDTH``, or its own length if longer; a longer guess is cut to that width), and
+    the lengths are compared separately without branching, so the comparison always takes the same path.
+    No hash is used: a fast hash of a password is what code scanners rightly flag, and nothing here is
+    stored.
     """
-    return hmac.compare_digest(
-        hmac.new(_COMPARE_KEY, supplied.encode(), 'sha256').digest(),
-        hmac.new(_COMPARE_KEY, expected.encode(), 'sha256').digest(),
-    )
+    guess = supplied.encode()
+    secret = expected.encode()
+    width = max(SECRET_WIDTH, len(secret))
+    padded_guess = guess[:width].ljust(width, b'\0')
+    padded_secret = secret.ljust(width, b'\0')
+    same_length = len(guess) == len(secret)
+    return hmac.compare_digest(padded_guess, padded_secret) & same_length
 
 
 def _client_address(request: Request) -> str:
