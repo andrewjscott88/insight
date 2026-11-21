@@ -14,6 +14,11 @@
   Each report keeps its source identity, typed observations, TLP and publisher handling restrictions.
   [Import guide](docs/API.md#post-apiimportstix)
 
+### MISP event exchange
+
+- The host CLI now exports reviewed indicators to MISP event JSON and imports trusted events into the inbox.
+  It also supports explicit transfers to a configured MISP instance. [MISP guide](docs/MISP.md)
+
 ### Optional indicator feeds
 
 - The Sources tab can now sync URLhaus, ThreatFox and MalwareBazaar using an operator's abuse.ch key.

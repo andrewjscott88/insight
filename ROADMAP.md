@@ -83,7 +83,7 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
       report revision. Each exported `attack-pattern` carries that report's sharing label and MITRE technique ID.
 - [x] **TIP 2.9 Network sensor export:** download Suricata or Snort 3 alert rules for the reviewed
       IP or domain blocklist. [Sensor rule formats](docs/IOC_EXPORT.md#network-sensor-rules).
-- [ ] **TIP 2.4 MISP export and import,** CLI first.
+- [x] **TIP 2.4 MISP export and import,** host CLI for event files and trusted MISP instances. [Guide](docs/MISP.md)
 
 ## 1.0: context around the indicators
 

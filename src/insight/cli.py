@@ -87,6 +87,8 @@ def build_parser() -> argparse.ArgumentParser:
             'import-stix',
             'delete-report',
             'attack-backfill',
+            'misp-export',
+            'misp-import',
         ],
         nargs='?',
         default='serve',
@@ -99,7 +101,8 @@ def build_parser() -> argparse.ArgumentParser:
             'notify [list|add|enable|disable|remove]: manage alert destinations | '
             'import-stix FILE: import a STIX 2.1 JSON bundle | '
             'delete-report ID --reason TEXT: delete one report for legal or retention reasons | '
-            'attack-backfill: tag the ATT&CK techniques written in reports stored before 0.7.0'
+            'attack-backfill: tag the ATT&CK techniques written in reports stored before 0.7.0 | '
+            'misp-export / misp-import: exchange a MISP event (see command --help)'
         ),
     )
     parser.add_argument(
@@ -656,7 +659,20 @@ def export_filters(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv[:1] in (['misp-export'], ['misp-import']):
+        from .cli_misp import run_misp
+
+        try:
+            print(run_misp(argv[0], argv[1:]))
+        except (ValueError, OSError) as exc:
+            print(f'MISP exchange failed: {exc}', file=sys.stderr)
+            return 1
+        return 0
     args = build_parser().parse_args(argv)
+    if args.command in ('misp-export', 'misp-import'):
+        print(f'usage: insight {args.command} [OPTIONS]; place options after the command', file=sys.stderr)
+        return 2
     if args.command == 'init':
         if not init_env(Path('.env')):
             print('.env already exists; refusing to overwrite existing credentials.', file=sys.stderr)

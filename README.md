@@ -177,6 +177,7 @@ Open http://127.0.0.1:8080. Default local data lives in `./data/insight.db`. Use
 | `insight migrate` | Apply database migrations explicitly |
 | `insight backup FILE` | Consistent online SQLite backup, safe while running (never overwrites) |
 | `insight export-iocs FILE` | Write a JSON IOC export (never overwrites; owner-only file). Options and recipes: [docs/IOC_EXPORT.md](docs/IOC_EXPORT.md#2-quick-start) |
+| `insight misp-export FILE` / `insight misp-import FILE` | Exchange a single MISP event as JSON or with a configured MISP instance. [MISP guide](docs/MISP.md) |
 | `insight attack-backfill` | Tag ATT&CK technique IDs in reports stored before 0.7.0 (safe to rerun) |
 | `insight mfa setup` | Pair an authenticator app for sign-in codes (shows a secret, then confirms one code). Also `status`, `reset`. MFA itself is **off by default** and switched with `INSIGHT_MFA=on`; with Docker, `make mfa-enable` / `make mfa-disable` do both steps |
 | `insight api-key create --name NAME` | Create the API key for scripts/SIEM (read-only unless `--access read-write`; `--max-tlp GREEN` hides more restrictive reports from it; shown once). Also `status`, `rotate`, `revoke`. See [docs/API.md](docs/API.md#api-key-scripts-and-siem) |

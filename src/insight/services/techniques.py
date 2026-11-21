@@ -139,7 +139,7 @@ def backfill_techniques(db: Session) -> tuple[int, int]:
     reports = added = 0
     for doc in db.scalars(
         select(Document)
-        .where(Document.id.not_in(tagged), Document.extractor_version != 'stix-2.1')
+        .where(Document.id.not_in(tagged), Document.extractor_version.not_in(('stix-2.1', 'misp-event-v1')))
         .order_by(Document.created_at)
     ):
         reports += 1
