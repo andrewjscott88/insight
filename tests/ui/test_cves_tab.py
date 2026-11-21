@@ -46,3 +46,17 @@ async def test_the_tab_ranks_cves_says_why_and_opens_the_newest_report(
         user.find(kind=ui.button, content='Open the newest report: Gateway advisory').click()
     with user.scope(marker='document-detail'):
         await user.should_see('Gateway advisory')
+
+
+async def test_regression_each_tab_has_its_own_period_control(user: User, ui_env: SimpleNamespace) -> None:
+    """Both tabs label their period "Reports added in"; tests and code must find each by its marker.
+
+    Finding the select by its label picked either one at random (a set), which made the techniques test
+    flaky once this tab was added."""
+    await user.should_see('Prioritised CVEs')
+    [cve_period] = user.find(kind=ui.select, marker='cve-period').elements
+    [technique_period] = user.find(kind=ui.select, marker='technique-period').elements
+    before = technique_period.value
+    cve_period.set_value(7)
+    assert technique_period.value == before
+    assert cve_period.value == 7

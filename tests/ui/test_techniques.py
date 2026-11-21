@@ -106,5 +106,5 @@ async def test_the_tab_period_filters_and_explains_an_empty_period(
     await user.open('/')
     await user.should_see('No report from this time has a technique yet. Open a report to add one.')
     add_report(ui_env, 'Ransom report', 'Files were encrypted (T1486).')
-    user.find(kind=ui.select, content='Reports added in').elements.pop().set_value(0)
+    user.find(kind=ui.select, marker='technique-period').elements.pop().set_value(0)
     await user.should_see('T1486 · Data Encrypted for Impact · 1 report(s)')

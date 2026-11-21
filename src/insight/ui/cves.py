@@ -102,6 +102,6 @@ def build_cves(ws: Workspace) -> None:
     ).classes('muted text-sm prose')
     ui.select(
         PERIODS, value=ws.state.cve_days, label='Reports added in', on_change=lambda e: choose(e.value)
-    ).props('outlined').classes('w-60')
+    ).props('outlined').classes('w-60').mark('cve-period')
     with ui.column().classes('w-full gap-2'):
         listing()
