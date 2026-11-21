@@ -11,7 +11,8 @@ from typing import Any
 
 from nicegui import ui
 
-from .. import services
+from .. import greynoise, services
+from .greynoise import open_greynoise
 from .typography import heading
 from .verdicts import Indicator, flag_badges, load_verdicts, render_verdict
 from .workspace import Workspace
@@ -53,9 +54,18 @@ def build_entities(ws: Workspace) -> None:
         with ws.read() as db:
             verdict = load_verdicts(db, [target.entity_id]).get(target.entity_id)
             first, last = services.entity_seen(db, target.entity_id)
+            show_greynoise = (
+                target.kind == 'ip'
+                and greynoise.configured()
+                and services.eligible_greynoise_ip(db, target.value)
+            )
         box.clear()
         with box:
             flag_badges(target.kind, target.value)
+            if show_greynoise:
+                ui.button(
+                    'GreyNoise Community context', on_click=lambda: open_greynoise(ws, target.value)
+                ).props('outline no-caps')
             if first and last:
                 ui.label(f'In reports added from {first[:10]} to {last[:10]}').classes('muted text-sm')
             render_verdict(ws, target, verdict, on_saved=lambda: render_about(box, target))

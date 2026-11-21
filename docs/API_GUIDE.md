@@ -468,6 +468,10 @@ curl -sS "$INSIGHT_URL/api/jobs?limit=5" -H "Authorization: Bearer $INSIGHT_API_
 # Look up a CVE that a report mentions (provider: epss or nvd; read-write key). Cached. One request per provider
 # window (NVD 6.5 s, or 0.7 s with a key; EPSS 1 s) across all callers and automatic lookups: 429 says how long to wait
 curl -sS -X POST "$INSIGHT_URL/api/enrichment/epss/CVE-2023-34362" -H "Authorization: Bearer $INSIGHT_API_KEY"
+# This POST authorizes sharing the address with GreyNoise. Set IP to a reviewed public IPv4 in a CLEAR report.
+curl -sS -X POST "$INSIGHT_URL/api/enrichment/greynoise/$IP" -H "Authorization: Bearer $INSIGHT_API_KEY"
+# This GET reads only the cached result and its timestamp.
+curl -sS "$INSIGHT_URL/api/ips/$IP/greynoise" -H "Authorization: Bearer $INSIGHT_API_KEY"
 # The CVEs in your reports, most urgent first (ransomware, known exploited, likely attacked, critical, high), and why
 curl -sS "$INSIGHT_URL/api/cves?days=30&limit=10" -H "Authorization: Bearer $INSIGHT_API_KEY" \
   | jq '.cves[] | {cve, label, reason, cvss: .cvss.score, epss: .epss.probability}'
