@@ -76,6 +76,7 @@ Set in `.env` (Compose reads it) or the process environment. Real environment va
 | `INSIGHT_SMTP_HOST`, `INSIGHT_SMTP_PORT`, `INSIGHT_SMTP_SECURITY`, `INSIGHT_SMTP_USERNAME`, `INSIGHT_SMTP_PASSWORD`, `INSIGHT_SMTP_FROM` | for e-mail alerts | port 587, `starttls` | The mail server for e-mail alerts. `SECURITY` is `starttls`, `tls` (port 465) or `none` (only for a relay on this host). Treat the password like `INSIGHT_PASSWORD` |
 | `INSIGHT_ALERT_PRIVATE_TARGETS` | no | `off` | `on` lets webhooks reach private networks (a chat or automation server on your LAN); link-local addresses stay blocked ([ADR 0022](adr/0022-alerts.md)) |
 | `INSIGHT_ABUSECH_AUTH_KEY` | no | (none) | Account key for the optional URLhaus, ThreatFox and MalwareBazaar Community APIs. Sent in the `Auth-Key` header to the enabled publisher API. |
+| `INSIGHT_GREYNOISE_KEY` | no | (none) | Enables manual GreyNoise Community IP lookups from Entity explorer and the API. [IP context](#greynoise-community-ip-context) |
 | `INSIGHT_NVD_API_KEY` | no | (none) | A free NIST NVD API key: CVE lookups at NVD every 0.7 s instead of every 6.5 s ([ADR 0023](adr/0023-automatic-cve-lookups.md)). Sent only in NVD's `apiKey` header, never logged |
 | `INSIGHT_MISP_URL` and `INSIGHT_MISP_KEY` | no | (none) | The trusted public HTTPS instance and its API key, read by host CLI MISP transfers. File exchange also works offline. |
 | `NICEGUI_STORAGE_PATH` | no | `/data/.nicegui` in the image | Must be writable |
@@ -380,6 +381,14 @@ evidence withheld from exports. Check your abuse.ch access and sharing terms bef
 redistributing data. Community access has fair-use limits, and commercial use may require a subscription.
 [URLhaus API](https://urlhaus-api.abuse.ch/) · [ThreatFox API](https://threatfox.abuse.ch/api/) ·
 [MalwareBazaar API](https://bazaar.abuse.ch/api/) · [abuse.ch terms](https://abuse.ch/terms-of-use/)
+
+#### GreyNoise Community IP context
+
+Set `INSIGHT_GREYNOISE_KEY` on the host and restart Insight. In **Entity explorer**, expand a public IPv4 address, open **GreyNoise Community context**, and approve sending the address. The action requires an accepted observation in a current TLP:CLEAR report. When an address occurs at several labels, a separately accepted CLEAR mention qualifies it.
+
+Insight queries the fixed GreyNoise HTTPS endpoint, sending the one IPv4 address and the account key. The dialog shows GreyNoise’s classification, whether it observed internet scanning, RIOT membership, the organisation, the provider’s last-seen date, and the time Insight fetched the result. An address outside the Community dataset gets a dated “no record” result. Earlier classifications remain available through the cache when the provider fails. Verdicts and blocklists are controlled by the analyst.
+
+Successful results and “no record” responses are reused for 24 hours. The manual API and workspace share one in-flight request and one new lookup per second. A GreyNoise `429` with `Retry-After` delays fresh lookups for that period. When it supplies no usable delay, Insight waits 24 hours. GreyNoise documents a combined allowance of up to 50 lookups per week for qualifying free accounts across its API and Visualizer. Check the allowance and terms on your account. [Community API guide](https://docs.greynoise.io/docs/using-the-greynoise-community-api) · [Provider API reference](https://docs.greynoise.io/reference/getcommunityip)
 
 **AlienVault Open Threat Exchange (OTX).** Set `INSIGHT_OTX_API_KEY` in the host environment (or Compose
 `.env`), restart Insight, then turn on **AlienVault Open Threat Exchange (OTX)** in Sources. **Sync now**

@@ -27,7 +27,15 @@ from sqlalchemy import (
     text,
     true,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, Session, column_property, mapped_column, sessionmaker
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    Mapped,
+    Session,
+    column_property,
+    mapped_column,
+    sessionmaker,
+    synonym,
+)
 from sqlalchemy.pool import StaticPool
 
 from .extraction import EXTRACTOR_VERSION
@@ -204,10 +212,13 @@ class SourceRun(Base):
 
 
 class Enrichment(Base):
+    """One provider's cached context. The legacy cve column also holds IP entity UUIDs for GreyNoise."""
+
     __tablename__ = 'enrichments'
     __table_args__ = (UniqueConstraint('cve', 'provider'),)
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     cve: Mapped[str] = mapped_column(String(40), index=True)
+    subject = synonym('cve')
     provider: Mapped[str] = mapped_column(String(20))
     payload: Mapped[str] = mapped_column(Text)
     fetched_at: Mapped[str] = mapped_column(String(40), default=now)

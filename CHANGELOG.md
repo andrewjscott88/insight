@@ -19,6 +19,10 @@
   Each report keeps its source identity, typed observations, TLP and publisher handling restrictions.
   [Import guide](docs/API.md#post-apiimportstix)
 
+### GreyNoise Community IP context
+
+- Entity explorer and the API support a manual GreyNoise lookup for accepted public IPv4 indicators in current TLP:CLEAR reports. Insight caches provider context and no-record responses for 24 hours. [Operator guide](docs/RUNBOOK.md#greynoise-community-ip-context)
+
 ### MISP event exchange
 
 - The host CLI now exports reviewed indicators to MISP event JSON and imports trusted events into the inbox.

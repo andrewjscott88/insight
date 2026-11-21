@@ -45,6 +45,7 @@ A single-operator threat-intelligence workbench, run locally or published behind
   The Record (news), for reporting on attacker groups, campaigns and malware. Insight keeps each item's title,
   short summary and link. Each publisher's reuse rule applies: only CISA's text leaves Insight in exports; for
   every other feed, exports carry titles, links, dates and indicators, not the publisher's words.
+- **GreyNoise Community IP context.** With a host key, analysts can approve a passive lookup of a reviewed public IPv4 address from a current TLP:CLEAR report in Entity explorer. [Runbook](docs/RUNBOOK.md#greynoise-community-ip-context)
 - **Optional abuse.ch indicator feeds.** Import recent URLs from URLhaus, network indicators and hashes from
   ThreatFox, and file hashes from MalwareBazaar. Set `INSIGHT_ABUSECH_AUTH_KEY` and enable the feeds you use.
   Each entry links to its record at the publisher. The connector reads only the provider's metadata API.

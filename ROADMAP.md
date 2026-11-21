@@ -102,7 +102,7 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
 - [x] **TIP 2.7 YARA and Sigma rules as linked artifacts** (carried and exported, never executed).
       *Done (unreleased):* attach rules to reports, actors, techniques, CVEs and malware families. Download
       the rule and its handling manifest together. [Rule files](docs/THREAT_GUIDES.md#rules)
-- [ ] **TIP 2.6 Optional GreyNoise enrichment** for IP addresses (operator key; never a verdict by itself).
+- [x] **TIP 2.6 Optional GreyNoise enrichment** for IP addresses (operator key; never a verdict by itself).
 - [ ] [#13](https://github.com/andrewjscott88/insight/issues/13) **TIP 2.8 PDF report ingestion,** keeping the
       file's hash as evidence.
 

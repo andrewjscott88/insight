@@ -22,6 +22,7 @@ services:
       # header. `make theme THEME=dark` sets it. "system" follows each device's light/dark setting.
       INSIGHT_THEME: ${INSIGHT_THEME:-system}
       # Optional NIST NVD API key: CVE lookups at NVD every 0.7 s instead of every 6.5 s (ADR 0023).
+      INSIGHT_GREYNOISE_KEY: ${INSIGHT_GREYNOISE_KEY:-}
       INSIGHT_NVD_API_KEY: ${INSIGHT_NVD_API_KEY:-}
       INSIGHT_ABUSECH_AUTH_KEY: ${INSIGHT_ABUSECH_AUTH_KEY:-}
       INSIGHT_OTX_API_KEY: ${INSIGHT_OTX_API_KEY:-}
