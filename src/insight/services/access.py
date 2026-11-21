@@ -13,6 +13,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from .. import apikeys, totp
+from ..mfa_crypto import decrypt_seed, encrypt_seed
 from ..models import (
     ApiKey,
     OperatorMfa,
@@ -159,7 +160,7 @@ def mfa_paired(db: Session) -> bool:
     return db.scalar(select(func.count()).select_from(OperatorMfa)) != 0
 
 
-def pair_mfa(db: Session, secret: str, confirmed_step: int) -> None:
+def pair_mfa(db: Session, secret: str, confirmed_step: int, *, session_secret: str) -> None:
     """Store a confirmed authenticator-app secret. Raises ``ValueError`` if an app is already paired.
 
     ``confirmed_step`` (the code the operator typed to prove the app was set up) is recorded as used, so that
@@ -167,7 +168,7 @@ def pair_mfa(db: Session, secret: str, confirmed_step: int) -> None:
     """
     if mfa_paired(db):
         raise ValueError('An authenticator app is already paired; reset it first to pair a new one')
-    row = OperatorMfa(secret=secret, last_step=confirmed_step)
+    row = OperatorMfa(secret=encrypt_seed(secret, session_secret), last_step=confirmed_step)
     db.add(row)
     db.flush()
     audit(db, 'mfa.pair', row.id)
@@ -182,7 +183,7 @@ def reset_mfa(db: Session) -> bool:
     return bool(rows)
 
 
-def verify_mfa_code(db: Session, code: str, at: float | None = None) -> bool:
+def verify_mfa_code(db: Session, code: str, at: float | None = None, *, session_secret: str) -> bool:
     """True for a current code of the paired app that has not been used yet (it is then marked used).
 
     False when no app is paired (fail closed). A replayed code, or any code from an older time step than the
@@ -191,7 +192,12 @@ def verify_mfa_code(db: Session, code: str, at: float | None = None) -> bool:
     row = db.scalar(select(OperatorMfa).with_for_update())
     if row is None:
         return False
-    step = totp.matching_step(row.secret, code, at, after=row.last_step)
+    try:
+        seed = decrypt_seed(row.secret, session_secret)
+        step = totp.matching_step(seed, code, at, after=row.last_step)
+    except ValueError:
+        # An unreadable pairing must still require the second factor. Leave it intact for recovery.
+        return False
     if step is None:
         return False
     row.last_step = step

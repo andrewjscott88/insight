@@ -611,7 +611,9 @@ def shares_one_connection(factory: SessionFactory) -> bool:
     return isinstance(getattr(engine, 'pool', None), StaticPool)
 
 
-def database(url: str, *, migrate: bool = True) -> tuple[Engine, SessionFactory]:
+def database(
+    url: str, *, migrate: bool = True, session_secret: str | None = None
+) -> tuple[Engine, SessionFactory]:
     """Create the engine and apply pending migrations (unless ``migrate=False``)."""
     is_sqlite = url.startswith('sqlite')
     options: dict[str, Any] = {}
@@ -635,5 +637,5 @@ def database(url: str, *, migrate: bool = True) -> tuple[Engine, SessionFactory]
     if migrate:
         from .migrations import upgrade  # Deferred: the migration environment imports this module.
 
-        upgrade(engine)
+        upgrade(engine, session_secret=session_secret)
     return engine, sessionmaker(engine, expire_on_commit=False)

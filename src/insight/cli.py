@@ -310,7 +310,7 @@ def migrate() -> str:
     try:
         before = current_revision(engine)
         database_url = engine.url.render_as_string(hide_password=True)
-        upgrade(engine)
+        upgrade(engine, session_secret=os.environ.get('INSIGHT_SESSION_SECRET'))
         after = current_revision(engine)
     finally:
         engine.dispose()
@@ -533,6 +533,7 @@ def mfa(action: str, read_code: Callable[[str], str] | None = None) -> str:
     ``input``, looked up per call).
     """
     from . import services, totp
+    from .config import MIN_SECRET_LENGTH
 
     read = read_code or input
     with _current_database() as sessions:
@@ -566,6 +567,9 @@ def mfa(action: str, read_code: Callable[[str], str] | None = None) -> str:
                 'An authenticator app is already paired; keeping it. To pair a different one: '
                 'insight mfa reset, then insight mfa setup.'
             )
+        session_secret = os.environ.get('INSIGHT_SESSION_SECRET', '')
+        if len(session_secret) < MIN_SECRET_LENGTH:
+            raise ValueError(f'Set INSIGHT_SESSION_SECRET ({MIN_SECRET_LENGTH}+ characters) before pairing')
         secret = totp.generate_secret()
         grouped = ' '.join(secret[i : i + 4] for i in range(0, len(secret), 4))
         print(
@@ -580,7 +584,7 @@ def mfa(action: str, read_code: Callable[[str], str] | None = None) -> str:
             if step is not None:
                 with sessions.begin() as db:
                     services.set_actor(db, 'cli')
-                    services.pair_mfa(db, secret, step)
+                    services.pair_mfa(db, secret, step, session_secret=session_secret)
                 if switch_on:
                     return 'Authenticator app paired. MFA is on: sign-in asks for the password and a code.'
                 return (
@@ -739,7 +743,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         print('Created .env. Read INSIGHT_PASSWORD there to sign in. Keep this file private.')
         return 0
     if args.command == 'migrate':
-        print(migrate())
+        try:
+            print(migrate())
+        except ValueError as exc:
+            print(f'Migration: {exc}', file=sys.stderr)
+            return 1
         return 0
     if args.command == 'import-stix':
         from sqlalchemy.exc import IntegrityError
