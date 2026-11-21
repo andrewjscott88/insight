@@ -72,6 +72,8 @@ PROTECTED = [
     ('POST', '/api/sources/sync-all'),
     ('PUT', '/api/schedules/cisa-kev'),
     ('POST', '/api/enrichment/epss/CVE-2024-12345'),
+    ('POST', '/api/enrichment/greynoise/8.8.8.8'),
+    ('GET', '/api/ips/8.8.8.8/greynoise'),
     ('GET', '/api/cves/CVE-2024-12345/scores'),
     ('GET', '/api/cves'),
     ('GET', '/api/industries'),

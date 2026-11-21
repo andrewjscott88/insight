@@ -8,7 +8,7 @@ from typing import Annotated, Any, Final
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 
-from ... import services
+from ... import greynoise, services
 from ...connectors import (
     ProviderError,
     SourceSwitchedOff,
@@ -22,7 +22,7 @@ from ...schemas import (
     ScheduleInput,
 )
 from ...source_registry import SOURCES, in_use
-from ..auth import AuthDependency, acting, reader_limit
+from ..auth import AuthDependency, acting, caller_of, reader_limit
 
 #: The NVD window without an API key (kept for scripts that read it; ``insight.lookups`` owns the throttles).
 ENRICHMENT_INTERVAL_SECONDS: Final = NVD_INTERVAL
@@ -138,6 +138,30 @@ def _register_source_routes(app: FastAPI, sessions: SessionFactory, require_auth
 
 def _register_enrichment_route(app: FastAPI, sessions: SessionFactory, require_auth: AuthDependency) -> None:
     """Explicit, globally throttled CVE lookups (sends only the CVE identifier to the provider)."""
+
+    @app.get('/api/ips/{ip}/greynoise', dependencies=[Depends(require_auth)])
+    def grey_cached(ip: str) -> dict[str, Any]:
+        with sessions() as db:
+            try:
+                record = services.cached_greynoise_context(db, ip)
+            except LookupError:
+                record = None
+        if record is None:
+            raise HTTPException(404, 'No eligible cached GreyNoise context')
+        return record
+
+    @app.post('/api/enrichment/greynoise/{ip}', dependencies=[Depends(require_auth)])
+    async def grey_lookup(request: Request, ip: str) -> dict[str, Any]:
+        try:
+            return await greynoise.lookup(sessions, ip, actor=caller_of(request).actor)
+        except greynoise.NotConfigured as exc:
+            raise HTTPException(503, str(exc)) from None
+        except LookupError as exc:
+            raise HTTPException(404, str(exc)) from None
+        except greynoise.RateLimited as exc:
+            raise HTTPException(429, str(exc), headers={'Retry-After': str(exc.seconds)}) from None
+        except ProviderError as exc:
+            raise HTTPException(502, str(exc)) from None
 
     @app.post('/api/enrichment/{provider}/{cve}', dependencies=[Depends(require_auth)])
     async def enrich(provider: str, cve: str) -> dict[str, Any]:
