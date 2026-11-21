@@ -130,6 +130,24 @@ def rate_limit_policy(method: str, path: str) -> Policy:
     return READ if method in SAFE_METHODS else WRITE
 
 
+#: A random key for :func:`same_secret`, new in every process; never stored or logged.
+_COMPARE_KEY: Final = secrets.token_bytes(32)
+
+
+def same_secret(supplied: str, expected: str) -> bool:
+    """Constant-time comparison that does not reveal the expected secret's length (code review N4).
+
+    ``hmac.compare_digest`` on the raw values returns early when the lengths differ, so response times could
+    tell a guesser how long the password is. Both values are first turned into HMAC-SHA256 tags under a
+    random per-process key (the "double HMAC" comparison), which always have the same length. Nothing is
+    stored: this is a comparison, not password hashing.
+    """
+    return hmac.compare_digest(
+        hmac.new(_COMPARE_KEY, supplied.encode(), 'sha256').digest(),
+        hmac.new(_COMPARE_KEY, expected.encode(), 'sha256').digest(),
+    )
+
+
 def _client_address(request: Request) -> str:
     return request.client.host if request.client else 'unknown'
 
@@ -303,7 +321,7 @@ def _register_login(app: FastAPI, settings: Settings, templates: Jinja2Templates
             current = time.time()
             app.state.failures[:] = [t for t in app.state.failures if current - t < LOGIN_WINDOW_SECONDS]
             limited = len(app.state.failures) >= LOGIN_MAX_FAILURES
-            password_ok = hmac.compare_digest(password.encode(), settings.password.encode())
+            password_ok = same_secret(password, settings.password)
             # The code is only checked (and consumed) once the password is right, so wrong guesses never burn
             # a valid code. One answer for either mistake: nothing tells a guesser which factor was wrong.
             code_ok = not mfa
