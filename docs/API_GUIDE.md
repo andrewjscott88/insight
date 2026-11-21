@@ -299,6 +299,21 @@ Use `exclude_flag=personal-data` to omit e-mail indicator entries. Other entries
 An invalid value is a `422` naming it (`kind 'IP': Input should be 'cve', ...`); more than 100,000 matching
 mentions is a `422` too (narrow the filters).
 
+### STIX 2.1 bundles
+
+To share accepted indicators with a partner cleared for TLP:GREEN, download a bundle with evidence excerpts omitted:
+
+```sh
+curl --fail --silent --show-error --get "$INSIGHT_URL/api/iocs/stix" \
+  -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  --data-urlencode 'review_status=accepted' --data-urlencode 'max_tlp=GREEN' \
+  --data-urlencode 'evidence=false' --output partner-stix.json
+```
+
+The download retains source report UUIDs and TLP 2.0 markings. Consumers can match indicators across
+filtered exports by canonical STIX pattern or value while retaining each download's markings.
+[STIX object mapping and sharing rules](IOC_EXPORT.md#stix-21-export)
+
 ### Blocklists
 
 `GET /api/iocs/blocklist?kind=…`: values safe to block, one per line: a `malicious` verdict that has not
