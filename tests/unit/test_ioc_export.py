@@ -83,6 +83,9 @@ def observation_ids(db: Session, doc: Document, value: str) -> list[str]:
         ('domain', 'files.example.net', 'files[.]example[.]net'),
         ('ip', '203.0.113.9', '203[.]0[.]113[.]9'),
         ('ip', '2001:db8::1', '2001[:]db8[:][:]1'),
+        ('cidr', '203.0.113.0/24', '203[.]0[.]113[.]0/24'),
+        ('cidr', '2001:db8::/32', '2001[:]db8[:][:]/32'),
+        ('email', 'Ops.Team+triage@example.org', 'Ops.Team+triage@example[.]org'),
         ('cve', 'CVE-2024-12345', 'CVE-2024-12345'),
         ('sha256', 'a' * 64, 'a' * 64),
     ],
@@ -99,6 +102,9 @@ def test_defang(kind: str, value: str, expected: str) -> None:
         ('domain', 'files.example.net'),
         ('ip', '203.0.113.9'),
         ('ip', '2001:db8::1'),
+        ('cidr', '203.0.113.0/24'),
+        ('cidr', '2001:db8::/32'),
+        ('email', 'Ops.Team+triage@example.org'),
     ],
 )
 def test_defanged_values_refang_to_the_original(kind: str, value: str) -> None:
@@ -539,7 +545,7 @@ def test_observation_model_is_untouched_by_exports(db: Session, two_reports: Rep
         ),
     ],
 )
-def test_defang_text_covers_network_text_the_extractor_skips(text: str, expected: str) -> None:
+def test_defang_text_covers_network_text_in_prose(text: str, expected: str) -> None:
     """Regression: e-mail domains, CIDR ranges and file-like names stayed live in defanged evidence
     (found by exporting the GLASS HARBOR and SALT MERIDIAN reports)."""
     assert defang_text(text) == expected
@@ -596,7 +602,7 @@ def test_sources_record_their_extractor_version(db: Session, two_reports: Report
     versions = {
         s['extractor_version'] for ioc in export_iocs(db, IocExportQuery())['iocs'] for s in ioc['sources']
     }
-    assert versions == {'regex-v2'}
+    assert versions == {'regex-v4'}
 
 
 @pytest.mark.parametrize(

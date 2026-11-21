@@ -22,9 +22,9 @@ from importlib import resources
 from typing import Final, Literal
 from urllib.parse import urlsplit, urlunsplit
 
-Kind = Literal['cve', 'url', 'sha512', 'sha256', 'sha1', 'md5', 'ip', 'domain']
+Kind = Literal['cve', 'url', 'sha512', 'sha256', 'sha1', 'md5', 'ip', 'domain', 'cidr', 'email']
 
-EXTRACTOR_VERSION: Final = 'regex-v2'
+EXTRACTOR_VERSION: Final = 'regex-v4'
 MAX_MENTIONS: Final = 2000
 EVIDENCE_CONTEXT: Final = 90
 
@@ -88,16 +88,29 @@ _URL = re.compile(r'\bhttps?://[^\s<>"\'`|]+', re.IGNORECASE)
 _HEX = re.compile(r'\b[0-9a-f]{32,128}\b', _ASCII_I)
 # A hash wrapped onto the next line (PDF/e-mail export): first part ends a line, second part starts the next.
 _WRAPPED_HEX = re.compile(r'\b([0-9a-f]{8,124})[ \t]*\r?\n[ \t]*([0-9a-f]{4,124})\b', _ASCII_I)
-_IPV4 = re.compile(r'(?<![\w.:])(?:\d{1,3}\.){3}\d{1,3}(?!\w|\.\w|/\d)', re.ASCII)
+_IPV4 = re.compile(r'(?<![\w.:])(?:\d{1,3}\.){3}\d{1,3}(?!\w|\.\w|/[+-]?\d)', re.ASCII)
 _IPV6 = re.compile(
-    r'(?<![\w:.])(?:[0-9a-f]{0,4}:){2,}(?:(?:\d{1,3}\.){3}\d{1,3}|[0-9a-f]{0,4})(?![\w:]|\.\w|/\d)', _ASCII_I
+    r'(?<![\w:.])(?:[0-9a-f]{0,4}:){2,}(?:(?:\d{1,3}\.){3}\d{1,3}|[0-9a-f]{0,4})(?![\w:]|\.\w|/[+-]?\d)',
+    _ASCII_I,
 )
+# 45 characters covers an IPv6 address with a dotted IPv4 tail. Validate the full candidate with ip_network.
+_CIDR = re.compile(r'(?<![\w.:/@%-])[0-9a-f:.]{2,45}/[0-9]{1,3}(?![\w/%+-]|[.:][\w:])', _ASCII_I)
 _LABEL = r'_?[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?'
 _TLD = r'(?:[a-z]{2,63}|xn--[a-z0-9-]{1,59})'
 _DOMAIN = re.compile(rf'(?<![\w@.\-])(?:{_LABEL}\.)+{_TLD}(?![\w-]|\.[a-z0-9])(?!@)', _ASCII_I)
 _DOMAIN_FULL = re.compile(rf'(?:{_LABEL}\.)+{_TLD}', _ASCII_I)
 _WORDISH = r'\w\u0300-\u036f\u200b-\u200d\u2060\ufeff\u00ad'
 _IDN = re.compile(rf'(?<![{_WORDISH}@.\-])(?:[{_WORDISH}-]+\.)+[{_WORDISH}-]{{2,63}}(?![{_WORDISH}-])')
+# Accept common unquoted mailboxes; the wider left boundary prevents taking the tail of an unsupported one.
+_EMAIL = re.compile(
+    rf"(?<![{_WORDISH}.!#$%&'*+/=?^`{{|}}~@\\-])(?<!\[@\])(?P<local>[A-Za-z0-9_.'%+-]{{1,65}})"
+    rf'(?:@|\[@\])(?P<host>[{_WORDISH}-]+(?:\.[{_WORDISH}-]+)+)(?![{_WORDISH}@-]|\[@\]|\.+[{_WORDISH}-])'
+)
+_EMAIL_LOCAL = re.compile(r"[A-Za-z0-9_%+-]+(?:[.'][A-Za-z0-9_%+-]+)*")
+# Scan URI tokens and bare mailboxes in one pass: userinfo, query strings and paths are not recipients.
+_URI_OR_EMAIL = re.compile(
+    r'(?P<uri>\b(?:(?P<mailto>(?i:mailto:))|[A-Za-z][A-Za-z0-9+.\-]{0,31}://)[^\s<>"`|]+)|' + _EMAIL.pattern
+)
 _IPV4_SHAPE = re.compile(r'\d{1,3}(?:\.\d{1,3}){3}', re.ASCII)
 _VERSION_CONTEXT = re.compile(
     r'(?:\b(?:version|ver|firmware|fw|build|release|agent|patch|section|chapter|step)\.?'
@@ -198,6 +211,19 @@ def _canonical_domain(value: str) -> str:
     return ascii_name
 
 
+def _canonical_email(value: str) -> str:
+    match = _EMAIL.fullmatch(refang(value))
+    if not match:
+        raise ValueError('Invalid e-mail address')
+    local, host = match.group('local', 'host')
+    if len(local) > 64 or not _EMAIL_LOCAL.fullmatch(local) or '_' in host:
+        raise ValueError('Invalid e-mail address')
+    address = f'{local}@{_canonical_domain(host)}'
+    if len(address) > 254:
+        raise ValueError('E-mail address is too long')
+    return address
+
+
 def _canonical_url(value: str) -> str:
     parts = urlsplit(_strip_zero_width(refang(value)))
     if parts.scheme.lower() not in ('http', 'https') or not parts.hostname:
@@ -244,10 +270,25 @@ def canonical(kind: str, value: str) -> str:
         return value.upper()
     if kind == 'ip':
         return _canonical_ip(value)
+    if kind == 'cidr':
+        candidate = refang(value)
+        if not _CIDR.fullmatch(candidate):
+            raise ValueError('Expected a network address and numeric prefix length')
+        network = ipaddress.ip_network(candidate, strict=True)
+        if network.prefixlen == 0:
+            # 0.0.0.0/0 and ::/0 mean every address (firewall and cloud rules): never an indicator.
+            raise ValueError('A /0 range covers every address')
+        address = network.network_address
+        if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped is not None:
+            # Python versions differ on how they print mapped IPv6; keep one stable entity across upgrades.
+            return f'::ffff:{address.ipv4_mapped}/{network.prefixlen}'
+        return str(network)
     if kind == 'url':
         return _canonical_url(value)
     if kind == 'domain':
         return _canonical_domain(value)
+    if kind == 'email':
+        return _canonical_email(value)
     if kind in HASH_KINDS.values():
         return _canonical_hash(kind, value)
     raise ValueError(f'Unknown kind: {kind}')
@@ -362,6 +403,30 @@ def _add_urls(mentions: _Mentions) -> list[Span]:
     return url_spans
 
 
+def _add_emails(mentions: _Mentions) -> None:
+    """Record a whole mailbox once, then mask it so later passes cannot extract any of its parts."""
+    if '@' not in mentions.work:
+        return
+
+    def record(match: re.Match[str]) -> str:
+        start, end = match.span()
+        if match.group('mailto'):
+            start = match.end('mailto')
+            recipient = mentions.work[start:end].partition('?')[0].rstrip(".,;:!')}]")
+            if recipient:
+                mentions.add('email', start, start + len(recipient))
+        elif match.group('uri'):
+            return match.group()  # Leave HTTP(S) URLs for the URL pass.
+        else:
+            if mentions.work[start] == "'" and mentions.work[end : end + 1] == "'":
+                start += 1  # Prose quotes are outside the evidence span.
+            mentions.add('email', start, end)
+        # Mask even malformed mailbox tokens so later passes cannot misread a part as a different indicator.
+        return '\0' * len(match.group())
+
+    mentions.work = _URI_OR_EMAIL.sub(record, mentions.work)
+
+
 def _add_domains(mentions: _Mentions, url_spans: list[Span]) -> None:
     """ASCII and international domain names outside URLs, skipping fragments and file-like names."""
     work = mentions.work
@@ -381,9 +446,17 @@ def _add_domains(mentions: _Mentions, url_spans: list[Span]) -> None:
             mentions.add('domain', start, end)
 
 
-def _add_ips(mentions: _Mentions) -> None:
-    """IPv4 (not when preceded by a version/firmware/section context) and IPv6 addresses."""
+def _add_ips(mentions: _Mentions, url_spans: list[Span]) -> None:
+    """IPv4 and IPv6 addresses and standalone CIDR networks."""
     work = mentions.work
+    for match in _CIDR.finditer(work):
+        start, end = match.span()
+        if (
+            not _within(url_spans, start, end)
+            and not _is_fragment(work, start, end)
+            and not _VERSION_CONTEXT.search(work[max(0, start - 24) : start])
+        ):
+            mentions.add('cidr', start, end)
     for match in _IPV4.finditer(work):
         start, end = match.span()
         if not _VERSION_CONTEXT.search(work[max(0, start - 24) : start]):
@@ -421,12 +494,13 @@ def extract(text: str) -> list[Mention]:
     """Extract observable mentions with exact offsets into ``text``, sorted by position.
 
     Raises ``ValueError`` if the text yields more than :data:`MAX_MENTIONS` mentions. The passes run in a
-    fixed order (URLs first, so the domains and IPs inside them are attributed correctly).
+    fixed order (mailboxes first to protect their components, then URLs before standalone names).
     """
     mentions = _Mentions(text)
+    _add_emails(mentions)
     url_spans = _add_urls(mentions)
     _add_domains(mentions, url_spans)
-    _add_ips(mentions)
+    _add_ips(mentions, url_spans)
     _add_hashes(mentions)
     _add_cves(mentions)
     return mentions.in_order()

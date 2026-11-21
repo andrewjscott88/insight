@@ -17,6 +17,26 @@ def test_entity_search_counts_distinct_documents(
     assert (row['kind'], row['value'], row['document_count']) == ('cve', 'CVE-2024-12345', 2)
 
 
+def test_email_pivots_preserve_mailbox_case(
+    authed: TestClient, make_document: Callable[..., dict[str, Any]]
+) -> None:
+    first = make_document(body='Contact Desk+Case@EXAMPLE.org.')
+    second = make_document(body='Follow-up from Desk+Case@example[.]org.')
+    third = make_document(body='Separate address: desk+case@example.org.')
+
+    rows = authed.get('/api/entities', params={'q': 'example.org'}).json()
+    assert {row['value']: row['document_count'] for row in rows} == {
+        'Desk+Case@example.org': 2,
+        'desk+case@example.org': 1,
+    }
+    for row in rows:
+        detail = authed.get(f'/api/entities/{row["id"]}').json()
+        assert detail['kind'] == 'email'
+        assert 'personal-data' in detail['flags']
+        expected = {first['id'], second['id']} if row['value'].startswith('Desk') else {third['id']}
+        assert {doc['id'] for doc in detail['documents']} == expected
+
+
 def test_entity_search_is_literal_and_sorted(
     authed: TestClient, make_document: Callable[..., dict[str, Any]]
 ) -> None:

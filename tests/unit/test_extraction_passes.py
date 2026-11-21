@@ -113,7 +113,7 @@ def test_domain_pass_skips_names_inside_urls_and_file_like_names() -> None:
 
 def test_ip_pass_ignores_version_numbers() -> None:
     mentions = _Mentions('firmware 10.2.9.1 talks to 192.0.2.8 and 2001:db8::1')
-    _add_ips(mentions)
+    _add_ips(mentions, [])
     assert found(mentions) == {('ip', '192.0.2.8'), ('ip', '2001:db8::1')}
 
 

@@ -92,7 +92,7 @@ def test_document_defaults(db: Session) -> None:
     doc = Document(fingerprint='f', content_hash='h', title='t', body='b', source_name='s')
     db.add(doc)
     db.flush()
-    assert (doc.status, doc.tlp, doc.source_url, doc.extractor_version) == ('new', 'CLEAR', '', 'regex-v2')
+    assert (doc.status, doc.tlp, doc.source_url, doc.extractor_version) == ('new', 'CLEAR', '', 'regex-v4')
     assert (doc.search_text, doc.truncated) == ('', False)
     assert doc.created_at
 

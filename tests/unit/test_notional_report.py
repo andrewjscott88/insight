@@ -76,7 +76,7 @@ def test_salt_meridian_extraction_matches_ground_truth_except_the_documented_eve
     assert found - truth == EVEN_SPLIT_PARTS
 
 
-@pytest.mark.parametrize(('name', 'mentions'), [(GLASS, 35), (SALT, 52)])
+@pytest.mark.parametrize(('name', 'mentions'), [(GLASS, 38), (SALT, 55)])
 def test_mention_counts_are_stable(name: str, mentions: int) -> None:
     """A change here is a behaviour change: review the benchmark report and re-baseline deliberately."""
     result = extract(text_of(name))
@@ -129,7 +129,7 @@ def test_offsets_are_code_points_and_utf16_is_available(db: Session) -> None:
 # --------------------------------------------------------------------------- services (both databases)
 
 
-@pytest.mark.parametrize(('name', 'observations'), [(GLASS, 35), (SALT, 52)])
+@pytest.mark.parametrize(('name', 'observations'), [(GLASS, 38), (SALT, 55)])
 def test_ingest_preserves_exact_evidence(db: Session, name: str, observations: int) -> None:
     text = text_of(name)
     doc, created = services.ingest(db, report(name))

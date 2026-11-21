@@ -505,8 +505,8 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
   manual lookup, not a third copy of it.
 - **J3, per-source redistribution rules** (allow, or metadata only), before 1.5 / 1.6 add feeds with their own
   terms and before 2.1 / 2.4 / 3.1 send publishers' text to other tools.
-- **D2, e-mail and CIDR indicator kinds**, before 2.1: STIX patterns and MISP attributes expect them, and e-mail
-  addresses need the personal-data warning flag (review J1).
+- **D2, e-mail and CIDR indicator kinds** (implemented for 0.8.0), before 2.1: STIX patterns and MISP
+  attributes use these kinds. E-mail indicators carry the personal-data warning flag (review J1).
 
 ## 5. Checklist
 

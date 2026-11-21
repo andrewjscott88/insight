@@ -15,6 +15,7 @@ from nicegui import ui
 from pydantic import ValidationError
 
 from .. import services
+from ..extraction import EVIDENCE_CONTEXT
 from ..schemas import DOCUMENT_STATUSES, NoteInput
 from .enrichment import open_enrichment_dialog
 from .messages import tell
@@ -86,6 +87,10 @@ def render_report(ws: Workspace, data: dict[str, Any], actions: ReaderActions) -
         new_tab_link('Download this report as JSON', f'/api/documents/{data["id"]}/export')
         new_tab_link("Export this report's IOCs", f'/api/iocs/export?document_id={data["id"]}')
     ui.label('Exports keep the TLP label. They do not give permission to share.').classes('muted prose')
+    if any(obs['kind'] == 'email' for obs in data['observations']):
+        ui.label('This report includes e-mail addresses. Check who may receive them before sharing.').classes(
+            'text-warn prose'
+        )
     _render_notes(ws, data, actions)
     with ui.expansion('Where this report came from').classes('w-full muted'):
         ui.label('Fingerprint (SHA-256): ' + data['content_hash']).classes('break-value font-mono text-sm')
@@ -131,7 +136,17 @@ def _render_observation(
             ui.badge(obs['kind']).props('outline')
             ui.label(obs['value']).classes('font-mono break-value flex-1 min-w-0')
         flag_badges(obs['kind'], obs['value'])
-        ui.label(obs['evidence']).classes('evidence text-sm w-full')
+        if obs['kind'] in ('cidr', 'email'):
+            # The excerpt starts at most EVIDENCE_CONTEXT characters before the exact source span.
+            start = min(obs['start_offset'], EVIDENCE_CONTEXT)
+            end = start + obs['end_offset'] - obs['start_offset']
+            evidence = obs['evidence']
+            with ui.element('div').classes('evidence text-sm w-full'):
+                ui.label(evidence[:start]).tag = 'span'
+                ui.label(evidence[start:end]).tag = 'mark'
+                ui.label(evidence[end:]).tag = 'span'
+        else:
+            ui.label(obs['evidence']).classes('evidence text-sm w-full')
         ui.label(
             f'Position {obs["start_offset"]}–{obs["end_offset"]} in the text · {obs["review_status"]}'
         ).classes('muted text-sm')

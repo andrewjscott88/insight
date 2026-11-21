@@ -1,11 +1,19 @@
 {
-  "corpus_sha256": "86f0de8696a49a7ec0841e0ad28ea794dd172a30715eae750db2414e4471d791",
+  "corpus_sha256": "116d32bb6ea13b7ec49ee542810101e71765ba61e17d33cc1d7e785aec088a88",
   "scores": {
+    "cidr": {
+      "precision": 1.0,
+      "recall": 1.0
+    },
     "cve": {
       "precision": 1.0,
       "recall": 1.0
     },
     "domain": {
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "email": {
       "precision": 1.0,
       "recall": 1.0
     },
@@ -34,8 +42,8 @@
       "recall": 1.0
     },
     "overall": {
-      "precision": 0.9785,
-      "recall": 0.9891
+      "precision": 0.9813,
+      "recall": 0.9906
     }
   }
 }

@@ -33,7 +33,7 @@ HANDLING_NOTICE: Final = (
     'accurate, not that the indicator is malicious.'
 )
 #: Kinds that can be clicked, resolved or connected to by accident, and are therefore defanged on request.
-NETWORK_KINDS: Final = frozenset({'url', 'domain', 'ip'})
+NETWORK_KINDS: Final = frozenset({'url', 'domain', 'ip', 'cidr', 'email'})
 
 _BARE_DOT = re.compile(r'(?<![\[({])\.(?![\])}])')  # a dot that is not already defanged as [.] (.) {.}
 _BARE_COLON = re.compile(r'(?<!\[):(?!\])')  # a colon that is not already defanged as [:]
@@ -93,8 +93,11 @@ UNKNOWN: Final = Assessment('unknown')
 def _defang_span(kind: str, text: str) -> str:
     if kind not in NETWORK_KINDS:
         return text
+    if kind == 'email':
+        mailbox, separator, domain = text.rpartition('@')
+        return mailbox + separator + _BARE_DOT.sub('[.]', domain)
     text = _BARE_DOT.sub('[.]', text)
-    if kind == 'ip':
+    if kind in ('ip', 'cidr'):
         text = _BARE_COLON.sub('[:]', text)
     if kind == 'url':
         text = _LIVE_SCHEME.sub(lambda match: 'hxxp' + match.group(1).lower(), text)
@@ -117,10 +120,10 @@ def _defang_matches(pattern: re.Pattern[str], kind: str, text: str) -> str:
 
 
 def defang_text(text: str) -> str:
-    """Defang every URL, domain and IP address in free text (titles, evidence excerpts).
+    """Defang network indicators in free text (titles, evidence excerpts).
 
-    Covers what the extractor reports plus network-shaped text it deliberately does not: the domain part of
-    e-mail addresses, CIDR ranges (``203.0.113.0/24``) and two-label names with file-extension TLDs
+    Covers what the extractor reports plus network-shaped text it skips: e-mail domains in partial addresses,
+    CIDR-like text with host bits set and two-label names with file-extension TLDs
     (``update.zip``). Any remaining ``http(s)://`` scheme is defanged as well. Version numbers that merely
     look like IPv4 addresses (``firmware 10.2.9.1``) are left as written.
     """

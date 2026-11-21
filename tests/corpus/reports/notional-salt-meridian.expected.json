@@ -1,5 +1,5 @@
 {
-  "description": "Ground truth for notional-salt-meridian.md. What an analyst SHOULD get. Defanged indicators count (refanged); wallet addresses, e-mail addresses, file names, mutexes, registry paths, ATT&CK IDs, CIDR ranges and version strings do not. The table hash annotated as 'wrapped' is one SHA-256 to a human reader, but an even 32+32 split cannot be told apart from two MD5 lines, so the extractor deliberately keeps two MD5s (documented limitation).",
+  "description": "Ground truth for notional-salt-meridian.md. What an analyst SHOULD get. Defanged indicators count (refanged); wallet addresses, file names, mutexes, registry paths, ATT&CK IDs and version strings do not. The table hash annotated as 'wrapped' is one SHA-256 to a human reader, but an even 32+32 split cannot be told apart from two MD5 lines, so the extractor deliberately keeps two MD5s (documented limitation).",
   "expected": [
     [
       "cve",
@@ -8,6 +8,14 @@
     [
       "cve",
       "CVE-2025-0133"
+    ],
+    [
+      "cidr",
+      "2001:db8::/32"
+    ],
+    [
+      "cidr",
+      "203.0.113.0/24"
     ],
     [
       "ip",
@@ -48,6 +56,10 @@
     [
       "ip",
       "203.0.113.77"
+    ],
+    [
+      "email",
+      "abuse@mail-relay.example.org"
     ],
     [
       "domain",

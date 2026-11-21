@@ -71,6 +71,11 @@ GLOSSARY: Final[tuple[tuple[str, str], ...]] = (
         'break things.',
     ),
     (
+        'Personal data',
+        'Details that can identify a person, such as an e-mail address. Check who may see them '
+        'before you share a report.',
+    ),
+    (
         'Blocklist',
         'A list of values for a firewall to block. A value goes on it only when you marked it malicious, '
         'accepted it in a report and it has no warning. Verdicts on addresses drop off after 30 days, and '
@@ -205,6 +210,11 @@ GLOSSARY: Final[tuple[tuple[str, str], ...]] = (
     (
         'IP address',
         'A number that points to one computer on a network, a bit like a phone number.',
+    ),
+    (
+        'Network range (CIDR)',
+        'A short way to write a group of IP addresses. For example, 203.0.113.0/24 covers all '
+        'addresses from 203.0.113.0 through 203.0.113.255.',
     ),
     (
         'Domain, URL',

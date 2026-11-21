@@ -81,6 +81,7 @@ def build_parser() -> argparse.ArgumentParser:
             'api-key',
             'mfa',
             'schedule',
+            'notify',
             'delete-report',
             'attack-backfill',
         ],
@@ -91,6 +92,7 @@ def build_parser() -> argparse.ArgumentParser:
             'export-iocs DEST: write a JSON IOC export | api-key ACTION: manage the API key | '
             'mfa ACTION: pair the sign-in authenticator app | '
             'schedule [SOURCE|all --every off|1h|6h|24h]: show or set scheduled syncs | '
+            'notify [list|add|enable|disable|remove]: manage alert destinations | '
             'delete-report ID --reason TEXT: delete one report for legal or retention reasons | '
             'attack-backfill: tag the ATT&CK techniques written in reports stored before 0.7.0'
         ),
@@ -111,7 +113,7 @@ def build_parser() -> argparse.ArgumentParser:
         '--kind',
         action='append',
         metavar='KIND',
-        help='indicator type: cve url domain ip md5 sha1 sha256 sha512 (repeatable; default: all)',
+        help='indicator type: cve url domain ip cidr email md5 sha1 sha256 sha512 (repeatable; default: all)',
     )
     export.add_argument(
         '--review-status',
@@ -174,9 +176,17 @@ def build_parser() -> argparse.ArgumentParser:
         help='delete-report: why, e.g. a ticket number (required; kept in the audit log)',
     )
     removal.add_argument('--yes', action='store_true', help='delete-report: do not ask for confirmation')
-    keys = parser.add_argument_group('api-key options')
+    notify = parser.add_argument_group('notify options')
+    notify.add_argument('--style', choices=['chat', 'json', 'email'], help='notify add: destination type')
+    notify.add_argument(
+        '--secret-out', type=Path, metavar='FILE', help='notify add: new private JSON signing key file'
+    )
+    notify.add_argument('--target', metavar='ID', help='notify enable/disable/remove: ID from notify list')
+    keys = parser.add_argument_group('api-key and destination options')
     keys.add_argument(
-        '--name', metavar='NAME', help='create/rotate: label, e.g. siem (default on rotate: keep)'
+        '--name',
+        metavar='NAME',
+        help='api-key create/rotate or notify add: a label for this key or destination',
     )
     keys.add_argument(
         '--access',
@@ -715,6 +725,32 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 1
         except (EOFError, KeyboardInterrupt):
             print('\nCancelled; no authenticator app was paired (nothing was saved).', file=sys.stderr)
+            return 1
+        return 0
+    if args.command == 'notify':
+        from .cli_notify import manage_destination
+
+        try:
+            with _current_database() as sessions:
+                print(
+                    manage_destination(
+                        sessions,
+                        args.destination or 'list',
+                        name=args.name,
+                        style=args.style,
+                        target_id=args.target,
+                        max_tlp=args.max_tlp,
+                        secret_out=args.secret_out,
+                    )
+                )
+        except (EOFError, KeyboardInterrupt):
+            print('Cancelled.', file=sys.stderr)
+            return 1
+        except FileExistsError:
+            print('Alert destination: the key file already exists. Choose a new file.', file=sys.stderr)
+            return 1
+        except (OSError, ValueError) as exc:
+            print(f'Alert destination: {exc}', file=sys.stderr)
             return 1
         return 0
     if args.command == 'schedule':

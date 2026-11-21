@@ -95,10 +95,14 @@ def test_exports_exactly_the_ground_truth_with_policy_labels(
 ) -> None:
     full = export(authed)
     assert keys(full) == truth(GLASS) | truth(SALT)
-    assert (full['counts']['iocs'], full['counts']['documents'], full['counts']['mentions']) == (62, 2, 87)
+    assert (full['counts']['iocs'], full['counts']['documents'], full['counts']['mentions']) == (67, 2, 93)
     assert full['tlp'] == 'RED'  # SALT MERIDIAN's TLP:RED marking raised it; the file inherits it
     labels = {(frozenset(s['document_id'] for s in ioc['sources']), ioc['tlp']) for ioc in full['iocs']}
-    assert labels == {(frozenset({reports[GLASS]}), 'AMBER'), (frozenset({reports[SALT]}), 'RED')}
+    assert labels == {
+        (frozenset({reports[GLASS]}), 'AMBER'),
+        (frozenset({reports[SALT]}), 'RED'),
+        (frozenset(reports.values()), 'RED'),  # the shared CIDR inherits the stricter source label
+    }
 
 
 def test_max_tlp_and_document_filters(authed: TestClient, reports: dict[str, str]) -> None:

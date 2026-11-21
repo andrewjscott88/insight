@@ -28,7 +28,7 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
       themes, and KEV ransomware use (TIP 1.1) and EPSS (TIP 1.2) in it.
 - [x] **TIP 1.4 Alerts** (#15, [ADR 0022](docs/adr/0022-alerts.md)), brought forward from 0.8.0: watch-term
       matches and new KEV entries to chat webhooks, signed JSON webhooks or e-mail, once each, within each
-      destination's TLP limit. Next: a daily landscape digest, CLI management.
+      destination's TLP limit. CLI management is available with `insight notify`. Next: a daily landscape digest.
 - [x] **Threat-research sources** ([ADR 0021](docs/adr/0021-threat-research-sources.md)): Cisco Talos,
       Microsoft Threat Intelligence, The DFIR Report, ESET, Kaspersky Securelist and The Record, off until
       switched on, with per-source reuse rules (review J3, brought forward from 0.8.0).
@@ -59,14 +59,15 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
 ## 0.8.0: alerts and more feeds
 
 - [x] [#15](https://github.com/andrewjscott88/insight/issues/15) **TIP 1.4 Notifications (M4):** done in 0.7.0
-      (above). Destinations are set in the workspace; CLI management is still to do.
+      (above). Destinations are managed in the workspace or with `insight notify`.
 - [x] **Review J3 Per-source redistribution rules** (public, or metadata only), applied by the report and IOC
       exports ([ADR 0021](docs/adr/0021-threat-research-sources.md)); STIX and MISP must apply them too.
 - [x] **TIP 1.5 abuse.ch connectors:** URLhaus, ThreatFox and MalwareBazaar (indicators and metadata only, never
       samples; keys from the environment).
 - [x] **TIP 1.6 AlienVault OTX pulses** with the operator's own key. Imports subscribed public CLEAR/WHITE
       pulses and their supported indicators. [Operator guide](docs/RUNBOOK.md#8-sources-enrichment-and-their-failures).
-- [ ] **Review D2 E-mail and CIDR indicator kinds,** with e-mail addresses flagged as personal data.
+- [x] **Review D2 CIDR indicator kind:** IPv4 and IPv6 network ranges in report review, search and IOC export.
+- [x] **Review D2 E-mail indicator kind:** review and find full addresses across reports, with a personal-data warning on each address.
 - [ ] [#9](https://github.com/andrewjscott88/insight/issues/9) **TIP 1.7 Extraction quality (M1),** ongoing: a
       larger labelled corpus, the defanged-indicator gaps in [docs/EXTRACTION.md](docs/EXTRACTION.md), a
       ratcheted benchmark.

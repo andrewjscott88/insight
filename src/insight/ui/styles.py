@@ -83,6 +83,7 @@ body.body--dark, body.body--light { background:var(--ins-bg);color:var(--ins-tex
 .source-body { white-space:pre-wrap;overflow-wrap:break-word;font-size:1rem;line-height:1.7; }
 .evidence { border-left:3px solid var(--ins-evidence-line);padding:8px 12px;background:var(--ins-evidence-bg);
   white-space:pre-wrap;overflow-wrap:break-word;line-height:1.6; }
+.evidence mark { background:transparent;color:inherit;font-weight:bold;text-decoration:underline; }
 .nicegui-link { color:var(--ins-link);text-underline-offset:0.2em; }
 .nicegui-link.muted { color:var(--ins-muted); }
 .target-link { display:inline-flex;align-items:center;min-height:2.75rem; }
