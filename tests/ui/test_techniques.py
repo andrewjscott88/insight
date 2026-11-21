@@ -100,7 +100,9 @@ async def test_the_tab_groups_techniques_by_tactic_and_opens_the_reports(
         await user.should_see('Second ransom report')
 
 
-async def test_the_tab_period_filters_and_explains_an_empty_period(user: User, ui_env: SimpleNamespace) -> None:
+async def test_the_tab_period_filters_and_explains_an_empty_period(
+    user: User, ui_env: SimpleNamespace
+) -> None:
     await user.open('/')
     await user.should_see('No report from this time has a technique yet. Open a report to add one.')
     add_report(ui_env, 'Ransom report', 'Files were encrypted (T1486).')
