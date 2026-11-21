@@ -39,6 +39,10 @@ CVEs in reports they can see; starting a lookup stays refused to them. The new p
   keys, like the audit log: terms often name clients, internal hosts or sensitive projects.
 - **L4, the demo through an API key:** `POST /api/demo` is now for browser sessions only (keys get `403`), and
   the demo leaves out reports above `INSIGHT_MAX_TLP` instead of storing its AMBER+STRICT report past the limit.
+- **L5, one lock for every background job:** source syncs, CVE lookups and alert deliveries shared the sync
+  lock, so a lookup batch made *Sync all* answer `409` and alerts waited behind long syncs. They now run in
+  separate lanes, side by side, each with its own lock; only syncs share the lock of *Sync now*
+  ([ADR 0018](docs/adr/0018-opt-in-scheduled-syncs.md)).
 
 ### Changed: a clearer executive brief (from #39)
 - Keep the **Insight** name and symbol; use **Cyber Threat Intelligence Feed** as the tagline and remove

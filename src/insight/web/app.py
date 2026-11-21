@@ -140,9 +140,10 @@ def create_app(settings: Settings | None = None, *, with_ui: bool = True) -> Fas
         stop = asyncio.Event()
         runner = None
         if settings.run_jobs:
-            from ..jobs import run_forever  # Deferred: keeps `import insight.main` light for tools and tests.
+            from ..jobs import JobLocks, run_forever  # Deferred: keeps `import insight.main` light.
 
-            runner = asyncio.create_task(run_forever(sessions, application.state.sync_lock, stop))
+            locks = JobLocks(sync=application.state.sync_lock)  # Manual syncs share the sync lane (L5).
+            runner = asyncio.create_task(run_forever(sessions, locks, stop))
         try:
             yield
         finally:

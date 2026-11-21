@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Collection
 from datetime import UTC, datetime, timedelta
 from typing import Final
 
@@ -116,16 +117,22 @@ def enqueue_due_schedules(db: Session, *, at: datetime) -> list[Job]:
     return jobs
 
 
-def claim_job(db: Session, *, at: datetime) -> Job | None:
-    """Mark the oldest due queued job as running and return it, or ``None``.
+def claim_job(
+    db: Session, *, at: datetime, kinds: Collection[str] | None = None, exclude: Collection[str] = ()
+) -> Job | None:
+    """Mark the oldest due queued job (of ``kinds``, if given, and not of ``exclude``) as running and return
+    it, or ``None``.
 
     The update only succeeds while the job is still queued, so of two runners that pick the same job exactly
     one gets it (the other sees no row changed). Commit straight after, before running the job.
     """
+    which = [Job.kind.in_(kinds)] if kinds is not None else []
+    if exclude:
+        which.append(Job.kind.not_in(exclude))
     while (
         candidate := db.scalar(
             select(Job.id)
-            .where(Job.status == 'queued', Job.run_after <= stamp(at))
+            .where(Job.status == 'queued', Job.run_after <= stamp(at), *which)
             .order_by(Job.run_after, Job.created_at, Job.id)
             .limit(1)
         )

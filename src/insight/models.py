@@ -392,6 +392,13 @@ def _is_memory_sqlite(url: str) -> bool:
     return url in {'sqlite://', 'sqlite:///:memory:'} or 'mode=memory' in url
 
 
+def shares_one_connection(factory: SessionFactory) -> bool:
+    """Whether every session of ``factory`` uses the same connection (in-memory SQLite), which two threads
+    must never use at once: the job runner's lanes then take turns instead of running side by side (L5)."""
+    engine = factory.kw.get('bind')
+    return isinstance(getattr(engine, 'pool', None), StaticPool)
+
+
 def database(url: str, *, migrate: bool = True) -> tuple[Engine, SessionFactory]:
     """Create the engine and apply pending migrations (unless ``migrate=False``)."""
     is_sqlite = url.startswith('sqlite')
