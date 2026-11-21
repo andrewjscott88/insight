@@ -203,6 +203,10 @@ CVEs in reports they can see; starting a lookup stays refused to them. The new p
   see. `GET /api/brief` is unchanged.
 
 ### Added: MITRE ATT&CK® techniques on reports
+
+- STIX exports now link each included report to its tagged ATT&CK techniques. Each technique includes a
+  MITRE reference and keeps the report's TLP label. Removed tags and tags outside the current catalog are
+  omitted.
 - **Tags from the report text.** A report is tagged with every Enterprise ATT&CK technique ID written in it
   (`T1059`, `T1059.001`), with the words around it as evidence. Insight never guesses a technique from prose and
   never infers an actor ([ADR 0019](docs/adr/0019-attack-techniques.md)).

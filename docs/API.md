@@ -211,6 +211,7 @@ Task-oriented guide with recipes and troubleshooting: [IOC_EXPORT.md](IOC_EXPORT
 Download a validated STIX 2.1 bundle as `application/stix+json;version=2.1`. Use the same filters as the
 IOC export below. The request's `max_tlp`, the instance ceiling and the API key's ceiling all apply.
 Use `evidence=false` to omit excerpts. A request with `defang=true` returns 422.
+Each included report references its active ATT&CK techniques from the current catalog as `attack-pattern` objects.
 Each successful request records `stix.export` with its bundle UUID. Empty selections return a valid empty bundle.
 [Object mapping and handling rules](IOC_EXPORT.md#stix-21-export)
 
