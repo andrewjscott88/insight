@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import logging
 import os
 import stat
@@ -453,6 +454,70 @@ def test_mfa_setup_can_be_cancelled(
 def test_mfa_usage(capsys: pytest.CaptureFixture[str]) -> None:
     assert cli.main(['mfa']) == 2
     assert 'usage: insight mfa {setup,reset,status}' in capsys.readouterr().err
+
+
+def test_notify_manages_destinations_without_disclosing_addresses(
+    sqlite_env: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from insight.models import database
+    from insight.services import audit_events, list_targets
+
+    assert cli.main(['notify']) == 0
+    assert 'No alert destinations' in capsys.readouterr().out
+    address = 'https://alerts.example.org/secret-path'
+    monkeypatch.setattr(sys, 'stdin', io.StringIO(address + '\n'))
+    assert (
+        cli.main(['notify', 'add', '--name', 'Incident desk', '--style', 'json', '--max-tlp', 'green']) == 0
+    )
+    added = capsys.readouterr().out
+    engine, sessions = database(f'sqlite:///{sqlite_env / "insight.db"}', migrate=False)
+    try:
+        with sessions() as db:
+            (target,) = list_targets(db)
+            target_id, secret = target.id, target.secret
+            assert (target.address, target.max_tlp, target.actor) == (address, 'GREEN', 'cli')
+        assert secret
+        assert secret in added
+        assert address not in added
+        assert cli.main(['notify', 'disable', '--target', target_id]) == 0
+        assert cli.main(['notify', 'list']) == 0
+        listing = capsys.readouterr().out
+        assert target_id in listing
+        assert 'TLP:GREEN  off' in listing
+        assert secret not in listing
+        assert address not in listing
+        assert cli.main(['notify', 'enable', '--target', target_id]) == 0
+        assert cli.main(['notify', 'remove', '--target', target_id]) == 0
+        with sessions() as db:
+            assert not list_targets(db)
+            events = [e for e in audit_events(db) if e.object_id == target_id]
+            assert {e.actor for e in events} == {'cli'}
+            assert {e.action for e in events} == {
+                'alert.target.add',
+                'alert.target.off',
+                'alert.target.on',
+                'alert.target.delete',
+            }
+            assert all(address not in e.detail and secret not in e.detail for e in events)
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.parametrize(
+    'args',
+    [
+        ['add'],
+        ['enable'],
+        ['remove', '--target', 'missing'],
+        ['list', '--style', 'email'],
+        ['typo'],
+    ],
+)
+def test_notify_rejects_invalid_commands(
+    sqlite_env: Path, args: list[str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert cli.main(['notify', *args]) == 1
+    assert 'Alert destination:' in capsys.readouterr().err
 
 
 # --------------------------------------------------------------------------- scheduled syncs

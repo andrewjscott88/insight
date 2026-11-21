@@ -13,7 +13,7 @@ More than 10 new KEV entries in one import become a single alert that lists them
 
 ## Destinations
 
-Add them in the workspace, on the **Watch terms** tab, under **Alerts**. API keys cannot add, change or read
+Add them on the **Watch terms** tab under **Alerts**, or use the host CLI. API keys cannot add, change or read
 them, as they cannot change schedules.
 
 | Kind | What it sends |
@@ -24,6 +24,23 @@ them, as they cannot change schedules.
 
 **Send a test alert** sends straight away and shows the result. Turning a destination off keeps its queued
 alerts until it is on again; removing it deletes them.
+
+## Manage destinations on the host
+
+Run `insight notify` to list the destination IDs, names, styles, sharing limits and enabled state.
+Use `add` to create a destination. Enter the address at the hidden prompt or pipe it on standard input.
+For a signed JSON webhook, the command prints the signing secret once after creating the destination.
+
+```sh
+insight notify add --name "Incident desk" --style json --max-tlp GREEN
+insight notify list
+insight notify disable --target DESTINATION_ID
+insight notify enable --target DESTINATION_ID
+insight notify remove --target DESTINATION_ID
+```
+
+The styles are `chat`, `json` and `email`. The default sharing limit is AMBER. Removing a destination
+also deletes its queued alerts. These commands use the same database and audit events as the workspace.
 
 ## TLP
 
