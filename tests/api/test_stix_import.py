@@ -76,3 +76,23 @@ def test_bearer_key_scope_and_tlp_ceiling(app: FastAPI, client: TestClient) -> N
     unmarked['objects'][0].pop('object_marking_refs')
     assert client.post(URL, json=unmarked, headers=headers).status_code == 400
     assert client.post(URL, json=simple_bundle(), headers=headers).status_code == 200
+
+
+def test_wrong_report_type_returns_400_and_preserves_atomicity(authed: TestClient) -> None:
+    data = simple_bundle()
+    first = data['objects'][0]
+    data['objects'].append(
+        {
+            'type': 'report',
+            'id': f'report--{uuid4()}',
+            'spec_version': '2.1',
+            'created': first['created'],
+            'modified': first['modified'],
+            'published': first['created'],
+            'name': 'Invalid report type fixture',
+            'report_types': [7],
+            'object_refs': [first['id']],
+        }
+    )
+    assert authed.post(URL, json=data).status_code == 400
+    assert authed.get('/api/documents').json() == []
