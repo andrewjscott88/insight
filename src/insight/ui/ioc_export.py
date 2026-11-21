@@ -1,4 +1,4 @@
-"""IOC export dialog: choose what to include, then download the cross-report JSON export.
+"""IOC export dialog: select reports and indicators for an Insight JSON file or a STIX 2.1 bundle.
 
 The download goes through the authenticated API route (``/api/iocs/export``), exactly like the per-report
 export link in the inbox, so the API, workspace and CLI share one implementation and one audit event.
@@ -26,6 +26,7 @@ from .typography import heading
 from .workspace import ALL_STATUSES, ALL_TLP, Workspace, WorkspaceState
 
 EXPORT_ROUTE: Final = '/api/iocs/export'
+STIX_ROUTE: Final = '/api/iocs/stix'
 TITLE: Final = 'Export indicators of compromise (IOCs)'
 NO_TLP_LIMIT: Final = 'No limit'
 KIND_LABELS: Final = {
@@ -60,6 +61,7 @@ def export_url(
     defang: bool = False,
     inbox: WorkspaceState | None = None,
     evidence: bool = True,
+    stix: bool = False,
 ) -> str:
     """The download URL for these choices; ``inbox`` also applies the inbox search and filters."""
     optional = [
@@ -72,7 +74,8 @@ def export_url(
     params = [('kind', kind) for kind in kinds]
     params += [('review_status', status) for status in review_statuses]
     params += [(name, value) for name, value in optional if value]
-    return f'{EXPORT_ROUTE}?{urlencode(params)}' if params else EXPORT_ROUTE
+    route = STIX_ROUTE if stix else EXPORT_ROUTE
+    return f'{route}?{urlencode(params)}' if params else route
 
 
 def export_query(
@@ -126,6 +129,11 @@ def open_ioc_export_dialog(ws: Workspace) -> None:
             'You get one file (JSON) that lists each indicator once. For each one it shows the reports that '
             'mention it, the words around it, and the TLP label.'
         ).classes('muted prose')
+        format_input = (
+            ui.select({'json': 'Insight JSON', 'stix': 'STIX 2.1 bundle'}, value='json', label='File format')
+            .props('outlined')
+            .classes('w-full')
+        )
         kinds_input = (
             ui.select(
                 {kind: KIND_LABELS.get(kind, kind) for kind in INDICATOR_KINDS},
@@ -168,10 +176,9 @@ def open_ioc_export_dialog(ws: Workspace) -> None:
             'Check for personal data before sharing. You can leave e-mail out of the list of types. '
             'Addresses may still appear in titles and quotes from reports.'
         ).classes('text-warn text-sm prose')
-        ui.label(
-            'The file gets the strictest TLP label of the reports in it. Exports keep TLP labels. '
-            'They do not give permission to share. The file is not in the STIX format.'
-        ).classes('muted text-sm prose')
+        ui.label('Handle the whole file at the strictest TLP label of the reports it contains.').classes(
+            'muted text-sm prose'
+        )
         preview = ui.label().classes('text-primary prose').props('role=status')
 
         def counts() -> dict[str, int] | None:
@@ -186,6 +193,9 @@ def open_ioc_export_dialog(ws: Workspace) -> None:
             except ValidationError:
                 preview.set_text('Choose at least one indicator type and one review status.')
                 return None
+            if format_input.value == 'stix':
+                limit = services.stricter_limit(query.max_tlp, ws.app.state.settings.max_tlp)
+                query = query.model_copy(update={'max_tlp': limit})
             with ws.read() as db:
                 found = services.ioc_export_counts(db, query)
             preview.set_text(preview_text(found))
@@ -218,6 +228,7 @@ def open_ioc_export_dialog(ws: Workspace) -> None:
                 defang=bool(defang_input.value),
                 inbox=ws.state if inbox_input.value else None,
                 evidence=bool(evidence_input.value),
+                stix=format_input.value == 'stix',
             )
             ui.navigate.to(url, new_tab=True)
             dialog.close()
@@ -225,5 +236,15 @@ def open_ioc_export_dialog(ws: Workspace) -> None:
         problem = problem_area()
         with ui.row().classes('w-full justify-end'):
             ui.button('Cancel', on_click=dialog.close).props('flat')
-            ui.button('Download JSON ↓', on_click=download)
+            download_button = ui.button('Download JSON ↓', on_click=download)
+
+        def update_format() -> None:
+            stix = format_input.value == 'stix'
+            if stix:
+                defang_input.set_value(False)
+            defang_input.set_enabled(not stix)
+            download_button.set_text('Download STIX ↓' if stix else 'Download JSON ↓')
+            refresh_preview()
+
+        format_input.on_value_change(update_format)
     dialog.open()

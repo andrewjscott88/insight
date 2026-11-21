@@ -130,6 +130,34 @@ def test_the_blocklist_holds_only_safe_malicious_accepted_values(app: FastAPI, s
     assert len(events) == 3
 
 
+@pytest.mark.parametrize('engine', ['suricata', 'snort'])
+def test_sensor_download_reuses_the_blocklist_policy(
+    app: FastAPI, signed_in: TestClient, engine: str
+) -> None:
+    values = ingest(app, f'{PUBLIC_IP}, {PRIVATE_IP}, {OTHER_IP}, {EVIL_DOMAIN}')['values']
+    for value, ids in values.items():
+        if value != OTHER_IP:
+            accept(app, ids['observation'])
+        assess(signed_in, ids['entity'], verdict='malicious')
+    endpoint = '/api/iocs/blocklist'
+    result = signed_in.get(endpoint, params={'kind': 'ip', 'format': engine})
+    assert result.status_code == 200, result.text
+    assert result.headers['content-disposition'] == f'attachment; filename="insight-{engine}-ip.rules"'
+    assert f'alert ip any any <> {PUBLIC_IP} any' in result.text
+    assert PRIVATE_IP not in result.text
+    assert OTHER_IP not in result.text
+    assert len([line for line in result.text.splitlines() if line.startswith('alert ')]) == 1
+    dns = signed_in.get(endpoint, params={'kind': 'domain', 'format': engine})
+    assert dns.status_code == 200
+    assert EVIL_DOMAIN in dns.text
+    kind = 'sha256'
+    assert signed_in.get(endpoint, params={'kind': kind, 'format': engine}).status_code == 422
+    assess(signed_in, values[EVIL_DOMAIN]['entity'], verdict='unknown')
+    assert signed_in.get(endpoint, params={'kind': 'domain', 'format': engine}).status_code == 422
+    events = [event for event in signed_in.get('/api/audit').json() if event['action'] == 'ioc.blocklist']
+    assert len(events) == 2
+
+
 def test_expired_verdicts_leave_the_blocklist(app: FastAPI, signed_in: TestClient) -> None:
     report = ingest(app, f'C2 {PUBLIC_IP} and {OTHER_IP}; payload {SHA256}.')
     values = report['values']
@@ -192,6 +220,7 @@ def test_email_export_marks_personal_data_and_can_exclude_it(app: FastAPI, signe
 
 def test_blocklists_share_the_ioc_export_rate_budget() -> None:
     assert rate_limit_policy('GET', '/api/iocs/blocklist') is IOC_EXPORT
+    assert rate_limit_policy('GET', '/api/iocs/stix') is IOC_EXPORT
 
 
 # --------------------------------------------------------------------------- TLP-limited keys
@@ -218,6 +247,11 @@ def test_a_limited_key_sees_only_verdicts_within_its_limit(
     assert 'SECRET-REASON' not in hidden.text
     listed = client.get('/api/iocs/blocklist', params={'kind': 'ip'}, headers=green_key).text.splitlines()
     assert listed == [OTHER_IP]
+    for engine in ('suricata', 'snort'):
+        rules = client.get('/api/iocs/blocklist', params={'kind': 'ip', 'format': engine}, headers=green_key)
+        assert rules.status_code == 200
+        assert OTHER_IP in rules.text
+        assert PUBLIC_IP not in rules.text
     export = client.get('/api/iocs/export', headers=green_key).json()
     verdicts = {ioc['value']: ioc['verdict'] for ioc in export['iocs']}
     assert verdicts == {PUBLIC_IP: 'unknown', OTHER_IP: 'malicious'}

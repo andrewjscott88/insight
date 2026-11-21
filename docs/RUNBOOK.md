@@ -20,6 +20,7 @@ The Makefile wraps these (`make help`); the commands it runs are the ones in the
 | Backup (online, safe while running) and copy it off the volume | `make backup` (into `backups/`, owner-only) | `docker compose exec insight insight backup /data/backup-$(date +%F).db` · `docker compose cp insight:/data/backup-YYYY-MM-DD.db ./` |
 | Restore | `make restore BACKUP=backups/…` (asks first) | §5 |
 | Export IOCs (e.g. shareable at GREEN), copy it off the volume, remove it | `make export-iocs EXPORT_ARGS="--max-tlp GREEN --review-status accepted --defang --no-evidence"` | `docker compose exec insight insight export-iocs /data/iocs-$(date +%F).json …` · `docker compose cp insight:/data/iocs-YYYY-MM-DD.json ./` · `docker compose exec insight rm /data/iocs-YYYY-MM-DD.json` |
+| Exchange MISP events | [MISP guide](MISP.md) | `insight misp-export FILE --max-tlp GREEN` · `insight misp-import FILE` |
 | Apply migrations explicitly | `make migrate` | `docker compose exec insight insight migrate` |
 | Smoke-test a running instance | `make smoke` (password from `.env`, no demo data) | `python scripts/smoke.py http://127.0.0.1:8080 --password "$INSIGHT_PASSWORD"` |
 | Version | `make version` · `make health` | `docker compose exec insight insight --version` · `curl -s http://127.0.0.1:8080/health` |
@@ -76,6 +77,7 @@ Set in `.env` (Compose reads it) or the process environment. Real environment va
 | `INSIGHT_ALERT_PRIVATE_TARGETS` | no | `off` | `on` lets webhooks reach private networks (a chat or automation server on your LAN); link-local addresses stay blocked ([ADR 0022](adr/0022-alerts.md)) |
 | `INSIGHT_ABUSECH_AUTH_KEY` | no | (none) | Account key for the optional URLhaus, ThreatFox and MalwareBazaar Community APIs. Sent in the `Auth-Key` header to the enabled publisher API. |
 | `INSIGHT_NVD_API_KEY` | no | (none) | A free NIST NVD API key: CVE lookups at NVD every 0.7 s instead of every 6.5 s ([ADR 0023](adr/0023-automatic-cve-lookups.md)). Sent only in NVD's `apiKey` header, never logged |
+| `INSIGHT_MISP_URL` and `INSIGHT_MISP_KEY` | no | (none) | The trusted public HTTPS instance and its API key, read by host CLI MISP transfers. File exchange also works offline. |
 | `NICEGUI_STORAGE_PATH` | no | `/data/.nicegui` in the image | Must be writable |
 | `INSIGHT_OTX_API_KEY` | no | (none) | The operator's OTX subscription key. Set it on the host and switch on the AlienVault OTX source. |
 

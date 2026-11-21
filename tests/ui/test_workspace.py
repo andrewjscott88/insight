@@ -241,6 +241,28 @@ async def test_ioc_export_dialog_downloads_in_a_new_tab(user: User, monkeypatch:
     ]
 
 
+async def test_stix_download_uses_selected_filters_and_live_values(
+    user: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = record_navigation(user, monkeypatch)
+    await load_demo(user)
+    user.find('Export IOCs').click()
+    await user.should_see('File format')
+    defang = user.find(kind=ui.checkbox, content='Defang values').elements.pop()
+    defang.set_value(True)
+    user.find(kind=ui.select, content='File format').elements.pop().set_value('stix')
+    await user.should_see('Download STIX')
+    assert defang.value is False
+    assert not defang.enabled
+    user.find(kind=ui.select, content='Indicator types').elements.pop().set_value(['ip'])
+    user.find(kind=ui.checkbox, content='Include evidence excerpts').elements.pop().set_value(False)
+    user.find('Download STIX').click()
+    await asyncio.sleep(0.1)
+    assert calls == [
+        ('/api/iocs/stix?kind=ip&review_status=unreviewed&review_status=accepted&evidence=false', True)
+    ]
+
+
 async def test_ioc_export_dialog_blocks_an_empty_download(
     user: User, monkeypatch: pytest.MonkeyPatch
 ) -> None:

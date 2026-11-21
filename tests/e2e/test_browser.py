@@ -11,6 +11,7 @@ marking raises the label (the default limit would refuse it).
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import uuid
@@ -92,6 +93,50 @@ def test_demo_loads(context: Any) -> None:
     expect(
         page.get_by_role('button', name='Training scenario: edge appliance activity').first
     ).to_be_visible()
+
+
+def test_import_stix_file_in_the_workspace(context: Any) -> None:
+    page = context.new_page()
+    sign_in(page)
+    title = f'Browser STIX {uuid.uuid4()}'
+    timestamp = '2026-01-01T00:00:00.000Z'
+    indicator = {
+        'type': 'indicator',
+        'id': f'indicator--{uuid.uuid4()}',
+        'spec_version': '2.1',
+        'pattern_type': 'stix',
+        'pattern': "[domain-name:value = 'case.example.org']",
+        'valid_from': timestamp,
+        'created': timestamp,
+        'modified': timestamp,
+    }
+    report = {
+        'type': 'report',
+        'id': f'report--{uuid.uuid4()}',
+        'spec_version': '2.1',
+        'name': title,
+        'published': timestamp,
+        'created': timestamp,
+        'modified': timestamp,
+        'report_types': ['threat-report'],
+        'object_refs': [indicator['id']],
+    }
+    bundle = {'type': 'bundle', 'id': f'bundle--{uuid.uuid4()}', 'objects': [indicator, report]}
+    file = {'name': 'partner.json', 'mimeType': 'application/json', 'buffer': json.dumps(bundle).encode()}
+    page.get_by_role('button', name='Ingest intelligence').click()
+    dialog = page.get_by_role('dialog', name='Ingest intelligence')
+    dialog.get_by_text('Import a STIX bundle', exact=True).click()
+    submit = dialog.get_by_role('button', name='Import bundle')
+    submit.click()
+    expect(dialog.get_by_text('Choose a STIX bundle file first.')).to_be_visible()
+    picker = dialog.get_by_label('STIX bundle file')
+    picker.set_input_files(file)
+    submit.click()
+    expect(page.get_by_text('Imported 1 new report. Already present: 0.')).to_be_visible()
+    page.get_by_role('button', name='Ingest intelligence').click()
+    picker.set_input_files(file)
+    submit.click()
+    expect(page.get_by_text('Imported 0 new reports. Already present: 1.')).to_be_visible()
 
 
 def test_analyst_workflow(context: Any) -> None:

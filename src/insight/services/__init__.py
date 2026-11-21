@@ -81,9 +81,17 @@ from .brief import (
 )
 from .common import fold, like_pattern, stamp
 from .cves import MAX_CVE_MENTIONS, CveSignal, CveSignals, cve_signals
-from .documents import SourceRef, count_documents_above, fingerprint, get_document, ingest, revisions
+from .documents import (
+    SourceRef,
+    StructuredObservations,
+    count_documents_above,
+    fingerprint,
+    get_document,
+    ingest,
+    revisions,
+)
 from .entities import PIVOT_PAGE_SIZE, count_entity_documents, entity_documents, get_entity, list_entities
-from .exports import MAX_EXPORT_MENTIONS, export_iocs, ioc_export_counts, ioc_mentions
+from .exports import MAX_EXPORT_MENTIONS, export_iocs, export_stix, ioc_export_counts, ioc_mentions
 from .hunts import (
     get_hunt,
     hunt_checks,
@@ -156,6 +164,7 @@ from .sources import (
     set_source_switch,
     source_switches,
 )
+from .stix_imports import import_stix
 from .techniques import (
     TechniqueCount,
     TechniqueTag,
@@ -254,6 +263,7 @@ __all__ = [
     'ProfileEntry',
     'ReportRef',
     'SourceRef',
+    'StructuredObservations',
     'SweepEntry',
     'TechniqueCount',
     'TechniqueTag',
@@ -305,6 +315,7 @@ __all__ = [
     'entity_documents',
     'entity_seen',
     'export_iocs',
+    'export_stix',
     'find_mentions',
     'fingerprint',
     'finish_job',
@@ -317,6 +328,7 @@ __all__ = [
     'guide_data',
     'hunt_checks',
     'hunts_for',
+    'import_stix',
     'industry_counts',
     'industry_profile',
     'ingest',

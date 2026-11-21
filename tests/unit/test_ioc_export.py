@@ -461,6 +461,31 @@ def test_cli_writes_a_private_filtered_export(
     assert ('ioc.export', exported['export_id']) in audit_actions(workspace_url)
 
 
+def test_cli_writes_stix_with_private_permissions_and_refuses_to_overwrite(
+    workspace_url: str, tmp_path: Path
+) -> None:
+    target = tmp_path / 'bundle.json'
+    args = ['export-stix', str(target), '--kind', 'IP', '--no-evidence']
+    assert cli.main(args) == 0
+    written = target.read_bytes()
+    bundle = json.loads(written)
+    assert bundle['type'] == 'bundle'
+    assert b'192.0.2.8' in written
+    assert b'evil.example' not in written
+    if sys.platform != 'win32':
+        assert stat.S_IMODE(target.stat().st_mode) == 0o600
+    assert cli.main(args) == 1
+    assert target.read_bytes() == written
+    assert [action for action, _ in audit_actions(workspace_url)].count('stix.export') == 1
+
+
+def test_cli_rejects_defanged_stix_without_creating_a_file(workspace_url: str, tmp_path: Path) -> None:
+    target = tmp_path / 'bundle.json'
+    assert cli.main(['export-stix', str(target), '--defang']) == 1
+    assert not target.exists()
+    assert not any(action == 'stix.export' for action, _ in audit_actions(workspace_url))
+
+
 def test_cli_never_overwrites(workspace_url: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     target = tmp_path / 'iocs.json'
     target.write_text('keep me')

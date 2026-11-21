@@ -25,7 +25,9 @@ A single-operator threat-intelligence workbench, run locally or published behind
   and remove the rest in the reader, and new revisions keep those decisions. The **ATT&CK techniques** tab groups
   the techniques in your reports by tactic over a period you choose, opens the reports behind each one, and
   downloads a layer for ATT&CK Navigator. Never guessed from prose; no attribution. `make attack-backfill` tags
-  reports stored before 0.7.0. API: `/api/attack/*` and `/api/documents/{id}/techniques`.
+  reports stored before 0.7.0. STIX exports link each included report to its current catalog-backed tags,
+  with the report's sharing label and a link to the technique on MITRE's site.
+  API: `/api/attack/*` and `/api/documents/{id}/techniques`.
 - **Industry threats and threat guides** ([docs/THREAT_GUIDES.md](docs/THREAT_GUIDES.md),
   [ADR 0025](docs/adr/0025-threat-guides.md)): pick an industry and see up to ten threat groups that a cited
   source (MITRE ATT&CK or the MISP galaxy) says target it, each with the quoted evidence. Open one for a threat
@@ -81,6 +83,9 @@ A single-operator threat-intelligence workbench, run locally or published behind
   product uses the NVD API but is not endorsed or certified by the NVD.
 - JSON report exports retain provenance and TLP; they are **not STIX** and do not authorize redistribution.
 - **IOC export**: one JSON file listing every indicator across your reports once, with its source reports, evidence, KEV context and the most restrictive TLP of the reports it includes. Filter by type, review status, highest TLP or report; defang for e-mail and tickets, and leave evidence out when sharing. **Export IOCs** in the workspace (with a live count preview), **Export this report's IOCs** in the reader, `insight export-iocs FILE` or `GET /api/iocs/export`. Not STIX and not a blocklist by itself: see [docs/IOC_EXPORT.md](docs/IOC_EXPORT.md).
+- **STIX 2.1 import** brings a local bundle into the inbox as source-linked reports. Use the ingest dialog,
+  `insight import-stix FILE` or the authenticated API. [Import guide](docs/API.md#post-apiimportstix)
+- **STIX 2.1 export** shares filtered indicators, CVEs and source reports with TLP 2.0 markings. Select STIX in **Export IOCs**, run `insight export-stix FILE`, or use `GET /api/iocs/stix`. Each bundle is validated offline. [STIX export guide](docs/IOC_EXPORT.md#stix-21-export)
 - **HTTP API with an API key for scripts and SIEMs**: one key, created, rotated and revoked only on the host (`make api-key-create` / `insight api-key`), sent as `Authorization: Bearer`. Read-only unless you choose read-write; mandatory expiry; stored as a hash only; optionally limited to a TLP label (`MAX_TLP=GREEN`: more restrictive reports are invisible to it). Per-caller rate limits with `RateLimit` headers and `429` + `Retry-After`. Guide with every `curl` command: [docs/API_GUIDE.md](docs/API_GUIDE.md); field reference: [docs/API.md](docs/API.md).
 - **TLP:RED is refused by default** (`INSIGHT_MAX_TLP=AMBER+STRICT`), including reports whose text carries a RED marking, so material meant for named recipients does not end up on a server. Set `INSIGHT_MAX_TLP=RED` to allow it.
 - **Optional sign-in MFA** (authenticator-app codes), off by default: `make mfa-enable` / `make mfa-disable`.
@@ -179,6 +184,7 @@ Open http://127.0.0.1:8080. Default local data lives in `./data/insight.db`. Use
 | `insight migrate` | Apply database migrations explicitly |
 | `insight backup FILE` | Consistent online SQLite backup, safe while running (never overwrites) |
 | `insight export-iocs FILE` | Write a JSON IOC export (never overwrites; owner-only file). Options and recipes: [docs/IOC_EXPORT.md](docs/IOC_EXPORT.md#2-quick-start) |
+| `insight misp-export FILE` / `insight misp-import FILE` | Exchange a single MISP event as JSON or with a configured MISP instance. [MISP guide](docs/MISP.md) |
 | `insight attack-backfill` | Tag ATT&CK technique IDs in reports stored before 0.7.0 (safe to rerun) |
 | `insight industries` · `insight threat-profile INDUSTRY` | The industries, and the top ten groups for one with their evidence ([docs/THREAT_GUIDES.md](docs/THREAT_GUIDES.md#command-line)) |
 | `insight threat-guide REF FILE` | Write a group's threat guide (`--format md\|json\|navigator\|sweep-csv\|sweep-json`, `--max-tlp`, `--include-named` to sweep reports that only name the group; never overwrites; owner-only file) |
