@@ -4,17 +4,19 @@ from __future__ import annotations
 
 import asyncio
 import json
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
+from threading import Event
 from typing import Any
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import event, select
 from tests.greynoise_fixtures import ANSWER, IP, OTHER, provider_error, reviewed
 
 from insight import greynoise, services
 from insight.connectors import ProviderError
 from insight.lookups import THROTTLES
-from insight.models import Enrichment, EntityAssessment, Observation, SessionFactory
+from insight.models import Enrichment, EntityAssessment, Observation, SessionFactory, database
 from insight.schemas import TLP
 
 
@@ -186,3 +188,41 @@ async def test_simultaneous_fetches_and_retracted_disclosure_permission(
         await first
     with session_factory() as db:
         assert db.scalars(select(Enrichment)).all() == []
+
+
+def test_retention_committing_before_first_cache_write_cannot_leave_an_orphan(database_url: str) -> None:
+    # The fixture supplies a real file-backed SQLite DB or the configured PostgreSQL test database.
+    engine, sessions = database(database_url, migrate=False)
+    writing, resume = Event(), Event()
+
+    def store() -> None:
+        with sessions.begin() as db:
+
+            def pause_first_write(
+                _conn: Any, _cursor: Any, statement: str, _params: Any, _context: Any, _many: bool
+            ) -> None:
+                if not writing.is_set() and statement.startswith(('INSERT', 'UPDATE')):
+                    writing.set()
+                    assert resume.wait(timeout=10), 'retention did not finish'
+
+            event.listen(db.connection(), 'before_cursor_execute', pause_first_write)
+            services.store_greynoise_context(db, IP, {'found': False})
+
+    try:
+        with sessions.begin() as db:
+            report_id = reviewed(db)
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            worker = executor.submit(store)
+            try:
+                assert writing.wait(timeout=10), 'lookup did not reach its first write'
+                with sessions.begin() as db:
+                    services.delete_document(db, report_id, 'Synthetic retention request')
+            finally:
+                resume.set()
+            with pytest.raises(LookupError, match='No eligible'):
+                worker.result(timeout=10)
+        with sessions() as db:
+            assert db.scalars(select(Enrichment)).all() == []
+            assert all(e.action != 'ip.lookup' for e in services.audit_events(db))
+    finally:
+        engine.dispose()
