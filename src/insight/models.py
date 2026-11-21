@@ -263,13 +263,13 @@ class OperatorSession(Base):
 class OperatorMfa(Base):
     """The operator's TOTP second factor (at most one row; no row means MFA is off). See ``insight.totp``.
 
-    The shared secret must be stored in a recoverable form to verify codes; protect the database accordingly.
+    The stored secret is a versioned encrypted envelope. The operator session secret protects it.
     ``last_step`` is the 30-second time step of the last accepted code, so a code can never be used twice.
     """
 
     __tablename__ = 'operator_mfa'
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
-    secret: Mapped[str] = mapped_column(String(64))
+    secret: Mapped[str] = mapped_column(Text)
     created_at: Mapped[str] = mapped_column(String(40), default=now)
     last_step: Mapped[int] = mapped_column(default=0)
 
@@ -611,7 +611,9 @@ def shares_one_connection(factory: SessionFactory) -> bool:
     return isinstance(getattr(engine, 'pool', None), StaticPool)
 
 
-def database(url: str, *, migrate: bool = True) -> tuple[Engine, SessionFactory]:
+def database(
+    url: str, *, migrate: bool = True, session_secret: str | None = None
+) -> tuple[Engine, SessionFactory]:
     """Create the engine and apply pending migrations (unless ``migrate=False``)."""
     is_sqlite = url.startswith('sqlite')
     options: dict[str, Any] = {}
@@ -635,5 +637,5 @@ def database(url: str, *, migrate: bool = True) -> tuple[Engine, SessionFactory]
     if migrate:
         from .migrations import upgrade  # Deferred: the migration environment imports this module.
 
-        upgrade(engine)
+        upgrade(engine, session_secret=session_secret)
     return engine, sessionmaker(engine, expire_on_commit=False)

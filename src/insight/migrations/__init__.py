@@ -24,11 +24,13 @@ log = logging.getLogger('insight.migrations')
 HERE = Path(__file__).parent
 
 
-def alembic_config(engine: Engine | None = None) -> Config:
+def alembic_config(engine: Engine | None = None, *, session_secret: str | None = None) -> Config:
     config = Config()
     config.set_main_option('script_location', str(HERE))
     if engine is not None:
         config.attributes['engine'] = engine
+    if session_secret is not None:
+        config.attributes['session_secret'] = session_secret
     return config
 
 
@@ -49,9 +51,9 @@ def _is_unversioned_legacy_database(engine: Engine) -> bool:
     return 'documents' in tables and 'alembic_version' not in tables
 
 
-def upgrade(engine: Engine, revision: str = 'head') -> None:
+def upgrade(engine: Engine, revision: str = 'head', *, session_secret: str | None = None) -> None:
     """Bring the database schema up to ``revision`` (default: latest), logging what changed."""
-    config = alembic_config(engine)
+    config = alembic_config(engine, session_secret=session_secret)
     if _is_unversioned_legacy_database(engine):
         log.warning('Unversioned (0.1.0) database detected: stamping it at baseline %s', BASELINE_REVISION)
         command.stamp(config, BASELINE_REVISION)
@@ -64,5 +66,5 @@ def upgrade(engine: Engine, revision: str = 'head') -> None:
         log.info('Database schema at revision %s (up to date)', after)
 
 
-def downgrade(engine: Engine, revision: str) -> None:
-    command.downgrade(alembic_config(engine), revision)
+def downgrade(engine: Engine, revision: str, *, session_secret: str | None = None) -> None:
+    command.downgrade(alembic_config(engine, session_secret=session_secret), revision)
