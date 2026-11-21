@@ -143,6 +143,9 @@ class Observation(Base):
     start_offset: Mapped[int]
     end_offset: Mapped[int]
     review_status: Mapped[str] = mapped_column(String(20), default='unreviewed')
+    #: When ``review_status`` last changed (``None``: never reviewed, or reviewed before 0.8). TAXII uses it
+    #: so a client polling for new objects also gets indicators accepted after their report arrived.
+    reviewed_at: Mapped[str | None] = mapped_column(String(40), default=None)
 
 
 class DocumentTechnique(Base):

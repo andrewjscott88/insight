@@ -124,6 +124,7 @@ operator have separate budgets, so a runaway script cannot lock the analyst out 
 | `read` | `GET`/`HEAD`, except the IOC export | 300 per minute |
 | `write` | `POST` (ingest, triage, notes, demo, sync, enrichment) | 60 per minute |
 | `ioc-export` | `GET /api/iocs/export`, `GET /api/iocs/stix`, `GET /api/iocs/blocklist` | 30 per hour |
+| `taxii` | TAXII collection reads (`objects/`, `manifest/`, single objects and versions) | 240 per hour |
 | (invalid keys) | Requests with a wrong, revoked or expired key, per client address | 10 per minute |
 
 Budgets are token buckets: the full limit is available as a burst, then it refills evenly (`read`: 5 per
@@ -376,6 +377,22 @@ the `ioc-export` budget.
 For IPs and domains, `format=suricata` or `format=snort` downloads a plain-text `.rules` file. These formats
 return 422 when the selection is empty or the kind is unsupported. See [network sensor rules](IOC_EXPORT.md#network-sensor-rules)
 for signatures, DNS coverage and local rule IDs.
+
+## TAXII 2.1 (read-only)
+
+API keys only (`Authorization: Bearer <key>`); a signed-in browser gets `403`. Responses use
+`application/taxii+json;version=2.1` and TAXII error messages. Full guide: [TAXII.md](TAXII.md).
+
+| Method | Path | Returns |
+| --- | --- | --- |
+| `GET` | `/taxii2/` | Discovery: the API root |
+| `GET` | `/taxii2/insight/` | API root information |
+| `GET` | `/taxii2/insight/collections/` | The fixed collections (one: *Reviewed indicators*) |
+| `GET` | `/taxii2/insight/collections/{id}/` | One collection |
+| `GET` | `/taxii2/insight/collections/{id}/objects/` | Objects: `added_after`, `limit` (1 to 1,000), `next`, `match[id]`, `match[type]`, `match[version]`, `match[spec_version]`. Audited as `taxii.read` |
+| `GET` | `/taxii2/insight/collections/{id}/manifest/` | The same selection as IDs, `date_added` and versions |
+| `GET` | `/taxii2/insight/collections/{id}/objects/{object_id}/` | One object |
+| `GET` | `/taxii2/insight/collections/{id}/objects/{object_id}/versions/` | Its version (Insight keeps the current one) |
 
 ## Entities
 

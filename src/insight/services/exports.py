@@ -114,6 +114,7 @@ def ioc_mentions(db: Session, query: IocExportQuery) -> list[IocMention]:
     stmt = (
         select(
             Observation.review_status,
+            Observation.reviewed_at,
             Observation.evidence,
             Entity.id,
             Entity.kind,
@@ -163,9 +164,11 @@ def ioc_mentions(db: Session, query: IocExportQuery) -> list[IocMention]:
             kev=_kev_view(kev),
             extractor_version=extractor_version,
             metadata_only=metadata_only(source_key),
+            reviewed_at=reviewed_at or '',
         )
         for (
             review_status,
+            reviewed_at,
             evidence,
             entity_id,
             kind,
@@ -193,6 +196,12 @@ def ioc_mentions(db: Session, query: IocExportQuery) -> list[IocMention]:
 
 def _selected_export(db: Session, query: IocExportQuery) -> tuple[dict[str, Any], set[str]]:
     """Build both sharing formats from the same permitted set of mentions and publisher rights."""
+    result, metadata_only_ids, _ = _selection(db, query)
+    return result, metadata_only_ids
+
+
+def _selection(db: Session, query: IocExportQuery) -> tuple[dict[str, Any], set[str], list[IocMention]]:
+    """``_selected_export`` plus the mentions it was built from (TAXII derives change times from them)."""
     mentions = ioc_mentions(db, query)
     meanings = _meanings(db, mentions, query)
     mentions = _by_meaning(mentions, query, {k: v.verdict for k, v in meanings.items()})
@@ -206,7 +215,7 @@ def _selected_export(db: Session, query: IocExportQuery) -> tuple[dict[str, Any]
         include_evidence=query.include_evidence,
         assessments=meanings,
     )
-    return result, {m.document_id for m in mentions if m.metadata_only}
+    return result, {m.document_id for m in mentions if m.metadata_only}, mentions
 
 
 def export_iocs(db: Session, query: IocExportQuery) -> dict[str, Any]:

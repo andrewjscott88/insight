@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Added: a read-only TAXII 2.1 server (TIP 3.1)
+
+- SIEMs and threat-intelligence platforms can poll `/taxii2/` with the API key (`Authorization: Bearer`).
+  One collection, **Reviewed indicators**: the indicators and CVEs an analyst accepted, their reports and TLP
+  markings, within the key's TLP limit and the publishers' reuse rules, validated like the STIX export.
+  [TAXII guide](docs/TAXII.md), [ADR 0026](docs/adr/0026-taxii-server.md)
+- Objects keep the same ID in every poll, and `added_after` returns only what changed, including indicators
+  accepted long after their report arrived. Reads are audited (`taxii.read`) and have their own budget of 240
+  per hour per key. Nothing can be written.
+- **Upgrade:** migration `0018` records when each mention is reviewed (`observations.reviewed_at`).
+
 ### Authenticator pairing secrets encrypted at rest (review L2)
 
 - Migration `0017` encrypts existing MFA pairing secrets with a key derived from `INSIGHT_SESSION_SECRET`.

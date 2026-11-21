@@ -315,6 +315,26 @@ def test_status_changes_are_validated_and_audited(db: Session) -> None:
     assert {'document.review', 'observation.review'} <= set(actions)
 
 
+def test_a_review_records_when_the_status_changed(db: Session) -> None:
+    """TAXII polls with added_after: an indicator accepted after its report arrived must say when."""
+    ingest(db, item())
+    obs = db.scalars(select(Observation)).first()
+    assert obs is not None
+    times: list[str | None] = [obs.reviewed_at]
+    services.set_observation_status(db, obs.id, 'accepted')
+    times.append(obs.reviewed_at)
+    services.set_observation_status(db, obs.id, 'accepted')  # no change, so no new time
+    times.append(obs.reviewed_at)
+    services.set_observation_status(db, obs.id, 'rejected')
+    times.append(obs.reviewed_at)
+    never, accepted, unchanged, rejected = times
+    assert never is None
+    assert accepted is not None
+    assert unchanged == accepted
+    assert rejected is not None
+    assert rejected >= accepted
+
+
 def test_notes(db: Session) -> None:
     doc, _ = ingest(db, item())
     note = services.add_note(db, doc.id, 'Checked.')

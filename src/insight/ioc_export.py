@@ -74,6 +74,8 @@ class IocMention:
     extractor_version: str = ''
     #: The report's publisher allows metadata only: its words (the evidence) stay in Insight (ADR 0021).
     metadata_only: bool = False
+    #: When the mention was last reviewed ('' if never, or before reviews were timed). TAXII versions use it.
+    reviewed_at: str = ''
 
 
 @dataclass(frozen=True)
