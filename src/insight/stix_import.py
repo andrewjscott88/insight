@@ -99,6 +99,8 @@ def _read(data: bytes) -> Object:
         or not isinstance(bundle.get('id'), str)
     ):
         raise ValueError('Expected a STIX bundle with an ID')
+    if bundle.keys() - {'type', 'id', 'objects'}:
+        raise ValueError('Unsupported STIX bundle properties or envelope markings')
     _uuid(bundle['id'], 'bundle')
     if 'objects' not in bundle:  # STIX represents an empty bundle by omitting this property.
         return bundle
@@ -274,6 +276,8 @@ def parse_stix(data: bytes, max_tlp: str) -> ImportedBundle:
             or not isinstance(obj.get('id'), str)
         ):
             raise ValueError('Unsupported or invalid object in STIX bundle')
+        if obj['type'] != 'report' and 'x_insight_metadata_only' in obj:
+            raise ValueError('The metadata-only flag must belong to a report')
         _uuid(obj['id'], obj['type'])
         if obj['id'] in objects or obj.get('spec_version') != '2.1':
             raise ValueError('Expected unique, version 2.1 STIX objects')
