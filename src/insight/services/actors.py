@@ -14,12 +14,12 @@ import re
 from dataclasses import dataclass
 from typing import Final
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from ..industries import BY_KEY
 from ..models import ActorDocument, Document, IndustryClaim, ThreatActor, now
-from ..schemas import ActorInput, ActorLinkInput, IndustryClaimInput
+from ..schemas import ActorInput, ActorLinkInput, IndustryClaimInput, most_restrictive
 from ..threat_library import Group, library
 from .audit import DEFAULT_ACTOR, audit
 from .tlp import TlpNotPermitted, _visible, tlp_permitted, visible_levels
@@ -203,14 +203,13 @@ def record_industry_claim(
         raise ValueError(problem)
     _check_label(payload.tlp, max_tlp, 'industry mappings')
     subject = resolve_group(db, ref, max_tlp=max_tlp)
-    if payload.document_id:
-        _visible_report(db, payload.document_id, max_tlp)
+    doc = _visible_report(db, payload.document_id, max_tlp) if payload.document_id else None
     row = db.scalar(
         select(IndustryClaim).where(
             IndustryClaim.group_ref == subject.ref, IndustryClaim.industry == payload.industry
         )
     )
-    if row is not None and max_tlp is not None and not tlp_permitted(row.tlp, max_tlp):
+    if row is not None and max_tlp is not None and not tlp_permitted(row.effective_tlp, max_tlp):
         # Like a hidden hunt or rule: a decision above the caller's limit looks missing, so a limited key
         # cannot learn from the answer that one exists.
         raise LookupError('Industry mapping not found')
@@ -221,11 +220,11 @@ def record_industry_claim(
     row.citation_url = payload.citation_url
     row.document_id = payload.document_id
     row.reason = payload.reason.strip()
-    row.tlp = payload.tlp
+    row.tlp = most_restrictive(payload.tlp, subject.tlp, doc.tlp if doc else 'CLEAR')
     row.created_at = now()
     row.actor = _who(db)
     db.flush()
-    audit(db, 'actor.industry', subject.ref, f'{payload.decision} {payload.industry} (TLP:{payload.tlp})')
+    audit(db, 'actor.industry', subject.ref, f'{payload.decision} {payload.industry} (TLP:{row.tlp})')
     return row
 
 
@@ -235,7 +234,12 @@ def analyst_claims(
     """The analyst's industry decisions the reader may see, optionally for one group or industry."""
     stmt = select(IndustryClaim).order_by(IndustryClaim.group_ref, IndustryClaim.industry)
     if max_tlp is not None:
-        stmt = stmt.where(IndustryClaim.tlp.in_(visible_levels(max_tlp)))
+        levels = visible_levels(max_tlp)
+        stmt = stmt.where(
+            IndustryClaim.tlp.in_(levels),
+            or_(IndustryClaim.subject_tlp.is_(None), IndustryClaim.subject_tlp.in_(levels)),
+            or_(IndustryClaim.source_tlp.is_(None), IndustryClaim.source_tlp.in_(levels)),
+        )
     if group_ref is not None:
         stmt = stmt.where(IndustryClaim.group_ref == group_ref)
     if industry is not None:

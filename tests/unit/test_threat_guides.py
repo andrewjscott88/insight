@@ -86,7 +86,7 @@ def test_groups_named_in_recent_reports_rank_first_and_say_why(db: Session) -> N
     assert profile.tlp == 'AMBER'  # a counted report was AMBER
     hidden = services.industry_profile(db, 'government', now=NOW, max_tlp='GREEN')
     assert all(e.mentions == 0 for e in hidden.entries)  # the AMBER report is invisible at GREEN
-    assert hidden.tlp == 'CLEAR'
+    assert hidden.tlp == 'GREEN'  # reports_read includes the visible GREEN report
 
 
 def test_one_word_names_match_only_as_written(db: Session) -> None:
@@ -507,3 +507,17 @@ def test_regression_the_markdown_guide_has_a_hypothesis_for_every_technique(db: 
     md = to_markdown(guide)
     assert all(f'- **{h.technique_id}**:' in md for h in guide.hypotheses)
     assert 'more in the JSON export' not in md
+
+
+def test_guide_keeps_metadata_only_report_provenance_without_publisher_excerpts(db: Session) -> None:
+    payload = DocumentInput(
+        title='Training bulletin', body='Cozy Bear in fictional licensed prose.', source_name='Training feed'
+    )
+    doc, _ = ingest(db, payload, ref=SourceRef('stix-import-metadata', 'sample'))
+    guide = compose(services.guide_data(db, 'G0016', now=NOW), library())
+    result = guide_json(guide)
+    source = next(report for report in result['reports'] if report['id'] == doc.id)
+    assert source['title'] == 'Training bulletin'
+    assert source['via'] == 'named'
+    assert source['evidence'] == ''
+    assert 'fictional licensed prose' not in to_markdown(guide)

@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 from ..industries import BY_KEY, Industry
 from ..models import Document, IndustryClaim
 from ..schemas import most_restrictive
+from ..source_registry import metadata_only
 from ..threat_library import Campaign, Claim, library
 from .actors import GroupSubject, analyst_claims, list_actors, resolve_group
 from .common import stamp
@@ -94,19 +95,19 @@ def _index(
     return re.compile(r'(?<![\w-])(' + '|'.join(alternatives) + r')(?![\w-])', re.IGNORECASE), index
 
 
-def find_mentions(
+def _scan_mentions(
     db: Session,
     names_by_ref: Mapping[str, Iterable[str]],
     *,
     max_tlp: str | None = None,
     since: str | None = None,
     limit: int = MAX_SCANNED,
-) -> tuple[dict[str, list[Mention]], int]:
+) -> tuple[dict[str, list[Mention]], int, set[str]]:
     """Current reports the reader may see that name each group, newest first, and how many were read."""
     pattern, index = _index(names_by_ref)
     found: dict[str, list[Mention]] = {ref: [] for ref in names_by_ref}
     if pattern is None:
-        return found, 0
+        return found, 0, set()
     conditions = [Document.is_current.is_(True), *_visible(max_tlp)]
     if since:
         conditions.append(Document.created_at >= since)
@@ -117,6 +118,7 @@ def find_mentions(
             Document.tlp,
             Document.created_at,
             Document.source_name,
+            Document.source_key,
             Document.body,
         )
         .where(*conditions)
@@ -124,7 +126,9 @@ def find_mentions(
         .limit(limit)
     )
     scanned = 0
-    for doc_id, title, tlp, created_at, source_name, body in db.execute(stmt):
+    labels: set[str] = set()
+    for doc_id, title, tlp, created_at, source_name, source_key, body in db.execute(stmt):
+        labels.add(tlp)
         scanned += 1
         text = f'{title}\n{body}'
         seen: set[str] = set()
@@ -136,7 +140,29 @@ def find_mentions(
                 seen.add(ref)
                 start, end = match.span(1)
                 evidence = ' '.join(text[max(0, start - EVIDENCE_CONTEXT) : end + EVIDENCE_CONTEXT].split())
-                found[ref].append(Mention(doc_id, title, tlp, created_at, source_name, name, evidence))
+                found[ref].append(
+                    Mention(
+                        doc_id,
+                        title,
+                        tlp,
+                        created_at,
+                        source_name,
+                        name,
+                        '' if metadata_only(source_key) else evidence,
+                    )
+                )
+    return found, scanned, labels
+
+
+def find_mentions(
+    db: Session,
+    names_by_ref: Mapping[str, Iterable[str]],
+    *,
+    max_tlp: str | None = None,
+    since: str | None = None,
+    limit: int = MAX_SCANNED,
+) -> tuple[dict[str, list[Mention]], int]:
+    found, scanned, _ = _scan_mentions(db, names_by_ref, max_tlp=max_tlp, since=since, limit=limit)
     return found, scanned
 
 
@@ -169,7 +195,7 @@ def _candidates(
         out[ref] = (
             subject,
             [*subject_claims, analyst_claim_view(row)],
-            most_restrictive(label, row.tlp, subject.tlp),
+            most_restrictive(label, row.effective_tlp, subject.tlp),
         )
     return out, removed
 
@@ -205,7 +231,7 @@ def industry_profile(
         raise LookupError(f'Unknown industry: {industry}')
     candidates, removed = _candidates(db, industry, max_tlp)
     since = stamp(now - timedelta(days=days))
-    mentions, scanned = find_mentions(
+    mentions, scanned, scanned_labels = _scan_mentions(
         db, {ref: subject.names for ref, (subject, _, _) in candidates.items()}, max_tlp=max_tlp, since=since
     )
     entries = []
@@ -229,11 +255,8 @@ def industry_profile(
     )
     entries.sort(key=lambda e: -e.mentions)
     chosen = tuple(entries[: max(1, min(top, TOP))])
-    labels = ['CLEAR']
-    for entry in chosen:
-        labels.append(candidates[entry.subject.ref][2])
-        labels += [m.tlp for m in mentions.get(entry.subject.ref, [])]
-    labels += [row.tlp for row in removed]
+    labels = ['CLEAR', *scanned_labels, *(candidate[2] for candidate in candidates.values())]
+    labels += [row.effective_tlp for row in removed]
     return IndustryProfile(
         industry=BY_KEY[industry],
         entries=chosen,

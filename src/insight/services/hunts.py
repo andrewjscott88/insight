@@ -9,12 +9,12 @@ from __future__ import annotations
 
 from typing import Final
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from ..attack import technique
 from ..models import Hunt, HuntCheck, now
-from ..schemas import HuntCheckInput, HuntInput, HuntUpdate
+from ..schemas import HuntCheckInput, HuntInput, HuntUpdate, most_restrictive
 from .actors import _check_label, _who, resolve_group
 from .audit import audit
 from .tlp import tlp_permitted, visible_levels
@@ -26,7 +26,12 @@ def start_hunt(db: Session, ref: str, payload: HuntInput, *, max_tlp: str | None
     """Open a hunt for a group or actor. Audited as ``hunt.start``."""
     _check_label(payload.tlp, max_tlp, 'hunts')
     subject = resolve_group(db, ref, max_tlp=max_tlp)
-    hunt = Hunt(group_ref=subject.ref, title=payload.title.strip(), tlp=payload.tlp, actor=_who(db))
+    hunt = Hunt(
+        group_ref=subject.ref,
+        title=payload.title.strip(),
+        tlp=most_restrictive(subject.tlp, payload.tlp),
+        actor=_who(db),
+    )
     db.add(hunt)
     db.flush()
     audit(db, 'hunt.start', hunt.id, f'{subject.ref} (TLP:{hunt.tlp})')
@@ -39,13 +44,14 @@ def hunts_for(db: Session, ref: str | None = None, *, max_tlp: str | None = None
     if ref is not None:
         stmt = stmt.where(Hunt.group_ref == ref)
     if max_tlp is not None:
-        stmt = stmt.where(Hunt.tlp.in_(visible_levels(max_tlp)))
+        levels = visible_levels(max_tlp)
+        stmt = stmt.where(Hunt.tlp.in_(levels), or_(Hunt.subject_tlp.is_(None), Hunt.subject_tlp.in_(levels)))
     return list(db.scalars(stmt))
 
 
 def get_hunt(db: Session, hunt_id: str, *, max_tlp: str | None = None) -> Hunt | None:
     hunt = db.get(Hunt, hunt_id)
-    if hunt is None or (max_tlp is not None and not tlp_permitted(hunt.tlp, max_tlp)):
+    if hunt is None or (max_tlp is not None and not tlp_permitted(hunt.effective_tlp, max_tlp)):
         return None
     return hunt
 
