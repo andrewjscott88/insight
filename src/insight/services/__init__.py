@@ -67,7 +67,15 @@ from .brief import (
 )
 from .common import fold, like_pattern, stamp
 from .cves import MAX_CVE_MENTIONS, CveSignal, CveSignals, cve_signals
-from .documents import SourceRef, count_documents_above, fingerprint, get_document, ingest, revisions
+from .documents import (
+    SourceRef,
+    StructuredObservations,
+    count_documents_above,
+    fingerprint,
+    get_document,
+    ingest,
+    revisions,
+)
 from .entities import PIVOT_PAGE_SIZE, count_entity_documents, entity_documents, get_entity, list_entities
 from .exports import MAX_EXPORT_MENTIONS, export_iocs, export_stix, ioc_export_counts, ioc_mentions
 from .jobs import (
@@ -121,6 +129,7 @@ from .sources import (
     set_source_switch,
     source_switches,
 )
+from .stix_imports import import_stix
 from .techniques import (
     TechniqueCount,
     TechniqueTag,
@@ -192,6 +201,7 @@ __all__ = [
     'DueAlert',
     'LandscapeData',
     'SourceRef',
+    'StructuredObservations',
     'TechniqueCount',
     'TechniqueTag',
     'TlpNotPermitted',
@@ -241,6 +251,7 @@ __all__ = [
     'get_document',
     'get_entity',
     'get_fetch_state',
+    'import_stix',
     'ingest',
     'ioc_export_counts',
     'ioc_mentions',

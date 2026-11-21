@@ -206,7 +206,7 @@ METADATA_ONLY: Final = frozenset(key for key, s in SOURCES.items() if s.reuse ==
 
 def metadata_only(source_key: str | None) -> bool:
     """Whether a report from ``source_key`` may leave Insight only as metadata (pasted reports: never)."""
-    return source_key in METADATA_ONLY
+    return source_key in METADATA_ONLY or source_key == 'stix-import-metadata'
 
 
 def in_use(source: Source, switches: dict[str, bool]) -> bool:

@@ -84,6 +84,7 @@ def build_parser() -> argparse.ArgumentParser:
             'mfa',
             'schedule',
             'notify',
+            'import-stix',
             'delete-report',
             'attack-backfill',
         ],
@@ -96,6 +97,7 @@ def build_parser() -> argparse.ArgumentParser:
             'mfa ACTION: pair the sign-in authenticator app | '
             'schedule [SOURCE|all --every off|1h|6h|24h]: show or set scheduled syncs | '
             'notify [list|add|enable|disable|remove]: manage alert destinations | '
+            'import-stix FILE: import a STIX 2.1 JSON bundle | '
             'delete-report ID --reason TEXT: delete one report for legal or retention reasons | '
             'attack-backfill: tag the ATT&CK techniques written in reports stored before 0.7.0'
         ),
@@ -663,6 +665,35 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     if args.command == 'migrate':
         print(migrate())
+        return 0
+    if args.command == 'import-stix':
+        from sqlalchemy.exc import IntegrityError
+
+        from . import services
+        from .config import parse_max_tlp
+        from .stix_import import MAX_BUNDLE_BYTES
+
+        if not args.destination:
+            print('usage: insight import-stix FILE', file=sys.stderr)
+            return 2
+        try:
+            with Path(args.destination).open('rb') as source:
+                data = source.read(MAX_BUNDLE_BYTES + 1)
+            with _current_database() as sessions, sessions.begin() as db:
+                services.set_actor(db, 'cli')
+                result = services.import_stix(
+                    db, data, max_tlp=parse_max_tlp(os.getenv('INSIGHT_MAX_TLP', ''))
+                )
+            print(
+                f'Imported {result["reports"]} report(s), {result["created"]} new revision(s). '
+                f'SHA-256 {result["bundle_sha256"]}'
+            )
+        except IntegrityError:
+            print('Concurrent import; retry once', file=sys.stderr)
+            return 1
+        except (OSError, ValueError, RuntimeError) as exc:
+            print(f'Import failed: {exc}', file=sys.stderr)
+            return 1
         return 0
     if args.command == 'backup':
         if not args.destination:
