@@ -19,6 +19,15 @@ services:
       # Default colour theme (system, light or dark) for browsers that have not picked one in the workspace
       # header. `make theme THEME=dark` sets it. "system" follows each device's light/dark setting.
       INSIGHT_THEME: ${INSIGHT_THEME:-system}
+      # Alerts (docs/ALERTS.md): a link back to Insight, an optional mail server, and private webhook targets.
+      INSIGHT_PUBLIC_URL: ${INSIGHT_PUBLIC_URL:-}
+      INSIGHT_SMTP_HOST: ${INSIGHT_SMTP_HOST:-}
+      INSIGHT_SMTP_PORT: ${INSIGHT_SMTP_PORT:-}
+      INSIGHT_SMTP_SECURITY: ${INSIGHT_SMTP_SECURITY:-starttls}
+      INSIGHT_SMTP_USERNAME: ${INSIGHT_SMTP_USERNAME:-}
+      INSIGHT_SMTP_PASSWORD: ${INSIGHT_SMTP_PASSWORD:-}
+      INSIGHT_SMTP_FROM: ${INSIGHT_SMTP_FROM:-}
+      INSIGHT_ALERT_PRIVATE_TARGETS: ${INSIGHT_ALERT_PRIVATE_TARGETS:-off}
     volumes:
       - insight-data:/data
     restart: unless-stopped

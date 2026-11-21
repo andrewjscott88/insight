@@ -1,10 +1,13 @@
-"""Background jobs: opt-in scheduled source syncs, run inside the Insight process (ADR 0018).
+"""Background jobs: opt-in scheduled source syncs and alert delivery, inside the Insight process (ADR 0018).
 
 Nothing is scheduled until someone turns a schedule on: in the Sources tab, with ``PUT /api/schedules/{key}``
 from a browser session, or with ``insight schedule``. The runner wakes every :data:`TICK_SECONDS`, queues the
 syncs whose schedule is due, then runs queued jobs one at a time under the same lock as *Sync now* and *Sync
 all sources*, so a schedule and a person never sync at the same moment. A failed sync is tried again after 5,
 then 10 minutes, then recorded as failed; every attempt is also a ``SourceRun`` in *Recent sync activity*.
+
+Each tick also queues one alert-delivery job when an alert is due (ADR 0022): alerts are sent here, never
+while someone waits for a page.
 
 Run it in exactly one process (``INSIGHT_RUN_JOBS=on``, the default for ``insight serve``): at start-up it
 takes back jobs that a stopped process left running. This module builds no SQL; ``services`` owns the queries.
@@ -19,7 +22,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Final
 
-from . import services
+from . import alerts, services
 from .connectors import SourceSyncError, sync_source
 from .models import SessionFactory
 from .source_registry import SOURCES
@@ -41,13 +44,21 @@ async def _sync(sessions: SessionFactory, key: str) -> str:
     return await sync_source(sessions, key)
 
 
-HANDLERS: Final[Mapping[str, Handler]] = {services.SOURCE_SYNC: _sync}
+async def _deliver_alerts(sessions: SessionFactory, key: str) -> str:
+    return await alerts.deliver_due(sessions)
+
+
+HANDLERS: Final[Mapping[str, Handler]] = {
+    services.SOURCE_SYNC: _sync,
+    services.ALERT_DELIVERY: _deliver_alerts,
+}
 
 
 def _queue_due(sessions: SessionFactory, at: datetime) -> None:
     with sessions.begin() as db:
         services.set_actor(db, 'schedule')
         services.enqueue_due_schedules(db, at=at)
+        services.enqueue_due_alerts(db, at=at)
         services.prune_jobs(db, before=at - KEEP_FINISHED)
 
 

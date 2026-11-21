@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from .schemas import TLP, DocumentInput
 from .services import ingest
+from .services.alerts import QUIET
 
 REPORTS: Final[tuple[tuple[str, str, str, TLP], ...]] = (
     (
@@ -38,8 +39,16 @@ REPORTS: Final[tuple[tuple[str, str, str, TLP], ...]] = (
 
 
 def seed(db: Session) -> int:
-    """Ingest the synthetic reports; returns how many were newly created (0 on repeat runs)."""
-    return sum(
-        ingest(db, DocumentInput(title=title, source_name=source, body=body, tlp=tlp))[1]
-        for title, source, body, tlp in REPORTS
-    )
+    """Ingest the synthetic reports; returns how many were newly created (0 on repeat runs).
+
+    Synthetic reports never fire alerts, even when they mention a watch term.
+    """
+    quiet = db.info.get(QUIET)
+    db.info[QUIET] = True
+    try:
+        return sum(
+            ingest(db, DocumentInput(title=title, source_name=source, body=body, tlp=tlp))[1]
+            for title, source, body, tlp in REPORTS
+        )
+    finally:
+        db.info[QUIET] = quiet

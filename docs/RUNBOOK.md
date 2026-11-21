@@ -67,11 +67,14 @@ Set in `.env` (Compose reads it) or the process environment. Real environment va
 | `INSIGHT_MAX_TLP` | no | `AMBER+STRICT` | Most restrictive label stored. Reports at or raised to a higher label (i.e. TLP:RED) are refused on upload. `RED` allows everything. |
 | `INSIGHT_RUN_JOBS` | no | `on` | Run scheduled syncs in this process ([ADR 0018](adr/0018-opt-in-scheduled-syncs.md)). Nothing is scheduled until you choose a schedule (§8). Set `off` in every process but one if you run several. Anything other than on/off stops start-up. |
 | `INSIGHT_THEME` | no | `system` | Colour theme for browsers that have not picked one: `system` (follow each device's light/dark setting), `light` or `dark`. Each browser can override it with the Light/Dark/System buttons in the workspace header (`make theme THEME=dark` sets it). Anything else stops start-up. |
+| `INSIGHT_PUBLIC_URL` | no | (none) | The address people open Insight at; alerts link to `/?report=<id>` ([docs/ALERTS.md](ALERTS.md)) |
+| `INSIGHT_SMTP_HOST`, `INSIGHT_SMTP_PORT`, `INSIGHT_SMTP_SECURITY`, `INSIGHT_SMTP_USERNAME`, `INSIGHT_SMTP_PASSWORD`, `INSIGHT_SMTP_FROM` | for e-mail alerts | port 587, `starttls` | The mail server for e-mail alerts. `SECURITY` is `starttls`, `tls` (port 465) or `none` (only for a relay on this host). Treat the password like `INSIGHT_PASSWORD` |
+| `INSIGHT_ALERT_PRIVATE_TARGETS` | no | `off` | `on` lets webhooks reach private networks (a chat or automation server on your LAN); link-local addresses stay blocked ([ADR 0022](adr/0022-alerts.md)) |
 | `NICEGUI_STORAGE_PATH` | no | `/data/.nicegui` in the image | Must be writable |
 
 Never commit `.env`: a pre-commit hook and CI block it. Treat the file like the password it contains.
 
-Invalid values for `INSIGHT_TRUSTED_PROXIES`, `INSIGHT_MAX_TLP`, `INSIGHT_MFA`, `INSIGHT_RUN_JOBS` or `INSIGHT_THEME` stop start-up with a message naming the
+Invalid values for `INSIGHT_TRUSTED_PROXIES`, `INSIGHT_MAX_TLP`, `INSIGHT_MFA`, `INSIGHT_RUN_JOBS`, `INSIGHT_THEME` or the alert settings stop start-up with a message naming the
 variable, rather than running with a setting that silently does nothing.
 
 ### Reverse proxy (public deployment)
@@ -439,6 +442,7 @@ Uvicorn logs every request line.
 | Refused uploads | Log lines `Refused a TLP:RED report` (never the content) | Any, if nobody expected to upload RED |
 | MFA misconfiguration | Log line `INSIGHT_MFA=on but no authenticator app is paired` (sign-in locked) | Any |
 | Source health | Run history / `GET /api/sources` (`runs[0].status`) | Same source `error` 3 times in a row |
+| Alert delivery | **Watch terms → Alerts → Recent alerts** (status `Failed` with the reason); job messages `Sent N alert(s); M failed.` | Any `Failed`: a destination moved, or its secret or mail password changed |
 | Disk | Volume usage | Above 80% |
 | Upstream changes | Nightly pipeline issue "Nightly pipeline failure" | Any new comment |
 | Vulnerabilities | CI `pip-audit`, Trivy, nightly image re-scan | Any HIGH/CRITICAL |

@@ -112,6 +112,10 @@ def register_ui(app: FastAPI, session_factory: SessionFactory) -> None:
                     build_watch_terms(ws)
                 with ui.tab_panel(sources_tab).classes('panel p-4 sm:p-5'):
                     build_sources(ws)
+        # Alerts link to /?report=<id> (ADR 0022). An unknown ID opens nothing, as a deleted report would.
+        report = request.query_params.get('report', '')
+        if 0 < len(report) <= 36:
+            ws.open_document(report)
         return None
 
     ui.run_with(

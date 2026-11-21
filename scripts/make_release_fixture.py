@@ -96,6 +96,10 @@ def build(path: Path) -> None:
             services.start_operator_session(db, binding='fixture', at=when)  # its ID is thrown away
             services.tag_technique(db, manual.id, 'T1071.001')  # 0.7.0: an analyst's ATT&CK tag
             services.set_source_switch(db, 'talos', True, at=when)  # 0.7.0: an optional source on
+            alert_to = services.add_target(
+                db, name='Team chat', style='chat', address='https://hooks.example.org/x'
+            )
+            services.queue_test_alert(db, alert_to.id)  # 0.7.0: an alert destination and a queued alert
     finally:
         engine.dispose()
 

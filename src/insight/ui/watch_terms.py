@@ -1,10 +1,11 @@
-"""Organisation watch terms: transparent literal matches that highlight relevant reporting."""
+"""Organisation watch terms: transparent literal matches that highlight relevant reporting, and alerts."""
 
 from __future__ import annotations
 
 from nicegui import ui
 
 from .. import services
+from .alerts import build_alerts
 from .messages import tell
 from .typography import heading
 from .workspace import Workspace
@@ -66,3 +67,4 @@ def build_watch_terms(ws: Workspace) -> None:
         ui.button('Add watch term', on_click=add)
     with ui.column().classes('w-full gap-3 mt-4'):
         watch_terms()
+    build_alerts(ws)

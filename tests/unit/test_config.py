@@ -177,3 +177,8 @@ def test_insight_serve_runs_scheduled_syncs_unless_switched_off() -> None:
 def test_an_unclear_run_jobs_switch_stops_start_up(value: str) -> None:
     with pytest.raises(RuntimeError, match='INSIGHT_RUN_JOBS must be "on" or "off"'):
         Settings.from_env({**GOOD, 'INSIGHT_RUN_JOBS': value})
+
+
+def test_a_wrong_alert_setting_stops_start_up() -> None:
+    with pytest.raises(RuntimeError, match='INSIGHT_SMTP_SECURITY'):
+        Settings.from_env({**GOOD, 'INSIGHT_SMTP_SECURITY': 'ssl'})

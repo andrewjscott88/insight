@@ -27,6 +27,7 @@ from . import __version__
 from .models import Enrichment, Entity, KEVRecord, SessionFactory, SourceRun, now
 from .schemas import DocumentInput
 from .services import SourceRef, get_fetch_state, ingest, save_fetch_state, set_actor, source_switches
+from .services.alerts import known_kev, queue_kev_alerts
 
 # Re-exported: the registry used to live here, and tests and scripts still name it through this module.
 from .source_registry import CSAF_BASE as CSAF_BASE
@@ -474,6 +475,10 @@ def import_kev(db: Session, payload: bytes) -> tuple[int, int]:
     """
     validated = _validate_kev_rows(payload)
     imported_at = now()
+    known = known_kev(db)  # Empty on the first import: the whole catalog is not news.
+    if known:
+        fresh = [r for r in validated if r['cveID'] not in known]
+        queue_kev_alerts(db, [(r['cveID'], r['vendorProject'], r['product']) for r in fresh])
     for row in validated:
         record = db.get(KEVRecord, row['cveID'])
         if record is None:

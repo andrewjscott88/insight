@@ -296,6 +296,55 @@ class Schedule(Base):
     actor: Mapped[str] = mapped_column(String(80), default='')
 
 
+class AlertTarget(Base):
+    """Where alerts go: a webhook (JSON or chat style) or an e-mail address (ADR 0022).
+
+    Set only from the workspace, never with an API key. ``secret`` signs JSON webhooks; ``max_tlp`` is the
+    most restrictive label whose report titles may be sent there (stricter reports are announced untitled).
+    """
+
+    __tablename__ = 'alert_targets'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    name: Mapped[str] = mapped_column(String(80))
+    kind: Mapped[str] = mapped_column(String(10))  # webhook | email
+    style: Mapped[str] = mapped_column(String(10))  # json | chat | email
+    address: Mapped[str] = mapped_column(String(2048))
+    secret: Mapped[str] = mapped_column(String(80), default='')
+    max_tlp: Mapped[str] = mapped_column(String(20), default='AMBER')
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    created_at: Mapped[str] = mapped_column(String(40), default=now)
+    actor: Mapped[str] = mapped_column(String(80), default='')
+    last_status: Mapped[str] = mapped_column(String(10), default='')
+    last_sent_at: Mapped[str] = mapped_column(String(40), default='')
+    last_error: Mapped[str] = mapped_column(String(300), default='')
+
+
+class Alert(Base):
+    """One alert for one target: queued when it fires, then sent by the job runner (``insight.alerts``).
+
+    ``dedupe_key`` makes an alert fire once per target: a new revision of the same item, or the same KEV entry
+    seen again, adds nothing.
+    """
+
+    __tablename__ = 'alerts'
+    __table_args__ = (
+        UniqueConstraint('target_id', 'dedupe_key'),
+        Index('ix_alerts_due', 'status', 'next_attempt_at'),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    target_id: Mapped[str] = mapped_column(ForeignKey('alert_targets.id'), index=True)
+    trigger: Mapped[str] = mapped_column(String(10))  # watch | kev | test
+    dedupe_key: Mapped[str] = mapped_column(String(300))
+    subject: Mapped[str] = mapped_column(String(200))
+    document_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    status: Mapped[str] = mapped_column(String(10), default='pending')  # pending | sent | failed
+    attempts: Mapped[int] = mapped_column(default=0)
+    next_attempt_at: Mapped[str] = mapped_column(String(40), default=now)
+    created_at: Mapped[str] = mapped_column(String(40), default=now)
+    sent_at: Mapped[str] = mapped_column(String(40), default='')
+    error: Mapped[str] = mapped_column(String(300), default='')
+
+
 class SourceSwitch(Base):
     """Whether the operator uses a curated source. No row means its default: on, except optional sources."""
 
