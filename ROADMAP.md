@@ -40,7 +40,7 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
       optional `INSIGHT_REQUIRE_HARDENED=1` that refuses to start without secure cookies and MFA.
 - [x] **TIP 0.4 Pin connector connections to the checked DNS addresses,** closing the DNS-rebinding gap (code
       review L1): source syncs, CVE lookups and alert webhooks connect to the address they checked.
-- [ ] **TIP 0.5 `/health` without the version;** the version moves behind sign-in.
+- [x] **TIP 0.5** `/health` reports liveness. Signed-in users can read the version from `/api/session`.
 - [ ] **TIP 0.6 Encrypt the TOTP secret at rest,** migrating existing rows.
 - [x] **Review B2 Throttles into one place** ([ADR 0023](docs/adr/0023-automatic-cve-lookups.md)): one throttle
       per provider in `insight.lookups`, shared by the API, the workspace and the automatic lookups. (The sync
