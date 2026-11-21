@@ -365,11 +365,15 @@ def test_sync_refuses_a_file_that_does_not_match_its_pin(
 
 
 def test_the_pins_name_exact_commits_on_the_allow_listed_host() -> None:
+    from urllib.parse import urlsplit
+
     from insight.connectors import ALLOWED_HOSTS
 
     for pinned in PINNED.values():
-        assert pinned.url.startswith('https://raw.githubusercontent.com/')
-        assert 'raw.githubusercontent.com' in ALLOWED_HOSTS
+        url = urlsplit(pinned.url)
+        assert url.scheme == 'https'
+        assert url.netloc == 'raw.githubusercontent.com'
+        assert url.hostname in ALLOWED_HOSTS
         assert len(pinned.sha256) == 64
-        commit = pinned.url.split('/')[5]
+        commit = url.path.split('/')[3]
         assert len(commit) == 40, pinned.url

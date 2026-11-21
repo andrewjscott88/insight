@@ -168,7 +168,7 @@ def _hunt(guide: ThreatGuide) -> list[str]:
     for r in data.rules:
         source = link('source', r.rule.source_url) if r.rule.source_url else 'no source'
         out.append(
-            f'- {r.rule.kind.upper()} {escape(r.rule.name)} [TLP:{r.rule.tlp}] ({source}; '
+            f'- {r.rule.kind.upper()} {escape(r.rule.name)} [TLP:{r.tlp}] ({source}; '
             f'licence: {escape(r.rule.licence) or "not given"}; SHA-256 {r.rule.content_hash[:16]}…)'
         )
     out += ['', '### Hunt records', '']
@@ -176,7 +176,7 @@ def _hunt(guide: ThreatGuide) -> list[str]:
         out.append('No hunt recorded yet.')
     for record in data.hunts:
         out.append(
-            f'- **{escape(record.hunt.title)}** [TLP:{record.hunt.tlp}] {record.hunt.status}, '
+            f'- **{escape(record.hunt.title)}** [TLP:{record.hunt.effective_tlp}] {record.hunt.status}, '
             f'started {record.hunt.created_at[:10]}'
         )
         if record.hunt.summary:

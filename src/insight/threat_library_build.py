@@ -23,6 +23,7 @@ import hashlib
 from collections import defaultdict
 from collections.abc import Iterable
 from typing import Any, Final
+from urllib.parse import urlsplit
 
 from .industries import industries_in, industry_for_label, plain, sentences
 
@@ -143,10 +144,21 @@ def _misp_matches(
     return matches
 
 
+def _citation_host(url: str) -> str:
+    """Return the HTTPS publisher hostname for a usable reference, or an empty string."""
+    try:
+        parts = urlsplit(url)
+        if parts.scheme == 'https' and parts.username is None and parts.port in (None, 443):
+            return parts.hostname or ''
+    except ValueError:
+        pass
+    return ''
+
+
 def _misp_claims(group_id: str, name: str, entry: dict[str, Any]) -> list[dict[str, Any]]:
     """One claim per MISP field that names industries, with the labels it lists and what they map to."""
     meta = entry.get('meta', {}) if isinstance(entry.get('meta'), dict) else {}
-    refs = [r for r in meta.get('refs', []) if isinstance(r, str) and r.startswith('https://')]
+    refs = {r: host for r in meta.get('refs', []) if isinstance(r, str) and (host := _citation_host(r))}
     claims = []
     for field in ('cfr-target-category', 'targeted-sector'):
         labels = (
@@ -158,7 +170,11 @@ def _misp_claims(group_id: str, name: str, entry: dict[str, Any]) -> list[dict[s
         keys = [k for k in dict.fromkeys(mapped.values()) if (group_id, k) not in REVIEWED_EXCLUSIONS]
         if not keys:
             continue
-        cited = [r for r in refs if 'cfr.org' in r] if field.startswith('cfr-') else []
+        cited = (
+            [r for r, host in refs.items() if host in {'cfr.org', 'www.cfr.org'}]
+            if field.startswith('cfr-')
+            else []
+        )
         claims.append(
             {
                 'industries': keys,
@@ -166,7 +182,7 @@ def _misp_claims(group_id: str, name: str, entry: dict[str, Any]) -> list[dict[s
                 'evidence': f'MISP galaxy entry "{entry["value"]}", {field}: {"; ".join(labels)}.',
                 'match': f'"{name}" is the name of this MISP entry and a name of {group_id} in ATT&CK.',
                 'citations': [{'name': 'CFR Cyber Operations Tracker', 'url': r} for r in cited[:3]]
-                or [{'name': 'MISP galaxy reference', 'url': r} for r in refs[:3]],
+                or [{'name': 'MISP galaxy reference', 'url': r} for r in list(refs)[:3]],
             }
         )
     return claims

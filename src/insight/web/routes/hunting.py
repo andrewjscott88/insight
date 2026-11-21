@@ -24,7 +24,7 @@ def hunt_view(hunt: Hunt, checks: dict[str, tuple[str, str, str, str, str]]) -> 
         'title': hunt.title,
         'status': hunt.status,
         'summary': hunt.summary,
-        'tlp': hunt.tlp,
+        'tlp': hunt.effective_tlp,
         'created_at': hunt.created_at,
         'updated_at': hunt.updated_at,
         'created_by': hunt.actor,
@@ -36,7 +36,7 @@ def hunt_view(hunt: Hunt, checks: dict[str, tuple[str, str, str, str, str]]) -> 
 
 
 def rule_view(
-    rule: DetectionRule, links: tuple[tuple[str, str], ...] | list[tuple[str, str]]
+    rule: DetectionRule, links: tuple[tuple[str, str], ...] | list[tuple[str, str]], tlp: str
 ) -> dict[str, Any]:
     return {
         'id': rule.id,
@@ -45,7 +45,7 @@ def rule_view(
         'source_url': rule.source_url,
         'licence': rule.licence,
         'sha256': rule.content_hash,
-        'tlp': rule.tlp,
+        'tlp': tlp,
         'created_at': rule.created_at,
         'created_by': rule.actor,
         'linked_to': [{'kind': k, 'id': i} for k, i in links],
@@ -129,7 +129,7 @@ def _register_hunting_routes(app: FastAPI, sessions: SessionFactory, require_aut
         try:
             with sessions() as db:
                 return [
-                    rule_view(r.rule, r.links)
+                    rule_view(r.rule, r.links, r.tlp)
                     for r in services.list_rules(db, max_tlp=reader_limit(request), kind=kind, target=target)
                 ]
         except (LookupError, ValueError) as exc:
@@ -140,7 +140,8 @@ def _register_hunting_routes(app: FastAPI, sessions: SessionFactory, require_aut
         """Store a YARA or Sigma rule (carried as text, never run). Audited as ``rule.add``."""
         try:
             with acting(sessions, request) as db:
-                return rule_view(services.add_rule(db, payload, max_tlp=write_limit(app, request)), [])
+                rule = services.add_rule(db, payload, max_tlp=write_limit(app, request))
+                return rule_view(rule, [], rule.tlp)
         except ValueError as exc:
             raise _errors(exc) from exc
 
@@ -150,7 +151,8 @@ def _register_hunting_routes(app: FastAPI, sessions: SessionFactory, require_aut
             found = services.get_rule(db, rule_id, max_tlp=reader_limit(request))
             if found is None:
                 raise HTTPException(404, 'Rule not found')
-            return rule_view(found, services.rule_links(db, [found.id])[found.id])
+            linked = services.linked_rules(db, [found], max_tlp=reader_limit(request))[0]
+            return rule_view(found, linked.links, linked.tlp)
 
     @app.get('/api/rules/{rule_id}/export', dependencies=[Depends(require_auth)], response_class=Response)
     def download_rule(request: Request, rule_id: str) -> Response:

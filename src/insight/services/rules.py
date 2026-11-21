@@ -17,17 +17,17 @@ from dataclasses import dataclass
 from typing import Final
 from zipfile import ZIP_DEFLATED, ZipFile
 
-from sqlalchemy import delete, or_, select
+from sqlalchemy import Nullable, and_, delete, or_, select
 from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.orm import Session
 
 from ..attack import technique
 from ..extraction import canonical
-from ..models import DetectionRule, RuleLink
-from ..schemas import RuleInput, RuleLinkInput
-from .actors import _check_label, _visible_report, _who, resolve_group
+from ..models import DetectionRule, Document, RuleLink, ThreatActor
+from ..schemas import RuleInput, RuleLinkInput, most_restrictive
+from .actors import _check_label, _visible_report, _who, is_catalog_ref, resolve_group
 from .audit import audit
-from .tlp import visible_levels
+from .tlp import tlp_permitted, visible_levels
 
 _YARA: Final = re.compile(
     r'^\s*(?:(?:private|global)\s+)*rule\s+\w+[^{]*\{.*\bcondition\s*:', re.MULTILINE | re.DOTALL
@@ -40,6 +40,7 @@ MAX_RULES: Final = 500
 class LinkedRule:
     rule: DetectionRule
     links: tuple[tuple[str, str], ...]  # (target kind, target ID)
+    tlp: str  # label of the rule and every included link
 
 
 def rule_shape_problem(kind: str, body: str) -> str | None:
@@ -114,18 +115,58 @@ def get_rule(db: Session, rule_id: str, *, max_tlp: str | None = None) -> Detect
     return db.scalar(stmt)
 
 
-def rule_links(db: Session, rule_ids: Iterable[str]) -> dict[str, list[tuple[str, str]]]:
+def _visible_rule_links(
+    db: Session, rule_ids: Iterable[str], max_tlp: str | None
+) -> dict[str, list[tuple[str, str, str]]]:
+    """Resolve links in one query. A missing local target has no publishable reference."""
     ids = sorted(set(rule_ids))
-    found: dict[str, list[tuple[str, str]]] = {i: [] for i in ids}
-    if ids:
-        stmt = (
-            select(RuleLink)
-            .where(RuleLink.rule_id.in_(ids))
-            .order_by(RuleLink.target_kind, RuleLink.target_id)
-        )
-        for link in db.scalars(stmt):
-            found[link.rule_id].append((link.target_kind, link.target_id))
+    found: dict[str, list[tuple[str, str, str]]] = {i: [] for i in ids}
+    if not ids:
+        return found
+    stmt = (
+        select(RuleLink, Nullable(Document.tlp), Nullable(ThreatActor.tlp))
+        .join(DetectionRule, DetectionRule.id == RuleLink.rule_id)
+        .outerjoin(Document, and_(RuleLink.target_kind == 'document', RuleLink.target_id == Document.id))
+        .outerjoin(ThreatActor, and_(RuleLink.target_kind == 'group', RuleLink.target_id == ThreatActor.id))
+        .where(RuleLink.rule_id.in_(ids))
+        .order_by(RuleLink.target_kind, RuleLink.target_id)
+    )
+    if max_tlp is not None:
+        stmt = stmt.where(DetectionRule.tlp.in_(visible_levels(max_tlp)))
+    for link, report_tlp, actor_tlp in db.execute(stmt):
+        label: str | None = 'CLEAR'  # Catalog groups and techniques are public.
+        if link.target_kind == 'document':
+            label = report_tlp
+        elif link.target_kind == 'group' and not is_catalog_ref(link.target_id):
+            label = actor_tlp
+        if label is not None and (max_tlp is None or tlp_permitted(label, max_tlp)):
+            found[link.rule_id].append((link.target_kind, link.target_id, label))
     return found
+
+
+def rule_links(
+    db: Session, rule_ids: Iterable[str], *, max_tlp: str | None = None
+) -> dict[str, list[tuple[str, str]]]:
+    return {
+        rid: [(kind, target) for kind, target, _ in rows]
+        for rid, rows in _visible_rule_links(db, rule_ids, max_tlp).items()
+    }
+
+
+def linked_rules(
+    db: Session, rules: Iterable[DetectionRule], *, max_tlp: str | None = None
+) -> list[LinkedRule]:
+    """Label each visible rule together with the target references this reader may receive."""
+    visible = [r for r in rules if max_tlp is None or tlp_permitted(r.tlp, max_tlp)]
+    links = _visible_rule_links(db, (r.id for r in visible), max_tlp)
+    return [
+        LinkedRule(
+            rule,
+            tuple((kind, target) for kind, target, _ in links[rule.id]),
+            most_restrictive(rule.tlp, *(label for _, _, label in links[rule.id])),
+        )
+        for rule in visible
+    ]
 
 
 def list_rules(
@@ -147,8 +188,7 @@ def list_rules(
             )
         )
     rules = list(db.scalars(stmt))
-    links = rule_links(db, (r.id for r in rules))
-    return [LinkedRule(r, tuple(links[r.id])) for r in rules]
+    return linked_rules(db, rules, max_tlp=max_tlp)
 
 
 def delete_rule(db: Session, rule_id: str, *, max_tlp: str | None = None) -> None:
@@ -249,5 +289,4 @@ def rules_for_group(
     if max_tlp is not None:
         stmt = stmt.where(DetectionRule.tlp.in_(visible_levels(max_tlp)))
     rules = list(db.scalars(stmt.limit(MAX_RULES)))
-    links = rule_links(db, (r.id for r in rules))
-    return [LinkedRule(r, tuple(links[r.id])) for r in rules]
+    return linked_rules(db, rules, max_tlp=max_tlp)

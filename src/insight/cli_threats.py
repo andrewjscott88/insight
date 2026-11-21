@@ -1,7 +1,7 @@
 """Command line for industry threat profiles and actor threat guides (TIP 2.10, ADR 0025).
 
 ``threat-library-sync``, ``industries``, ``threat-profile INDUSTRY``, ``threat-guide REF DEST`` and
-``rule-add FILE``. Reads act as an unlimited reader unless ``--max-tlp`` is given; files are created
+``rule-add FILE``. Guide exports respect the instance limit and ``--max-tlp``. Files are created
 owner-only (0600) and never overwritten; every export and change is audited as ``cli``.
 """
 
@@ -93,10 +93,12 @@ def threat_guide(
     """
     from . import services
     from .cli import _current_database
+    from .config import parse_max_tlp
     from .threat_guide import compose, guide_json, navigator_layer, sweep_csv, sweep_json
     from .threat_guide_markdown import to_markdown
     from .threat_library import library
 
+    max_tlp = services.stricter_limit(max_tlp, parse_max_tlp(os.environ.get('INSIGHT_MAX_TLP', '')))
     if fmt not in GUIDE_FORMATS:
         raise ValueError(f'--format must be one of {", ".join(GUIDE_FORMATS)}')
     with _current_database() as sessions:
