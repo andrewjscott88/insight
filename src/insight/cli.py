@@ -432,7 +432,7 @@ def schedule(source: str | None, every: str | None, at: str | None = None) -> st
     from datetime import UTC, datetime
 
     from . import services
-    from .connectors import SOURCES
+    from .source_registry import SOURCES, in_use
 
     labels = {minutes: name for name, minutes in SCHEDULE_EVERY.items()}
     with _current_database() as sessions:
@@ -446,6 +446,11 @@ def schedule(source: str | None, every: str | None, at: str | None = None) -> st
             starts_at = services.time_of_day(at, now) if at else None
             with sessions.begin() as db:
                 services.set_actor(db, 'cli')
+                switches = services.source_switches(db)
+                if source == 'all':  # every source in use; switched-off sources stay off
+                    keys = [key for key in keys if in_use(SOURCES[key], switches)]
+                elif SCHEDULE_EVERY[every] and not in_use(SOURCES[source], switches):
+                    raise ValueError(f'{source} is switched off; switch it on in the Sources tab first')
                 for key in keys:
                     services.set_schedule(db, key, SCHEDULE_EVERY[every], at=now, starts_at=starts_at)
         with sessions() as db:
@@ -456,6 +461,8 @@ def schedule(source: str | None, every: str | None, at: str | None = None) -> st
                 if s is not None and s.enabled and s.next_run_at:
                     when = s.next_run_at[:16].replace('T', ' ')
                     lines.append(f'{key}: every {labels[s.interval_minutes]}; next sync {when} UTC')
+                elif not in_use(SOURCES[key], services.source_switches(db)):
+                    lines.append(f'{key}: switched off (Insight does not contact it)')
                 else:
                     lines.append(f'{key}: off (syncs only when asked)')
     lines.append('Scheduled syncs run inside `insight serve` while INSIGHT_RUN_JOBS is on (the default).')

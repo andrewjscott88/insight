@@ -20,8 +20,9 @@ from datetime import UTC, datetime, timedelta
 from typing import Final
 
 from . import services
-from .connectors import SOURCES, SourceSyncError, sync_source
+from .connectors import SourceSyncError, sync_source
 from .models import SessionFactory
+from .source_registry import SOURCES
 
 log = logging.getLogger('insight.jobs')
 TICK_SECONDS: Final = 15.0

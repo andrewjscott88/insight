@@ -22,6 +22,7 @@ from ..schemas import (
     TLP_LEVELS,
     IocExportQuery,
 )
+from ..source_registry import metadata_only
 from .assessments import visible_assessments
 from .audit import audit
 from .search import _document_conditions, _kev_view
@@ -122,6 +123,7 @@ def ioc_mentions(db: Session, query: IocExportQuery) -> list[IocMention]:
             Document.created_at,
             Document.is_current,
             Document.extractor_version,
+            Document.source_key,
             KEVRecord,
         )
         .select_from(Observation)
@@ -156,6 +158,7 @@ def ioc_mentions(db: Session, query: IocExportQuery) -> list[IocMention]:
             is_current=is_current,
             kev=_kev_view(kev),
             extractor_version=extractor_version,
+            metadata_only=metadata_only(source_key),
         )
         for (
             review_status,
@@ -172,6 +175,7 @@ def ioc_mentions(db: Session, query: IocExportQuery) -> list[IocMention]:
             created_at,
             is_current,
             extractor_version,
+            source_key,
             kev,
         ) in db.execute(stmt)
     ]

@@ -1,6 +1,8 @@
-"""Source runs, the enrichment cache and conditional-fetch state."""
+"""Source runs, source switches, the enrichment cache and conditional-fetch state."""
 
 from __future__ import annotations
+
+from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -8,9 +10,14 @@ from sqlalchemy.orm import Session
 from ..models import (
     Enrichment,
     FetchState,
+    Schedule,
     SourceRun,
+    SourceSwitch,
     now,
 )
+from .audit import DEFAULT_ACTOR, audit
+from .common import stamp
+from .jobs import set_schedule
 
 
 def recent_source_runs(db: Session, source_key: str | None = None, limit: int = 12) -> list[SourceRun]:
@@ -18,6 +25,28 @@ def recent_source_runs(db: Session, source_key: str | None = None, limit: int = 
     if source_key is not None:
         stmt = stmt.where(SourceRun.source_key == source_key)
     return list(db.scalars(stmt))
+
+
+def source_switches(db: Session) -> dict[str, bool]:
+    """The sources the operator switched on (``True``) or off; a source without a row keeps its default."""
+    return {s.source_key: s.enabled for s in db.scalars(select(SourceSwitch))}
+
+
+def set_source_switch(db: Session, source_key: str, enabled: bool, *, at: datetime) -> SourceSwitch:
+    """Switch a source on or off; off also turns its schedule off. Callers check that the source exists.
+
+    Audited as ``source.on`` or ``source.off``.
+    """
+    switch = db.get(SourceSwitch, source_key) or SourceSwitch(source_key=source_key)
+    switch.enabled = enabled
+    switch.updated_at = stamp(at)
+    switch.actor = str(db.info.get('actor', DEFAULT_ACTOR))
+    db.add(switch)
+    schedule = db.get(Schedule, source_key)
+    if not enabled and schedule is not None and schedule.enabled:
+        set_schedule(db, source_key, 0, at=at)
+    audit(db, 'source.on' if enabled else 'source.off', source_key, '')
+    return switch
 
 
 def cached_enrichments(db: Session, cve: str) -> list[Enrichment]:

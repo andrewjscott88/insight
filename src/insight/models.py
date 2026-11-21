@@ -296,6 +296,16 @@ class Schedule(Base):
     actor: Mapped[str] = mapped_column(String(80), default='')
 
 
+class SourceSwitch(Base):
+    """Whether the operator uses a curated source. No row means its default: on, except optional sources."""
+
+    __tablename__ = 'source_switches'
+    source_key: Mapped[str] = mapped_column(String(80), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    updated_at: Mapped[str] = mapped_column(String(40), default=now)
+    actor: Mapped[str] = mapped_column(String(80), default='')
+
+
 class FetchState(Base):
     """What a source URL returned last time, so the next fetch can be skipped when nothing changed.
 

@@ -80,7 +80,14 @@ from .search import (
     summaries,
     summary,
 )
-from .sources import cached_enrichments, get_fetch_state, recent_source_runs, save_fetch_state
+from .sources import (
+    cached_enrichments,
+    get_fetch_state,
+    recent_source_runs,
+    save_fetch_state,
+    set_source_switch,
+    source_switches,
+)
 from .techniques import (
     TechniqueCount,
     TechniqueTag,
@@ -212,6 +219,8 @@ __all__ = [
     'set_document_status',
     'set_observation_status',
     'set_schedule',
+    'set_source_switch',
+    'source_switches',
     'stamp',
     'start_operator_session',
     'stats',

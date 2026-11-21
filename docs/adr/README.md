@@ -25,3 +25,4 @@ superseded ones are marked, never deleted.
 | [0018](0018-opt-in-scheduled-syncs.md) | Opt-in scheduled syncs with an in-process job runner | Accepted |
 | [0019](0019-attack-techniques.md) | MITRE ATT&CK techniques on reports, from the text and from analysts | Accepted |
 | [0020](0020-threat-landscape.md) | A threat landscape counted from the reports, compared with the weeks before | Accepted |
+| [0021](0021-threat-research-sources.md) | Threat-research sources, switched on by the operator, with per-publisher reuse rules | Accepted |

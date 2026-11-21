@@ -19,6 +19,7 @@ from ...schemas import (
     IocExportQuery,
     validation_message,
 )
+from ...source_registry import metadata_only
 from ..auth import AuthDependency, acting, reader_limit
 from .documents import get_document_or_404
 
@@ -87,6 +88,13 @@ def _register_export_routes(app: FastAPI, sessions: SessionFactory, require_auth
             result['handling_notice'] = (
                 'Local backup/export only. Preserve TLP and publisher restrictions. Not STIX.'
             )
+            if metadata_only(doc.source_key):  # ADR 0021: the publisher's words stay in Insight.
+                result['body'] = ''
+                for observation in result['observations']:
+                    observation['evidence'] = ''
+                result['handling_notice'] += (
+                    ' The publisher allows metadata only: the report text and evidence are left out.'
+                )
             services.audit(db, 'document.export', doc.id, doc.tlp)
         return JSONResponse(
             result, headers={'Content-Disposition': f'attachment; filename="insight-report-{doc.id}.json"'}

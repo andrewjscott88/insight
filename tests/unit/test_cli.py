@@ -496,6 +496,17 @@ def test_schedule_usage_errors(
     assert message in capsys.readouterr().err
 
 
+def test_schedule_leaves_switched_off_sources_off(
+    sqlite_env: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert cli.main(['schedule', 'all', '--every', '6h']) == 0
+    out = capsys.readouterr().out
+    assert out.count('every 6h; next sync ') == 4
+    assert 'talos: switched off (Insight does not contact it)' in out
+    assert cli.main(['schedule', 'talos', '--every', '1h']) == 1
+    assert 'talos is switched off' in capsys.readouterr().err
+
+
 def test_schedule_at_a_time_of_day(sqlite_env: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert cli.main(['schedule', 'all', '--every', '24h', '--at', '00:00']) == 0
     out = capsys.readouterr().out

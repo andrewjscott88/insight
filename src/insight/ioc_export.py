@@ -72,6 +72,8 @@ class IocMention:
     is_current: bool
     kev: Mapping[str, str] | None = None
     extractor_version: str = ''
+    #: The report's publisher allows metadata only: its words (the evidence) stay in Insight (ADR 0021).
+    metadata_only: bool = False
 
 
 @dataclass(frozen=True)
@@ -173,7 +175,7 @@ def export_filename(generated_at: str) -> str:
 
 
 def _evidence(mention: IocMention, defanged: bool, include: bool) -> str | None:
-    if not include:
+    if not include or mention.metadata_only:
         return None
     return defang_excerpt(mention.evidence) if defanged else mention.evidence
 
