@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased
+
+### Changed: a clearer executive brief
+- Keep the **Insight** name and symbol; use **Cyber Threat Intelligence Feed** as the tagline and remove
+  **Collect. Connect. Understand.**
+- The landing-page summary explains the collected intelligence in plain English for general and IT readers:
+  a seven-day view, reports received in the last 24 hours, evidence links and conditional next steps.
+  **Exploited now** and **Most severe** remain separate: known exploitation and technical severity are
+  different signals. Repeated reporting is described as attention in collected sources, never as proof that
+  attacks are increasing or that the operator's systems are affected.
+- `GET /api/brief` retains `days`, `since`, `summary` and `sections`, and adds `as_of`, `recent_reports`,
+  `report_count`, `source_count`, `highlights` and `coverage`. The brief uses stored reports and public KEV
+  context; it makes no external AI call or new source request. Counts and evidence respect the caller's TLP
+  limit. No database migration is needed. Field reference: [API](docs/API.md#executive-brief).
+- Design, evidence rules and limits: [Executive brief](docs/EXECUTIVE_BRIEF.md).
+
+### Added: temporary password-free operator access
+- `INSIGHT_DEV_NO_AUTH=on` lets a visitor enter through `/login` without a password. It is **off by default**,
+  rejects invalid values and cannot be combined with MFA. Password and signing-secret configuration remain
+  required. On a public domain, enabling it deliberately gives anyone access to reports and operator tools.
+- This mode uses normal expiring sessions, CSRF and same-origin checks; direct API calls still need a
+  session or key. Turning it off and restarting with the changed environment invalidates open-mode sessions
+  and restores the retained password. A workspace notice identifies the active mode.
+- Configuration, consequences and restoration checks: [Runbook](docs/RUNBOOK.md#temporary-password-free-access)
+  and [security record](docs/SECURITY.md#temporary-public-operator-access). The switch has no automatic expiry.
+
 ## 0.6.0 - 2026-11-20
 
 **Upgrading from 0.5.0:** migrations `0006` (jobs, schedules, remembered feed downloads), `0007` (verdicts) and

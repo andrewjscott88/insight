@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 from typing import Any
 
 import pytest
@@ -25,6 +26,13 @@ def test_brief_has_an_executive_summary_and_linked_sections(app: FastAPI, authed
     assert response.status_code == 200, response.text
     brief: dict[str, Any] = response.json()
     assert brief['days'] == 7
+    assert (brief['report_count'], brief['source_count'], brief['recent_reports']) == (2, 2, 2)
+    assert datetime.fromisoformat(brief['as_of']) - datetime.fromisoformat(brief['since']) == timedelta(
+        days=7
+    )
+    assert all(isinstance(note, str) for note in brief['coverage'])
+    assert {'title', 'text', 'action', 'evidence'} == brief['highlights'][-1].keys()
+    assert len(brief['highlights'][-1]['evidence']) == 2
     assert brief['summary'][0] == 'In the last 7 days, 2 new reports came in from 2 sources.'
     titles = [s['title'] for s in brief['sections']]
     assert titles == [
@@ -46,7 +54,9 @@ def test_brief_has_an_executive_summary_and_linked_sections(app: FastAPI, authed
 def test_the_demo_does_not_count(authed: TestClient) -> None:
     assert authed.post('/api/demo').status_code == 200
     brief = authed.get('/api/brief', params={'days': 1}).json()
-    assert brief['summary'] == ['Nothing new in the last 1 day. Sync your sources to get the latest.']
+    assert brief['summary'] == [
+        'No recent reports are available for the last 1 day. Check the source status below.'
+    ]
     assert all(s['items'] == [] for s in brief['sections'])
 
 
@@ -65,3 +75,6 @@ def test_a_tlp_limited_key_gets_a_brief_of_what_it_may_see(app: FastAPI, client:
     assert limited['summary'][0] == 'In the last 7 days, 1 new report came in from 1 source.'
     assert 'None of the new reports mention your watch terms.' in limited['summary']
     assert limited['sections'][3]['items'] == []  # the AMBER report would make 192.0.2.44 "shared"
+    assert (limited['report_count'], limited['source_count'], limited['recent_reports']) == (1, 1, 1)
+    assert 'Partner only' not in str(limited['highlights'])
+    assert all(item['title'] != 'Possible relevance to your organization' for item in limited['highlights'])

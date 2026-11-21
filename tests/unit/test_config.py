@@ -84,7 +84,36 @@ def test_public_deployment_settings_default_to_safe_values() -> None:
     settings = Settings.from_env(GOOD)
     assert settings.trusted_proxies == ()  # forwarded headers are ignored unless a proxy is named
     assert settings.max_tlp == 'AMBER+STRICT'  # TLP:RED is refused unless explicitly allowed
+    assert settings.dev_no_auth is False
     assert Settings(database_url='sqlite://', password='p', session_secret='s').max_tlp == 'AMBER+STRICT'
+
+
+@pytest.mark.parametrize(('value', 'expected'), [('', False), ('off', False), ('ON', True), (' on ', True)])
+def test_password_free_development_access_requires_explicit_opt_in(value: str, expected: bool) -> None:
+    settings = Settings.from_env({**GOOD, 'INSIGHT_DEV_NO_AUTH': value})
+    assert settings.dev_no_auth is expected
+    assert settings.password == GOOD['INSIGHT_PASSWORD']
+    assert settings.session_secret == GOOD['INSIGHT_SESSION_SECRET']
+
+
+@pytest.mark.parametrize('value', ['true', 'yes', '1', 'onn', 'disabled'])
+def test_password_free_setting_typos_fail_closed(value: str) -> None:
+    with pytest.raises(RuntimeError, match='INSIGHT_DEV_NO_AUTH'):
+        Settings.from_env({**GOOD, 'INSIGHT_DEV_NO_AUTH': value})
+
+
+def test_password_free_access_cannot_claim_to_require_mfa() -> None:
+    with pytest.raises(RuntimeError, match='requires INSIGHT_MFA=off'):
+        Settings.from_env({**GOOD, 'INSIGHT_DEV_NO_AUTH': 'on', 'INSIGHT_MFA': 'on'})
+    with pytest.raises(RuntimeError, match='requires INSIGHT_MFA=off'):
+        Settings(
+            database_url='sqlite://', password='p' * 12, session_secret='s' * 32, mfa=True, dev_no_auth=True
+        )
+
+
+def test_password_free_access_keeps_credentials_required_for_restoration() -> None:
+    with pytest.raises(RuntimeError, match='INSIGHT_PASSWORD'):
+        Settings.from_env({**GOOD, 'INSIGHT_DEV_NO_AUTH': 'on', 'INSIGHT_PASSWORD': ''})
 
 
 def test_trusted_proxies_and_max_tlp_from_env() -> None:

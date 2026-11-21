@@ -47,7 +47,7 @@ Browser ──HTTP (127.0.0.1:8080)──► uvicorn (1 worker)
 | NiceGUI storage | `/data/.nicegui` |
 | Volume | `<project>_insight-data` (`docker volume ls`) |
 | Port | `127.0.0.1:8080` only |
-| Sessions | In the database (8 hours): a restart or upgrade keeps you signed in; a new password or MFA setting signs everyone out. **Sign out everywhere** on the sign-out page ends every session. Rate limits stay in memory, so run exactly **one** worker. |
+| Sessions | In the database (8 hours): a restart or upgrade keeps you signed in; a new password, MFA setting or temporary-access mode invalidates existing sessions. **Sign out everywhere** on the sign-out page ends every session. Rate limits stay in memory, so run exactly **one** worker. |
 | Outbound network | Only when an operator presses **Sync now** or approves a CVE lookup |
 
 ## 2. Configuration
@@ -64,6 +64,7 @@ Set in `.env` (Compose reads it) or the process environment. Real environment va
 | `INSIGHT_SECURE_COOKIES` | no | `0` | Set `1` only behind HTTPS |
 | `INSIGHT_TRUSTED_PROXIES` | no | none | Reverse proxy address(es), IPs or CIDRs (`172.18.0.1`, `10.0.0.0/24`). See "Reverse proxy" below. `*` and malformed entries stop start-up. |
 | `INSIGHT_MFA` | no | `off` | `on` requires an authenticator-app code at sign-in (`make mfa-enable` pairs the app and sets it). Anything other than on/off stops start-up. |
+| `INSIGHT_DEV_NO_AUTH` | no | `off` | Temporary password-free operator access. Only `on` enables it; blank or `off` disables it. Invalid values or enabling it with MFA stop start-up. Anyone who can reach the site can enter and use its operator tools. See "Temporary password-free access" in §4. |
 | `INSIGHT_MAX_TLP` | no | `AMBER+STRICT` | Most restrictive label stored. Reports at or raised to a higher label (i.e. TLP:RED) are refused on upload. `RED` allows everything. |
 | `INSIGHT_RUN_JOBS` | no | `on` | Run scheduled syncs in this process ([ADR 0018](adr/0018-opt-in-scheduled-syncs.md)). Nothing is scheduled until you choose a schedule (§8). Set `off` in every process but one if you run several. Anything other than on/off stops start-up. |
 | `INSIGHT_THEME` | no | `system` | Colour theme for browsers that have not picked one: `system` (follow each device's light/dark setting), `light` or `dark`. Each browser can override it with the Light/Dark/System buttons in the workspace header (`make theme THEME=dark` sets it). Anything else stops start-up. |
@@ -71,7 +72,7 @@ Set in `.env` (Compose reads it) or the process environment. Real environment va
 
 Never commit `.env`: a pre-commit hook and CI block it. Treat the file like the password it contains.
 
-Invalid values for `INSIGHT_TRUSTED_PROXIES`, `INSIGHT_MAX_TLP`, `INSIGHT_MFA`, `INSIGHT_RUN_JOBS` or `INSIGHT_THEME` stop start-up with a message naming the
+Invalid values for `INSIGHT_TRUSTED_PROXIES`, `INSIGHT_MAX_TLP`, `INSIGHT_MFA`, `INSIGHT_DEV_NO_AUTH`, `INSIGHT_RUN_JOBS` or `INSIGHT_THEME` stop start-up with a message naming the
 variable, rather than running with a setting that silently does nothing.
 
 ### Reverse proxy (public deployment)
@@ -138,6 +139,46 @@ Rotate at least every 90 days, when anyone who knew them leaves, and **immediate
 3. `docker compose up -d` (recreates the container with the new environment).
 
 Everyone is signed out, and cookies issued with the old secret stop working.
+
+### Temporary password-free access
+
+`INSIGHT_DEV_NO_AUTH=on` deliberately lets anyone who can reach the site obtain the full browser operator
+session without a password. On a public domain, that means public access to stored reports, exports and
+editing tools. It is not a read-only public feed or a per-user account system. The setting is **off by
+default** and the workspace displays a notice while it is enabled.
+
+To enable it temporarily:
+
+1. Keep the existing `INSIGHT_PASSWORD` and `INSIGHT_SESSION_SECRET`; both remain required and must still
+   meet their length requirements. Do not remove them from the environment.
+2. Set `INSIGHT_DEV_NO_AUTH=on` in the deployment's environment. `INSIGHT_MFA` must be `off`: combining MFA
+   and password-free access is rejected at start-up. Record any previous MFA setting for restoration.
+3. Recreate the container with the changed environment: `docker compose up -d --no-deps insight`. A plain
+   `docker compose restart` does not apply changed Compose environment values. For local Python, restart
+   `insight serve` with the new environment.
+4. From a fresh browser, open the site and confirm it enters the workspace without a password. A visit to
+   `/login` creates a normal expiring session and redirects to `/`; it no longer returns a password form.
+
+The cookie, CSRF checks, same-origin checks, API-key rules and HTTPS/proxy settings remain in effect.
+An API request without a valid session or key still returns `401`, but anyone can obtain a session through
+`/login` while this mode is on. API-key TLP limits do not restrict the full operator session. Signing out,
+including **Sign out everywhere**, ends existing sessions but cannot keep visitors out while the mode is
+enabled: they can visit `/login` again. Password-form smoke scripts are for the normal protected mode;
+verify the open mode's redirect, session, CSRF and report access explicitly.
+
+To restore password protection:
+
+1. Set `INSIGHT_DEV_NO_AUTH=off` (or remove it) and restore the previous MFA setting, if any. Keep the
+   configured password and signing secret.
+2. Run `docker compose up -d --no-deps insight` again, or restart the local Python process with the changed
+   environment. The authentication-mode change invalidates sessions issued by the password-free mode.
+3. Confirm a fresh browser sees the password form, an old password-free session cannot read `/api/stats`,
+   and a request without any session or key returns `401`. Sign in with the retained password and, when
+   enabled, the authenticator code; then run the normal smoke check.
+
+Restoring sign-in stops future unauthenticated entry. It does not undo report changes or recall information
+that visitors viewed or exported during the open period. The [security record](SECURITY.md#temporary-public-operator-access)
+describes this tradeoff and the controls that remain.
 
 ### The API key
 `insight api-key status` shows the key ID, access, expiry and last use (in Docker: `docker compose exec insight

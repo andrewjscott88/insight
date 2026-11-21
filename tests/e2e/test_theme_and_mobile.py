@@ -198,7 +198,7 @@ def test_regression_desktop_shows_every_tab_label(browser: Any) -> None:
     sign_in(page)
     for label in ('Intelligence inbox', 'Entity explorer', 'Watch terms', 'Sources'):
         expect(page.get_by_role('tab', name=label)).to_be_visible()
-    expect(page.get_by_text('Private intelligence workspace')).to_be_visible()
+    expect(page.get_by_text('Cyber Threat Intelligence Feed', exact=True)).to_be_visible()
     expect(page.get_by_role('button', name='Back to list')).to_have_count(0)
     context.close()
 

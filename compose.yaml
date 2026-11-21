@@ -16,6 +16,8 @@ services:
       INSIGHT_MAX_TLP: ${INSIGHT_MAX_TLP:-AMBER+STRICT}
       # Authenticator-app code at sign-in: off by default. Turn on with `make mfa-enable` (docs/RUNBOOK.md).
       INSIGHT_MFA: ${INSIGHT_MFA:-off}
+      # Explicit temporary public access for development; defaults off. See docs/RUNBOOK.md.
+      INSIGHT_DEV_NO_AUTH: ${INSIGHT_DEV_NO_AUTH:-off}
       # Default colour theme (system, light or dark) for browsers that have not picked one in the workspace
       # header. `make theme THEME=dark` sets it. "system" follows each device's light/dark setting.
       INSIGHT_THEME: ${INSIGHT_THEME:-system}

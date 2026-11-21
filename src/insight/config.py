@@ -54,6 +54,16 @@ def parse_run_jobs(value: str) -> bool:
     raise RuntimeError(f'INSIGHT_RUN_JOBS must be "on" or "off"; got {value!r}')
 
 
+def parse_dev_no_auth(value: str) -> bool:
+    """Explicit temporary password-free browser access; a typo must never enable it."""
+    choice = value.strip().lower()
+    if choice in {'', 'off'}:
+        return False
+    if choice == 'on':
+        return True
+    raise RuntimeError(f'INSIGHT_DEV_NO_AUTH must be "on" or "off"; got {value!r}')
+
+
 def parse_trusted_proxies(value: str) -> tuple[str, ...]:
     """``INSIGHT_TRUSTED_PROXIES``: comma-separated IP addresses or CIDR networks of the reverse proxy.
 
@@ -113,6 +123,13 @@ class Settings:
     #: Run the background job runner (scheduled syncs) in this process (``INSIGHT_RUN_JOBS``, default ``on``).
     #: Off when constructed directly, so tests and tools never start it by accident.
     run_jobs: bool = False
+    #: Temporary open browser access for development. Off by default, including on public deployments.
+    #: Credentials are retained; turning this off ends sessions granted while it was on.
+    dev_no_auth: bool = False
+
+    def __post_init__(self) -> None:
+        if self.dev_no_auth and self.mfa:
+            raise RuntimeError('INSIGHT_DEV_NO_AUTH=on requires INSIGHT_MFA=off')
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None) -> Self:
@@ -144,4 +161,5 @@ class Settings:
             mfa=parse_mfa(env.get('INSIGHT_MFA', '')),
             theme=parse_theme(env.get('INSIGHT_THEME', '')),
             run_jobs=parse_run_jobs(env.get('INSIGHT_RUN_JOBS', '')),
+            dev_no_auth=parse_dev_no_auth(env.get('INSIGHT_DEV_NO_AUTH', '')),
         )
