@@ -344,6 +344,10 @@ expires_at,tlp` with a header row; a cell that would start with `=`, `+`, `-`, `
 gets a leading `'` so spreadsheets never run it as a formula (code review N1). Audited as `ioc.blocklist`; shares
 the `ioc-export` budget.
 
+For IPs and domains, `format=suricata` or `format=snort` downloads a plain-text `.rules` file. These formats
+return 422 when the selection is empty or the kind is unsupported. See [network sensor rules](IOC_EXPORT.md#network-sensor-rules)
+for signatures, DNS coverage and local rule IDs.
+
 ## Entities
 
 | Route | Parameters | Result |

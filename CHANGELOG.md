@@ -43,6 +43,11 @@ CVEs in reports they can see; starting a lookup stays refused to them. The new p
   mailbox. Each address carries a personal-data warning. IOC exports can filter out entries with that flag.
 - E-mail support was introduced with `regex-v4`. Earlier reports keep their original observations and review decisions.
 
+### Alerts for network sensors
+
+- Download Suricata or Snort 3 rules from the IP or domain blocklist. Rules alert on traffic involving a
+  reviewed address or a DNS lookup for an exact reviewed name. [Sensor rule formats](docs/IOC_EXPORT.md#network-sensor-rules).
+
 ### Network ranges in reports
 
 - Insight now recognizes IPv4 and IPv6 network ranges (CIDR). Analysts can review a whole range,
