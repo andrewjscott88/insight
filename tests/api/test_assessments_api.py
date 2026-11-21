@@ -220,6 +220,7 @@ def test_email_export_marks_personal_data_and_can_exclude_it(app: FastAPI, signe
 
 def test_blocklists_share_the_ioc_export_rate_budget() -> None:
     assert rate_limit_policy('GET', '/api/iocs/blocklist') is IOC_EXPORT
+    assert rate_limit_policy('GET', '/api/iocs/stix') is IOC_EXPORT
 
 
 # --------------------------------------------------------------------------- TLP-limited keys

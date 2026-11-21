@@ -122,7 +122,7 @@ operator have separate budgets, so a runaway script cannot lock the analyst out 
 | --- | --- | --- |
 | `read` | `GET`/`HEAD`, except the IOC export | 300 per minute |
 | `write` | `POST` (ingest, triage, notes, demo, sync, enrichment) | 60 per minute |
-| `ioc-export` | `GET /api/iocs/export`, `GET /api/iocs/blocklist` | 30 per hour |
+| `ioc-export` | `GET /api/iocs/export`, `GET /api/iocs/stix`, `GET /api/iocs/blocklist` | 30 per hour |
 | (invalid keys) | Requests with a wrong, revoked or expired key, per client address | 10 per minute |
 
 Budgets are token buckets: the full limit is available as a burst, then it refills evenly (`read`: 5 per
@@ -205,6 +205,46 @@ The summary plus:
 Task-oriented guide with recipes and troubleshooting: [IOC_EXPORT.md](IOC_EXPORT.md). JSON Schema:
 [schemas/insight-ioc-v1.schema.json](schemas/insight-ioc-v1.schema.json). Example file:
 [examples/insight-iocs-example.json](examples/insight-iocs-example.json).
+
+### `GET /api/iocs/stix`
+
+Download a validated STIX 2.1 bundle as `application/stix+json;version=2.1`. Use the same filters as the
+IOC export below. The request's `max_tlp`, the instance ceiling and the API key's ceiling all apply.
+Use `evidence=false` to omit excerpts. A request with `defang=true` returns 422.
+Each included report references its active ATT&CK techniques from the current catalog as `attack-pattern` objects.
+Each successful request records `stix.export` with its bundle UUID. Empty selections return a valid empty bundle.
+[Object mapping and handling rules](IOC_EXPORT.md#stix-21-export)
+
+### `POST /api/import/stix`
+
+Send a local STIX 2.1 bundle as the request body with `Content-Type: application/json` or
+`application/stix+json`. Use a read-write bearer key or an authenticated browser session with
+`X-CSRF-Token`. The workspace offers **Import a STIX bundle** in the ingest dialog. On the server, run
+`insight import-stix FILE`. All three paths apply the same import and handling rules.
+
+The result contains `bundle_id`, `bundle_sha256` (the submitted bytes), `reports` (the reports processed),
+`created` (new report revisions) and `document_ids`. A repeated submission of unchanged reports returns
+zero new revisions. Import keeps the original UUID for the first revision of each STIX Report. A changed
+version receives a new Insight document ID with a link to the revision it supersedes. A conflicting UUID
+from another source is refused. Each accepted report has a source ID and an audit receipt with the bundle
+ID and SHA-256. Report text, extracted values and mentions use Insight's existing deletion path.
+
+Import accepts Reports that reference simple Indicator equality patterns, CVE Vulnerabilities and
+catalog-backed ATT&CK Attack Patterns by reference. Supported values are IPs, CIDRs, domains, email
+addresses, URLs, MD5, SHA-1, SHA-256 and SHA-512 hashes, and CVE IDs. Standalone Indicators and CVEs are
+grouped under one report identified by the bundle. Identity objects can supply publisher metadata. The
+importer validates data locally and reads no external URLs. Compound patterns, time-limited indicators,
+revoked objects, unsupported object types and unresolved report references cause the entire import to fail.
+
+Unmarked data defaults to AMBER. A report inherits the strongest TLP of its own text and markings, linked
+observations and publisher identity. The standard TLP 1.0 and 2.0 marking IDs are supported. Unknown or
+granular markings are refused. Both `INSIGHT_MAX_TLP` and the API key's ceiling apply. Existing publisher
+restrictions and TLP labels are protected across revisions. Metadata-only reports retain their titles,
+publisher links and observations. Their excerpts are discarded.
+
+An upload can contain up to 2,000,000 bytes, 2,000 objects, 200 Reports and 10,000 references. Individual
+indicator values are capped at 2,000 UTF-8 bytes. A malformed or unsupported bundle returns 400 and stores
+zero documents from that request. Oversized HTTP bodies return 413 and unsupported content types return 415.
 
 ### `GET /api/iocs/export`
 One JSON file listing every indicator across the selected reports, each **once**, with the reports that mention

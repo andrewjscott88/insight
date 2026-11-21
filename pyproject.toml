@@ -38,6 +38,8 @@ dependencies = [
     "python-dotenv>=1,<2",
     "pydantic>=2.7,<3",
     "alembic>=1.14,<2",
+    "stix2-validator>=3.3.2,<4",
+    "cpe==1.3.1",  # Exact reviewed LGPL release; matching source ships in data/licenses.
 ]
 
 [project.optional-dependencies]
@@ -77,6 +79,7 @@ where = ["src"]
 [tool.setuptools.package-data]
 insight = [
     "templates/*.html", "static/*", "py.typed", "data/*.txt", "data/*.json",
+    "data/licenses/cpe-1.3.1.tar.gz", "data/licenses/*-3.0.txt",
     "migrations/script.py.mako", "migrations/versions/*.py",
 ]
 
@@ -169,7 +172,7 @@ enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["defusedxml.*", "playwright.*", "jsonschema.*", "yaml", "yaml.*"]
+module = ["defusedxml.*", "playwright.*", "jsonschema.*", "stix2validator.*", "yaml", "yaml.*"]
 ignore_missing_imports = true
 
 # --------------------------------------------------------------------------- mutation testing (nightly)

@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from .. import services
 from ..schemas import DocumentInput
 from .messages import problem_area, tell
+from .stix_import import build_stix_import
 from .typography import heading
 from .workspace import Workspace
 
@@ -33,6 +34,7 @@ def build_ingest_dialog(ws: Workspace) -> ui.dialog:
     ):
         ui.label('Add to your workspace').classes('eyebrow')
         heading(TITLE, 2)
+        build_stix_import(ws, dialog)
         ui.label(
             'Paste the text of a report. Insight finds the indicators in it, on this server, '
             'for you to check.'
