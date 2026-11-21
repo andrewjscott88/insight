@@ -10,6 +10,7 @@ from __future__ import annotations
 import dataclasses
 import logging
 from collections.abc import Callable
+from typing import Any
 
 import pytest
 from fastapi import FastAPI
@@ -195,13 +196,45 @@ def test_startup_notes(settings: Settings, caplog: pytest.LogCaptureFixture) -> 
     public = dataclasses.replace(settings, trusted_proxies=('10.0.0.2',), secure_cookies=True)
     create_app(public, with_ui=False)
     assert 'MFA is off (INSIGHT_MFA=off)' in caplog.text
-    assert not [r for r in caplog.records if 'MFA' in r.getMessage() and r.levelno >= logging.WARNING]
+    # Behind a proxy, password-only sign-in is a warning (TIP 0.3), naming the switch that fixes it.
+    [warning] = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    assert 'INSIGHT_MFA is off' in warning
+    assert 'INSIGHT_SECURE_COOKIES' not in warning
+    assert 'INSIGHT_REQUIRE_HARDENED=on' in warning
     caplog.clear()
     app = create_app(dataclasses.replace(public, mfa=True), with_ui=False)
     pair(app)
     caplog.clear()
     create_app(dataclasses.replace(public, mfa=True), with_ui=False)
     assert 'MFA is on' in caplog.text
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+
+
+@pytest.mark.parametrize(
+    ('changes', 'warned'),
+    [
+        ({}, False),  # loopback only: local development stays quiet
+        ({'allowed_hosts': ('insight.example.org',)}, True),
+        ({'allowed_hosts': ('insight.example.org',), 'secure_cookies': True, 'mfa': True}, False),
+        ({'secure_cookies': True, 'mfa': True, 'require_hardened': True}, False),
+    ],
+)
+def test_internet_facing_instances_warn_when_not_hardened(
+    settings: Settings, caplog: pytest.LogCaptureFixture, changes: dict[str, Any], warned: bool
+) -> None:
+    caplog.set_level(logging.INFO, logger='insight.auth')
+    create_app(
+        dataclasses.replace(settings, **{'allowed_hosts': ('localhost', '127.0.0.1'), **changes}),
+        with_ui=False,
+    )
+    warnings = [r.getMessage() for r in caplog.records if 'reachable from the internet' in r.getMessage()]
+    assert bool(warnings) is warned
+    if warned:
+        assert 'answers to insight.example.org' in warnings[0]
+        assert 'INSIGHT_SECURE_COOKIES is off' in warnings[0]
+        assert 'INSIGHT_MFA is off' in warnings[0]
+    if changes.get('require_hardened'):
+        assert 'INSIGHT_REQUIRE_HARDENED is on' in caplog.text
 
 
 # --------------------------------------------------------------------------- service

@@ -15,6 +15,8 @@ from .schemas import TLP, TLP_LEVELS
 MIN_PASSWORD_LENGTH = 12
 MIN_SECRET_LENGTH = 32
 DEFAULT_ALLOWED_HOSTS = ('localhost', '127.0.0.1')
+#: Host names that only this machine uses. Any other allowed host suggests the internet can reach Insight.
+LOCAL_HOSTS: Final = frozenset({'localhost', '127.0.0.1', '::1', '[::1]', 'testserver'})
 #: Most restrictive label this instance stores by default. TLP:RED is for named recipients only and should not
 #: sit on an internet-facing server unless the operator decides otherwise (``INSIGHT_MAX_TLP=RED``).
 DEFAULT_MAX_TLP: TLP = 'AMBER+STRICT'
@@ -52,6 +54,20 @@ def parse_run_jobs(value: str) -> bool:
     if choice == 'off':
         return False
     raise RuntimeError(f'INSIGHT_RUN_JOBS must be "on" or "off"; got {value!r}')
+
+
+def parse_require_hardened(value: str) -> bool:
+    """``INSIGHT_REQUIRE_HARDENED``: ``on`` refuses to start without secure cookies and MFA (TIP 0.3).
+
+    Default (empty): ``off``, so local ``make dev`` keeps working. Strict, because a typo such as
+    ``INSIGHT_REQUIRE_HARDENED=onn`` must not silently drop the check.
+    """
+    word = value.strip().lower()
+    if word in {'', 'off', '0', 'false', 'no'}:
+        return False
+    if word in {'on', '1', 'true', 'yes'}:
+        return True
+    raise RuntimeError(f'INSIGHT_REQUIRE_HARDENED must be "on" or "off"; got {value!r}')
 
 
 def parse_dev_no_auth(value: str) -> bool:
@@ -126,10 +142,40 @@ class Settings:
     #: Temporary open browser access for development. Off by default, including on public deployments.
     #: Credentials are retained; turning this off ends sessions granted while it was on.
     dev_no_auth: bool = False
+    #: Refuse to start unless the settings a public deployment needs are on (``INSIGHT_REQUIRE_HARDENED``).
+    require_hardened: bool = False
 
     def __post_init__(self) -> None:
         if self.dev_no_auth and self.mfa:
             raise RuntimeError('INSIGHT_DEV_NO_AUTH=on requires INSIGHT_MFA=off')
+        if self.require_hardened and (gaps := self.hardening_gaps()):
+            raise RuntimeError(
+                'INSIGHT_REQUIRE_HARDENED is on, so Insight will not start: '
+                + '; '.join(gaps)
+                + '. See docs/RUNBOOK.md, "Reverse proxy".'
+            )
+
+    def hardening_gaps(self) -> list[str]:
+        """Settings a public deployment should not run with (TIP 0.3), in plain words. Empty when hardened.
+
+        An enabled but unpaired authenticator is not a gap here: sign-in is refused until one is paired.
+        """
+        gaps = []
+        if not self.secure_cookies:
+            gaps.append('INSIGHT_SECURE_COOKIES is off, so the sign-in cookie may travel over plain HTTP')
+        if not self.mfa:
+            gaps.append('INSIGHT_MFA is off, so the password alone signs in')
+        if self.dev_no_auth:
+            gaps.append('INSIGHT_DEV_NO_AUTH is on, so anyone who reaches the site can use it')
+        return gaps
+
+    def public_hosts(self) -> list[str]:
+        """Allowed host names that are not this machine's own (``*`` included)."""
+        return [host for host in self.allowed_hosts if host.lower() not in LOCAL_HOSTS]
+
+    def internet_facing(self) -> bool:
+        """True when Insight answers to a non-local host name or trusts a reverse proxy."""
+        return bool(self.trusted_proxies or self.public_hosts())
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None) -> Self:
@@ -163,6 +209,7 @@ class Settings:
             theme=parse_theme(env.get('INSIGHT_THEME', '')),
             run_jobs=parse_run_jobs(env.get('INSIGHT_RUN_JOBS', '')),
             dev_no_auth=parse_dev_no_auth(env.get('INSIGHT_DEV_NO_AUTH', '')),
+            require_hardened=parse_require_hardened(env.get('INSIGHT_REQUIRE_HARDENED', '')),
         )
 
 
