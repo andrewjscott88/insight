@@ -92,6 +92,13 @@ class ScheduleInput(BaseModel):
     at: str | None = Field(default=None, pattern=r'^([01]\d|2[0-3]):[0-5]\d$')
 
 
+class TechniqueInput(BaseModel):
+    """A MITRE ATT&CK technique to add to a report, by ID (``T1059`` or ``T1059.001``)."""
+
+    model_config = ConfigDict(extra='forbid')
+    technique_id: str = Field(min_length=5, max_length=9, pattern=r'^[Tt]\d{4}(\.\d{3})?$')
+
+
 class AssessmentInput(BaseModel):
     """``POST /api/entities/{id}/assessment``: an analyst's verdict on an indicator.
 

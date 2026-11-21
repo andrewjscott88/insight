@@ -250,6 +250,12 @@ def test_restore_stops_copies_the_backup_in_and_starts(project: Path, args: list
 # --------------------------------------------------------------------------- API key
 
 
+def test_attack_backfill_runs_the_cli_in_the_container(project: Path) -> None:
+    result = make(project, 'attack-backfill')
+    assert result.returncode == 0, result.stderr
+    assert calls(project) == ['run --rm insight insight attack-backfill']
+
+
 def test_delete_report_needs_an_id_and_a_reason(project: Path) -> None:
     for args in (['delete-report'], ['delete-report', 'ID=abc'], ['delete-report', 'REASON=ticket 42']):
         result = make(project, *args)

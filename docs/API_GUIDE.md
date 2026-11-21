@@ -323,6 +323,29 @@ curl -sS -X POST "$INSIGHT_URL/api/entities/$ENTITY_ID/assessment" -H "Authoriza
   -H 'Content-Type: application/json' -d '{"verdict": "unknown"}'
 ```
 
+### ATT&CK techniques
+
+Reports are tagged with the MITRE ATT&CK® technique IDs written in them; analysts add the rest. Adding or
+removing a technique needs a read-write key.
+
+```sh
+# Look a technique up in the bundled catalog
+curl -sS "$INSIGHT_URL/api/attack/techniques?q=powershell" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq '.techniques[0]'
+# What reports described over the last 30 days, most reports first
+curl -sS "$INSIGHT_URL/api/attack/summary?days=30" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  | jq -r '.techniques[] | "\(.reports)\t\(.id)\t\(.name)"'
+# The reports behind one technique
+curl -sS "$INSIGHT_URL/api/attack/techniques/T1486/documents" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  | jq '.documents[] | {id, title}'
+# A layer to open in ATT&CK Navigator ("Open Existing Layer" > "Upload from local")
+curl -sS -OJ "$INSIGHT_URL/api/attack/navigator?days=90" -H "Authorization: Bearer $INSIGHT_API_KEY"
+# One report's techniques; add one, remove one
+curl -sS "$INSIGHT_URL/api/documents/$DOC_ID/techniques" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq
+curl -sS -X POST "$INSIGHT_URL/api/documents/$DOC_ID/techniques" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d '{"technique_id": "T1566.001"}' | jq
+curl -sS -X DELETE "$INSIGHT_URL/api/documents/$DOC_ID/techniques/T1059.001" -H "Authorization: Bearer $INSIGHT_API_KEY"
+```
+
 ### Sources and enrichment (outbound internet)
 
 These are the only routes that make Insight contact other servers. Sync imports a curated public feed; enrichment

@@ -22,6 +22,7 @@ SERVICE_MODULES = sorted((PACKAGE / 'services').glob('*.py'))
 SQL_BUILDERS = {'select', 'insert', 'update', 'delete', 'func', 'or_', 'and_', 'text'}
 ORM_CLASSES = {'Document', 'Entity', 'Observation', 'Note', 'AuditEvent', 'KEVRecord', 'WatchTerm'}
 ORM_CLASSES |= {'SourceRun', 'Enrichment', 'ApiKey', 'Job', 'Schedule', 'FetchState', 'EntityAssessment'}
+ORM_CLASSES |= {'DocumentTechnique'}
 
 
 def imports(path: Path) -> list[tuple[str, str]]:
@@ -111,6 +112,7 @@ TLP_AWARE_SERVICES = {
     'DocumentQuery', 'detail', 'list_entities', 'entity_documents', 'count_entity_documents', 'stats',
     'set_document_status', 'set_observation_status', 'add_note', 'ingest', 'brief_data',
     'assess_entity', 'entity_assessment', 'entity_seen', 'blocklist',
+    'document_techniques', 'tag_technique', 'untag_technique', 'technique_summary', 'technique_documents',
 }  # fmt: skip
 
 

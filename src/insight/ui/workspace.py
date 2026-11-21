@@ -27,6 +27,8 @@ class WorkspaceState:
     tlp: str = ALL_TLP
     include_superseded: bool = False
     entity_q: str = ''
+    #: The period on the ATT&CK techniques tab, in days (0: all time).
+    technique_days: int = 30
     #: Unsaved note text per document. Panels re-render whenever anything changes (a review, a finished source
     #: sync in the background, ...); without this, re-rendering silently discarded the analyst's typing.
     note_drafts: dict[str, str] = field(default_factory=dict)

@@ -605,3 +605,27 @@ def test_delete_report_usage_errors(
 ) -> None:
     assert cli.main(argv) == code
     assert message in capsys.readouterr().err
+
+
+def test_attack_backfill_tags_reports_from_before_0_7_0(
+    sqlite_env: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from sqlalchemy import delete, select
+
+    from insight.models import AuditEvent, DocumentTechnique, database
+
+    _seed_report(sqlite_env, 'Ransomware encrypted files (T1486).')
+    engine, sessions = database(f'sqlite:///{sqlite_env / "insight.db"}', migrate=False)
+    try:
+        with sessions.begin() as db:
+            db.execute(delete(DocumentTechnique))  # as a 0.6.0 database holds it
+        assert cli.main(['attack-backfill']) == 0
+        assert capsys.readouterr().out.strip() == 'Read 1 report without technique tags; added 1 tag.'
+        assert cli.main(['attack-backfill']) == 0
+        assert capsys.readouterr().out.strip() == 'Read 0 reports without technique tags; added 0 tags.'
+        with sessions() as db:
+            assert db.scalars(select(DocumentTechnique.technique_id)).all() == ['T1486']
+            event = db.scalars(select(AuditEvent).where(AuditEvent.action == 'technique.backfill')).one()
+            assert event.actor == 'cli'
+    finally:
+        engine.dispose()

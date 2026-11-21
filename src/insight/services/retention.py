@@ -3,7 +3,7 @@
 Reports carry victims' names, addresses and hosts, so data-protection law can require deleting one. This
 replaces the runbook's manual SQL procedure with one audited transaction:
 
-- the report's observations and notes are deleted with it;
+- the report's observations, notes and ATT&CK technique tags are deleted with it;
 - indicators that no other report mentions are deleted too, with any verdict on them (the verdict rested on
   reports that no longer exist);
 - the revision chain is repaired: later revisions point past the deleted one, and when it was the current
@@ -22,7 +22,7 @@ from dataclasses import asdict, dataclass
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
-from ..models import Document, Entity, EntityAssessment, Note, Observation
+from ..models import Document, DocumentTechnique, Entity, EntityAssessment, Note, Observation
 from .audit import audit
 
 MAX_REASON_LENGTH = 500
@@ -111,6 +111,7 @@ def delete_document(db: Session, document_id: str, reason: str) -> DeletionResul
     )
     db.execute(delete(Observation).where(Observation.document_id == doc.id))
     db.execute(delete(Note).where(Note.document_id == doc.id))
+    db.execute(delete(DocumentTechnique).where(DocumentTechnique.document_id == doc.id))
     content_hash = doc.content_hash
     db.delete(doc)
     db.flush()  # Gone before a predecessor is made current: one current revision per item (a unique index).

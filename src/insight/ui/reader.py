@@ -1,4 +1,4 @@
-"""The report reader: one report, its extracted observations and the analyst's notes.
+"""The report reader: one report, its extracted observations, its ATT&CK techniques and the analyst's notes.
 
 Written for readability (ADR 0017): real headings (report title ``h2``, sections ``h3``), the report text in a
 readable column instead of a box with its own scroll bar, plain-language explanations, and links that say they
@@ -19,6 +19,7 @@ from ..schemas import DOCUMENT_STATUSES, NoteInput
 from .enrichment import open_enrichment_dialog
 from .messages import tell
 from .mobile import back_to_list_button
+from .techniques import render_report_techniques
 from .theme import tlp_badge
 from .typography import heading, new_tab_link
 from .verdicts import Indicator, VerdictView, flag_badges, render_verdict
@@ -76,6 +77,7 @@ def render_report(ws: Workspace, data: dict[str, Any], actions: ReaderActions) -
     verdicts = data.get('verdicts', {})
     for obs in data['observations']:
         _render_observation(ws, obs, actions, data['tlp'], verdicts.get(obs['entity_id']))
+    render_report_techniques(ws, data['id'], data.get('techniques', []), actions.refresh)
     with ui.row().classes('gap-x-6 gap-y-0'):
         new_tab_link('Download this report as JSON', f'/api/documents/{data["id"]}/export')
         new_tab_link("Export this report's IOCs", f'/api/iocs/export?document_id={data["id"]}')

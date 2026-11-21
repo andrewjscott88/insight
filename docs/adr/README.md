@@ -23,3 +23,4 @@ superseded ones are marked, never deleted.
 | [0016](0016-colour-themes-and-per-device-choice.md) | Light and dark themes from one set of tokens; per-device choice | Accepted |
 | [0017](0017-readability-standard.md) | Readability: WCAG 2.2 AA, its reading-related AAA criteria and dyslexia guidance | Accepted |
 | [0018](0018-opt-in-scheduled-syncs.md) | Opt-in scheduled syncs with an in-process job runner | Accepted |
+| [0019](0019-attack-techniques.md) | MITRE ATT&CK techniques on reports, from the text and from analysts | Accepted |

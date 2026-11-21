@@ -75,7 +75,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 insight = [
-    "templates/*.html", "static/*", "py.typed", "data/*.txt",
+    "templates/*.html", "static/*", "py.typed", "data/*.txt", "data/*.json",
     "migrations/script.py.mako", "migrations/versions/*.py",
 ]
 

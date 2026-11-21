@@ -24,6 +24,7 @@ from ..schemas import (
 )
 from .audit import audit
 from .common import fold
+from .techniques import carry_decisions, record_report_techniques
 from .tlp import _refuse_above, _visible, apply_tlp_policy, tlp_permitted, visible_levels
 
 
@@ -152,6 +153,8 @@ def ingest(
         doc = _create_document(db, item, fp, None, extract(item.body), truncated=truncated)
         _audit_tlp_raise(db, doc, submitted_tlp)
         db.flush()
+        record_report_techniques(db, doc)
+        db.flush()
         return doc, True
 
     current = _current_revision(db, ref)
@@ -167,6 +170,8 @@ def ingest(
             current.is_current = False
             db.flush()
         existing.is_current = True
+        if current is not None:
+            carry_decisions(db, from_doc=current, to_doc=existing)
         audit(db, 'document.revision.reactivate', existing.id, current.id if current else '')
         db.flush()
         return existing, False
@@ -181,6 +186,8 @@ def ingest(
     if current is not None:
         doc.supersedes_id = current.id
         audit(db, 'document.revision.supersede', doc.id, current.id)
+    db.flush()
+    record_report_techniques(db, doc, previous=current)
     db.flush()
     return doc, True
 

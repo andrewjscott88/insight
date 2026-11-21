@@ -20,6 +20,7 @@ from .ingest import build_ingest_dialog
 from .ioc_export import open_ioc_export_dialog
 from .sources import build_sources, build_sync_all_button
 from .stats import build_stats
+from .techniques import build_techniques
 from .theme import apply_theme
 from .typography import heading
 from .watch_terms import build_watch_terms
@@ -29,7 +30,7 @@ RECONNECT_SECONDS: Final = 30.0
 
 
 def _tab(label: str, short: str) -> ui.tab:
-    """A tab with its full label, shortened on phones so all four fit without scrolling.
+    """A tab with its full label, shortened on phones so the tabs fit with little or no scrolling.
 
     ``max-sm:hidden``, not ``hidden sm:block``: Quasar's ``.hidden`` is ``!important`` and beats ``sm:block``.
     """
@@ -87,6 +88,7 @@ def register_ui(app: FastAPI, session_factory: SessionFactory) -> None:
             with ui.tabs().props('mobile-arrows align=left no-caps').classes('w-full') as tabs:
                 inbox_tab = _tab('Intelligence inbox', 'Inbox')
                 entities_tab = _tab('Entity explorer', 'Entities')
+                techniques_tab = _tab('ATT&CK techniques', 'ATT&CK')
                 watch_tab = _tab('Watch terms', 'Watch')
                 sources_tab = _tab('Sources', 'Sources')
 
@@ -104,6 +106,8 @@ def register_ui(app: FastAPI, session_factory: SessionFactory) -> None:
                     build_inbox(ws)
                 with ui.tab_panel(entities_tab).classes('panel p-4 sm:p-5'):
                     build_entities(ws)
+                with ui.tab_panel(techniques_tab).classes('panel p-4 sm:p-5'):
+                    build_techniques(ws)
                 with ui.tab_panel(watch_tab).classes('panel p-4 sm:p-5'):
                     build_watch_terms(ws)
                 with ui.tab_panel(sources_tab).classes('panel p-4 sm:p-5'):

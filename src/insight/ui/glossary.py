@@ -94,6 +94,26 @@ GLOSSARY: Final[tuple[tuple[str, str], ...]] = (
         'One indicator value, such as one web address, that may appear in many reports.',
     ),
     (
+        'MITRE ATT&CK',
+        'A free list of the ways attackers work, kept by the MITRE organisation. Analysts use it so that '
+        'everyone names the same attack steps with the same words.',
+    ),
+    (
+        'Technique, sub-technique, technique ID',
+        'One way attackers work, such as phishing. Each one has a short code, its ID, such as T1566. A '
+        'sub-technique is a more exact kind, such as T1566.001 for phishing with a file attached.',
+    ),
+    (
+        'Tactic',
+        'What an attacker wants from a step, such as getting in, staying hidden or stealing data. Each '
+        'technique serves one or more tactics.',
+    ),
+    (
+        'ATT&CK Navigator, layer',
+        'A free web tool from MITRE that shows the ATT&CK techniques as a grid of colours. A layer is a '
+        'file you open in it. Insight makes one from the techniques in your reports.',
+    ),
+    (
         'Watch term',
         'A word you care about, such as a product name. Reports that contain it are marked in the inbox.',
     ),

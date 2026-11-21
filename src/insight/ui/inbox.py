@@ -101,6 +101,7 @@ def build_inbox(ws: Workspace) -> None:
             data = services.detail(db, doc) if doc else None
             if data:
                 data['verdicts'] = load_verdicts(db, (o['entity_id'] for o in data['observations']))
+                data['techniques'] = services.document_techniques(db, data['id'])
         if data:
             render_report(ws, data, actions)
         else:
