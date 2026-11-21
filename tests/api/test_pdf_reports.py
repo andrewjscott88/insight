@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -23,6 +24,7 @@ def headers(**changes: str) -> dict[str, str]:
     return {'content-type': 'application/pdf', 'x-insight-document': metadata}
 
 
+@pytest.mark.skipif(sys.platform != 'linux', reason='PDF extraction requires the Linux sandbox')
 def test_signed_in_upload_flows_into_normal_review_and_duplicate_handling(authed: TestClient) -> None:
     raw = ADVISORY.read_bytes()
     response = authed.post(ROUTE, content=raw, headers=headers())
@@ -56,6 +58,7 @@ def test_invalid_files_and_metadata_do_not_write(authed: TestClient) -> None:
     ('access', 'label', 'expected'),
     [('read', 'CLEAR', 403), ('read-write', 'RED', 400), ('read-write', 'CLEAR', 200)],
 )
+@pytest.mark.skipif(sys.platform != 'linux', reason='PDF extraction requires the Linux sandbox')
 def test_bearer_key_ceiling(app: FastAPI, client: TestClient, access: str, label: str, expected: int) -> None:
     with app.state.session_factory.begin() as db:
         _, token = services.create_api_key(db, name='fixture', access=access, max_tlp='GREEN')
@@ -64,3 +67,16 @@ def test_bearer_key_ceiling(app: FastAPI, client: TestClient, access: str, label
         ROUTE, content=raw, headers=headers(tlp=label) | {'authorization': f'Bearer {token}'}
     )
     assert result.status_code == expected, result.text
+
+
+def test_pdf_worker_unavailable_does_not_write(authed: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    from insight.pdf_import import PdfUnavailable
+    from insight.services import pdf_reports
+
+    def unavailable(data: bytes) -> None:
+        raise PdfUnavailable('The PDF parser sandbox is unavailable.')
+
+    monkeypatch.setattr(pdf_reports, 'parse_pdf', unavailable)
+    res = authed.post(ROUTE, content=ADVISORY.read_bytes(), headers=headers())
+    assert res.status_code == 503
+    assert authed.get('/api/documents').json() == []

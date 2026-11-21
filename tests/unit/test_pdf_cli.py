@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import sys
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,7 @@ from insight.models import AuditEvent, Document, database
 FIXTURE = Path(__file__).parents[1] / 'fixtures' / 'advisory.pdf'
 
 
+@pytest.mark.skipif(sys.platform != 'linux', reason='PDF extraction requires the Linux sandbox')
 def test_cli_imports_pdf_with_provenance_and_honors_instance_limit(
     monkeypatch: pytest.MonkeyPatch, database_url: str, capsys: pytest.CaptureFixture[str]
 ) -> None:

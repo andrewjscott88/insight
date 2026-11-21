@@ -51,6 +51,7 @@ def fingerprint(item: DocumentInput, *, file_sha256: str | None = None) -> str:
     identity = item.model_dump()
     if file_sha256 is not None:
         # Preserve distinct files with identical text and the historic identity of pasted reports.
+        del identity['body']  # A decoder update can change text ordering for the same immutable file.
         identity['file_sha256'] = file_sha256
     return hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
 

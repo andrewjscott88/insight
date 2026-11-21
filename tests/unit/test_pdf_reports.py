@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import sys
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,7 @@ from insight.schemas import DocumentInput
 ADVISORY = Path(__file__).parents[1] / 'fixtures' / 'advisory.pdf'
 
 
+@pytest.mark.skipif(sys.platform != 'linux', reason='PDF extraction requires the Linux sandbox')
 def test_pdf_hash_observations_and_repeat_import(db: Session) -> None:
     data = ADVISORY.read_bytes()
     submitted = {
@@ -53,6 +55,7 @@ def test_pdf_hash_observations_and_repeat_import(db: Session) -> None:
     )
 
 
+@pytest.mark.skipif(sys.platform != 'linux', reason='PDF extraction requires the Linux sandbox')
 def test_file_identity_and_retention(db: Session) -> None:
     raw = ADVISORY.read_bytes()
     params = {'title': 'PDF review', 'source_name': 'Training', 'tlp': 'GREEN', 'max_tlp': 'GREEN'}
@@ -88,3 +91,18 @@ def test_tlp_in_extracted_prose_can_block_import(db: Session) -> None:
         )
     for table in (Document, DocumentAttachment, Entity, Observation, AuditEvent):
         assert db.scalar(select(func.count()).select_from(table)) == 0
+
+
+def test_new_decoder_spacing_preserves_original_report(db: Session, monkeypatch: pytest.MonkeyPatch) -> None:
+    from insight.pdf_import import ParsedPdf
+    from insight.services import pdf_reports
+
+    raw = b'Same synthetic original'
+    sha256 = hashlib.sha256(raw).hexdigest()
+    data = {'title': 'Fixture layout', 'source_name': 'Training', 'tlp': 'CLEAR', 'max_tlp': 'GREEN'}
+    for attempt, text in enumerate(['Advisory page', 'Advisory\npage']):
+        result = ParsedPdf(text=text, sha256=sha256, size_bytes=len(raw), page_count=1)
+        monkeypatch.setattr(pdf_reports, 'parse_pdf', lambda _data, current=result: current)
+        receipt = services.import_pdf(db, raw, **data)
+        assert receipt['created'] is (attempt == 0)
+        assert db.get_one(Document, receipt['document_id']).body == 'Advisory page'
