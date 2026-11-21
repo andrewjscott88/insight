@@ -51,6 +51,7 @@ PROTECTED = [
     ('GET', '/api/sources'),
     ('GET', '/api/audit'),
     ('GET', '/api/watch-terms'),
+    ('POST', '/api/import/stix'),
     ('POST', '/api/documents'),
     ('POST', '/api/documents/x/review'),
     ('POST', '/api/documents/x/notes'),

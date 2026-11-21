@@ -129,6 +129,7 @@ from .sources import (
     set_source_switch,
     source_switches,
 )
+from .stix_imports import import_stix
 from .techniques import (
     TechniqueCount,
     TechniqueTag,
@@ -249,6 +250,7 @@ __all__ = [
     'get_document',
     'get_entity',
     'get_fetch_state',
+    'import_stix',
     'ingest',
     'ioc_export_counts',
     'ioc_mentions',

@@ -87,7 +87,7 @@ def _copy(row: DocumentTechnique, document_id: str) -> DocumentTechnique:
     )
 
 
-def record_report_techniques(db: Session, doc: Document, *, previous: Document | None = None) -> int:
+def record_report_techniques(db: Session, doc: Document, *, previous: Document | None = None, allowed: frozenset[str] | None = None) -> int:
     """At ingest: tag the technique IDs written in ``doc``; copy the analyst's decisions from ``previous``.
 
     Returns the number of techniques tagged from the text.
@@ -95,15 +95,21 @@ def record_report_techniques(db: Session, doc: Document, *, previous: Document |
     decided = _decisions(db, previous.id) if previous is not None else {}
     db.add_all(_copy(row, doc.id) for row in decided.values())
     added = 0
-    for mention in find_techniques(doc.body):
-        if mention.technique_id in decided:
+    # Structured STIX reports provide an explicit membership list. Unrelated technique IDs
+    # in a quoted excerpt must never add a tag (including during a later backfill).
+    mentions = (
+        [(m.technique_id, m.evidence) for m in find_techniques(doc.body)]
+        if allowed is None else [(tid, f'ATT&CK technique: {tid}') for tid in sorted(allowed)]
+    )
+    for technique_id, evidence in mentions:
+        if technique_id in decided:
             continue  # the analyst's decision on the previous revision wins
         db.add(
             DocumentTechnique(
                 document_id=doc.id,
-                technique_id=mention.technique_id,
+                technique_id=technique_id,
                 source='report',
-                evidence=mention.evidence,
+                evidence=evidence,
             )
         )
         added += 1
@@ -128,7 +134,7 @@ def backfill_techniques(db: Session) -> tuple[int, int]:
     """
     tagged = select(DocumentTechnique.document_id).distinct()
     reports = added = 0
-    for doc in db.scalars(select(Document).where(Document.id.not_in(tagged)).order_by(Document.created_at)):
+    for doc in db.scalars(select(Document).where(Document.id.not_in(tagged), Document.extractor_version != 'stix-2.1').order_by(Document.created_at)):
         reports += 1
         added += record_report_techniques(db, doc)
     if added:
