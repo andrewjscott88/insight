@@ -43,7 +43,7 @@ def _attack_pattern(technique: Technique, markings: tuple[str, ...], created: st
     return obj
 
 
-def add_stix_techniques(db: Session, bundle: dict[str, Any], *, max_tlp: str | None) -> None:
+def _add_stix_techniques(db: Session, bundle: dict[str, Any], *, max_tlp: str | None) -> None:
     """Link active catalog tags on already-selected reports, under each report's own markings.
 
     Read only the two keys needed for the links. In particular a tag's contextual evidence may contain
