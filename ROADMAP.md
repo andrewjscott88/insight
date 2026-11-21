@@ -77,6 +77,11 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
 
 - [ ] **TIP 2.5 Actors and campaigns, created by the analyst.** ATT&CK groups only as a labelled catalog; never
       attribution from shared indicators.
+- [ ] **TIP 2.10 Industry threat profiles and actor threat guides** (requested by Andrew, 2026-11-21): pick an
+      industry and see the top ten threat groups known to target it, each with its evidence; open one and export
+      a threat guide (aliases, targets, ATT&CK techniques and Navigator layer, tools, mitigations, your reports
+      that name it, sources, TLP). Needs a bundled threat-group library (ATT&CK groups plus sourced industry
+      data); builds on TIP 2.3 and 2.5.
 - [ ] **TIP 2.7 YARA and Sigma rules as linked artifacts** (carried and exported, never executed).
 - [ ] **TIP 2.6 Optional GreyNoise enrichment** for IP addresses (operator key; never a verdict by itself).
 - [ ] [#13](https://github.com/andrewjscott88/insight/issues/13) **TIP 2.8 PDF report ingestion,** keeping the

@@ -427,6 +427,47 @@ opt-in schedules and the job runner, and `ROADMAP.md` marks #10 done.
 - **Effort:** L
 - **Acceptance criteria:** A case can collect two reports and one entity, show a timeline of audit events, and close with a note. TLP of the case is the max of its items. Tests cover delete/unlink.
 
+### 2.10 Industry threat profiles and actor threat guides (requested 2026-11-21)
+
+- **What to build:** The analyst picks an industry (for example healthcare, energy or finance). Insight lists the
+  **top ten threat groups known to target it**, each with the evidence for listing it. The analyst opens one group
+  and **exports a threat guide**: its names and aliases, the industries and regions it targets, how it operates
+  (ATT&CK techniques by tactic, with a Navigator layer), its tools and malware, its activity in the analyst's own
+  reports, what to check and defend first (ATT&CK mitigations and detections), and the sources for every claim.
+- **Why / which TIP capability:** Threat profiling for priority intelligence requirements. Premium platforms lead
+  with "who targets my sector"; analysts use it to brief leadership and to choose which defences to test first.
+- **It needs a threat library:** a bundled, regenerable catalog of threat groups, like the ATT&CK catalog
+  (TIP 2.3), with a source for every claim:
+  - **MITRE ATT&CK groups** (intrusion sets) from the bundle Insight already reads: names, aliases, descriptions,
+    techniques and software used, references. ATT&CK has no structured industry field; sectors appear only in
+    its prose.
+  - **Structured targeting data** for industries and regions, such as the MISP galaxy threat-actor cluster
+    (target categories, suspected victims). Check each source's licence before bundling it, keep provenance per
+    field, and avoid non-commercial licences (Insight is redistributable).
+  - **Insight's own reports:** literal matches of a group's names and aliases (like watch terms) give "named in N
+    of your reports, last on DATE"; analyst-created actors and links come from TIP 2.5.
+- **Ranking, never a hidden score:** a group is listed only if a cited catalog entry names the industry; the order
+  is by mentions in the analyst's reports in the last 90 days, then the most recent publicly reported activity,
+  then ATT&CK coverage. Each line shows why it is there. A listed group is not a claim that it targeted the
+  analyst's organisation, and Insight still never infers attribution from shared indicators.
+- **Implementation notes:** `scripts/update_actors.py` (like `update_attack.py`) builds
+  `src/insight/data/actors.json`: groups, aliases, industries and regions with their source, techniques, software,
+  references. A small fixed industry list maps the catalogs' labels. The guide export follows the landscape
+  briefing (ADR 0020): Markdown and print, TLP-marked from the reports it cites (CLEAR when it uses only public
+  catalogs), plain language (ADR 0017), catalog text quoted with attribution under its terms, no AI-written text.
+- **New tables or endpoints:** none for the bundled catalog; TIP 2.5's `threat_actors` holds the analyst's own
+  groups and corrections. `GET /api/industries`, `GET /api/industries/{key}/actors`, `GET /api/actors/{id}/guide`
+  (Markdown, audited). UI: an **Industry threats** view (industry picker, top-ten list with evidence) and a group
+  page with **Export threat guide**.
+- **Sources / libraries:** [attack-stix-data](https://github.com/mitre-attack/attack-stix-data) (already used;
+  terms in `NOTICE`); [MISP galaxy](https://github.com/MISP/misp-galaxy) (licence to confirm before bundling).
+- **Effort:** L (catalog and industry mapping M; ranking and views M; guide export S to M).
+- **Acceptance criteria:** Choosing an industry lists at most ten groups, each with the catalog source naming the
+  industry and its count in the analyst's reports; a group not named for that industry is never listed; a guide
+  exports with aliases, industries, techniques by tactic and a Navigator layer, tools, mitigations, the analyst's
+  reports that name the group, sources, and a TLP marking; TLP limits apply to the report counts and titles in it;
+  wording passes the plain-language checks.
+
 ---
 
 ## 4. Implementation order
@@ -436,7 +477,7 @@ opt-in schedules and the job runner, and `ROADMAP.md` marks #10 done.
 - Phase 0 first (0.1 can run in parallel with the others).
 - Phase 1: 1.1 → 1.2 → 1.3 (the vulnerability vertical), then 1.4 (alerts), then 1.5 / 1.6 (feeds); 1.7 is ongoing.
 - Phase 2: 2.1 before 2.2, 2.4 and 3.1; 2.3 before 2.5's ATT&CK seeding; 2.6 and 2.8 can proceed in parallel;
-  2.7 and 2.9 after the export patterns exist.
+  2.7 and 2.9 after the export patterns exist; 2.10 after 2.3 (done) and with or after 2.5.
 - Phase 3: 3.1 after 2.1; 3.4 before treating Insight as multi-user; 3.6 only after evaluation hooks exist;
   3.7 last and optional.
 
@@ -465,22 +506,23 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
 - [ ] **1.1** Persist KEV ransomware / vulnerability name / notes / CWEs; document inbox policy
 - [ ] **1.2** Auto-enqueue NVD and EPSS lookups for new CVEs (opt-in, throttled)
 - [ ] **1.3** Brief uses ransomware flag, NVD CVSS, and EPSS (fact-only wording)
-- [ ] **1.4** Webhook/email notifications for watch-term hits and new KEV (`ROADMAP` #15)
+- [x] **1.4** Webhook/email notifications for watch-term hits and new KEV (`ROADMAP` #15)
 - [ ] **1.5** abuse.ch URLhaus, ThreatFox, and MalwareBazaar connectors (metadata/IOCs only)
 - [ ] **1.6** AlienVault OTX connector (operator API key)
 - [ ] **1.7** Extraction-quality corpus and benchmark ratchet (`ROADMAP` #9)
 
-### Phase 2 — Core TIP features (9)
+### Phase 2 — Core TIP features (10)
 
 - [ ] **2.1** STIX 2.1 export, validated (`ROADMAP` #12)
 - [ ] **2.2** STIX 2.1 import with TLP enforcement
-- [ ] **2.3** ATT&CK catalog + manual/extracted technique tags
+- [x] **2.3** ATT&CK catalog + manual/extracted technique tags
 - [ ] **2.4** MISP export/import (CLI first)
 - [ ] **2.5** Manual actor and campaign entities (no inferred attribution)
 - [ ] **2.6** Optional GreyNoise community IP enrichment
 - [ ] **2.7** YARA/Sigma rules as linked artifacts (not an engine)
 - [ ] **2.8** PDF advisory ingest with file hash (`ROADMAP` #13)
 - [ ] **2.9** Suricata/Snort-oriented export of accepted network IOCs
+- [ ] **2.10** Industry threat profiles (top ten groups per industry, with evidence) and exportable actor threat guides; needs a bundled threat-group library
 
 ### Phase 3 — Advanced (8)
 
@@ -493,7 +535,7 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
 - [ ] **3.7** Optional Shodan/Censys enrichment (operator keys; vendor-priced)
 - [ ] **3.8** Lightweight case management
 
-**Total: 30 items.** Out of scope on purpose: cloning CrowdStrike/Mandiant/Recorded Future collection, building a malware sandbox, automated adversary attribution, and any always-on cloud AI.
+**Total: 31 items.** Out of scope on purpose: cloning CrowdStrike/Mandiant/Recorded Future collection, building a malware sandbox, automated adversary attribution, and any always-on cloud AI.
 
 ---
 
