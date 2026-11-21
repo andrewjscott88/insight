@@ -198,6 +198,162 @@ class IocExportQuery(BaseModel):
         return self.verdicts != VERDICTS or bool(self.exclude_flags)
 
 
+# ------------------------------------------------------------------------- threat guides (TIP 2.10, ADR 0025)
+
+ClaimDecision = Literal['added', 'removed']
+RuleKind = Literal['yara', 'sigma']
+RuleTarget = Literal['group', 'technique', 'document']
+HuntStatus = Literal['open', 'closed']
+HuntResult = Literal['not-checked', 'nothing-found', 'suspicious', 'confirmed']
+HUNT_RESULTS: tuple[str, ...] = get_args(HuntResult)
+#: An ATT&CK group ID (``G0016``) or the ID of an actor the analyst created.
+GroupRef = Annotated[str, StringConstraints(strip_whitespace=True, min_length=5, max_length=36)]
+MAX_ALIASES = 50
+
+
+def _https_url(value: str) -> str:
+    """Empty, or an ``https://`` URL without credentials (citations are links people open)."""
+    if not value:
+        return value
+    parts = urlsplit(value)
+    if parts.scheme != 'https' or not parts.hostname or parts.username or parts.password:
+        raise ValueError('Must be an https:// link without a user name or password')
+    _ = parts.port
+    return value
+
+
+class ActorInput(BaseModel):
+    """``POST /api/actors``: an actor the analyst tracks (TIP 2.5). Never created by Insight itself."""
+
+    model_config = ConfigDict(frozen=True, extra='forbid')
+
+    name: str = Field(min_length=1, max_length=120)
+    aliases: tuple[
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)], ...
+    ] = Field(default=(), max_length=MAX_ALIASES)
+    description: str = Field(default='', max_length=5_000)
+    attack_group_id: str | None = Field(default=None, pattern=r'^[Gg]\d{4}$')
+    tlp: TLP = DEFAULT_TLP
+
+    @field_validator('name')
+    @classmethod
+    def name_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError('Must not be blank')
+        return ' '.join(value.split())
+
+
+class ActorLinkInput(BaseModel):
+    """``POST /api/actors/{id}/documents``: link a report to a group or actor (the analyst's decision)."""
+
+    model_config = ConfigDict(frozen=True, extra='forbid')
+
+    document_id: DocumentId
+    note: str = Field(default='', max_length=2_000)
+
+
+class IndustryClaimInput(BaseModel):
+    """``POST /api/actors/{id}/industries``: add an industry with a citation, or remove a catalog claim.
+
+    ``added`` needs ``citation_url`` or ``document_id`` (a report that says so); ``removed`` needs a
+    ``reason``. The reason may quote a report, so the claim carries its own ``tlp``.
+    """
+
+    model_config = ConfigDict(frozen=True, extra='forbid')
+
+    industry: str = Field(min_length=2, max_length=40)
+    decision: ClaimDecision = 'added'
+    citation_url: str = Field(default='', max_length=2_000)
+    document_id: DocumentId | None = None
+    reason: str = Field(default='', max_length=2_000)
+    tlp: TLP = DEFAULT_TLP
+
+    @field_validator('citation_url')
+    @classmethod
+    def https_only(cls, value: str) -> str:
+        return _https_url(value.strip())
+
+    def problem(self) -> str | None:
+        """Why the claim cannot be stored, or ``None``."""
+        if self.decision == 'added' and not (self.citation_url or self.document_id):
+            return 'Give the link or the report that says this group targets the industry.'
+        if self.decision == 'removed' and not self.reason.strip():
+            return 'Say why the catalog is wrong about this group.'
+        return None
+
+
+class RuleInput(BaseModel):
+    """``POST /api/rules``: a YARA or Sigma rule, carried as text (TIP 2.7). Insight never runs it."""
+
+    model_config = ConfigDict(frozen=True, extra='forbid')
+
+    kind: RuleKind
+    name: str = Field(min_length=1, max_length=200)
+    body: str = Field(min_length=1, max_length=100_000)
+    source_url: str = Field(default='', max_length=2_000)
+    licence: str = Field(default='', max_length=120)
+    tlp: TLP = DEFAULT_TLP
+
+    @field_validator('name', 'body')
+    @classmethod
+    def not_blank(cls, value: str) -> str:
+        return _not_blank(value)
+
+    @field_validator('source_url')
+    @classmethod
+    def https_only(cls, value: str) -> str:
+        return _https_url(value.strip())
+
+
+class RuleLinkInput(BaseModel):
+    """``POST /api/rules/{id}/links``: what a rule is for."""
+
+    model_config = ConfigDict(frozen=True, extra='forbid')
+
+    target_kind: RuleTarget
+    target_id: str = Field(min_length=1, max_length=36)
+
+
+class HuntInput(BaseModel):
+    """``POST /api/actors/{id}/hunts``: start a hunt record from a group's threat guide."""
+
+    model_config = ConfigDict(frozen=True, extra='forbid')
+
+    title: str = Field(min_length=1, max_length=200)
+    tlp: TLP = DEFAULT_TLP
+
+    @field_validator('title')
+    @classmethod
+    def not_blank(cls, value: str) -> str:
+        return _not_blank(value)
+
+
+class HuntUpdate(BaseModel):
+    """``PUT /api/hunts/{id}``: close or reopen a hunt, and its summary."""
+
+    model_config = ConfigDict(frozen=True, extra='forbid')
+
+    status: HuntStatus
+    summary: str = Field(default='', max_length=10_000)
+
+
+class HuntCheckInput(BaseModel):
+    """``PUT /api/hunts/{id}/checks/{technique}``: what was checked for one hypothesis, when, the result."""
+
+    model_config = ConfigDict(frozen=True, extra='forbid')
+
+    result: HuntResult
+    data_checked: str = Field(default='', max_length=2_000)
+    period_start: date | None = None
+    period_end: date | None = None
+    notes: str = Field(default='', max_length=10_000)
+
+    def problem(self) -> str | None:
+        if self.period_start and self.period_end and self.period_end < self.period_start:
+            return 'The end of the time range is before its start.'
+        return None
+
+
 def validation_message(exc: ValidationError, names: Mapping[str, str] | None = None) -> str:
     """One short line per problem, naming the field as the caller knows it.
 

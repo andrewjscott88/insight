@@ -170,12 +170,14 @@ async def download(
     validators: Validators | None = None,
     headers: Mapping[str, str] | None = None,
     body: bytes | None = None,
+    max_bytes: int = MAX_BYTES,
     allowed_hosts: frozenset[str] = ALLOWED_HOSTS,
 ) -> bytes:
     """Fetch from the curated registry or an explicitly configured host, with the same HTTPS egress policy.
 
     With ``validators``, the request is conditional: an unchanged resource raises :class:`NotModified`, and a
     changed one updates ``validators`` from the response. Keyed feeds can add headers and a fixed POST body.
+    ``max_bytes`` raises the size limit for one pinned, hash-checked download (the threat library sync).
     ``transport`` exists for offline testing; production code never passes it.
     """
     parts = urlsplit(url)
@@ -196,7 +198,9 @@ async def download(
     try:
         async with asyncio.timeout(DOWNLOAD_DEADLINE):
             addresses = await _public_addresses(parts.hostname)
-            return await _fetch(url, addresses, params, request_headers, validators, transport, body)
+            return await _fetch(
+                url, addresses, params, request_headers, validators, transport, body, max_bytes
+            )
     except TimeoutError as exc:  # The overall deadline (L6); a normal fetch failure, recorded like any other.
         raise TimeoutError(f'The download took longer than {DOWNLOAD_DEADLINE:g} seconds') from exc
 
@@ -209,6 +213,7 @@ async def _fetch(
     validators: Validators | None,
     transport: httpx.AsyncBaseTransport | None,
     body: bytes | None,
+    max_bytes: int = MAX_BYTES,
 ) -> bytes:
     async with httpx.AsyncClient(
         timeout=httpx.Timeout(25), follow_redirects=False, trust_env=False, transport=transport
@@ -224,14 +229,16 @@ async def _fetch(
                     headers={**request_headers, **target.headers},
                     extensions=target.extensions,
                 ) as response:
-                    return await _read(response, url, validators)
+                    return await _read(response, url, validators, max_bytes)
             except httpx.ConnectError:
                 if index == len(addresses) - 1:  # Every checked address refused: report the last error.
                     raise
     raise AssertionError('unreachable')  # pragma: no cover - the loop returns or raises
 
 
-async def _read(response: httpx.Response, url: str, validators: Validators | None) -> bytes:
+async def _read(
+    response: httpx.Response, url: str, validators: Validators | None, max_bytes: int = MAX_BYTES
+) -> bytes:
     if response.status_code == 304:
         if validators is not None:
             raise NotModified(url)
@@ -247,8 +254,8 @@ async def _read(response: httpx.Response, url: str, validators: Validators | Non
     data = bytearray()
     async for chunk in response.aiter_bytes():
         data.extend(chunk)
-        if len(data) > MAX_BYTES:
-            raise ValueError('Source exceeds the 8 MB payload limit')
+        if len(data) > max_bytes:
+            raise ValueError(f'Source exceeds the {max_bytes // 1_000_000} MB payload limit')
     return bytes(data)
 
 

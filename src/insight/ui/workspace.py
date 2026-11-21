@@ -33,6 +33,8 @@ class WorkspaceState:
     technique_days: int = 30
     #: The period on the prioritised CVE tab, in days.
     cve_days: int = 30
+    #: The industry on the industry threats tab (TIP 2.10).
+    threat_industry: str = 'government'
     #: Unsaved note text per document. Panels re-render whenever anything changes (a review, a finished source
     #: sync in the background, ...); without this, re-rendering silently discarded the analyst's typing.
     note_drafts: dict[str, str] = field(default_factory=dict)
@@ -64,6 +66,8 @@ class Workspace:
     show_entity: Callable[[str], None] = _noop
     #: Search the inbox for a word, as if typed into its search box (set by the inbox).
     search_reports: Callable[[str], None] = _noop
+    #: Open a group's threat guide by its ATT&CK ID or actor ID (set by the industry threats tab).
+    open_guide: Callable[[str], None] = _noop
 
     def authorized(self) -> bool:
         """Re-checked on every callback: signing out in another tab revokes this page immediately."""

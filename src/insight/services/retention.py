@@ -3,7 +3,9 @@
 Reports carry victims' names, addresses and hosts, so data-protection law can require deleting one. This
 replaces the runbook's manual SQL procedure with one audited transaction:
 
-- the report's observations, notes and ATT&CK technique tags are deleted with it;
+- the report's observations, notes and ATT&CK technique tags are deleted with it, and so are the analyst's
+  links from groups and rules to it (TIP 2.10); an industry mapping that cited it loses that citation and is
+  deleted when nothing else supports it;
 - indicators that no other report mentions are deleted too, with any verdict on them (the verdict rested on
   reports that no longer exist);
 - the revision chain is repaired: later revisions point past the deleted one, and when it was the current
@@ -22,7 +24,18 @@ from dataclasses import asdict, dataclass
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
-from ..models import Document, DocumentTechnique, Enrichment, Entity, EntityAssessment, Note, Observation
+from ..models import (
+    ActorDocument,
+    Document,
+    DocumentTechnique,
+    Enrichment,
+    Entity,
+    EntityAssessment,
+    IndustryClaim,
+    Note,
+    Observation,
+    RuleLink,
+)
 from .audit import audit
 
 MAX_REASON_LENGTH = 500
@@ -112,6 +125,16 @@ def delete_document(db: Session, document_id: str, reason: str) -> DeletionResul
     db.execute(delete(Observation).where(Observation.document_id == doc.id))
     db.execute(delete(Note).where(Note.document_id == doc.id))
     db.execute(delete(DocumentTechnique).where(DocumentTechnique.document_id == doc.id))
+    db.execute(delete(ActorDocument).where(ActorDocument.document_id == doc.id))
+    db.execute(delete(RuleLink).where(RuleLink.target_kind == 'document', RuleLink.target_id == doc.id))
+    db.execute(
+        delete(IndustryClaim).where(
+            IndustryClaim.document_id == doc.id,
+            IndustryClaim.citation_url == '',
+            IndustryClaim.decision == 'added',
+        )
+    )
+    db.execute(update(IndustryClaim).where(IndustryClaim.document_id == doc.id).values(document_id=None))
     content_hash = doc.content_hash
     db.delete(doc)
     db.flush()  # Gone before a predecessor is made current: one current revision per item (a unique index).
