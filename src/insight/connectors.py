@@ -22,7 +22,7 @@ from defusedxml import ElementTree
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from . import __version__, egress
+from . import __version__, egress, otx
 from .abusech import parse_abusech
 from .feed_items import MAX_FEED_ITEMS as MAX_FEED_ITEMS
 from .feed_items import FeedItem as FeedItem
@@ -34,9 +34,9 @@ from .services.alerts import known_kev, queue_kev_alerts
 # Re-exported: the registry used to live here, and tests and scripts still name it through this module.
 from .source_registry import CSAF_BASE as CSAF_BASE
 from .source_registry import CSAF_INBOX_LIMIT as CSAF_INBOX_LIMIT
+from .source_registry import OTX_SUBSCRIBED_URL, in_use
 from .source_registry import SOURCES as SOURCES
 from .source_registry import Source as Source
-from .source_registry import in_use
 
 MAX_BYTES: Final = 8_000_000
 #: Seconds one whole download may take (code review L6). ``httpx.Timeout(25)`` only limits each wait for data,
@@ -700,6 +700,38 @@ def _record_failure(session_factory: SessionFactory, key: str, message: str) -> 
         db.add(SourceRun(source_key=key, status='error', message=message))
 
 
+async def fetch_otx() -> bytes:
+    """Fetch page one of this operator's subscriptions. Never follow provider-supplied links."""
+    key = os.environ.get('INSIGHT_OTX_API_KEY', '').strip()
+    if not key:
+        raise ValueError('Set INSIGHT_OTX_API_KEY to sync subscribed pulses')
+    if len(key) > 512 or not key.isascii() or not key.isprintable() or ' ' in key:
+        raise ValueError('Check INSIGHT_OTX_API_KEY: the key must be one printable token')
+    try:
+        return await download(
+            OTX_SUBSCRIBED_URL, {'page': '1', 'limit': str(otx.PAGE_SIZE)}, headers={'X-OTX-API-KEY': key}
+        )
+    except httpx.HTTPStatusError as exc:
+        status = exc.response.status_code
+        hint = ' (check INSIGHT_OTX_API_KEY)' if status in (401, 403) else ''
+        raise ValueError(f'OTX answered HTTP {status}{hint}') from None
+    except Exception:
+        # Transport diagnostics can quote a request header, including its secret value.
+        raise ValueError('The OTX subscription request failed') from None
+
+
+def _store_otx(session_factory: SessionFactory, source: Source, payload: bytes) -> str:
+    batch = otx.parse_pulses(payload, source)
+    with session_factory.begin() as db:
+        set_actor(db, f'connector:{source.key}')
+        added = _ingest_items(db, source, batch.items)
+        message = (
+            f'Read {len(batch.items)} public pulses; {added} new reports. Skipped {batch.skipped} pulses.'
+        )
+        db.add(SourceRun(source_key=source.key, status='success', message=message))
+    return message
+
+
 def switches(session_factory: SessionFactory) -> dict[str, bool]:
     with session_factory() as db:
         return source_switches(db)
@@ -748,6 +780,8 @@ async def sync_source(session_factory: SessionFactory, key: str) -> str:
         raise SourceSwitchedOff(source)
     try:
         # Database work is synchronous; keep it off the event loop so the UI stays responsive.
+        if source.kind == 'otx':
+            return await asyncio.to_thread(_store_otx, session_factory, source, await fetch_otx())
         if source.kind == 'csaf':
             changed = [f for url in source.indexes if (f := await fetch_if_changed(session_factory, url))]
             if not changed:

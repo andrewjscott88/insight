@@ -64,7 +64,8 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
       exports ([ADR 0021](docs/adr/0021-threat-research-sources.md)); STIX and MISP must apply them too.
 - [x] **TIP 1.5 abuse.ch connectors:** URLhaus, ThreatFox and MalwareBazaar (indicators and metadata only, never
       samples; keys from the environment).
-- [ ] **TIP 1.6 AlienVault OTX pulses** with the operator's own key.
+- [x] **TIP 1.6 AlienVault OTX pulses** with the operator's own key. Imports subscribed public CLEAR/WHITE
+      pulses and their supported indicators. [Operator guide](docs/RUNBOOK.md#8-sources-enrichment-and-their-failures).
 - [x] **Review D2 CIDR indicator kind:** IPv4 and IPv6 network ranges in report review, search and IOC export.
 - [x] **Review D2 E-mail indicator kind:** review and find full addresses across reports, with a personal-data warning on each address.
 - [ ] [#9](https://github.com/andrewjscott88/insight/issues/9) **TIP 1.7 Extraction quality (M1),** ongoing: a

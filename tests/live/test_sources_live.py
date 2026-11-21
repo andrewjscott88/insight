@@ -16,6 +16,7 @@ import pytest
 
 from insight import connectors
 from insight.abusech import parse_abusech
+from insight.otx import parse_pulses
 
 pytestmark = pytest.mark.live
 
@@ -26,6 +27,11 @@ if os.environ.get('INSIGHT_LIVE_TESTS') != '1':
 @pytest.mark.parametrize('key', sorted(connectors.SOURCES))
 def test_source_is_reachable_and_parsable(key: str) -> None:
     source = connectors.SOURCES[key]
+    if source.kind == 'otx':
+        if not os.environ.get('INSIGHT_OTX_API_KEY'):
+            pytest.skip('OTX subscriptions need INSIGHT_OTX_API_KEY')
+        parse_pulses(asyncio.run(connectors.fetch_otx()), source)
+        return
     if source.kind == 'csaf':
         items, skipped = asyncio.run(connectors.fetch_csaf(source))
         assert skipped == 0, f'{key}: {skipped} of the newest advisories could not be read'

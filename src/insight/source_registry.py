@@ -21,6 +21,7 @@ from typing import Final, Literal
 #: repeats IT.
 CSAF_BASE: Final = 'https://raw.githubusercontent.com/cisagov/CSAF/develop/csaf_files/'
 CSAF_INBOX_LIMIT: Final = 25
+OTX_SUBSCRIBED_URL: Final = 'https://otx.alienvault.com/api/v1/pulses/subscribed'
 
 Category = Literal['vulnerabilities', 'threat research', 'news', 'indicators']
 Reuse = Literal['public', 'metadata']
@@ -45,7 +46,7 @@ class Source:
     name: str
     #: The feed for ``kev`` and ``rss`` sources. For ``csaf`` sources, the page people open to browse them.
     url: str
-    kind: Literal['kev', 'rss', 'csaf', 'abusech']
+    kind: Literal['kev', 'rss', 'csaf', 'abusech', 'otx']
     note: str
     #: Fixed download URLs when ``url`` points to the publisher page people can open in the workspace.
     indexes: tuple[str, ...] = ()
@@ -184,6 +185,16 @@ SOURCES: Final[dict[str, Source]] = {
             'the file details.',
             indexes=('https://mb-api.abuse.ch/api/v1/',),
             category='indicators',
+            optional=True,
+        ),
+        Source(
+            'alienvault-otx',
+            'AlienVault Open Threat Exchange (OTX)',
+            OTX_SUBSCRIBED_URL,
+            'otx',
+            'Import public pulses you subscribe to with your own OTX key. Insight reads only pulses marked '
+            'CLEAR or WHITE. It keeps the title, link and indicators. Publisher terms apply.',
+            category='threat research',
             optional=True,
         ),
     )
