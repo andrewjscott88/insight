@@ -74,6 +74,7 @@ Set in `.env` (Compose reads it) or the process environment. Real environment va
 | `INSIGHT_ABUSECH_AUTH_KEY` | no | (none) | Account key for the optional URLhaus, ThreatFox and MalwareBazaar Community APIs. Sent in the `Auth-Key` header to the enabled publisher API. |
 | `INSIGHT_NVD_API_KEY` | no | (none) | A free NIST NVD API key: CVE lookups at NVD every 0.7 s instead of every 6.5 s ([ADR 0023](adr/0023-automatic-cve-lookups.md)). Sent only in NVD's `apiKey` header, never logged |
 | `NICEGUI_STORAGE_PATH` | no | `/data/.nicegui` in the image | Must be writable |
+| `INSIGHT_OTX_API_KEY` | no | (none) | The operator's OTX subscription key. Set it on the host and switch on the AlienVault OTX source. |
 
 Never commit `.env`: a pre-commit hook and CI block it. Treat the file like the password it contains.
 
@@ -357,7 +358,7 @@ daily sync stays on its hour. Changing **Start at** moves the schedules that are
 is tried again after 5, then 10 minutes, and each attempt appears in *Recent sync activity*. `GET /api/jobs`
 lists recent jobs.
 
-GET feeds use the publisher's cache validators (`If-None-Match`, `If-Modified-Since`). All feeds compare the
+Public GET feeds use the publisher's cache validators (`If-None-Match`, `If-Modified-Since`). These feeds and the abuse.ch feeds compare the
 response bytes with the last successful import. An unchanged feed records `Unchanged since the last
 sync.` and nothing else. After an upgrade, every source is read once in full.
 
@@ -374,6 +375,20 @@ evidence withheld from exports. Check your abuse.ch access and sharing terms bef
 redistributing data. Community access has fair-use limits, and commercial use may require a subscription.
 [URLhaus API](https://urlhaus-api.abuse.ch/) · [ThreatFox API](https://threatfox.abuse.ch/api/) ·
 [MalwareBazaar API](https://bazaar.abuse.ch/api/) · [abuse.ch terms](https://abuse.ch/terms-of-use/)
+
+**AlienVault Open Threat Exchange (OTX).** Set `INSIGHT_OTX_API_KEY` in the host environment (or Compose
+`.env`), restart Insight, then turn on **AlienVault Open Threat Exchange (OTX)** in Sources. **Sync now**
+requests the first 25 subscribed pulses. Insight imports only explicitly public pulses marked TLP:CLEAR
+or its former name, WHITE. Recent sync activity gives the numbers imported and skipped. A missing key,
+refused request or malformed response records an error. A valid empty page is a successful sync.
+
+Insight keeps each eligible pulse's ID, title, source link and supported indicator values from its first
+100 indicator entries. It leaves descriptions and reference articles at OTX. A pulse keeps the same ID
+across syncs, and changes to its imported content create a report revision. Unsubscribing or a subsequent
+change to private visibility leaves the previously imported public snapshot in the workspace. Source reuse
+is metadata-only. Review the terms for your intended use, including the non-commercial use condition for
+free access. [OTX DirectConnect and keys](https://otx.alienvault.com/api) ·
+[OTX end-user agreement](https://www.levelblue.com/legal/otx-eula-terms)
 
 **CVE lookups** (FIRST EPSS and NIST NVD) send only the CVE number. People start one with *Look up this CVE*
 after agreeing to the request. **Automatic lookups** ([ADR 0023](adr/0023-automatic-cve-lookups.md)) are off

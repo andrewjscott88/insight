@@ -2,10 +2,12 @@
 
 ## Unreleased
 
-### Optional abuse.ch indicator feeds
+### Optional indicator feeds
 
 - The Sources tab can now sync URLhaus, ThreatFox and MalwareBazaar using an operator's abuse.ch key.
   The feeds start switched off. They ingest recent indicator metadata and keep source evidence in Insight.
+- Added optional AlienVault OTX subscription sync. With your own key, Insight imports public CLEAR/WHITE
+  pulses as reports and links revisions to their OTX pulse ID. [Runbook](docs/RUNBOOK.md#8-sources-enrichment-and-their-failures).
 
 **Upgrading from 0.6.0:** migrations `0009` (ATT&CK technique tags), `0010` (source switches), `0011`
 (alerts), `0012` (CVE lookup failures) and `0013` (more KEV fields; the next KEV sync fills them) run at start-up, or with `make migrate`. Reports stored before the upgrade get their technique tags when you run

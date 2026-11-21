@@ -44,6 +44,8 @@ A single-operator threat-intelligence workbench, run locally or published behind
   schedules** (off by default; every hour, 6 hours or day, per source or for all, from a time of day you choose,
   in UTC) so the feeds and the brief stay fresh by themselves. An unchanged feed is not downloaded again (`ETag` / `Last-Modified`). See
   [ADR 0018](docs/adr/0018-opt-in-scheduled-syncs.md).
+- **OTX subscriptions** import public CLEAR/WHITE pulses as reports with their indicators and source links.
+  Set your own `INSIGHT_OTX_API_KEY` and turn on the source in the workspace. [Runbook](docs/RUNBOOK.md#8-sources-enrichment-and-their-failures)
 - **Threat landscape** opens the workspace ([ADR 0020](docs/adr/0020-threat-landscape.md)): a plain-English
   executive summary of the last 7 or 30 days, compared with the 4 weeks or months before. Which kinds of threat
   are **rising**, **new** or **quieter** (ransomware, phishing, data theft, supply chain, zero-days and 8 more,
