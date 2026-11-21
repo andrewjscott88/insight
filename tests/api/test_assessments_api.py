@@ -239,3 +239,23 @@ def test_the_export_preview_counts_what_the_filtered_export_contains(
         export = services.export_iocs(db, query)
     assert counts == {key: export['counts'][key] for key in ('iocs', 'documents', 'mentions')}
     assert [ioc['value'] for ioc in export['iocs']] == [OTHER_IP]
+
+
+@pytest.mark.parametrize(
+    ('value', 'shown'),
+    [
+        ('=HYPERLINK("http://evil.example")', '\'=HYPERLINK("http://evil.example")'),
+        ('+1', "'+1"),
+        ('-2', "'-2"),
+        ('@SUM(A1)', "'@SUM(A1)"),
+        ('\tx', "'\tx"),
+        ('\rx', "'\rx"),
+        ('198.51.100.7', '198.51.100.7'),
+        ('', ''),
+    ],
+)
+def test_regression_n1_csv_cells_cannot_start_a_formula(value: str, shown: str) -> None:
+    """Review N1: a spreadsheet opening the blocklist CSV must not evaluate a value as a formula."""
+    from insight.web.routes.exports import cell
+
+    assert cell(value) == shown

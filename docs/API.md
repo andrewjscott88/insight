@@ -294,7 +294,9 @@ these hold:
 - the verdict's own TLP label is within your limit.
 
 `format=txt` (default): one value per line, sorted, never defanged. `format=csv`: `value,kind,decided_at,
-expires_at,tlp` with a header row. Audited as `ioc.blocklist`; shares the `ioc-export` budget.
+expires_at,tlp` with a header row; a cell that would start with `=`, `+`, `-`, `@`, a tab or a carriage return
+gets a leading `'` so spreadsheets never run it as a formula (code review N1). Audited as `ioc.blocklist`; shares
+the `ioc-export` budget.
 
 ## Entities
 

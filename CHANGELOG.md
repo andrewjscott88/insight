@@ -49,6 +49,8 @@ CVEs in reports they can see; starting a lookup stays refused to them. The new p
 - **L7, CI images pinned by tag:** gitleaks (with the repository mounted), ZAP (on the host network) and the
   rehearsal's registry now run from digests, and `scripts/check_pins.py` fails on any third-party `docker run`
   image that is not pinned by digest. Dependabot does not update these; docs/CI_CD.md says how to.
+- **N1, spreadsheet formulas in the blocklist CSV:** a cell starting with `=`, `+`, `-`, `@`, a tab or a carriage
+  return now gets a leading `'`, so a spreadsheet shows it as text.
 
 ### Changed: a clearer executive brief (from #39)
 - Keep the **Insight** name and symbol; use **Cyber Threat Intelligence Feed** as the tagline and remove
