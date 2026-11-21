@@ -10,6 +10,7 @@ say why a value is unsafe to block, so the blocklist leaves it out whatever its 
 * ``reserved-name``: special-use and internal names (``.test``, ``.local``, ``example.com``).
 * ``common-benign``: a short list of vendor domains that reports cite constantly; blocking them would cut off
   updates or e-mail. User-content platforms (``github.io``, cloud storage) are deliberately not on it.
+* ``personal-data``: e-mail addresses can identify people. Review them before sharing.
 
 Pure functions, no SQL, no network.
 """
@@ -22,7 +23,7 @@ from urllib.parse import urlsplit
 
 from .extraction import SPECIAL_USE_TLDS
 
-Flag = Literal['non-routable', 'documentation', 'reserved-name', 'common-benign']
+Flag = Literal['non-routable', 'documentation', 'reserved-name', 'common-benign', 'personal-data']
 FLAGS: Final[tuple[Flag, ...]] = get_args(Flag)
 
 DOCUMENTATION_NETWORKS: Final = tuple(
@@ -141,6 +142,8 @@ def url_flags(value: str) -> frozenset[Flag]:
 
 def flags(kind: str, value: str) -> tuple[Flag, ...]:
     """The warning flags for one indicator, in ``FLAGS`` order (stable for exports). Hashes and CVEs: none."""
+    if kind == 'email':
+        return ('personal-data',)
     if kind == 'ip':
         found = ip_flags(value)
     elif kind == 'cidr':

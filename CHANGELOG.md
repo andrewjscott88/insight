@@ -16,15 +16,20 @@ fields are additive. TLP-limited API keys may now read cached CVE scores (`GET /
 CVEs in reports they can see; starting a lookup stays refused to them. The new password-free access
 (`INSIGHT_DEV_NO_AUTH`) is off unless you set it to `on`.
 
+### E-mail addresses in reports
+
+- Insight can highlight an e-mail address in its source report and show other reports that mention the same
+  mailbox. Each address carries a personal-data warning. IOC exports can filter out entries with that flag.
+- New reports and revisions use `regex-v4`. Earlier reports keep their original observations and review decisions.
+
 ### Network ranges in reports
 
 - Insight now recognizes IPv4 and IPv6 network ranges (CIDR). Analysts can review a whole range,
   find other reports that mention it, and include it in indicator exports. The original spelling stays in
-  the evidence. New reports and revisions use `regex-v3`. Previously stored observations keep their
-  original extraction version and review decisions. `0.0.0.0/0` and `::/0` ("every address", common in
-  firewall and cloud rules) are not recorded.
-- **IOC exports:** the default (every kind) now includes `cidr` entries. Pass `--kind`, or `kinds` in the API,
-  to keep the previous set; a consumer that checks `kind` against the old schema needs the updated one.
+  the evidence. CIDR support was introduced with `regex-v3`. Insight skips the universal networks
+  `0.0.0.0/0` and `::/0`, which occur in firewall and cloud rules.
+- **IOC exports:** the default now includes `cidr` entries. Select the previous kinds with `--kind` or the API's
+  `kinds` field. Consumers that validate indicator kinds need the updated schema.
 
 ### Manage alert destinations on the host
 

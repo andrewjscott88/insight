@@ -67,7 +67,7 @@
       "description": "Traffic Light Protocol 2.0 label, least to most restrictive."
     },
     "kind": {
-      "enum": ["cve", "url", "sha512", "sha256", "sha1", "md5", "ip", "domain", "cidr"]
+      "enum": ["cve", "url", "sha512", "sha256", "sha1", "md5", "ip", "domain", "cidr", "email"]
     },
     "review_status": {
       "enum": ["unreviewed", "accepted", "rejected"],
@@ -78,8 +78,8 @@
       "description": "An analyst's verdict on the indicator: what it means, as opposed to review (whether it was copied correctly). `unknown` when none was recorded, or when its own label is above the export's TLP limit."
     },
     "flag": {
-      "enum": ["non-routable", "documentation", "reserved-name", "common-benign"],
-      "description": "Why a value is unsafe to block: a private or reserved address, a documentation range, a special-use name, or a vendor domain reports cite constantly. Computed from the value (docs/IOC_EXPORT.md)."
+      "enum": ["non-routable", "documentation", "reserved-name", "common-benign", "personal-data"],
+      "description": "Warning shown on private or reserved addresses, documentation ranges, special-use names, common vendor domains and personal data such as e-mail addresses (docs/IOC_EXPORT.md)."
     },
     "triage_status": {
       "enum": ["new", "reviewing", "reviewed"],

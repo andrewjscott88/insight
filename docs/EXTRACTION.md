@@ -1,4 +1,4 @@
-# Indicator extraction (`regex-v3`)
+# Indicator extraction (`regex-v4`)
 
 `insight/extraction.py` turns report text into **mentions**: kind, canonical value, exact character offsets and
 surrounding evidence. It is deterministic. It never judges maliciousness or attributes activity; accepting an
@@ -24,9 +24,9 @@ and the raw span always appears in its evidence.
 
 In code, `extract()` creates one `_Mentions` collector (steps 1 and 3: the refanged view, the position map and
 `add()`, which validates, canonicalises and records each candidate once) and runs one pass per family in a fixed
-order: `_add_urls` (URLs and their host domains; returns the URL spans), `_add_domains`, `_add_ips`,
-`_add_hashes` and `_add_cves`. The context predicates (`_within`, `_is_fragment`, `_is_ambiguous_name`) are
-module-level functions. URLs run first so that names and addresses inside them are attributed to the URL.
+order. The e-mail pass records each mailbox and masks its span in the working copy. The URL, domain, IP,
+hash and CVE passes see the surrounding text. This keeps an address such
+as `CVE-2024-12345@example.org` together as one observation and preserves its original evidence.
 
 ## Kinds and canonical forms
 
@@ -35,6 +35,7 @@ module-level functions. URLs run first so that names and addresses inside them a
 | `cve` | `CVE-YYYY-NNNN…` (4+ digits, any case) | Upper case |
 | `url` | `http://` / `https://` up to whitespace, quotes, `<>`, `` ` ``, `\|` | Lower-case scheme and host, IDNA host, **credentials removed**, port/path/query/fragment kept verbatim |
 | `domain` | Dotted names with a **known TLD**; international names | Lower case, punycode (`xn--…`), no trailing dot |
+| `email` | Mailbox with a dotted domain, e.g. `Desk+Alert@EXAMPLE.org` | `Desk+Alert@example.org`. The mailbox name keeps its case. The domain uses the same lower-case IDNA form as domain indicators. |
 | `ip` | IPv4, IPv6 (including embedded IPv4, bracketed, with ports or zone IDs) | Compressed; IPv4-mapped IPv6 → the IPv4 address |
 | `cidr` | IPv4 or IPv6 network address and prefix length | Compressed network address with the prefix, e.g. `2001:db8::/32` |
 | `md5`, `sha1`, `sha256`, `sha512` | Hex runs of exactly 32/40/64/128 characters | Lower case |
@@ -58,7 +59,11 @@ module-level functions. URLs run first so that names and addresses inside them a
 | Zone IDs | `fe80::1%eth0` | `fe80::1` (the zone is host-local context) |
 | Wrapped hashes | 48 hex + newline + 16 hex | Joined into one SHA-256. An **even** split into two valid lengths (32 + 32) is kept as two hashes, because it cannot be told apart from the common one-hash-per-line list. |
 | URL punctuation | `(see https://x/a).`, `https://en.wikipedia.org/wiki/Foo_(bar)` | Trailing punctuation and *unbalanced* closing brackets are trimmed; balanced ones are kept |
-| E-mail addresses | `soc@example.org` | Neither the address nor its parts are extracted (no e-mail kind yet) |
+| E-mail addresses | `Analyst+Case@Example[.]org` | One `email` indicator, `Analyst+Case@example.org`, flagged as personal data. The original spelling stays in the evidence. |
+
+E-mail extraction covers common unquoted ASCII mailbox names and dotted domains with a recognized suffix.
+A `mailto:` link with a single explicit recipient contributes that recipient's address.
+The extractor skips quoted mailbox names, IP-literal domains, and addresses embedded in web URLs.
 
 Limits: at most 2,000 mentions per document (larger documents are rejected with a message to split them),
 and 90 characters of evidence on each side.

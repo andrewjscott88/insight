@@ -39,6 +39,7 @@ FLAG_LABELS: Final[dict[Flag, str]] = {
     'documentation': 'Example address',
     'reserved-name': 'Reserved name',
     'common-benign': 'Common vendor site',
+    'personal-data': 'Personal data',
 }
 
 

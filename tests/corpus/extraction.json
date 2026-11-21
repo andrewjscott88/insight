@@ -248,8 +248,45 @@
     {
       "id": "email-only",
       "text": "Report phishing to soc@example.org; the sender was spoof.user@example.net.",
-      "expected": [],
-      "note": "E-mail addresses are not an entity kind; their parts must not become domains."
+      "expected": [
+        [
+          "email",
+          "soc@example.org"
+        ],
+        [
+          "email",
+          "spoof.user@example.net"
+        ]
+      ]
+    },
+    {
+      "id": "email-defanged-idn",
+      "text": "The sender was <Reply.Team+Case42[@]Café[.]EXAMPLE>.",
+      "expected": [
+        [
+          "email",
+          "Reply.Team+Case42@xn--caf-dma.example"
+        ]
+      ]
+    },
+    {
+      "id": "email-malformed",
+      "text": "Rejected .leading@example.org, trailing.@example.net and two..dots@example.com.",
+      "expected": []
+    },
+    {
+      "id": "email-in-url",
+      "text": "Archived directory: https://portal.example.org/profiles/owner@example.net",
+      "expected": [
+        [
+          "url",
+          "https://portal.example.org/profiles/owner@example.net"
+        ],
+        [
+          "domain",
+          "portal.example.org"
+        ]
+      ]
     },
     {
       "id": "file-names",

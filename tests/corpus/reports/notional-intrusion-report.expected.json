@@ -1,5 +1,5 @@
 {
-  "description": "Ground truth for notional-intrusion-report.md: what an analyst SHOULD extract. Defanged indicators count (refanged); e-mail addresses, file names, code identifiers, version numbers and ATT&CK IDs do not.",
+  "description": "Ground truth for notional-intrusion-report.md: what an analyst SHOULD extract. Defanged indicators count (refanged); file names, code identifiers, version numbers and ATT&CK IDs do not.",
   "expected": [
     [
       "cve",
@@ -44,6 +44,10 @@
     [
       "ip",
       "198.51.100.77"
+    ],
+    [
+      "email",
+      "billing@invoices.example.net"
     ],
     [
       "domain",

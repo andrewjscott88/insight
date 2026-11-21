@@ -166,6 +166,83 @@ def test_domain(text: str, expected: list[str]) -> None:
     assert values(text, 'domain') == expected
 
 
+@pytest.mark.parametrize(
+    ('raw', 'expected'),
+    [
+        ('InBox.Team+VIP@Dept.EXAMPLE.Org', 'InBox.Team+VIP@dept.example.org'),
+        ('Ops_2-Test[@]Relay[.]Example', 'Ops_2-Test@relay.example'),
+        ('Alice@bücher.example', 'Alice@xn--bcher-kva.example'),
+        ("O'Brien@example.org", "O'Brien@example.org"),
+        ('192.0.2.8@relay.example', '192.0.2.8@relay.example'),
+        ('CVE-2026-12345@relay.example', 'CVE-2026-12345@relay.example'),
+        ('a' * 32 + '@relay.example', 'a' * 32 + '@relay.example'),
+        ('sales.example+eu@sub.example.org', 'sales.example+eu@sub.example.org'),
+    ],
+)
+def test_email_is_one_mention_with_its_original_evidence(raw: str, expected: str) -> None:
+    text = f'📄 The report lists <{raw}>.'
+    (mention,) = extract(text)
+    assert (mention.kind, mention.value) == ('email', expected)
+    assert text[mention.start : mention.end] == raw
+    assert raw in mention.evidence
+    assert canonical('email', raw) == expected
+
+
+@pytest.mark.parametrize(
+    'raw',
+    [
+        '.name@example.org',
+        'name.@example.org',
+        'a..b@example.org',
+        'a@b@example.org',
+        'a[@]b@example.org',
+        'a@example.org[@]x.example',
+        "'desk@example.org",
+        "part.''desk@example.org",
+        'éname@example.org',
+        'name@host.bad-tld',
+        'name@example.org..invalid',
+        'a@_sip.example.org',
+        'a' * 65 + '@example.org',
+        'a@' + ('a' * 62 + '.') * 4 + 'org',
+        '"two names"@example.org',
+        'support@[192.0.2.1]',
+        'a@localhost',
+    ],
+)
+def test_email_rejects_malformed_or_unsupported_forms(raw: str) -> None:
+    assert values(raw, 'email') == []
+    with pytest.raises(ValueError):  # noqa: PT011 - the canonicalisation contract.
+        canonical('email', raw)
+
+
+def test_email_ignores_credentials_paths_and_queries_even_in_unsupported_or_invalid_urls() -> None:
+    text = (
+        'https://operator:secret@example.org/a@relay.example '
+        'hxxps://docs.example/query?q=admin[@]example[.]org '
+        'ftp://user:pass@relay.example and https://user@bad.example:badport/ '
+        'then Analyst@Example.org. The other address is analyst@example.org.'
+    )
+    assert values(text, 'email') == ['Analyst@example.org', 'analyst@example.org']
+
+
+def test_single_quoted_mailbox_excludes_the_delimiters() -> None:
+    raw = "O'Brien@example.org"
+    text = f"Send to '{raw}'."
+    (mention,) = extract(text)
+    assert (mention.kind, mention.value, text[mention.start : mention.end]) == ('email', raw, raw)
+
+
+def test_mailto_only_extracts_a_single_explicit_recipient() -> None:
+    raw = 'Desk[@]Reports[.]Example'
+    text = f'Use MAILTO:{raw}?cc=other[@]sample[.]example&body=visit.example now.'
+    (mention,) = extract(text)
+    assert (mention.kind, mention.value) == ('email', 'Desk@reports.example')
+    assert text[mention.start : mention.end] == raw
+    assert extract('mailto:a@example.org,b[@]relay[.]example') == []
+    assert extract('mailto:?cc=other[@]sample[.]example') == []
+
+
 def test_invalid_candidate_does_not_stop_later_matches() -> None:
     """Found by mutation testing: ``continue`` -> ``break`` after an invalid candidate survived."""
     text = '999.1.2.3 then 192.0.2.8; ftp://bad.example/ then https://good.example/'
