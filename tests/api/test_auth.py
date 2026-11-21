@@ -7,6 +7,7 @@ import base64
 import contextlib
 import dataclasses
 import hashlib
+import hmac
 import json
 import logging
 import re
@@ -363,3 +364,31 @@ def test_failed_sign_ins_are_logged_without_the_password(
     assert any('Failed sign-in attempt' in m for m in messages)
     assert any('Operator signed in' in m for m in messages)
     assert not any('hunter2' in m or 'longtestpassword' in m for m in messages)
+
+
+@pytest.mark.parametrize(
+    ('supplied', 'same'),
+    [
+        ('longtestpassword', True),
+        ('longtestpasswor', False),
+        ('', False),
+        ('longtestpassword!', False),
+        ('ü', False),
+    ],
+)
+def test_regression_n4_the_password_check_compares_fixed_length_digests(
+    supplied: str, same: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review N4: compare_digest on the raw values leaked the password's length through timing."""
+    from insight.web import auth
+
+    lengths: list[tuple[int, int]] = []
+    real = hmac.compare_digest
+
+    def spy(a: bytes, b: bytes) -> bool:
+        lengths.append((len(a), len(b)))
+        return bool(real(a, b))
+
+    monkeypatch.setattr('insight.web.auth.hmac.compare_digest', spy)
+    assert auth.same_secret(supplied, 'longtestpassword') is same
+    assert lengths == [(32, 32)]
