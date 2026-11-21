@@ -13,4 +13,5 @@
 | Contribute | [CONTRIBUTING](../CONTRIBUTING.md), [TESTING](TESTING.md) |
 | Cut a release or understand the pipeline | [RELEASING](RELEASING.md), [CI_CD](CI_CD.md) |
 | See what a release was validated against | [VALIDATION](VALIDATION.md), [CHANGELOG](../CHANGELOG.md) |
+| See what is planned next | [ROADMAP](../ROADMAP.md), then the detailed plan in [ROADMAP-TIP](ROADMAP-TIP.md) |
 | Plan LLM features | [LLM_EXTENSION](LLM_EXTENSION.md) |

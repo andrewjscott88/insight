@@ -127,9 +127,12 @@ TLS reverse proxy (optional; the container listens on loopback)
   records it on every event, so service signatures did not change.
 - **Sign-in MFA** (`totp.py`, ADR 0015): optional, `INSIGHT_MFA=on`; the TOTP secret is paired from the CLI.
 
-No live connection happens at startup. Sources must be run manually. Syncs share an in-process lock. Provider
-lookups are explicitly requested and globally throttled for the single operator. There is no durable queue/retry
-scheduler; failed jobs produce an error record and are manually retried.
+No live connection happens at startup. Sources sync when the operator asks (**Sync now**, **Sync all sources**)
+or on opt-in schedules, off by default ([ADR 0018](adr/0018-opt-in-scheduled-syncs.md)): both go through the
+`jobs` table, and one in-process runner (`INSIGHT_RUN_JOBS`) works through it, one sync at a time under the same
+lock as **Sync now**. A failed scheduled sync is tried again after 5, then 10 minutes, then recorded as failed;
+every attempt appears in *Recent sync activity*. Provider lookups (NVD, EPSS) are explicitly requested and
+globally throttled for the single operator.
 
 ## Next milestones
 
