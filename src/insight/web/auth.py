@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import hmac
 import logging
 import secrets
@@ -131,14 +130,21 @@ def rate_limit_policy(method: str, path: str) -> Policy:
     return READ if method in SAFE_METHODS else WRITE
 
 
+#: A random key for :func:`same_secret`, new in every process; never stored or logged.
+_COMPARE_KEY: Final = secrets.token_bytes(32)
+
+
 def same_secret(supplied: str, expected: str) -> bool:
     """Constant-time comparison that does not reveal the expected secret's length (code review N4).
 
     ``hmac.compare_digest`` on the raw values returns early when the lengths differ, so response times could
-    tell a guesser how long the password is. SHA-256 digests always have the same length.
+    tell a guesser how long the password is. Both values are first turned into HMAC-SHA256 tags under a
+    random per-process key (the "double HMAC" comparison), which always have the same length. Nothing is
+    stored: this is a comparison, not password hashing.
     """
     return hmac.compare_digest(
-        hashlib.sha256(supplied.encode()).digest(), hashlib.sha256(expected.encode()).digest()
+        hmac.new(_COMPARE_KEY, supplied.encode(), 'sha256').digest(),
+        hmac.new(_COMPARE_KEY, expected.encode(), 'sha256').digest(),
     )
 
 

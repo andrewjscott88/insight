@@ -12,6 +12,7 @@ from nicegui import ui
 from ..appearance import TEXT_SIZE_COOKIE, THEME_COOKIE, dark_mode_value, text_size_choice, theme_choice
 from ..models import SessionFactory
 from .appearance import TextSizeSwitch, ThemeSwitch
+from .cves import build_cves
 from .entities import build_entities
 from .glossary import open_glossary
 from .inbox import build_inbox
@@ -97,6 +98,7 @@ def register_ui(app: FastAPI, session_factory: SessionFactory) -> None:
             build_stats(ws)
             with ui.tabs().props('align=left no-caps').classes('evidence-tabs w-full') as tabs:
                 inbox_tab = _tab('Intelligence inbox', 'Inbox')
+                cves_tab = _tab('Prioritised CVEs', 'CVEs')
                 entities_tab = _tab('Entity explorer', 'Entities')
                 techniques_tab = _tab('ATT&CK techniques', 'ATT&CK')
                 watch_tab = _tab('Watch terms', 'Watch')
@@ -114,6 +116,8 @@ def register_ui(app: FastAPI, session_factory: SessionFactory) -> None:
             with ui.tab_panels(tabs, value=inbox_tab).classes('w-full bg-transparent p-0'):
                 with ui.tab_panel(inbox_tab).classes('p-0'):
                     build_inbox(ws)
+                with ui.tab_panel(cves_tab).classes('panel p-4 sm:p-5'):
+                    build_cves(ws)
                 with ui.tab_panel(entities_tab).classes('panel p-4 sm:p-5'):
                     build_entities(ws)
                 with ui.tab_panel(techniques_tab).classes('panel p-4 sm:p-5'):

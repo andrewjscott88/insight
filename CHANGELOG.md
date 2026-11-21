@@ -3,7 +3,7 @@
 ## Unreleased
 
 **Upgrading from 0.6.0:** migrations `0009` (ATT&CK technique tags), `0010` (source switches), `0011`
-(alerts) and `0012` (CVE lookup failures) run at start-up, or with `make migrate`. Reports stored before the upgrade get their technique tags when you run
+(alerts), `0012` (CVE lookup failures) and `0013` (more KEV fields; the next KEV sync fills them) run at start-up, or with `make migrate`. Reports stored before the upgrade get their technique tags when you run
 `make attack-backfill` once (safe to run again). The new threat-research sources start switched off: Insight
 contacts no new host until you switch one on. **Exports change for SANS ISC and NCSC reports:** their text and
 evidence are no longer included (their publishers allow metadata only). Every 0.6.0 API field is unchanged; new
@@ -22,6 +22,18 @@ CVEs in reports they can see; starting a lookup stays refused to them. The new p
 - Insight now recognizes IPv4 and IPv6 network ranges (CIDR). Analysts can review a whole range,
   find other reports that mention it, and include it in indicator exports. The original spelling stays in
   the evidence. CIDR support was introduced with `regex-v3`.
+
+### Added: a prioritised CVE view, and a brief that uses ransomware use, NVD and EPSS (TIP 1.3)
+- **Prioritised CVEs** tab and `GET /api/cves` ([ADR 0024](docs/adr/0024-prioritised-cves.md)): the CVEs in your
+  reports, most urgent first by stated rules: used in ransomware (CISA KEV), known exploited, likely to be
+  attacked soon (EPSS 10% or more), critical (CVSS 9 or more), high (CVSS 7 or more). Each row says why it is
+  there, lists the facts behind it and opens its newest report. Follows the TLP limit; the demo is left out.
+- **The brief:** *Exploited now* lists ransomware-linked entries first; the summary says how many; new findings
+  **Used in ransomware attacks** (first) and **Likely to be attacked soon** (with the EPSS caveat). *Most
+  severe* now also uses NIST NVD's score for any CVE a new report mentions, says where each score comes from,
+  and shows NVD's beside a CISA advisory's when they differ.
+- **More of CISA KEV (TIP 1.1):** the weakness name, known ransomware use, notes and CWEs are kept (migration
+  `0013`), and the reader shows ransomware use and the name beside a CVE. KEV report text is unchanged.
 
 ### Fixed: field labels no longer overlap their examples
 - An empty field showed its label and its example on top of each other (for example "Watch term" over
@@ -67,8 +79,8 @@ CVEs in reports they can see; starting a lookup stays refused to them. The new p
   `LIMIT`) instead of loading every CVE and cache row.
 - **N3, a stale gitleaks exemption:** the test's fake API key carries an inline `gitleaks:allow`, so scans of
   the working tree stay clean wherever the line moves; the history fingerprint stays for `gitleaks detect`.
-- **N4, the password's length:** sign-in compares SHA-256 digests of the password instead of the raw values, so
-  response times no longer hint at its length.
+- **N4, the password's length:** sign-in compares fixed-length HMAC tags of the password (random per-process
+  key) instead of the raw values, so response times no longer hint at its length.
 - **N5, formatting:** the Python examples in docs/ALERTS.md, docs/API.md and docs/LLM_EXTENSION.md are
   formatted, so `ruff format --check .` passes on the whole repository.
 

@@ -171,6 +171,17 @@ class KEVRecord(Base):
     due_date: Mapped[str] = mapped_column(String(30))
     required_action: Mapped[str] = mapped_column(Text)
     imported_at: Mapped[str] = mapped_column(String(40), default=now)
+    #: CISA's name for the weakness, such as "Palo Alto Networks PAN-OS Command Injection Vulnerability".
+    vulnerability_name: Mapped[str] = mapped_column(Text, default='', server_default='')
+    #: ``knownRansomwareCampaignUse``: ``Known`` or ``Unknown`` (``''`` before migration 0013's first import).
+    ransomware_use: Mapped[str] = mapped_column(String(20), default='', server_default='')
+    notes: Mapped[str] = mapped_column(Text, default='', server_default='')
+    #: Weakness types (``CWE-78``), comma-separated.
+    cwes: Mapped[str] = mapped_column(Text, default='', server_default='')
+
+    @property
+    def ransomware(self) -> bool:
+        return self.ransomware_use == 'Known'
 
 
 class WatchTerm(Base):

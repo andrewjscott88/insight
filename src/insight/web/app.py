@@ -31,6 +31,7 @@ from .auth import (
     session_checker,
 )
 from .boundary import BoundaryMiddleware
+from .routes.cves import _register_cve_routes
 from .routes.documents import _register_document_routes
 from .routes.entities import _register_entity_routes
 from .routes.exports import _register_export_routes
@@ -177,6 +178,7 @@ def create_app(settings: Settings | None = None, *, with_ui: bool = True) -> Fas
     for register in (
         _register_workspace_routes,
         _register_landscape_routes,
+        _register_cve_routes,
         _register_document_routes,
         _register_triage_routes,
         _register_export_routes,

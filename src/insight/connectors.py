@@ -68,7 +68,14 @@ KEV_STRING_FIELDS: Final = (
     'dueDate',
     'requiredAction',
     'shortDescription',
+    'vulnerabilityName',
+    'knownRansomwareCampaignUse',
+    'notes',
 )
+#: CISA writes ``Known`` or ``Unknown``; anything else is stored as ``''`` (not known either way).
+KEV_RANSOMWARE: Final = frozenset({'Known', 'Unknown'})
+KEV_CWE: Final = re.compile(r'CWE-\d{1,5}', re.ASCII)
+MAX_KEV_CWES: Final = 20
 
 PROVIDERS: Final[dict[str, str]] = {
     'epss': 'https://api.first.org/data/v1/epss',
@@ -520,6 +527,14 @@ def _validate_kev_rows(payload: bytes) -> list[dict[str, str]]:
             if not isinstance(value, str) or len(value) > MAX_KEV_FIELD:
                 raise ValueError('Invalid KEV record field')
             clean[key] = value
+        if clean['knownRansomwareCampaignUse'] not in KEV_RANSOMWARE:
+            clean['knownRansomwareCampaignUse'] = ''
+        cwes = row.get('cwes', [])
+        if not isinstance(cwes, list) or len(cwes) > MAX_KEV_CWES:
+            raise ValueError('Invalid KEV record field')
+        if not all(isinstance(c, str) and KEV_CWE.fullmatch(c) for c in cwes):
+            raise ValueError('Invalid KEV record field')
+        clean['cwes'] = ','.join(dict.fromkeys(cwes))
         validated.append(clean)
     return validated
 
@@ -546,6 +561,10 @@ def import_kev(db: Session, payload: bytes) -> tuple[int, int]:
         record.date_added = row['dateAdded']
         record.due_date = row['dueDate']
         record.required_action = row['requiredAction']
+        record.vulnerability_name = row['vulnerabilityName']
+        record.ransomware_use = row['knownRansomwareCampaignUse']
+        record.notes = row['notes']
+        record.cwes = row['cwes']
         record.imported_at = imported_at
     added = 0
     newest = sorted(validated, key=lambda r: r['dateAdded'], reverse=True)[:KEV_INBOX_LIMIT]
