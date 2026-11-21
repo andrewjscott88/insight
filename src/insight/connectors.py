@@ -81,7 +81,19 @@ class ConnectorError(Exception):
 
 
 class ProviderError(ConnectorError):
-    """An upstream provider failed or returned something unusable (maps to HTTP 502)."""
+    """An upstream provider failed or returned something unusable (maps to HTTP 502).
+
+    ``provider_wide`` says whether the problem stops every lookup at the provider (no network, rate limit,
+    refused key, server error) or only concerns the one request's answer (review M2).
+    """
+
+    def __init__(self, message: str, *, provider_wide: bool = True) -> None:
+        super().__init__(message)
+        self.provider_wide = provider_wide
+
+
+#: HTTP answers that concern the whole provider, not one CVE: a refused key or rate limit, and server errors.
+PROVIDER_WIDE_STATUSES: Final = frozenset({401, 403, 429})
 
 
 class SourceSyncError(ConnectorError):
@@ -750,16 +762,17 @@ async def fetch_provider_json(provider: str, params: Mapping[str, str]) -> dict[
         code = exc.response.status_code
         # NVD refuses a wrong key with a client error, so point at the setting (never at the key itself).
         hint = ' (check INSIGHT_NVD_API_KEY)' if headers and code in (401, 403, 404) else ''
-        raise ProviderError(f'{provider.upper()} answered HTTP {code}{hint}') from exc
+        wide = code in PROVIDER_WIDE_STATUSES or code >= 500
+        raise ProviderError(f'{provider.upper()} answered HTTP {code}{hint}', provider_wide=wide) from exc
     except (httpx.HTTPError, OSError, ValueError) as exc:
         # Size-limit, redirect and DNS-policy violations are upstream problems too, not bad client input.
         raise ProviderError(f'{provider.upper()} request failed: {type(exc).__name__}') from exc
     try:
         payload = json.loads(raw)
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-        raise ProviderError(f'{provider.upper()} returned a non-JSON response') from exc
+        raise ProviderError(f'{provider.upper()} returned a non-JSON response', provider_wide=False) from exc
     if not isinstance(payload, dict):
-        raise ProviderError(f'{provider.upper()} returned an unexpected response')
+        raise ProviderError(f'{provider.upper()} returned an unexpected response', provider_wide=False)
     return payload
 
 

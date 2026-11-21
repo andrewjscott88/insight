@@ -2,8 +2,8 @@
 
 ## Unreleased
 
-**Upgrading from 0.6.0:** migrations `0009` (ATT&CK technique tags), `0010` (source switches) and `0011`
-(alerts) run at start-up, or with `make migrate`. Reports stored before the upgrade get their technique tags when you run
+**Upgrading from 0.6.0:** migrations `0009` (ATT&CK technique tags), `0010` (source switches), `0011`
+(alerts) and `0012` (CVE lookup failures) run at start-up, or with `make migrate`. Reports stored before the upgrade get their technique tags when you run
 `make attack-backfill` once (safe to run again). The new threat-research sources start switched off: Insight
 contacts no new host until you switch one on. **Exports change for SANS ISC and NCSC reports:** their text and
 evidence are no longer included (their publishers allow metadata only). Every 0.6.0 API field is unchanged; new
@@ -21,6 +21,10 @@ CVEs in reports they can see; starting a lookup stays refused to them. The new p
   password included, and the operator's attempt waited behind every pending bad guess. The backstop now
   refuses only wrong passwords (still after the 1 s delay), and the delay no longer holds the check lock
   ([ADR 0002](docs/adr/0002-login-delay-not-lockout.md)).
+- **M2, one bad CVE could stop NVD scoring:** a CVE NVD cannot answer for is now set aside with a growing wait
+  (1 hour, doubling up to 7 days) while the rest of the batch goes on; the job fails only when every CVE in it
+  failed or the provider itself is unavailable. Migration `0012` adds `lookup_failures`
+  ([ADR 0023](docs/adr/0023-automatic-cve-lookups.md)).
 
 ### Changed: a clearer executive brief (from #39)
 - Keep the **Insight** name and symbol; use **Cyber Threat Intelligence Feed** as the tagline and remove

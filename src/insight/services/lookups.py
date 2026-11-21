@@ -17,7 +17,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..cve_scores import CveScores, scores
-from ..models import Document, Enrichment, Entity, Job, Observation, SourceSwitch
+from ..models import Document, Enrichment, Entity, Job, LookupFailure, Observation, SourceSwitch
 from .audit import DEFAULT_ACTOR, audit
 from .common import stamp
 from .jobs import enqueue_job
@@ -32,6 +32,10 @@ PUBLIC_TLPS: Final = ('CLEAR', 'GREEN')
 STALE_AFTER: Final[dict[str, timedelta]] = {'epss': timedelta(days=7), 'nvd': timedelta(days=30)}
 #: After a lookup job fails for good, wait this long before queueing that provider again.
 PAUSE_AFTER_FAILURE: Final = timedelta(hours=1)
+#: A CVE the provider could not answer for waits this long, doubling after each failure up to
+#: :data:`MAX_CVE_BACKOFF`, so one bad CVE never holds up the others (review M2).
+CVE_BACKOFF: Final = timedelta(hours=1)
+MAX_CVE_BACKOFF: Final = timedelta(days=7)
 _SWITCH: Final = 'lookup:{}'
 _CHUNK: Final = 500
 
@@ -77,7 +81,43 @@ def cves_to_look_up(db: Session, provider: str, *, at: datetime, limit: int) -> 
             )
         )
     )
-    return [cve for cve, _ in rows if cve not in fresh][:limit]
+    waiting = set(
+        db.scalars(
+            select(LookupFailure.cve).where(
+                LookupFailure.provider == provider, LookupFailure.retry_at > stamp(at)
+            )
+        )
+    )
+    return [cve for cve, _ in rows if cve not in fresh and cve not in waiting][:limit]
+
+
+def record_lookup_failure(db: Session, provider: str, cve: str, message: str, *, at: datetime) -> datetime:
+    """Note that ``provider`` could not answer for ``cve``; returns when it is tried again (review M2)."""
+    failure = db.get(LookupFailure, (provider, cve))
+    if failure is None:
+        failure = LookupFailure(provider=provider, cve=cve, failures=0)
+        db.add(failure)
+    failure.failures += 1
+    wait = min(CVE_BACKOFF * (1 << min(failure.failures - 1, 16)), MAX_CVE_BACKOFF)
+    failure.message, failure.failed_at, failure.retry_at = message[:200], stamp(at), stamp(at + wait)
+    return at + wait
+
+
+def clear_lookup_failure(db: Session, provider: str, cve: str) -> None:
+    """Forget earlier failures once ``provider`` has answered for ``cve``."""
+    if (failure := db.get(LookupFailure, (provider, cve))) is not None:
+        db.delete(failure)
+
+
+def lookup_failures(db: Session, *, at: datetime) -> dict[str, int]:
+    """How many CVEs each provider is waiting to try again (for the Sources tab)."""
+    rows = db.execute(
+        select(LookupFailure.provider, func.count())
+        .where(LookupFailure.retry_at > stamp(at))
+        .group_by(LookupFailure.provider)
+    ).all()
+    found = {provider: int(count) for provider, count in rows}
+    return {p: found.get(p, 0) for p in LOOKUP_PROVIDERS}
 
 
 def _paused(db: Session, provider: str, at: datetime) -> bool:

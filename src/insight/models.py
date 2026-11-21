@@ -355,6 +355,19 @@ class SourceSwitch(Base):
     actor: Mapped[str] = mapped_column(String(80), default='')
 
 
+class LookupFailure(Base):
+    """A CVE a provider could not answer for (review M2): it is not looked up by itself again until
+    ``retry_at`` (1 hour after the first failure, doubling up to 7 days), so it cannot hold up the rest."""
+
+    __tablename__ = 'lookup_failures'
+    provider: Mapped[str] = mapped_column(String(10), primary_key=True)
+    cve: Mapped[str] = mapped_column(String(40), primary_key=True)
+    failures: Mapped[int] = mapped_column(default=1)
+    message: Mapped[str] = mapped_column(String(200), default='')
+    failed_at: Mapped[str] = mapped_column(String(40), default=now)
+    retry_at: Mapped[str] = mapped_column(String(40), index=True)
+
+
 class FetchState(Base):
     """What a source URL returned last time, so the next fetch can be skipped when nothing changed.
 
