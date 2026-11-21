@@ -229,7 +229,7 @@ opt-in schedules and the job runner, and `ROADMAP.md` marks #10 done.
 - **Effort:** M
 - **Acceptance criteria:** Offline tests with recorded fixtures (follow `tests/fixtures` and `tests/unit/test_feeds.py` / `test_kev.py` style). Each source can sync, is idempotent, creates entities (url/domain/ip/hash), and shows up in Sources + Sync all. Live tests stay behind `INSIGHT_LIVE_TESTS=1`. No sample binaries stored.
 
-### 1.6 Add an AlienVault OTX pulse connector
+### 1.6 Add an AlienVault OTX pulse connector (implemented)
 
 - **What to build:** Optional curated connector for OTX pulses the operator subscribes to (API key required).
 - **Why / which TIP capability:** Community IOC sharing, closer to MISP-style pulses than to Mandiant IR reporting.
@@ -525,8 +525,8 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
 - [x] **1.2** Auto-enqueue NVD and EPSS lookups for new CVEs (opt-in, throttled): done, ADR 0023, with review B2 and C2
 - [x] **1.3** Brief uses ransomware flag, NVD CVSS, and EPSS (fact-only wording): done, ADR 0024, with a prioritised CVE view
 - [x] **1.4** Webhook/email notifications for watch-term hits and new KEV (`ROADMAP` #15)
-- [ ] **1.5** abuse.ch URLhaus, ThreatFox, and MalwareBazaar connectors (metadata/IOCs only)
-- [ ] **1.6** AlienVault OTX connector (operator API key)
+- [x] **1.5** abuse.ch URLhaus, ThreatFox, and MalwareBazaar connectors (metadata/IOCs only)
+- [x] **1.6** AlienVault OTX subscriptions with an operator API key, bounded to explicitly public CLEAR/WHITE pulses
 - [x] **1.7** 0.8.0 extraction-quality corpus expansion and benchmark ratchet (`ROADMAP` #9, ongoing)
 
 ### Phase 2 — Core TIP features (10)

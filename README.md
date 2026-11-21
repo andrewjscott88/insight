@@ -36,11 +36,16 @@ A single-operator threat-intelligence workbench, run locally or published behind
   The Record (news), for reporting on attacker groups, campaigns and malware. Insight keeps each item's title,
   short summary and link. Each publisher's reuse rule applies: only CISA's text leaves Insight in exports; for
   every other feed, exports carry titles, links, dates and indicators, not the publisher's words.
+- **Optional abuse.ch indicator feeds.** Import recent URLs from URLhaus, network indicators and hashes from
+  ThreatFox, and file hashes from MalwareBazaar. Set `INSIGHT_ABUSECH_AUTH_KEY` and enable the feeds you use.
+  Each entry links to its record at the publisher. The connector reads only the provider's metadata API.
 - Curated connectors: CISA KEV, CISA security advisories (CISA's machine-readable CSAF files), SANS ISC and UK
   NCSC feeds. **Sync now** per source, **Sync all sources** beside the threat landscape, and **opt-in
   schedules** (off by default; every hour, 6 hours or day, per source or for all, from a time of day you choose,
   in UTC) so the feeds and the brief stay fresh by themselves. An unchanged feed is not downloaded again (`ETag` / `Last-Modified`). See
   [ADR 0018](docs/adr/0018-opt-in-scheduled-syncs.md).
+- **OTX subscriptions** import public CLEAR/WHITE pulses as reports with their indicators and source links.
+  Set your own `INSIGHT_OTX_API_KEY` and turn on the source in the workspace. [Runbook](docs/RUNBOOK.md#8-sources-enrichment-and-their-failures)
 - **Threat landscape** opens the workspace ([ADR 0020](docs/adr/0020-threat-landscape.md)): a plain-English
   executive summary of the last 7 or 30 days, compared with the 4 weeks or months before. Which kinds of threat
   are **rising**, **new** or **quieter** (ransomware, phishing, data theft, supply chain, zero-days and 8 more,

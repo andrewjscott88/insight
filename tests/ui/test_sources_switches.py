@@ -11,6 +11,7 @@ from sqlalchemy import select
 
 from insight.cve_scores import NVD_NOTICE
 from insight.models import AuditEvent
+from insight.source_registry import CATEGORIES, SOURCES
 
 pytestmark = pytest.mark.ui
 
@@ -24,11 +25,14 @@ async def test_optional_sources_start_off_and_can_be_switched_on(user: User, ui_
     await user.should_see('Threat research')
     await user.should_see('Security news')
     await user.should_see('Cisco Talos')
+    await user.should_see('AlienVault Open Threat Exchange (OTX)')
+    defaults = [not s.optional for category in CATEGORIES for s in SOURCES.values() if s.category == category]
     buttons = sync_buttons(user)
-    assert len(buttons) == 10
-    assert [b.enabled for b in buttons] == [True] * 4 + [False] * 6
+    for name in ('Indicator feeds', 'URLhaus', 'ThreatFox', 'MalwareBazaar'):
+        await user.should_see(name)
+    assert [b.enabled for b in buttons] == defaults
     switches = sorted(user.find(kind=ui.switch, content='Use this source').elements, key=lambda s: s.id)
-    assert [s.value for s in switches] == [True] * 4 + [False] * 6
+    assert [s.value for s in switches] == defaults
     switches[4].set_value(True)  # Cisco Talos
     await user.should_see('Cisco Talos is on. Press Sync now to fetch its reports.')
     assert sync_buttons(user)[4].enabled

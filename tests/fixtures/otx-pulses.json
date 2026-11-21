@@ -1,0 +1,40 @@
+{
+  "count": 2,
+  "next": "https://example.invalid/untrusted-next-page",
+  "results": [
+    {
+      "id": "1234567890abcdef12345678",
+      "name": "Synthetic exercise for the OTX connector",
+      "description": "Publisher prose from a synthetic fixture.",
+      "public": 1,
+      "tlp": "white",
+      "created": "2026-11-15T12:00:00",
+      "modified": "2026-11-20T12:00:00",
+      "references": ["https://example.invalid/outside-reference"],
+      "indicators": [
+        {"type": "IPv4", "indicator": "198.51.100.17"},
+        {"type": "IPv6", "indicator": "2001:db8::17"},
+        {"type": "domain", "indicator": "lab.example"},
+        {"type": "hostname", "indicator": "sensor.lab.example"},
+        {"type": "URL", "indicator": "https://portal.example/study"},
+        {"type": "CVE", "indicator": "CVE-2024-12345"},
+        {"type": "FileHash-MD5", "indicator": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+        {"type": "FileHash-SHA1", "indicator": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+        {"type": "FileHash-SHA256", "indicator": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"},
+        {"type": "FileHash-SHA512", "indicator": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"},
+        {"type": "CIDR", "indicator": "203.0.113.0/24"},
+        {"type": "email", "indicator": "analyst@example.org"},
+        {"type": "IP-ADDRESS", "indicator": "192.0.2.84"},
+        {"type": "IPv4", "indicator": "198.51.100.999"},
+        {"type": "FilePath", "indicator": "/tmp/skip-fixture-value.example"}
+      ]
+    },
+    {
+      "id": "87654321abcdef0987654321",
+      "name": "Private fixture",
+      "public": false,
+      "TLP": "white",
+      "indicators": [{"type": "domain", "indicator": "confidential-marker.example"}]
+    }
+  ]
+}
