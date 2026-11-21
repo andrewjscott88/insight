@@ -89,10 +89,20 @@ things to search for, not a list of things the group used.
 
 ### Rules
 
-YARA and Sigma rules are stored as text with their source URL, licence and SHA-256, and linked to groups,
-techniques or reports. **Insight never compiles or runs them**; a shape check only catches pasting mistakes.
-Check the licence before sharing (Sigma's main repository uses the Detection Rule License). Add from the guide,
-the API or `insight rule-add FILE --kind sigma --link G0016 --link T1059.001`.
+Open **Detection rules** in a report to attach a saved rule or add new YARA or Sigma text. You can also
+add a rule from a group guide. The guide includes rules attached to that group, its techniques, and reports
+explicitly linked to the group. Insight displays the text without running it.
+
+Use `insight rule-add FILE --kind sigma --link G0016 --link T1059.001` to import a local file.
+Additional links accept `document:REPORT_ID`, `cve:CVE-2024-1234`, or `"malware:Example Family"`.
+An analyst supplies the CVE and family associations. They carry the rule’s sharing label. CVEs are
+normalized to uppercase. Family labels accept up to 36 ASCII letters, digits, spaces, dots, underscores
+and hyphens, and are stored lowercase.
+
+**Download rule and manifest** saves a ZIP containing `rule.yar` or `rule.yml` and `manifest.json`.
+Keep the two files together. The manifest records the rule’s name, source URL, licence, TLP label and
+SHA-256 of the enclosed UTF-8 file (CRLF is converted to LF). Report and actor links stay in Insight.
+Check the licence and sharing label before sending the file to another team.
 
 ## TLP
 

@@ -6,13 +6,13 @@ for each hypothesis. Every change is audited; labels above the caller's or the i
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 
 from ... import services
 from ...models import DetectionRule, Hunt, SessionFactory
-from ...schemas import HuntCheckInput, HuntInput, HuntUpdate, RuleInput, RuleLinkInput
+from ...schemas import HuntCheckInput, HuntInput, HuntUpdate, RuleInput, RuleLinkInput, RuleTarget
 from ..auth import AuthDependency, acting, reader_limit
 from .threats import write_limit
 
@@ -115,12 +115,25 @@ def _register_hunting_routes(app: FastAPI, sessions: SessionFactory, require_aut
             raise _errors(exc) from exc
 
     @app.get('/api/rules', dependencies=[Depends(require_auth)])
-    def rules(request: Request, kind: Literal['yara', 'sigma'] | None = None) -> list[dict[str, Any]]:
-        with sessions() as db:
-            return [
-                rule_view(r.rule, r.links)
-                for r in services.list_rules(db, max_tlp=reader_limit(request), kind=kind)
-            ]
+    def rules(
+        request: Request,
+        kind: Literal['yara', 'sigma'] | None = None,
+        target_kind: RuleTarget | None = None,
+        target_id: Annotated[str | None, Query(min_length=1, max_length=36)] = None,
+    ) -> list[dict[str, Any]]:
+        if (target_kind is None) != (target_id is None):
+            raise HTTPException(422, 'Provide target_kind and target_id together')
+        target = (
+            RuleLinkInput(target_kind=target_kind, target_id=target_id) if target_kind and target_id else None
+        )
+        try:
+            with sessions() as db:
+                return [
+                    rule_view(r.rule, r.links)
+                    for r in services.list_rules(db, max_tlp=reader_limit(request), kind=kind, target=target)
+                ]
+        except (LookupError, ValueError) as exc:
+            raise _errors(exc) from exc
 
     @app.post('/api/rules', status_code=201, dependencies=[Depends(require_auth)])
     def add(request: Request, payload: RuleInput) -> dict[str, Any]:
@@ -138,6 +151,22 @@ def _register_hunting_routes(app: FastAPI, sessions: SessionFactory, require_aut
             if found is None:
                 raise HTTPException(404, 'Rule not found')
             return rule_view(found, services.rule_links(db, [found.id])[found.id])
+
+    @app.get('/api/rules/{rule_id}/export', dependencies=[Depends(require_auth)], response_class=Response)
+    def download_rule(request: Request, rule_id: str) -> Response:
+        try:
+            with acting(sessions, request) as db:
+                archive = services.export_rule(db, rule_id, max_tlp=write_limit(app, request))
+        except LookupError as exc:
+            raise _errors(exc) from exc
+        return Response(
+            archive,
+            media_type='application/zip',
+            headers={
+                'Content-Disposition': f'attachment; filename="insight-rule-{rule_id}.zip"',
+                'Cache-Control': 'no-store',
+            },
+        )
 
     @app.delete('/api/rules/{rule_id}', dependencies=[Depends(require_auth)])
     def delete(request: Request, rule_id: str) -> dict[str, str]:

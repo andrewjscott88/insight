@@ -9,7 +9,7 @@ from nicegui import ui
 from nicegui.testing.user import User
 from sqlalchemy import select
 
-from insight.models import AuditEvent, Hunt, HuntCheck, IndustryClaim, ThreatActor
+from insight.models import AuditEvent, DetectionRule, Hunt, HuntCheck, IndustryClaim, ThreatActor
 from insight.schemas import DocumentInput
 from insight.services import ingest
 
@@ -125,3 +125,31 @@ async def test_a_rule_is_saved_and_shown_as_text(user: User, ui_env: SimpleNames
     await user.should_see('Rule saved and linked.')
     await user.should_see('Detection rules (1)')
     assert actions(ui_env, 'rule.') == ['rule.add', 'rule.link', 'rule.link']
+
+
+async def test_report_reader_attaches_and_displays_a_rule(user: User, ui_env: SimpleNamespace) -> None:
+    add_report(ui_env, 'Test bulletin', 'Analyst summary.')
+    add_report(ui_env, 'Second bulletin', 'Additional findings.')
+    await user.open('/')
+    await open_report(user, 'Test bulletin')
+    user.find(kind=ui.expansion, content='Detection rules (0)').elements.pop().open()
+    user.find(kind=ui.button, content='Add a rule to this report').click()
+    user.find(kind=ui.input, content='Name').type('Audit fixture')
+    user.find(kind=ui.textarea, content='Rule text').type(SIGMA)
+    user.find(kind=ui.input, content='Malware family').type('Example Family')
+    user.find(marker='save-detection-rule').click()
+    await user.should_see('Detection rules (1)')
+    user.find(kind=ui.expansion, content='Detection rules (1)').elements.pop().open()
+    user.find(kind=ui.expansion, content='Audit fixture').elements.pop().open()
+    await user.should_see('Download rule and manifest')
+    await user.should_see('malware example family')
+    assert actions(ui_env, 'rule.') == ['rule.add', 'rule.link', 'rule.link']
+    with ui_env.app.state.session_factory() as db:
+        rule_id = db.scalars(select(DetectionRule.id)).one()
+    await open_report(user, 'Second bulletin')
+    user.find(kind=ui.expansion, content='Detection rules (0)').elements.pop().open()
+    user.find(marker='choose-saved-rule').click()
+    user.find(marker='saved-rule').elements.pop().set_value(rule_id)
+    user.find(marker='attach-saved-rule').click()
+    await user.should_see('Rule linked to this report.')
+    await user.should_see('Detection rules (1)')

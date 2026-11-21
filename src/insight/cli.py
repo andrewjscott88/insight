@@ -226,7 +226,7 @@ def build_parser() -> argparse.ArgumentParser:
         action='append',
         default=[],
         metavar='REF',
-        help='rule-add: a group (G0016) or technique (T1059.001); repeatable',
+        help='rule-add: G0016, T1059.001, document:ID, cve:CVE-YYYY-NNNN or malware:NAME; repeatable',
     )
     threats.add_argument('--licence', default='', help="rule-add: the rule's licence, e.g. DRL-1.1")
     threats.add_argument(
