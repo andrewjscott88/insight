@@ -30,7 +30,7 @@ RECONNECT_SECONDS: Final = 30.0
 
 
 def _tab(label: str, short: str) -> ui.tab:
-    """A tab with its full label, shortened on phones so the tabs fit with little or no scrolling.
+    """A tab with its full label, shortened on phones; tabs that still do not fit wrap onto a second line.
 
     ``max-sm:hidden``, not ``hidden sm:block``: Quasar's ``.hidden`` is ``!important`` and beats ``sm:block``.
     """
@@ -85,7 +85,7 @@ def register_ui(app: FastAPI, session_factory: SessionFactory) -> None:
                     )
             build_stats(ws)
             build_brief(ws)
-            with ui.tabs().props('mobile-arrows align=left no-caps').classes('w-full') as tabs:
+            with ui.tabs().props('align=left no-caps').classes('w-full') as tabs:
                 inbox_tab = _tab('Intelligence inbox', 'Inbox')
                 entities_tab = _tab('Entity explorer', 'Entities')
                 techniques_tab = _tab('ATT&CK techniques', 'ATT&CK')
