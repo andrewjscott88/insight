@@ -37,8 +37,8 @@ SESSION_TTL_SECONDS: Final = int(services.SESSION_TTL.total_seconds())
 
 LOGIN_WINDOW_SECONDS: Final = 60
 
-#: Backstop only. The primary brute-force control is the per-failure delay with serialised checks, which
-#: slows guessing without letting a third party lock the operator out (see docs/SECURITY.md).
+#: Backstop: once this many sign-ins failed in the last minute, wrong passwords are refused with 429 (after
+#: the usual delay). The right password still signs in, so nobody can lock the operator out (ADR 0002).
 LOGIN_MAX_FAILURES: Final = 30
 
 #: Shown on the sign-in page while INSIGHT_MFA=on but no authenticator app is paired (sign-in is refused).
@@ -295,33 +295,38 @@ def _register_login(app: FastAPI, settings: Settings, templates: Jinja2Templates
                 status_code=503,
                 context={'csrf_token': csrf, 'error': MFA_UNPAIRED, 'mfa': mfa},
             )
-        # Checks run one at a time and each failure waits before answering: online guessing is slowed to
-        # roughly one attempt per `failed_login_delay`, while the operator can always still sign in.
+        # Checks run one at a time (the lock also keeps a code from being used twice), but the delay after a
+        # failure is served outside the lock: the operator never waits behind other clients' failures (M1).
+        # Once the backstop is reached, wrong passwords are refused, still after the delay; the right one
+        # signs in, so a flood of bad guesses cannot lock the operator out (ADR 0002).
         async with app.state.login_lock:
             current = time.time()
             app.state.failures[:] = [t for t in app.state.failures if current - t < LOGIN_WINDOW_SECONDS]
-            if len(app.state.failures) >= LOGIN_MAX_FAILURES:
-                log.warning('Sign-in refused: %d failures in the last minute', len(app.state.failures))
-                raise HTTPException(429, 'Too many login attempts; wait one minute')
+            limited = len(app.state.failures) >= LOGIN_MAX_FAILURES
             password_ok = hmac.compare_digest(password.encode(), settings.password.encode())
             # The code is only checked (and consumed) once the password is right, so wrong guesses never burn
             # a valid code. One answer for either mistake: nothing tells a guesser which factor was wrong.
             code_ok = not mfa
             if password_ok and mfa:
                 code_ok = await asyncio.to_thread(_check_code, sessions, code)
-            if not (password_ok and code_ok):
+            failed = not (password_ok and code_ok)
+            if failed and not limited:  # Bounded: at most LOGIN_MAX_FAILURES timestamps are kept.
                 app.state.failures.append(current)
-                reason = 'password' if not password_ok else 'authentication code'
-                failures = len(app.state.failures)
-                log.warning('Failed sign-in attempt: wrong %s (%d in the last minute)', reason, failures)
-                await asyncio.sleep(settings.failed_login_delay)
-                error = 'Incorrect password or authentication code.' if mfa else 'Incorrect password.'
-                return templates.TemplateResponse(
-                    request=request,
-                    name='login.html',
-                    status_code=401,
-                    context={'csrf_token': csrf, 'error': error, 'mfa': mfa},
-                )
+        if failed:
+            reason = 'password' if not password_ok else 'authentication code'
+            failures = len(app.state.failures)
+            log.warning('Failed sign-in attempt: wrong %s (%d in the last minute)', reason, failures)
+            await asyncio.sleep(settings.failed_login_delay)
+            if limited:
+                log.warning('Sign-in refused: %d failures in the last minute', failures)
+                raise HTTPException(429, 'Too many login attempts; wait one minute')
+            error = 'Incorrect password or authentication code.' if mfa else 'Incorrect password.'
+            return templates.TemplateResponse(
+                request=request,
+                name='login.html',
+                status_code=401,
+                context={'csrf_token': csrf, 'error': error, 'mfa': mfa},
+            )
         sid = await asyncio.to_thread(new_session_id, app, request.session.get('sid'), current)
         set_session_cookie(request, sid)
         log.info('Operator signed in%s', ' (password and authentication code)' if mfa else '')

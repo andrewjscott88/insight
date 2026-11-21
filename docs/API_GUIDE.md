@@ -536,6 +536,6 @@ print('read budget left:', client.get('/api/stats').headers['ratelimit'])
 | `400 Invalid host header` | URL host not in `INSIGHT_ALLOWED_HOSTS` | Add the host name you use |
 | `413 Request too large` | Body over 2 MB | Split the report |
 | `422 ... cannot be stored here` / `Refused: the text carries a TLP:RED marking` | Report above `INSIGHT_MAX_TLP` (or the key's limit) | Do not store it here, or reword a marking that only mentions the label |
-| `429` | Budget used up | Wait `Retry-After` seconds (recipe 5.5). Sign-in: 30 failures per minute |
+| `429` | Budget used up | Wait `Retry-After` seconds (recipe 5.5). Sign-in: a wrong password after 30 failures per minute (the right one still signs in) |
 | `502` | The external source or provider failed | Retry later; `GET /api/sources` shows the recorded error |
 | `503` on sign-in | MFA on, no authenticator app paired | `make mfa-enable` (pairs it) or `make mfa-disable` |

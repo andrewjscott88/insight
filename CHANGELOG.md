@@ -16,6 +16,12 @@ CVEs in reports they can see; starting a lookup stays refused to them. The new p
   "e.g. Palo Alto, VPN, identity"). The example now appears only once the label has moved up, as the
   framework intends; the readable colour of examples is unchanged.
 
+### Security: fixes from the 2026-11-21 code review
+- **M1, sign-in lockout:** 30 wrong passwords a minute from anyone used to refuse every sign-in, the right
+  password included, and the operator's attempt waited behind every pending bad guess. The backstop now
+  refuses only wrong passwords (still after the 1 s delay), and the delay no longer holds the check lock
+  ([ADR 0002](docs/adr/0002-login-delay-not-lockout.md)).
+
 ### Changed: a clearer executive brief (from #39)
 - Keep the **Insight** name and symbol; use **Cyber Threat Intelligence Feed** as the tagline and remove
   **Collect. Connect. Understand.** The threat landscape now leads the page, above the report tools.

@@ -15,7 +15,7 @@ page is the field-by-field reference.
    HttpOnly, SameSite=Strict).
 2. `POST /login` (form fields `csrf_token`, `password`, and `otp` when MFA is on) → `303` to `/` on
    success; `401` wrong password or authentication code (one message for both); `403` bad or missing CSRF
-   token; `429` throttled (more than 30 failures per minute; each failure waits ~1 s); `503` MFA is on but no
+   token; `429` a wrong password after 30 failures in the last minute (each failure waits ~1 s; the right password always signs in); `503` MFA is on but no
    authenticator app is paired (sign-in locked). MFA is off by default (`INSIGHT_MFA=on` or `make mfa-enable`
    turns it on); then `otp` is the 6-digit code from the app, and each code works once.
 3. `GET /api/session` → `{"csrf_token": "…"}`. Send it as `X-CSRF-Token` on **every non-GET** API request.

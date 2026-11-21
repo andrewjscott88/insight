@@ -242,9 +242,10 @@ the GUI meets is [ADR 0017](adr/0017-readability-standard.md).
 `cli`, `connector:<source>` or `system`. Events from before schema revision `0005` have an empty actor.
 
 ### Sign-in throttling (expected behaviour)
-Each failed sign-in waits about 1 s, and sign-ins are checked one at a time. More than 30 failures in one
-minute returns HTTP 429 for the rest of that minute. A legitimate operator can always sign in again after the
-window; there is no lockout.
+Each failed sign-in waits about 1 s before it is answered. After 30 failures in one minute, wrong passwords
+get HTTP 429 for the rest of that minute (still after the delay), and the log says `Sign-in refused`. The right
+password always signs in, even during a flood of bad guesses ([ADR 0002](adr/0002-login-delay-not-lockout.md)):
+there is no lockout.
 
 ## 5. Backup and restore
 
