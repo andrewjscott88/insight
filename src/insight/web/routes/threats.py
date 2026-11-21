@@ -145,7 +145,7 @@ def _register_threat_routes(app: FastAPI, sessions: SessionFactory, require_auth
             'ranking': 'Reports naming the group in the period, then latest public activity, then techniques',
             'actors': [entry_view(n, e) for n, e in enumerate(profile.entries, start=1)],
             'removed_by_you': [
-                {'ref': r.group_ref, 'reason': r.reason, 'tlp': r.tlp} for r in profile.removed
+                {'ref': r.group_ref, 'reason': r.reason, 'tlp': r.effective_tlp} for r in profile.removed
             ],
         }
 
@@ -203,7 +203,7 @@ def _register_threat_routes(app: FastAPI, sessions: SessionFactory, require_auth
                         'citation_url': c.citation_url,
                         'document_id': c.document_id,
                         'reason': c.reason,
-                        'tlp': c.tlp,
+                        'tlp': c.effective_tlp,
                         'by': c.actor,
                         'at': c.created_at,
                     }
@@ -266,7 +266,7 @@ def _register_threat_routes(app: FastAPI, sessions: SessionFactory, require_auth
     def build_guide(
         request: Request, ref: str, export_tlp: str | None, linked_only: bool, what: str
     ) -> ThreatGuide:
-        limit = services.stricter_limit(export_tlp, reader_limit(request))
+        limit = services.stricter_limit(export_tlp, reader_limit(request), app.state.settings.max_tlp)
         now = datetime.now(UTC)
         with acting(sessions, request) as db:
             try:

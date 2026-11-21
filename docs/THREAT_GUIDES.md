@@ -104,6 +104,11 @@ the API or `insight rule-add FILE --kind sigma --link G0016 --link T1059.001`.
   includes every sweep row (a row takes the label of its reports *and* of the verdict on the indicator, which
   can be stricter) and the reports behind a hypothesis's "in N of your reports" count. Exports may
   be made at a lower limit (`max_tlp=GREEN`) to share; anything above is left out, not redacted in place.
+* A rule's listed report and actor links are limited to visible targets. The exported rule and guide carry
+  the highest label of those references. Industry decisions inherit their cited report and actor labels.
+  Hunt records inherit their actor's label. Profiles include the labels of counted reports and candidates.
+* Guide downloads respect the instance limit and any stricter requested limit. Metadata-only publisher reports
+  can contribute a name match, title and report reference. Their publisher text stays in the workspace.
 * JSON exports carry `tlp`; Markdown has the label first and last; the Navigator layer has it in its name,
   description and metadata; CSV starts with a `# TLP:` line. Every export is audited as `actor.guide`.
 

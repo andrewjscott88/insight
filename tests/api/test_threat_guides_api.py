@@ -245,3 +245,50 @@ def test_a_hidden_industry_decision_looks_missing(
     response = client.post('/api/actors/G0016/industries', json=mine, headers=key(app, max_tlp='GREEN'))
     assert response.status_code == 404
     assert response.json()['detail'] == 'Industry mapping not found'
+
+
+def test_rule_links_and_guide_labels_follow_eligible_targets(
+    app: FastAPI, signed_in: TestClient, client: TestClient
+) -> None:
+    doc = ingest(app, 'Restricted report', 'Fictional training record.', 'AMBER')
+    actor = signed_in.post('/api/actors', json={'name': 'Fictional group', 'tlp': 'AMBER'}).json()['ref']
+    rid = signed_in.post(
+        '/api/rules', json={'kind': 'sigma', 'name': 'Training', 'body': SIGMA, 'tlp': 'GREEN'}
+    ).json()['id']
+    path = f'/api/rules/{rid}'
+    for kind, target in [('group', 'G0016'), ('document', doc), ('group', actor)]:
+        assert (
+            signed_in.post(f'{path}/links', json={'target_kind': kind, 'target_id': target}).status_code
+            == 200
+        )
+    for caller, headers, expected in [(signed_in, {}, 'AMBER'), (client, key(app, max_tlp='GREEN'), 'GREEN')]:
+        guide = caller.get('/api/actors/G0016/guide', headers=headers).json()
+        assert guide['tlp'] == expected
+        for result in (
+            caller.get(path, headers=headers).json(),
+            caller.get('/api/rules', headers=headers).json()[0],
+            guide['hunt']['rules'][0],
+        ):
+            assert result['tlp'] == expected
+            ids = {link['id'] for link in result['linked_to']}
+            assert ids == ({'G0016', doc, actor} if expected == 'AMBER' else {'G0016'})
+
+
+def test_a_cited_report_and_hunt_subject_set_the_minimum_label(
+    app: FastAPI, signed_in: TestClient, client: TestClient
+) -> None:
+    doc = ingest(app, 'Training report', 'Internal analyst summary.', 'AMBER')
+    claim = signed_in.post(
+        '/api/actors/G0016/industries',
+        json={'industry': 'energy', 'document_id': doc, 'tlp': 'CLEAR', 'reason': 'Training decision'},
+    )
+    assert claim.json()['tlp'] == 'AMBER'
+    actor = signed_in.post('/api/actors', json={'name': 'Training actor', 'tlp': 'AMBER'}).json()['ref']
+    hunt = signed_in.post(
+        f'/api/actors/{actor}/hunts', json={'title': 'Training case', 'tlp': 'GREEN'}
+    ).json()
+    assert hunt['tlp'] == 'AMBER'
+    headers = key(app, max_tlp='GREEN')
+    assert client.get(f'/api/hunts/{hunt["id"]}', headers=headers).status_code == 404
+    assert client.get('/api/actors/G0016', headers=headers).json()['your_industry_decisions'] == []
+    assert 'Training decision' not in client.get('/api/actors/G0016/guide', headers=headers).text
