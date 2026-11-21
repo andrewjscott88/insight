@@ -128,6 +128,11 @@ html { scroll-padding-bottom:8rem; }
   .q-select__dropdown-icon { font-size:1rem; }
   .q-field__label { color:var(--ins-muted); }
   .q-field__native::placeholder, .q-field__input::placeholder { color:var(--ins-muted);opacity:1; }
+  /* Quasar hides an example while the label sits inside the empty field, and shows it once the label
+     moves up. The readable colour above must not undo that, or the label and the example are drawn on top
+     of each other ("Watch term" over "e.g. Palo Alto, VPN"). Quasar's selector, in this layer so it wins. */
+  .q-field--labeled:not(.q-field--float) .q-field__native::placeholder,
+  .q-field--labeled:not(.q-field--float) .q-field__input::placeholder { color:transparent; }
   .q-field__control { background:var(--ins-field); }
   .q-field--outlined .q-field__control:before { border-color:var(--ins-field-border); }
   .q-field--outlined .q-field__control:hover:before { border-color:var(--ins-text); }
