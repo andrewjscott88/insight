@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import subprocess
 import sys
+from importlib.resources import files
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -235,6 +237,11 @@ def test_release_action_metadata_is_only_read_from_github() -> None:
         ('MPL-2.0 AND (Apache-2.0 OR MIT)', True),
         ('(GPL-2.0-only OR AGPL-3.0-only) AND MIT', False),
         ('Apache-2.0 WITH LLVM-exception', True),
+        ('MIT custom terms', False),
+        ('MIT OR', False),
+        ('MIT OR OR', False),
+        ('(MIT OR GPL-3.0-only', False),
+        ('MIT WITH AND', False),
     ],
 )
 def test_spdx_evaluation(expression: str, allowed: bool) -> None:
@@ -247,6 +254,16 @@ def test_spdx_evaluation(expression: str, allowed: bool) -> None:
         ({'license_expression': 'BSD-3-Clause'}, True, 'spdx'),
         ({'license': 'Apache 2.0'}, True, 'license-field'),
         ({'license': 'GPLv3'}, False, 'license-field'),
+        ({'license': 'MIT OR AFL-2.1'}, True, 'license-field'),
+        ({'license': 'MIT AND GPL-3.0-only'}, False, 'license-field'),
+        ({'license': 'MIT WITH restrictions'}, False, 'license-field'),
+        ({'license': 'UNKNOWN'}, False, 'none'),
+        (
+            {'license': 'UNKNOWN', 'classifier': ['License :: OSI Approved :: ISC License (ISCL)']},
+            True,
+            'classifiers',
+        ),
+        ({'license': 'UNKNOWN', 'classifier': ['License :: OSI Approved :: GPL']}, False, 'classifiers'),
         ({'classifier': ['License :: OSI Approved :: MIT License']}, True, 'classifiers'),
         (
             {'classifier': ['License :: OSI Approved :: GNU General Public License (GPL)']},
@@ -263,6 +280,33 @@ def test_licence_verdicts(fields: dict[str, object], allowed: bool, source: str)
 
 def test_runtime_dependencies_pass_the_licence_policy() -> None:
     assert check_licenses.main([]) == 0
+
+
+@pytest.mark.parametrize(
+    ('package', 'version', 'licence', 'expression', 'allowed'),
+    [
+        ('cpe', '1.3.1', 'LGPLv3', '', True),
+        ('cpe', '1.3.2', 'LGPLv3', '', False),
+        ('other', '1.3.1', 'LGPLv3', '', False),
+        ('cpe', '1.3.1', 'GPLv3', '', False),
+        ('cpe', '1.3.1', 'LGPLv3', 'AGPL-3.0-only', False),
+    ],
+)
+def test_cpe_licence_review_is_scoped_to_the_release(
+    package: str, version: str, licence: str, expression: str, allowed: bool
+) -> None:
+    meta = SimpleNamespace(json={'version': version, 'license': licence, 'license_expression': expression})
+    assert check_licenses.verdict(package, meta).allowed is allowed
+
+
+def test_cpe_matching_source_and_licences_ship_as_resources() -> None:
+    bundled = files('insight').joinpath('data', 'licenses')
+    archive = bundled.joinpath('cpe-1.3.1.tar.gz').read_bytes()
+    digest = 'f30a97881b6eb74a6d630552aebce03df22cddb7a587d632a13b4e14b66b95b0'
+    assert hashlib.sha256(archive).hexdigest() == digest
+    assert digest in (ROOT / 'requirements.lock').read_text()
+    assert 'GNU LESSER GENERAL PUBLIC LICENSE' in bundled.joinpath('LGPL-3.0.txt').read_text()
+    assert 'GNU GENERAL PUBLIC LICENSE' in bundled.joinpath('GPL-3.0.txt').read_text()
 
 
 # --------------------------------------------------------------------------- forbidden files

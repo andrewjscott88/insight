@@ -25,7 +25,9 @@ A single-operator threat-intelligence workbench, run locally or published behind
   and remove the rest in the reader, and new revisions keep those decisions. The **ATT&CK techniques** tab groups
   the techniques in your reports by tactic over a period you choose, opens the reports behind each one, and
   downloads a layer for ATT&CK Navigator. Never guessed from prose; no attribution. `make attack-backfill` tags
-  reports stored before 0.7.0. API: `/api/attack/*` and `/api/documents/{id}/techniques`.
+  reports stored before 0.7.0. STIX exports link each included report to its current catalog-backed tags,
+  with the report's sharing label and a link to the technique on MITRE's site.
+  API: `/api/attack/*` and `/api/documents/{id}/techniques`.
 - **Alerts** ([docs/ALERTS.md](docs/ALERTS.md)): when a new report mentions a watch term, or CISA adds a KEV
   entry, Insight tells a chat channel (Slack, Mattermost, Google Chat), your own tool (signed JSON webhook) or
   an e-mail address, within about 15 seconds of the sync. Each alert fires once; report titles go only up to
@@ -74,6 +76,7 @@ A single-operator threat-intelligence workbench, run locally or published behind
   product uses the NVD API but is not endorsed or certified by the NVD.
 - JSON report exports retain provenance and TLP; they are **not STIX** and do not authorize redistribution.
 - **IOC export**: one JSON file listing every indicator across your reports once, with its source reports, evidence, KEV context and the most restrictive TLP of the reports it includes. Filter by type, review status, highest TLP or report; defang for e-mail and tickets, and leave evidence out when sharing. **Export IOCs** in the workspace (with a live count preview), **Export this report's IOCs** in the reader, `insight export-iocs FILE` or `GET /api/iocs/export`. Not STIX and not a blocklist by itself: see [docs/IOC_EXPORT.md](docs/IOC_EXPORT.md).
+- **STIX 2.1 export** shares filtered indicators, CVEs and source reports with TLP 2.0 markings. Select STIX in **Export IOCs**, run `insight export-stix FILE`, or use `GET /api/iocs/stix`. Each bundle is validated offline. [STIX export guide](docs/IOC_EXPORT.md#stix-21-export)
 - **HTTP API with an API key for scripts and SIEMs**: one key, created, rotated and revoked only on the host (`make api-key-create` / `insight api-key`), sent as `Authorization: Bearer`. Read-only unless you choose read-write; mandatory expiry; stored as a hash only; optionally limited to a TLP label (`MAX_TLP=GREEN`: more restrictive reports are invisible to it). Per-caller rate limits with `RateLimit` headers and `429` + `Retry-After`. Guide with every `curl` command: [docs/API_GUIDE.md](docs/API_GUIDE.md); field reference: [docs/API.md](docs/API.md).
 - **TLP:RED is refused by default** (`INSIGHT_MAX_TLP=AMBER+STRICT`), including reports whose text carries a RED marking, so material meant for named recipients does not end up on a server. Set `INSIGHT_MAX_TLP=RED` to allow it.
 - **Optional sign-in MFA** (authenticator-app codes), off by default: `make mfa-enable` / `make mfa-disable`.

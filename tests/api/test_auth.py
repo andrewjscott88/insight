@@ -41,6 +41,7 @@ PROTECTED = [
     ('GET', '/api/documents/x'),
     ('GET', '/api/documents/x/export'),
     ('GET', '/api/iocs/export'),
+    ('GET', '/api/iocs/stix'),
     ('GET', '/api/iocs/blocklist'),
     ('GET', '/api/entities'),
     ('GET', '/api/entities/x'),

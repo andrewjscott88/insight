@@ -17,5 +17,24 @@ permission of The MITRE Corporation. MITRE ATT&CK and ATT&CK are registered
 trademarks of The MITRE Corporation. Terms of use:
 https://attack.mitre.org/resources/legal-and-branding/terms-of-use/
 
+Insight uses the unmodified cpe 1.3.1 Python library via stix2-validator.
+Copyright (C) 2013 Alejandro Galindo García and Roberto Abdelkader Martínez
+Pérez; upstream authors also include Aloïs Micard.
+https://github.com/nilp0inter/cpe
+The library is distributed under the GNU Lesser General Public License,
+version 3 (LGPLv3); source files also permit later versions. Insight ships the
+corresponding upstream source archive cpe-1.3.1.tar.gz (SHA-256
+f30a97881b6eb74a6d630552aebce03df22cddb7a587d632a13b4e14b66b95b0)
+with LGPL-3.0.txt and GPL-3.0.txt under insight/data/licenses in installed
+packages and images (src/insight/data/licenses in the source distribution).
+
+cpe is a separate, replaceable Python package. To modify it, unpack the bundled
+archive, edit the sources, and install the modified library into the same
+Python environment (for example: python -m pip install --no-deps --force-reinstall
+./cpe-1.3.1). For the container, build a compatible modified cpe wheel and
+install it in the runtime image before pip is removed. No changes to Insight
+are required. Modification of the library and reverse engineering for debugging
+such modifications are permitted under the LGPL.
+
 Third-party Python dependencies are installed from requirements.lock and retain
 their own licences; scripts/check_licenses.py enforces the permitted set.

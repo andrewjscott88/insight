@@ -533,7 +533,7 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
 
 - [ ] **2.1** STIX 2.1 export, validated (`ROADMAP` #12)
 - [ ] **2.2** STIX 2.1 import with TLP enforcement
-- [x] **2.3** ATT&CK catalog + manual/extracted technique tags
+- [x] **2.3** ATT&CK catalog, report and analyst tags, and TLP-marked technique references in STIX Reports
 - [ ] **2.4** MISP export/import (CLI first)
 - [ ] **2.5** Manual actor and campaign entities (no inferred attribution)
 - [ ] **2.6** Optional GreyNoise community IP enrichment

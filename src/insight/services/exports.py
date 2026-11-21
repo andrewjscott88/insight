@@ -23,9 +23,12 @@ from ..schemas import (
     IocExportQuery,
 )
 from ..source_registry import metadata_only
+from ..stix_export import build_stix_bundle
+from ..stix_validation import validate_stix_bundle
 from .assessments import visible_assessments
 from .audit import audit
 from .search import _document_conditions, _kev_view
+from .stix_techniques import add_stix_techniques
 
 #: Upper bound on indicator mentions in one IOC export, so a single request cannot exhaust memory.
 MAX_EXPORT_MENTIONS: Final = 100_000
@@ -187,26 +190,32 @@ def ioc_mentions(db: Session, query: IocExportQuery) -> list[IocMention]:
     return mentions
 
 
+def _selected_export(db: Session, query: IocExportQuery) -> tuple[dict[str, Any], set[str]]:
+    """Build both sharing formats from the same permitted set of mentions and publisher rights."""
+    mentions = ioc_mentions(db, query)
+    meanings = _meanings(db, mentions, query)
+    mentions = _by_meaning(mentions, query, {k: v.verdict for k, v in meanings.items()})
+    filters = query.model_dump(mode='json', exclude={'defang'})
+    result = build_export(
+        mentions,
+        filters=filters,
+        defanged=query.defang,
+        export_id=uid(),
+        generated_at=now(),
+        include_evidence=query.include_evidence,
+        assessments=meanings,
+    )
+    return result, {m.document_id for m in mentions if m.metadata_only}
+
+
 def export_iocs(db: Session, query: IocExportQuery) -> dict[str, Any]:
     """Build an ``insight-ioc-v1`` export for ``query`` and audit it (``ioc.export``).
 
     Shared by the API, the workspace and ``insight export-iocs``. The audit event's object ID is the
     ``export_id`` written into the file, so a file found later can be traced back to its audit record.
     """
-    mentions = ioc_mentions(db, query)
-    meanings = _meanings(db, mentions, query)
-    mentions = _by_meaning(mentions, query, {k: v.verdict for k, v in meanings.items()})
-    export_id = uid()
-    filters = query.model_dump(mode='json', exclude={'defang'})
-    result = build_export(
-        mentions,
-        filters=filters,
-        defanged=query.defang,
-        export_id=export_id,
-        generated_at=now(),
-        include_evidence=query.include_evidence,
-        assessments=meanings,
-    )
+    result, _ = _selected_export(db, query)
+    filters = result['filters']
     audit_detail = {
         'iocs': result['counts']['iocs'],
         'documents': result['counts']['documents'],
@@ -214,5 +223,18 @@ def export_iocs(db: Session, query: IocExportQuery) -> dict[str, Any]:
         'defanged': query.defang,
         'filters': filters,
     }
-    audit(db, 'ioc.export', export_id, json.dumps(audit_detail, sort_keys=True))
+    audit(db, 'ioc.export', result['export_id'], json.dumps(audit_detail, sort_keys=True))
     return result
+
+
+def export_stix(db: Session, query: IocExportQuery) -> dict[str, Any]:
+    """Export a validated STIX 2.1 snapshot and audit it in the caller's transaction."""
+    if query.defang:
+        raise ValueError('STIX indicator patterns require original values. Turn off defanging.')
+    export, metadata_only_ids = _selected_export(db, query)
+    bundle = build_stix_bundle(export, metadata_only_ids)
+    add_stix_techniques(db, bundle, max_tlp=query.max_tlp)
+    validate_stix_bundle(bundle)
+    detail = {'counts': export['counts'], 'tlp': export['tlp'], 'filters': export['filters']}
+    audit(db, 'stix.export', bundle['id'], json.dumps(detail, sort_keys=True))
+    return bundle

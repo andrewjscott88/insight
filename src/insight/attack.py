@@ -59,6 +59,7 @@ class Technique:
 class Catalog:
     version: str
     notice: str
+    terms: str
     tactics: tuple[Tactic, ...]
     techniques: dict[str, Technique]
 
@@ -95,6 +96,7 @@ def catalog() -> Catalog:
     return Catalog(
         version=raw['version'],
         notice=raw['notice'],
+        terms=raw['terms'],
         tactics=tuple(Tactic(t['id'], t['shortname'], t['name']) for t in raw['tactics']),
         techniques=techniques,
     )
