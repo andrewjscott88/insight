@@ -379,7 +379,8 @@ def test_failed_sign_ins_are_logged_without_the_password(
 def test_regression_n4_the_password_check_compares_fixed_length_digests(
     supplied: str, same: bool, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Review N4: compare_digest on the raw values leaked the password's length through timing."""
+    """Review N4: compare_digest on the raw values leaked the password's length through timing; the
+    comparison now sees two HMAC tags of the same length."""
     from insight.web import auth
 
     lengths: list[tuple[int, int]] = []
