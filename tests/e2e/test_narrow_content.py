@@ -61,3 +61,8 @@ def test_long_feed_text_fits_a_320px_phone_with_larger_text(context: Any, theme:
     assert card.evaluate('e => e.scrollWidth <= e.clientWidth')
     for selector in ('.q-btn__content', '.q-btn__content > .block', '.line-clamp-2'):
         assert card.locator(selector).evaluate('e => e.scrollWidth <= e.clientWidth')
+    card.get_by_role('button', name=long_url, exact=True).click()
+    reader = page.locator('.document-reader')
+    expect(reader.get_by_role('heading', name=long_url, exact=True)).to_be_visible()
+    # The tab panel clips reader overflow too: include title, source metadata, controls and indicators.
+    assert reader.evaluate('e => e.scrollWidth <= e.clientWidth')

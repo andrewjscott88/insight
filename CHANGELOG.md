@@ -16,7 +16,8 @@
   limit. No database migration is needed. Field reference: [API](docs/API.md#executive-brief).
 - Design, evidence rules and limits: [Executive brief](docs/EXECUTIVE_BRIEF.md).
 - Phone header controls wrap at narrow widths, including temporary open access with larger text at 320 px.
-  Long feed titles, URLs and source names wrap within their report cards instead of being cut off.
+  Long feed titles, URLs and source names wrap within their cards and opened reports instead of being cut off.
+  Report review controls and extracted values also stay within a narrow reader.
 
 ### Added: temporary password-free operator access
 - `INSIGHT_DEV_NO_AUTH=on` lets a visitor enter through `/login` without a password. It is **off by default**,

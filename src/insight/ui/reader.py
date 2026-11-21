@@ -47,13 +47,15 @@ def render_empty() -> None:
 def render_report(ws: Workspace, data: dict[str, Any], actions: ReaderActions) -> None:
     back_to_list_button()
     tlp_badge(data['tlp'])
-    heading(data['title'], 2, 'report-title break-value')
+    heading(data['title'], 2, 'report-title break-value w-full')
     if data['truncated']:
         ui.label(
             'Only part of this report was saved. The publisher’s text was longer than the summary Insight '
             'keeps, so the full report may have more indicators. Open the original to read all of it.'
         ).classes('text-warn prose')
-    ui.label(f'{data["source_name"]} · {data["created_at"][:10]}').classes('muted text-sm')
+    ui.label(f'{data["source_name"]} · {data["created_at"][:10]}').classes(
+        'muted text-sm prose break-value w-full'
+    )
     if data['source_url']:
         new_tab_link('Open the original report', data['source_url'])
     _render_revisions(data, actions)
@@ -62,7 +64,7 @@ def render_report(ws: Workspace, data: dict[str, Any], actions: ReaderActions) -
         value=data['status'],
         label='Document review',
         on_change=lambda event: actions.review_document(data['id'], event.value),
-    ).props('outlined').classes('w-60')
+    ).props('outlined').classes('w-60 max-w-full')
     heading('Report text', 3, 'subsection-title mt-3')
     ui.label(data['body']).classes('source-body panel p-4 w-full').props(
         'role=region aria-label="Report text"'
@@ -118,7 +120,7 @@ def _render_observation(
     with ui.column().classes('panel w-full p-4 gap-2'):
         with ui.row().classes('items-center w-full'):
             ui.badge(obs['kind']).props('outline')
-            ui.label(obs['value']).classes('font-mono break-value flex-1')
+            ui.label(obs['value']).classes('font-mono break-value flex-1 min-w-0')
         flag_badges(obs['kind'], obs['value'])
         ui.label(obs['evidence']).classes('evidence text-sm w-full')
         ui.label(
