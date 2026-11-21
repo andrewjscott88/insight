@@ -14,7 +14,7 @@ _UPLOAD = """
     const picker = document.querySelector('.stix-bundle-file');
     const file = picker?.files?.[0];
     if (!file) return {error: 'Choose a STIX bundle file first.'};
-    if (file.size > 2000000) return {error: 'Choose a bundle of 2 MB or less.'};
+    if (file.size > 2000000) return {error: 'Choose a bundle of 2 megabytes or less.'};
     try {
         const session = await fetch('/api/session');
         if (!session.ok) return {error: 'Sign in again before importing a bundle.'};
@@ -42,7 +42,7 @@ _UPLOAD = """
 
 def build_stix_import(ws: Workspace, dialog: ui.dialog) -> None:
     with ui.expansion('Import a STIX bundle').classes('w-full'):
-        ui.label('Choose a STIX 2.1 JSON file up to 2 MB. The workspace sharing limit applies.').classes(
+        ui.label('Choose a STIX 2.1 JSON file up to 2 megabytes. The workspace sharing limit applies.').classes(
             'muted prose'
         )
         ui.element('input').props(
