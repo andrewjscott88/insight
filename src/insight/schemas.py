@@ -52,14 +52,13 @@ def most_restrictive(*levels: str) -> str:
     return max(levels, key=TLP_LEVELS.index)
 
 
-class DocumentInput(BaseModel):
+class ReportMetadata(BaseModel):
     title: str = Field(min_length=1, max_length=300)
-    body: str = Field(min_length=1, max_length=200_000)
     source_name: str = Field(min_length=1, max_length=160)
     source_url: str = Field(default='', max_length=2000)
     tlp: TLP = DEFAULT_TLP
 
-    @field_validator('title', 'body', 'source_name')
+    @field_validator('title', 'source_name')
     @classmethod
     def not_blank(cls, value: str) -> str:
         return _not_blank(value)
@@ -74,6 +73,15 @@ class DocumentInput(BaseModel):
             raise ValueError('Source URL must be an HTTP(S) URL without credentials')
         _ = parts.port  # Raises ValueError for a malformed/out-of-range port.
         return value
+
+
+class DocumentInput(ReportMetadata):
+    body: str = Field(min_length=1, max_length=200_000)
+
+    @field_validator('body')
+    @classmethod
+    def body_not_blank(cls, value: str) -> str:
+        return _not_blank(value)
 
 
 class DocumentReview(BaseModel):
@@ -202,7 +210,7 @@ class IocExportQuery(BaseModel):
 
 ClaimDecision = Literal['added', 'removed']
 RuleKind = Literal['yara', 'sigma']
-RuleTarget = Literal['group', 'technique', 'document']
+RuleTarget = Literal['group', 'technique', 'document', 'cve', 'malware']
 HuntStatus = Literal['open', 'closed']
 HuntResult = Literal['not-checked', 'nothing-found', 'suspicious', 'confirmed']
 HUNT_RESULTS: tuple[str, ...] = get_args(HuntResult)
@@ -222,8 +230,8 @@ def _https_url(value: str) -> str:
     return value
 
 
-class ActorInput(BaseModel):
-    """``POST /api/actors``: an actor the analyst tracks (TIP 2.5). Never created by Insight itself."""
+class CampaignInput(BaseModel):
+    """A manually curated campaign."""
 
     model_config = ConfigDict(frozen=True, extra='forbid')
 
@@ -232,7 +240,6 @@ class ActorInput(BaseModel):
         Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)], ...
     ] = Field(default=(), max_length=MAX_ALIASES)
     description: str = Field(default='', max_length=5_000)
-    attack_group_id: str | None = Field(default=None, pattern=r'^[Gg]\d{4}$')
     tlp: TLP = DEFAULT_TLP
 
     @field_validator('name')
@@ -243,6 +250,25 @@ class ActorInput(BaseModel):
         return ' '.join(value.split())
 
 
+class ActorInput(CampaignInput):
+    """An analyst actor optionally matched by the analyst to one catalog group."""
+
+    attack_group_id: str | None = Field(default=None, pattern=r'^[Gg]\d{4}$')
+
+
+ThreatSubjectKind = Literal['actor', 'campaign']
+ThreatTargetKind = Literal['document', 'indicator', 'technique']
+
+
+class ThreatLinkInput(BaseModel):
+    """An explicit link to an existing report, indicator, or catalog technique."""
+
+    model_config = ConfigDict(frozen=True, extra='forbid')
+    target_kind: ThreatTargetKind
+    target_id: DocumentId
+    tlp: TLP = DEFAULT_TLP
+
+
 class ActorLinkInput(BaseModel):
     """``POST /api/actors/{id}/documents``: link a report to a group or actor (the analyst's decision)."""
 
@@ -250,6 +276,7 @@ class ActorLinkInput(BaseModel):
 
     document_id: DocumentId
     note: str = Field(default='', max_length=2_000)
+    tlp: TLP = 'CLEAR'
 
 
 class IndustryClaimInput(BaseModel):

@@ -5,8 +5,10 @@ from __future__ import annotations
 import io
 import logging
 import os
+import sqlite3
 import stat
 import sys
+from contextlib import closing
 from pathlib import Path
 from typing import Any
 
@@ -142,7 +144,7 @@ def test_migrate_hides_database_passwords(
 
     monkeypatch.setattr('insight.models.database', lambda *a, **k: (FakeEngine(), None))
     monkeypatch.setattr('insight.migrations.current_revision', lambda _e: '0002')
-    monkeypatch.setattr('insight.migrations.upgrade', lambda _e: None)
+    monkeypatch.setattr('insight.migrations.upgrade', lambda _e, **_kwargs: None)
     monkeypatch.setattr(os, 'environ', {'INSIGHT_DATABASE_URL': 'postgresql://insight:hunter2@db/insight'})
     assert cli.main(['migrate']) == 0
     out = capsys.readouterr().out
@@ -314,6 +316,12 @@ def test_api_key_with_a_tlp_limit(sqlite_env: Path, capsys: pytest.CaptureFixtur
 MFA_SECRET = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP'
 
 
+@pytest.fixture
+def mfa_cli_env(sqlite_env: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    monkeypatch.setenv('INSIGHT_SESSION_SECRET', 'configured session secret for MFA CLI tests')
+    return sqlite_env
+
+
 def answer_codes(monkeypatch: pytest.MonkeyPatch, *codes: str) -> list[str]:
     """Typed codes for `insight mfa setup`; returns the prompts shown."""
     from insight import totp
@@ -333,7 +341,7 @@ def answer_codes(monkeypatch: pytest.MonkeyPatch, *codes: str) -> list[str]:
 
 
 def test_mfa_setup_confirms_a_code_before_pairing(
-    sqlite_env: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    mfa_cli_env: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     from insight import totp
 
@@ -348,10 +356,13 @@ def test_mfa_setup_confirms_a_code_before_pairing(
     assert 'Authenticator app paired. MFA is still off until INSIGHT_MFA=on' in captured.out
     assert 'does not match' in captured.err
     assert prompts == ['Code shown by the app: '] * 2
+    with closing(sqlite3.connect(mfa_cli_env / 'insight.db')) as connection:
+        assert connection.execute('SELECT count(*) FROM operator_mfa').fetchone() == (1,)
+        assert MFA_SECRET not in '\n'.join(connection.iterdump())
 
 
 def test_mfa_setup_is_idempotent(
-    sqlite_env: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    mfa_cli_env: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """`make mfa-enable` runs setup every time: an already paired app is kept, and that is not an error."""
     from insight import totp
@@ -387,7 +398,7 @@ def test_mfa_setup_is_idempotent(
     ],
 )
 def test_mfa_status(
-    sqlite_env: Path,
+    mfa_cli_env: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
     switch: str,
@@ -405,7 +416,7 @@ def test_mfa_status(
     assert expected in capsys.readouterr().out
 
 
-def test_mfa_status_rejects_an_invalid_switch(sqlite_env: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_mfa_status_rejects_an_invalid_switch(mfa_cli_env: Path, capsys: pytest.CaptureFixture[str]) -> None:
     os.environ['INSIGHT_MFA'] = 'onn'
     assert cli.main(['mfa', 'status']) == 1
     assert 'INSIGHT_MFA must be "on" or "off"' in capsys.readouterr().err
@@ -413,7 +424,7 @@ def test_mfa_status_rejects_an_invalid_switch(sqlite_env: Path, capsys: pytest.C
 
 @pytest.mark.parametrize(('switch', 'message'), [('off', 'MFA is off'), ('on', 'sign-in is locked')])
 def test_mfa_reset(
-    sqlite_env: Path,
+    mfa_cli_env: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
     switch: str,
@@ -427,14 +438,28 @@ def test_mfa_reset(
     assert cli.main(['mfa', 'setup']) == 0
     capsys.readouterr()
     os.environ['INSIGHT_MFA'] = switch
+    monkeypatch.setenv('INSIGHT_SESSION_SECRET', 'new host secret after key rotation for tests')
     assert cli.main(['mfa', 'reset']) == 0
     out = capsys.readouterr().out
     assert 'Authenticator app forgotten' in out
     assert message in out
 
 
-def test_mfa_setup_saves_nothing_without_a_matching_code(
+def test_mfa_setup_without_a_host_secret_leaves_the_instance_unpaired(
     sqlite_env: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    prompts = answer_codes(monkeypatch)
+    assert cli.main(['mfa', 'setup']) == 1
+    captured = capsys.readouterr()
+    assert 'INSIGHT_SESSION_SECRET' in captured.err
+    assert 'otpauth://' not in captured.out
+    assert prompts == []
+    assert cli.main(['mfa', 'status']) == 0
+    assert 'No authenticator app is paired' in capsys.readouterr().out
+
+
+def test_mfa_setup_saves_nothing_without_a_matching_code(
+    mfa_cli_env: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     answer_codes(monkeypatch, 'nope', '123', 'abcdef')
     assert cli.main(['mfa', 'setup']) == 1
@@ -444,7 +469,7 @@ def test_mfa_setup_saves_nothing_without_a_matching_code(
 
 
 def test_mfa_setup_can_be_cancelled(
-    sqlite_env: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    mfa_cli_env: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     answer_codes(monkeypatch)  # end of input at the first prompt (Ctrl-D)
     assert cli.main(['mfa', 'setup']) == 1
@@ -724,3 +749,35 @@ def test_attack_backfill_tags_reports_from_before_0_7_0(
             assert event.actor == 'cli'
     finally:
         engine.dispose()
+
+
+def test_backup_removes_incomplete_destination_and_preserves_existing_file(
+    monkeypatch: pytest.MonkeyPatch, in_tmp: Path
+) -> None:
+    source = in_tmp / 'invalid # data.db'
+    source.write_bytes(b'Synthetic invalid database')
+    monkeypatch.setenv('INSIGHT_DATABASE_URL', f'sqlite:///{source}')
+    target = in_tmp / 'backup.db'
+    assert cli.main(['backup', str(target)]) == 1
+    assert not target.exists()
+    target.write_bytes(b'Existing backup')
+    assert cli.main(['backup', str(target)]) == 1
+    assert target.read_bytes() == b'Existing backup'
+
+
+def test_backup_captures_committed_snapshot_while_wal_writer_is_open(
+    monkeypatch: pytest.MonkeyPatch, in_tmp: Path
+) -> None:
+    path = in_tmp / 'snapshot #1.db'
+    monkeypatch.setenv('INSIGHT_DATABASE_URL', f'sqlite:///{path}')
+    target = in_tmp / 'live.db'
+    with closing(sqlite3.connect(path)) as writer:
+        writer.execute('PRAGMA journal_mode=WAL')
+        writer.execute('CREATE TABLE records (value INTEGER PRIMARY KEY)')
+        writer.execute('INSERT INTO records VALUES (1)')
+        writer.commit()
+        writer.execute('INSERT INTO records VALUES (2)')
+        assert cli.main(['backup', str(target)]) == 0
+        writer.rollback()
+    with closing(sqlite3.connect(target)) as copy:
+        assert copy.execute('SELECT value FROM records').fetchall() == [(1,)]

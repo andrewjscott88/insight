@@ -458,6 +458,8 @@ offline with the OASIS STIX 2.1 validator before recording the `stix.export` eve
 | CVE | A `vulnerability` with the CVE external reference and, where available, CISA KEV context |
 | Source report | A `report` with the source document UUID, selected object references and publisher provenance |
 | Tagged ATT&CK technique | An `attack-pattern` in the report's `object_refs`, with the MITRE technique ID, URL, tactics and copyright notice |
+| Manually linked local actor or campaign | A `threat-actor` or `campaign` with its name, aliases, a local UUID in an `Insight` external reference and the relationship's TLP marking |
+| Analyst-created link to a selected report, indicator, CVE or technique | A `related-to` relationship marked at the strictest level of the subject, target and link |
 
 Each report carries its own TLP 2.0 marking. An indicator shared by several selected reports carries the
 strictest source marking. Handle the whole bundle at its highest marking, including AMBER+STRICT where
@@ -470,6 +472,22 @@ Technique tags come from the selected report revision. For example, if the repor
 the same marking appears once in the bundle. Different markings get separate copies. Use the `mitre-attack`
 external ID to match techniques across exports. Only active tags in the bundled Enterprise catalog qualify.
 Tag evidence and analyst names stay in Insight. Each STIX export supports up to 100,000 active report tags.
+
+Local actors and campaigns appear only when a selected object has an explicit link to them within the
+export's TLP ceiling. For example, a CLEAR report can have an AMBER link to a campaign. A CLEAR export
+omits the campaign if that was its only link. An AMBER export can also include the
+campaign and the separately marked relationship. The report keeps its own marking and object references.
+Catalog groups, free-text profile descriptions, link notes and analyst names stay in Insight.
+
+A subject linked at different levels appears once per marking. If its only selected link is AMBER, the
+subject copy also carries AMBER, even when the actor or campaign was originally CLEAR. Recipients who
+filter the bundle by marking can therefore omit the subject alongside the restricted relationship.
+A link to a technique appears once for each selected, differently marked copy of the technique.
+
+An actor or campaign retains its local UUID in its STIX ID at its original marking. Stricter copies use
+fresh IDs. Each copy carries the same local UUID in its `Insight` external reference. Links between a
+stable subject ID and a report retain their IDs. Other links use snapshot-specific IDs. The limit per
+export is 100,000 threat relationships. The export audit records the highest marking in the bundle.
 
 Only permitted excerpts enter report descriptions. Turn evidence off to omit all excerpts. Feed items whose
 publisher permits metadata only carry `x_insight_metadata_only: true` and omit their text. Source titles,

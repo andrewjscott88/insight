@@ -84,12 +84,15 @@ A single-operator threat-intelligence workbench, run locally or published behind
   product uses the NVD API but is not endorsed or certified by the NVD.
 - JSON report exports retain provenance and TLP; they are **not STIX** and do not authorize redistribution.
 - **IOC export**: one JSON file listing every indicator across your reports once, with its source reports, evidence, KEV context and the most restrictive TLP of the reports it includes. Filter by type, review status, highest TLP or report; defang for e-mail and tickets, and leave evidence out when sharing. **Export IOCs** in the workspace (with a live count preview), **Export this report's IOCs** in the reader, `insight export-iocs FILE` or `GET /api/iocs/export`. Not STIX and not a blocklist by itself: see [docs/IOC_EXPORT.md](docs/IOC_EXPORT.md).
+- Import a local PDF advisory from the ingest dialog or with `insight import-pdf FILE`. The report reader shows
+  the original file’s SHA-256 alongside its searchable text and indicators. [PDF import](docs/API.md#post-apidocumentspdf)
 - **STIX 2.1 import** brings a local bundle into the inbox as source-linked reports. Use the ingest dialog,
   `insight import-stix FILE` or the authenticated API. [Import guide](docs/API.md#post-apiimportstix)
 - **STIX 2.1 export** shares filtered indicators, CVEs and source reports with TLP 2.0 markings. Select STIX in **Export IOCs**, run `insight export-stix FILE`, or use `GET /api/iocs/stix`. Each bundle is validated offline. [STIX export guide](docs/IOC_EXPORT.md#stix-21-export)
 - **HTTP API with an API key for scripts and SIEMs**: one key, created, rotated and revoked only on the host (`make api-key-create` / `insight api-key`), sent as `Authorization: Bearer`. Read-only unless you choose read-write; mandatory expiry; stored as a hash only; optionally limited to a TLP label (`MAX_TLP=GREEN`: more restrictive reports are invisible to it). Per-caller rate limits with `RateLimit` headers and `429` + `Retry-After`. Guide with every `curl` command: [docs/API_GUIDE.md](docs/API_GUIDE.md); field reference: [docs/API.md](docs/API.md).
 - **TLP:RED is refused by default** (`INSIGHT_MAX_TLP=AMBER+STRICT`), including reports whose text carries a RED marking, so material meant for named recipients does not end up on a server. Set `INSIGHT_MAX_TLP=RED` to allow it.
-- **Optional sign-in MFA** (authenticator-app codes), off by default: `make mfa-enable` / `make mfa-disable`.
+- **Optional sign-in MFA** uses authenticator-app codes and starts switched off. Use `make mfa-enable` or
+  `make mfa-disable`. The stored pairing is encrypted with a key derived from `INSIGHT_SESSION_SECRET`. [Setup and recovery](docs/RUNBOOK.md#sign-in-second-factor-mfa)
 - **Public deployment** behind a TLS reverse proxy: trusted proxy headers (`INSIGHT_TRUSTED_PROXIES`), secure cookies and HSTS. See [docs/RUNBOOK.md](docs/RUNBOOK.md) ("Reverse proxy").
 - The audit log records who acted: the operator, the API key (by key ID), the CLI or a connector.
 - A `Makefile` for every routine task: `make help`.
@@ -270,7 +273,7 @@ docker compose cp insight:/data/backup-$(date +%Y%m%d).db ./
 - No team accounts, SSO, RBAC or recipient-level dissemination rules. MFA is an optional single-operator authenticator-app code, off by default (`make mfa-enable`). One API key at a time.
 - Rate limits live in server memory: one worker, and a restart resets them. Sessions are stored in the database and survive restarts. The API is unversioned (breaking changes are listed in the CHANGELOG's upgrade notes).
 - No full-text relevance ranking engine, case management or graph visualization yet. Source syncs can run on opt-in schedules (off by default).
-- No PDF/binary parsing, arbitrary URL fetching, arbitrary feed entry, STIX/TAXII/MISP synchronization or automatic full-article storage.
+- Local PDF import extracts text in a bounded Linux worker. Arbitrary URL fetching, arbitrary feed entry, STIX/TAXII/MISP synchronization and automatic full-article storage remain outside the collection workflow.
 - No actor/malware attribution, ML or LLM inference (threat guides show what cited catalogs say about a group and which of your reports name it or you linked, never an inferred attribution). Extraction is deterministic and can still miss or mis-read unusual formats (see the known gaps in [docs/EXTRACTION.md](docs/EXTRACTION.md); the labelled benchmark `python scripts/benchmark_extraction.py` measures quality). Manual review is essential. URL extraction trims sentence punctuation and unbalanced closing brackets, so verify against the source evidence.
 - Matching is literal; watch terms are not an asset inventory. Source-language dates are not authoritative ingestion dates.
 - The inbox shows up to 200 rows; entity pivots load 25 documents at a time. The API paginates documents and entity pivots. Suitable for a pilot, not large-scale intelligence ingestion.

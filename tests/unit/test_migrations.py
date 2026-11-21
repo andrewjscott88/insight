@@ -16,11 +16,13 @@ from alembic.autogenerate import compare_metadata
 from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
 from sqlalchemy import Engine, create_engine, func, inspect, select, text
+from sqlalchemy.orm import Session
 
-from insight import migrations
+from insight import migrations, services
 from insight.connectors import import_kev
 from insight.demo import seed
-from insight.models import Base, Document, Note, Observation, WatchTerm, database
+from insight.models import ActorDocument, Base, Document, Note, Observation, ThreatActor, WatchTerm, database
+from insight.schemas import DocumentInput
 from insight.services import DocumentQuery, search_documents
 
 RELEASES = Path(__file__).parent.parent / 'fixtures' / 'releases'
@@ -259,3 +261,33 @@ def test_upgrades_are_logged(release_0_1_0: Path, caplog: pytest.LogCaptureFixtu
     assert messages[0].startswith('Unversioned (0.1.0) database detected')
     assert messages[1] == f'Database schema upgraded 0001 -> {migrations.head_revision()}'
     assert messages[2] == f'Database schema at revision {migrations.head_revision()} (up to date)'
+
+
+def test_0015_preserves_markings_in_existing_actor_notes(engine: Engine) -> None:
+    migrations.upgrade(engine, '0014')
+    with Session(engine) as db, db.begin():
+        doc, _ = services.ingest(
+            db, DocumentInput(title='Synthetic', body='Example only.', source_name='Lab', tlp='GREEN')
+        )
+        actor = ThreatActor(name='Tracked example', description='Restricted TLP:AMBER', tlp='CLEAR')
+        db.add(actor)
+        db.flush()
+        db.execute(
+            text(
+                'INSERT INTO actor_documents (id, group_ref, document_id, note, created_at, actor) '
+                "VALUES (:id, :group_ref, :document_id, :note, :stamp, 'analyst')"
+            ),
+            {
+                'id': 'historical-link',
+                'group_ref': actor.id,
+                'document_id': doc.id,
+                'note': 'Private TLP:RED, retained.',
+                'stamp': doc.created_at,
+            },
+        )
+    migrations.upgrade(engine)
+    with Session(engine) as db:
+        assert db.scalars(select(ThreatActor)).one().tlp == 'AMBER'
+        link = db.scalars(select(ActorDocument)).one()
+        assert (link.tlp, link.note) == ('RED', 'Private TLP:RED, retained.')
+        assert services.linked_reports(db, link.group_ref, max_tlp='AMBER') == []

@@ -157,7 +157,15 @@ def _reports(
 ) -> tuple[list[ReportRef], list[Mention]]:
     """Linked reports, then up to ``MAX_NAMED`` reports that only name the group; and every mention found."""
     linked = [
-        ReportRef(d.id, d.title, d.tlp, d.created_at, d.source_name, 'linked', link.note)
+        ReportRef(
+            d.id,
+            d.title,
+            most_restrictive(d.tlp, link.tlp, subject.tlp),
+            d.created_at,
+            d.source_name,
+            'linked',
+            link.note,
+        )
         for d, link in linked_reports(db, subject.ref, max_tlp=max_tlp)
     ]
     seen = {r.document_id for r in linked}
@@ -192,7 +200,7 @@ def guide_data(
     }
     swept = [r for r in reports if r.via == 'linked'] if linked_only else reports
     sweep, truncated = sweep_list(db, swept, max_tlp=max_tlp, now=now)
-    rules = rules_for_group(db, subject.ref, techniques, max_tlp=max_tlp)
+    rules = rules_for_group(db, subject.ref, techniques, reports=linked_ids, max_tlp=max_tlp)
     hunts = tuple(HuntView(h, hunt_checks(db, h.id)) for h in hunts_for(db, subject.ref, max_tlp=max_tlp))
     # Every label of what the guide shows or counts: the banner is never less restrictive than its content.
     labels = (

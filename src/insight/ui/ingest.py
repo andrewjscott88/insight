@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from .. import services
 from ..schemas import DocumentInput
 from .messages import problem_area, tell
+from .pdf_import import build_pdf_import
 from .stix_import import build_stix_import
 from .typography import heading
 from .workspace import Workspace
@@ -35,13 +36,20 @@ def build_ingest_dialog(ws: Workspace) -> ui.dialog:
         ui.label('Add to your workspace').classes('eyebrow')
         heading(TITLE, 2)
         build_stix_import(ws, dialog)
-        ui.label(
-            'Paste the text of a report. Insight finds the indicators in it, on this server, '
-            'for you to check.'
-        ).classes('muted prose')
-        title_input = ui.input('Document title').props('outlined maxlength=300').classes('w-full')
-        source_input = ui.input('Source name').props('outlined maxlength=160').classes('w-full')
-        url_input = ui.input('Source URL (optional)').props('outlined maxlength=2000').classes('w-full')
+        ui.label('Fill in the source and title, then choose a PDF or paste the report text below.').classes(
+            'muted prose'
+        )
+        title_input = (
+            ui.input('Document title').props('outlined maxlength=300').classes('w-full pdf-report-title')
+        )
+        source_input = (
+            ui.input('Source name').props('outlined maxlength=160').classes('w-full pdf-report-source')
+        )
+        url_input = (
+            ui.input('Source URL (optional)')
+            .props('outlined maxlength=2000')
+            .classes('w-full pdf-report-url')
+        )
         # Only labels this instance may store (INSIGHT_MAX_TLP); markings in the text are checked on submit.
         # Default AMBER (ADR 0009), or the most restrictive permitted label when the limit is below AMBER.
         levels = services.permitted_tlp_levels(ws.app.state.settings.max_tlp)
@@ -51,6 +59,7 @@ def build_ingest_dialog(ws: Workspace) -> ui.dialog:
             .props('outlined')
             .classes('w-full')
         )
+        build_pdf_import(ws, dialog, tlp_input)
         body_input = ui.textarea('Source content').props('outlined rows=8 maxlength=200000').classes('w-full')
         fields = {
             'title': title_input,

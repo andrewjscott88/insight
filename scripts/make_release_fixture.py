@@ -30,12 +30,14 @@ from insight.schemas import (
     ActorInput,
     ActorLinkInput,
     AssessmentInput,
+    CampaignInput,
     DocumentInput,
     HuntCheckInput,
     HuntInput,
     IndustryClaimInput,
     RuleInput,
     RuleLinkInput,
+    ThreatLinkInput,
 )
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -59,6 +61,14 @@ def build(path: Path) -> None:
     try:
         with sessions.begin() as db:
             seed(db)
+            services.import_pdf(
+                db,
+                (ROOT / 'tests' / 'fixtures' / 'advisory.pdf').read_bytes(),
+                title='Fixture PDF advisory',
+                source_name='Training publisher',
+                tlp='GREEN',
+                max_tlp='GREEN',
+            )
             import_kev(db, kev('Command injection in GlobalProtect.'))
         with sessions.begin() as db:
             import_kev(db, kev('OS command injection in the GlobalProtect feature of PAN-OS.'))
@@ -115,6 +125,13 @@ def build(path: Path) -> None:
             # 0.7.0: a CVE NVD could not answer for, waiting to be tried again (review M2)
             services.record_lookup_failure(db, 'nvd', 'CVE-2024-3400', 'NVD answered HTTP 404', at=when)
             # 0.7.0: threat guides (TIP 2.10): an actor, a report link, an industry decision, a rule, a hunt
+            campaign = services.create_campaign(db, CampaignInput(name='Fixture campaign', tlp='GREEN'))
+            services.link_threat(
+                db,
+                'campaign',
+                campaign.id,
+                ThreatLinkInput(target_kind='document', target_id=manual.id, tlp='GREEN'),
+            )
             actor = services.create_actor(db, ActorInput(name='Fixture Fox', aliases=('FF-1',), tlp='AMBER'))
             services.link_report(db, actor.id, ActorLinkInput(document_id=manual.id, note='Same beacon'))
             services.record_industry_claim(

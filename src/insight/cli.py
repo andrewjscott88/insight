@@ -11,7 +11,7 @@ import os
 import secrets
 import sys
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -88,6 +88,7 @@ def build_parser() -> argparse.ArgumentParser:
             'schedule',
             'notify',
             'import-stix',
+            'import-pdf',
             'delete-report',
             'attack-backfill',
             'threat-library-sync',
@@ -108,6 +109,7 @@ def build_parser() -> argparse.ArgumentParser:
             'schedule [SOURCE|all --every off|1h|6h|24h]: show or set scheduled syncs | '
             'notify [list|add|enable|disable|remove]: manage alert destinations | '
             'import-stix FILE: import a STIX 2.1 JSON bundle | '
+            'import-pdf FILE: add a local PDF advisory (see import-pdf --help) | '
             'delete-report ID --reason TEXT: delete one report for legal or retention reasons | '
             'attack-backfill: tag the ATT&CK techniques written in reports stored before 0.7.0 | '
             'threat-library-sync: fetch the full pinned threat library | industries | '
@@ -226,7 +228,7 @@ def build_parser() -> argparse.ArgumentParser:
         action='append',
         default=[],
         metavar='REF',
-        help='rule-add: a group (G0016) or technique (T1059.001); repeatable',
+        help='rule-add: G0016, T1059.001, document:ID, cve:CVE-YYYY-NNNN or malware:NAME; repeatable',
     )
     threats.add_argument('--licence', default='', help="rule-add: the rule's licence, e.g. DRL-1.1")
     threats.add_argument(
@@ -308,7 +310,7 @@ def migrate() -> str:
     try:
         before = current_revision(engine)
         database_url = engine.url.render_as_string(hide_password=True)
-        upgrade(engine)
+        upgrade(engine, session_secret=os.environ.get('INSIGHT_SESSION_SECRET'))
         after = current_revision(engine)
     finally:
         engine.dispose()
@@ -333,17 +335,23 @@ def backup(destination: Path) -> str:
     if not source_path.is_file():
         raise ValueError(f'No database at {source_path}')
     # Exclusive create: never overwrite an existing backup.
-    os.close(os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600))
-    source = sqlite3.connect(f'file:{source_path}?mode=ro', uri=True)
-    target = sqlite3.connect(destination)
+    fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:
-        source.backup(target)
-        status = target.execute('PRAGMA integrity_check').fetchone()[0]
-    finally:
-        source.close()
-        target.close()
-    if status != 'ok':
-        raise ValueError(f'Backup integrity check failed: {status}')
+        os.close(fd)
+        # VACUUM INTO creates a consistent snapshot of live records. Unlike a page-for-page copy, the
+        # destination never contains free pages that might still hold data deleted before an upgrade.
+        source_uri = source_path.resolve().as_uri() + '?mode=ro'
+        with closing(sqlite3.connect(source_uri, uri=True)) as source:
+            source.execute('VACUUM INTO ?', (str(destination.resolve()),))
+        with closing(sqlite3.connect(destination.resolve().as_uri() + '?mode=ro', uri=True)) as target:
+            status = target.execute('PRAGMA integrity_check').fetchone()[0]
+            if status != 'ok':
+                raise ValueError(f'Backup integrity check failed: {status}')
+    except BaseException as exc:
+        destination.unlink(missing_ok=True)
+        if isinstance(exc, sqlite3.Error):
+            raise ValueError(f'SQLite could not complete the backup: {exc}') from None
+        raise
     return f'Backed up {source_path} to {destination} (integrity ok).'
 
 
@@ -531,6 +539,7 @@ def mfa(action: str, read_code: Callable[[str], str] | None = None) -> str:
     ``input``, looked up per call).
     """
     from . import services, totp
+    from .config import MIN_SECRET_LENGTH
 
     read = read_code or input
     with _current_database() as sessions:
@@ -564,6 +573,9 @@ def mfa(action: str, read_code: Callable[[str], str] | None = None) -> str:
                 'An authenticator app is already paired; keeping it. To pair a different one: '
                 'insight mfa reset, then insight mfa setup.'
             )
+        session_secret = os.environ.get('INSIGHT_SESSION_SECRET', '')
+        if len(session_secret) < MIN_SECRET_LENGTH:
+            raise ValueError(f'Set INSIGHT_SESSION_SECRET ({MIN_SECRET_LENGTH}+ characters) before pairing')
         secret = totp.generate_secret()
         grouped = ' '.join(secret[i : i + 4] for i in range(0, len(secret), 4))
         print(
@@ -578,7 +590,7 @@ def mfa(action: str, read_code: Callable[[str], str] | None = None) -> str:
             if step is not None:
                 with sessions.begin() as db:
                     services.set_actor(db, 'cli')
-                    services.pair_mfa(db, secret, step)
+                    services.pair_mfa(db, secret, step, session_secret=session_secret)
                 if switch_on:
                     return 'Authenticator app paired. MFA is on: sign-in asks for the password and a code.'
                 return (
@@ -708,6 +720,15 @@ def export_filters(args: argparse.Namespace) -> dict[str, Any]:
 
 def main(argv: Sequence[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
+    if argv[:1] == ['import-pdf']:
+        from .cli_pdf import run_pdf
+
+        try:
+            print(run_pdf(argv[1:]))
+        except (ValueError, OSError, RuntimeError) as exc:
+            print(f'PDF import failed: {exc}', file=sys.stderr)
+            return 1
+        return 0
     if argv[:1] in (['misp-export'], ['misp-import']):
         from .cli_misp import run_misp
 
@@ -718,7 +739,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 1
         return 0
     args = build_parser().parse_args(argv)
-    if args.command in ('misp-export', 'misp-import'):
+    if args.command in ('misp-export', 'misp-import', 'import-pdf'):
         print(f'usage: insight {args.command} [OPTIONS]; place options after the command', file=sys.stderr)
         return 2
     if args.command == 'init':
@@ -728,7 +749,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         print('Created .env. Read INSIGHT_PASSWORD there to sign in. Keep this file private.')
         return 0
     if args.command == 'migrate':
-        print(migrate())
+        try:
+            print(migrate())
+        except ValueError as exc:
+            print(f'Migration: {exc}', file=sys.stderr)
+            return 1
         return 0
     if args.command == 'import-stix':
         from sqlalchemy.exc import IntegrityError
