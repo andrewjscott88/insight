@@ -1,46 +1,110 @@
 # Roadmap
 
-Planned work for Insight, in rough priority order. Each item links to its GitHub issue. The design
-background lives in [docs/CI_CD.md](docs/CI_CD.md) (milestones), [docs/VALIDATION.md](docs/VALIDATION.md) (what is
-not yet verified) and the README's "Scope and known limits".
+Planned work for Insight, release by release. The goal: a self-hosted workbench that matches premium threat
+intelligence platforms (TIPs) in **workflow and interoperability**, without cloning the telemetry, incident
+response and dark-web collection they sell.
 
-## Done: the 0.5.0 release
+- **TIP n.n** refers to a section of [docs/ROADMAP-TIP.md](docs/ROADMAP-TIP.md), the detailed plan: what to
+  build, why, which modules to touch, new tables and routes, sources, effort and acceptance criteria.
+- **Review Xn** refers to the 0.5.0 architecture review (B2 policy in services, C2 CVE scores, D2 indicator kinds,
+  J3 redistribution rules).
+- **#n** links the GitHub issue where one exists.
 
-- [x] [#4](https://github.com/andrewjscott88/insight/issues/4) **Pin GitHub Actions to commit SHAs and the base image to a digest.** Run `pinact run` (or `ratchet pin`),
-      update both `FROM` lines in the `Dockerfile`, and switch `.github/zizmor.yml` to `hash-pin`. The release gate
-      fails until this is done.
-- [x] [#5](https://github.com/andrewjscott88/insight/issues/5) **Get the `v0.5.0-rc.1` milestone gate green.** Still unverified for 0.5.0: `docker build` and the image,
-      the Makefile's Docker targets against real containers (including `make mfa-enable`), Trivy, gitleaks,
-      `pip-audit`, the Playwright browser and accessibility suites, the ZAP scan and mutation testing.
-- [x] [#6](https://github.com/andrewjscott88/insight/issues/6) **Commit the 0.5.0 upgrade fixture** (`python scripts/make_release_fixture.py`), update `docs/VALIDATION.md`
-      with what the gate verified, and tag the final `v0.5.0`.
-- [x] [#7](https://github.com/andrewjscott88/insight/issues/7) **Repository settings:** branch protection on `main`, a `release` environment with a required reviewer, and
-      a decision on GHCR image visibility.
-- [x] [#8](https://github.com/andrewjscott88/insight/issues/8) **Fix:** a CVE-enrichment request for a well-formed CVE that no report mentions is refused (`422`) but still
-      starts the 6.5 s enrichment window.
+Background: [docs/CI_CD.md](docs/CI_CD.md) (pipeline), [docs/VALIDATION.md](docs/VALIDATION.md) (what is not yet
+verified) and the README's "Scope and known limits".
 
-## Now
+## 0.7.0: hardened, with complete vulnerability intelligence
 
-- [ ] Review the open Dependabot updates one at a time: the GitHub Actions major versions (#18; the Docker,
-      cosign and attestation actions run only in the release workflow, which still warns about Node 20) and the
-      Python 3.15 base image (#1, after adding 3.15 to the test matrix).
+Close the security findings first, then make the vulnerability workflow complete.
 
-## Next
+- [ ] **TIP 0.1 Verify every public deployment.** Anonymous `GET /` answers 303 to `/login`; `.env` sets secure
+      cookies, allowed hosts and trusted proxies, preferably MFA. A smoke check for the public URL.
+- [x] **TIP 0.2 Fix stale session and scheduling documentation.** README and ARCHITECTURE now describe stored
+      sessions, opt-in schedules and the job runner.
+- [ ] **TIP 0.3 Safer public-deploy defaults.** Stronger start-up warnings when Insight is internet-facing, and an
+      optional `INSIGHT_REQUIRE_HARDENED=1` that refuses to start without secure cookies and MFA.
+- [ ] **TIP 0.4 Pin connector connections to the checked DNS addresses,** closing the DNS-rebinding gap.
+- [ ] **TIP 0.5 `/health` without the version;** the version moves behind sign-in.
+- [ ] **TIP 0.6 Encrypt the TOTP secret at rest,** migrating existing rows.
+- [ ] **Review B2 Throttles and locks into services,** so the API, the workspace and the automatic enrichment
+      below share one implementation.
+- [ ] **TIP 1.1 Complete KEV fields:** known ransomware use, vulnerability name, notes and CWEs; a documented inbox
+      policy for older KEV entries.
+- [ ] **TIP 1.2 Automatic NVD and EPSS enrichment** for newly seen CVEs: opt-in, throttled, through the job queue
+      (with review C2, a cached score per CVE).
+- [ ] **TIP 1.3 The brief and a prioritised CVE view use them:** ransomware-used KEV entries, NVD CVSS next to
+      CSAF scores, EPSS with a plain-language caveat (review C2).
 
-- [ ] [#9](https://github.com/andrewjscott88/insight/issues/9) **Extraction quality (M1).** Grow `tests/corpus/extraction.json` with real, permitted reports; close the
-      defanged-indicator gaps listed in [docs/EXTRACTION.md](docs/EXTRACTION.md); ratchet the benchmark baseline.
-- [ ] [#10](https://github.com/andrewjscott88/insight/issues/10) **Scheduled source syncs.** Run the CISA, SANS ISC and NCSC connectors on a schedule instead of only on demand,
-      with visible failures and no duplicate reports.
-- [ ] [#11](https://github.com/andrewjscott88/insight/issues/11) **PostgreSQL and feed cursors (M2).** Native datetime columns (migration), cursor-based resume for feeds,
-      and a tighter PostgreSQL performance budget.
-- [ ] [#12](https://github.com/andrewjscott88/insight/issues/12) **STIX 2.1 export (M5).** Export reports and indicators as STIX bundles, validated with `stix2-validator` on
-      every export, with an import/export round-trip test and retention/licence rules.
-- [ ] [#13](https://github.com/andrewjscott88/insight/issues/13) **PDF report ingestion.** Extract text from PDF advisories, keeping the original file hash as evidence.
+## 0.8.0: alerts and more feeds
+
+- [ ] [#15](https://github.com/andrewjscott88/insight/issues/15) **TIP 1.4 Notifications (M4).** Signed webhooks
+      and e-mail when a new report matches a watch term or KEV gains an entry; destinations set from the CLI or the
+      workspace, never with an API key.
+- [ ] **Review J3 Per-source redistribution rules** (allow, or metadata only), applied by every export, before the
+      new feeds and before STIX and MISP.
+- [ ] **TIP 1.5 abuse.ch connectors:** URLhaus, ThreatFox and MalwareBazaar (indicators and metadata only, never
+      samples; keys from the environment).
+- [ ] **TIP 1.6 AlienVault OTX pulses** with the operator's own key.
+- [ ] **Review D2 E-mail and CIDR indicator kinds,** with e-mail addresses flagged as personal data.
+- [ ] [#9](https://github.com/andrewjscott88/insight/issues/9) **TIP 1.7 Extraction quality (M1),** ongoing: a
+      larger labelled corpus, the defanged-indicator gaps in [docs/EXTRACTION.md](docs/EXTRACTION.md), a
+      ratcheted benchmark.
+
+## 0.9.0: speaks STIX, ATT&CK and MISP
+
+- [ ] [#12](https://github.com/andrewjscott88/insight/issues/12) **TIP 2.1 STIX 2.1 export (M5),** validated on
+      every export, with a round-trip test.
+- [ ] **TIP 2.2 STIX 2.1 import** with TLP raising and the instance TLP limit.
+- [ ] **TIP 2.3 ATT&CK techniques:** the official catalog, manual tags and conservative suggestions from explicit
+      technique IDs only.
+- [ ] **TIP 2.9 Suricata/Snort-oriented export** of the blocklist population.
+- [ ] **TIP 2.4 MISP export and import,** CLI first.
+
+## 1.0: context around the indicators
+
+- [ ] **TIP 2.5 Actors and campaigns, created by the analyst.** ATT&CK groups only as a labelled catalog; never
+      attribution from shared indicators.
+- [ ] **TIP 2.7 YARA and Sigma rules as linked artifacts** (carried and exported, never executed).
+- [ ] **TIP 2.6 Optional GreyNoise enrichment** for IP addresses (operator key; never a verdict by itself).
+- [ ] [#13](https://github.com/andrewjscott88/insight/issues/13) **TIP 2.8 PDF report ingestion,** keeping the
+      file's hash as evidence.
 
 ## Later
 
-- [ ] [#14](https://github.com/andrewjscott88/insight/issues/14) **Identity provider and groups (M3).** OIDC sign-in, roles and an authorisation matrix per endpoint, and an
-      authenticated ZAP active scan against a staging deployment.
-- [ ] [#15](https://github.com/andrewjscott88/insight/issues/15) **Notifications (M4).** E-mail or webhook alerts when a new report matches a watch term or a KEV entry.
-- [ ] [#16](https://github.com/andrewjscott88/insight/issues/16) **Multi-worker deployments.** Move sessions and rate-limit state out of process memory.
-- [ ] [#17](https://github.com/andrewjscott88/insight/issues/17) **Search and pivots.** Full-text relevance ranking and a graph view of reports, indicators and CVEs.
+- [ ] **TIP 3.1 Read-only TAXII 2.1 server** over the STIX collections.
+- [ ] [#17](https://github.com/andrewjscott88/insight/issues/17) **TIP 3.2 Ranked search and a graph view.**
+- [ ] **TIP 3.3 Exploit-availability signals,** metadata only, from terms-reviewed sources.
+- [ ] [#14](https://github.com/andrewjscott88/insight/issues/14) **TIP 3.4 OIDC sign-in and roles (M3),** with an
+      authenticated ZAP active scan.
+- [ ] [#16](https://github.com/andrewjscott88/insight/issues/16) **TIP 3.5 Multi-worker deployments:** shared rate
+      limits (sessions are already in the database).
+- [ ] [#11](https://github.com/andrewjscott88/insight/issues/11) **PostgreSQL datetime columns and feed cursors
+      (M2).**
+- [ ] **TIP 3.8 Lightweight case management.**
+- [ ] **TIP 3.6 Opt-in LLM proposals** under the contract in [docs/LLM_EXTENSION.md](docs/LLM_EXTENSION.md).
+- [ ] **TIP 3.7 Optional Shodan or Censys enrichment** with the operator's own keys.
+
+**Out of scope on purpose:** cloning CrowdStrike, Mandiant or Recorded Future collection, a malware sandbox,
+automated adversary attribution, and any always-on cloud AI.
+
+## Done
+
+### 0.6.0 (20 November 2026)
+
+- [x] [#10](https://github.com/andrewjscott88/insight/issues/10) **Scheduled source syncs,** opt-in
+      ([ADR 0018](docs/adr/0018-opt-in-scheduled-syncs.md)).
+- [x] Verdicts, warning flags and a safe blocklist; report deletion; sign-in sessions stored in the database with
+      **Sign out everywhere**; CISA CSAF advisories; the intel brief; a lighter pipeline with one tag per release.
+      Details in the [CHANGELOG](CHANGELOG.md).
+
+### 0.5.0
+
+- [x] [#4](https://github.com/andrewjscott88/insight/issues/4) **Pin GitHub Actions to commit SHAs and the base
+      image to a digest.**
+- [x] [#5](https://github.com/andrewjscott88/insight/issues/5) **Get the `v0.5.0-rc.1` milestone gate green.**
+- [x] [#6](https://github.com/andrewjscott88/insight/issues/6) **Commit the 0.5.0 upgrade fixture,** update
+      `docs/VALIDATION.md` and tag `v0.5.0`.
+- [x] [#7](https://github.com/andrewjscott88/insight/issues/7) **Repository settings:** branch protection, a
+      `release` environment with a required reviewer, GHCR image visibility.
+- [x] [#8](https://github.com/andrewjscott88/insight/issues/8) **Fix:** a refused CVE-enrichment request no longer
+      starts the enrichment window.

@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Documentation: a roadmap toward a premium TIP; corrected session and schedule notes
+- `ROADMAP.md` now plans releases 0.7.0 to 1.0 and later from a detailed gap analysis against premium threat
+  intelligence platforms, kept in `docs/ROADMAP-TIP.md`: security fixes first, then complete vulnerability
+  intelligence, alerts and more feeds, STIX/ATT&CK/MISP, and analyst-created context.
+- The README no longer says sessions are in memory and that a restart signs everyone out (stored sessions survive
+  restarts since 0.6.0; use **Sign out everywhere**), nor that there is no scheduling. `docs/ARCHITECTURE.md`
+  describes the job runner and opt-in schedules.
+
 ## 0.6.0 - 2026-11-20
 
 **Upgrading from 0.5.0:** migrations `0006` (jobs, schedules, remembered feed downloads), `0007` (verdicts) and

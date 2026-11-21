@@ -71,7 +71,7 @@ docker compose up --build -d
 5. Click **Load demo**, inspect a report, review its extracted observations and follow an entity to related reports.
 6. In **Sources**, run only the sources you want. These buttons make outbound internet requests. NVD/EPSS lookups explicitly send the selected CVE identifier to that provider; source documents are not sent.
 
-The container runs as an unprivileged user with a read-only root filesystem and no Linux capabilities. The Docker port is bound to **127.0.0.1 only**. Never expose port 8080 itself to your LAN or the internet: to publish Insight, put it behind a TLS reverse proxy as described in [docs/RUNBOOK.md](docs/RUNBOOK.md) ("Reverse proxy") and read [docs/SECURITY.md](docs/SECURITY.md) first. It has one operator password (plus optional MFA), in-memory sessions and rate limits: restarting signs everyone out. Use one process/worker.
+The container runs as an unprivileged user with a read-only root filesystem and no Linux capabilities. The Docker port is bound to **127.0.0.1 only**. Never expose port 8080 itself to your LAN or the internet: to publish Insight, put it behind a TLS reverse proxy as described in [docs/RUNBOOK.md](docs/RUNBOOK.md) ("Reverse proxy") and read [docs/SECURITY.md](docs/SECURITY.md) first. It has one operator password (plus optional MFA). Sign-in sessions are stored in the database for 8 hours and survive a restart: a restart does **not** sign anyone out. To end sessions, use **Sign out everywhere** on the sign-out page, or change the password or MFA setting. Rate limits are in memory, so use one process/worker.
 
 ```sh
 docker compose logs -f insight
@@ -209,7 +209,7 @@ docker compose cp insight:/data/backup-$(date +%Y%m%d).db ./
 
 - No team accounts, SSO, RBAC or recipient-level dissemination rules. MFA is an optional single-operator authenticator-app code, off by default (`make mfa-enable`). One API key at a time.
 - Rate limits live in server memory: one worker, and a restart resets them. Sessions are stored in the database and survive restarts. The API is unversioned (breaking changes are listed in the CHANGELOG's upgrade notes).
-- No full-text relevance ranking engine, automated scheduling, alert delivery, case management or graph visualization yet.
+- No full-text relevance ranking engine, alert delivery, case management or graph visualization yet. Source syncs can run on opt-in schedules (off by default).
 - No PDF/binary parsing, arbitrary URL fetching, arbitrary feed entry, STIX/TAXII/MISP synchronization or automatic full-article storage.
 - No actor/malware attribution, ML or LLM inference. Extraction is deterministic and can still miss or mis-read unusual formats (see the known gaps in [docs/EXTRACTION.md](docs/EXTRACTION.md); the labelled benchmark `python scripts/benchmark_extraction.py` measures quality). Manual review is essential. URL extraction trims sentence punctuation and unbalanced closing brackets, so verify against the source evidence.
 - Matching is literal; watch terms are not an asset inventory. Source-language dates are not authoritative ingestion dates.
