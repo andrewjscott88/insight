@@ -149,7 +149,7 @@ async def test_report_reader_attaches_and_displays_a_rule(user: User, ui_env: Si
     await open_report(user, 'Second bulletin')
     user.find(kind=ui.expansion, content='Detection rules (0)').elements.pop().open()
     user.find(marker='choose-saved-rule').click()
-    user.find(marker='saved-rule').elements.pop().set_value(rule_id)
+    user.find(kind=ui.select, marker='saved-rule').elements.pop().set_value(rule_id)
     user.find(marker='attach-saved-rule').click()
     await user.should_see('Rule linked to this report.')
     await user.should_see('Detection rules (1)')
