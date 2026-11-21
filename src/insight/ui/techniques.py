@@ -244,6 +244,6 @@ def build_techniques(ws: Workspace) -> None:
     ui.label(f'Uses version {catalog().version} of Enterprise ATT&CK.').classes('muted text-sm')
     ui.select(
         PERIODS, value=ws.state.technique_days, label='Reports added in', on_change=lambda e: choose(e.value)
-    ).props('outlined').classes('w-60')
+    ).props('outlined').classes('w-60').mark('technique-period')
     with ui.column().classes('w-full gap-3'):
         summary()
