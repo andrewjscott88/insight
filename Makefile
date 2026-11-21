@@ -80,7 +80,7 @@ version: env-file ## Print the version of the built image
 
 ##@ Data (Docker)
 
-.PHONY: backup restore export-iocs migrate db-shell delete-report attack-backfill
+.PHONY: backup restore export-iocs migrate db-shell delete-report attack-backfill threat-library-sync
 backup: env-file ## Online, integrity-checked backup (safe while running) into backups/
 	@umask 077; mkdir -p $(BACKUP_DIR)
 	$(COMPOSE) exec -T $(SERVICE) insight backup /data/backup-$(STAMP).db
@@ -118,6 +118,10 @@ db-shell: env-file ## SQL shell on the database (RUNBOOK section 9: stop and bac
 
 attack-backfill: env-file ## Tag ATT&CK technique IDs in reports stored before 0.7.0 (safe to rerun)
 	$(COMPOSE) run --rm $(SERVICE) insight attack-backfill
+
+threat-library-sync: env-file ## Fetch the full threat library (pinned ATT&CK + MISP galaxy, SHA-256 checked)
+	$(COMPOSE) run --rm $(SERVICE) insight threat-library-sync
+	@echo "Restart to load it: make restart"
 
 delete-report: env-file ## Delete a report (legal/retention): ID=... REASON='ticket 42' (asks first)
 	@test -n $(call shell-quote,$(ID)) && test -n $(call shell-quote,$(REASON)) || { echo "usage: make delete-report ID=<report id> REASON='ticket 42: retention ended'" >&2; exit 2; }

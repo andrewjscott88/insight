@@ -6,8 +6,10 @@ fixture, so a migration that breaks real user data fails CI long before it reach
 The database is written through the normal services (not raw SQL) and exercises every table: demo reports,
 a KEV entry with a publisher edit (revisions), an RSS item, a reviewed manual report with an accepted
 observation, a note and a verdict, a watch term, a source run, a cached enrichment, a schedule, a queued job,
-a remembered feed download, an API key and a signed-in session (their secrets are thrown away). All data is
-synthetic. Only the MFA pairing is left out: it would put an authenticator secret in the repository.
+a remembered feed download, an API key and a signed-in session (their secrets are thrown away), and
+threat-guide records (an actor, a report link, an industry decision, a rule and its link, a hunt and a check).
+All data is synthetic. Only the MFA pairing is left out: it would put an authenticator secret in the
+repository.
 """
 
 from __future__ import annotations
@@ -24,7 +26,17 @@ from insight import __version__, services
 from insight.connectors import SOURCES, import_kev, parse_feed
 from insight.demo import seed
 from insight.models import Enrichment, Entity, Observation, SourceRun, database
-from insight.schemas import AssessmentInput, DocumentInput
+from insight.schemas import (
+    ActorInput,
+    ActorLinkInput,
+    AssessmentInput,
+    DocumentInput,
+    HuntCheckInput,
+    HuntInput,
+    IndustryClaimInput,
+    RuleInput,
+    RuleLinkInput,
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -102,6 +114,21 @@ def build(path: Path) -> None:
             services.queue_test_alert(db, alert_to.id)  # 0.7.0: an alert destination and a queued alert
             # 0.7.0: a CVE NVD could not answer for, waiting to be tried again (review M2)
             services.record_lookup_failure(db, 'nvd', 'CVE-2024-3400', 'NVD answered HTTP 404', at=when)
+            # 0.7.0: threat guides (TIP 2.10): an actor, a report link, an industry decision, a rule, a hunt
+            actor = services.create_actor(db, ActorInput(name='Fixture Fox', aliases=('FF-1',), tlp='AMBER'))
+            services.link_report(db, actor.id, ActorLinkInput(document_id=manual.id, note='Same beacon'))
+            services.record_industry_claim(
+                db, actor.id, IndustryClaimInput(industry='energy', document_id=manual.id, tlp='AMBER')
+            )
+            rule = services.add_rule(
+                db,
+                RuleInput(kind='yara', name='Fixture', body='rule fixture { condition: true }', tlp='GREEN'),
+            )
+            services.link_rule(db, rule.id, RuleLinkInput(target_kind='group', target_id=actor.id))
+            hunt = services.start_hunt(db, actor.id, HuntInput(title='Fixture hunt', tlp='AMBER'))
+            services.record_check(
+                db, hunt.id, 'T1071.001', HuntCheckInput(result='nothing-found', data_checked='Proxy logs')
+            )
     finally:
         engine.dispose()
 

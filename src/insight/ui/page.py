@@ -23,6 +23,7 @@ from .sources import build_sources
 from .stats import build_stats
 from .techniques import build_techniques
 from .theme import apply_theme
+from .threats import build_threats
 from .typography import heading
 from .watch_terms import build_watch_terms
 from .workspace import Workspace
@@ -101,6 +102,7 @@ def register_ui(app: FastAPI, session_factory: SessionFactory) -> None:
                 cves_tab = _tab('Prioritised CVEs', 'CVEs')
                 entities_tab = _tab('Entity explorer', 'Entities')
                 techniques_tab = _tab('ATT&CK techniques', 'ATT&CK')
+                threats_tab = _tab('Industry threats', 'Threats')
                 watch_tab = _tab('Watch terms', 'Watch')
                 sources_tab = _tab('Sources', 'Sources')
 
@@ -122,6 +124,8 @@ def register_ui(app: FastAPI, session_factory: SessionFactory) -> None:
                     build_entities(ws)
                 with ui.tab_panel(techniques_tab).classes('panel p-4 sm:p-5'):
                     build_techniques(ws)
+                with ui.tab_panel(threats_tab).classes('panel p-4 sm:p-5'):
+                    build_threats(ws)
                 with ui.tab_panel(watch_tab).classes('panel p-4 sm:p-5'):
                     build_watch_terms(ws)
                 with ui.tab_panel(sources_tab).classes('panel p-4 sm:p-5'):
