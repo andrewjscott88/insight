@@ -450,6 +450,14 @@ def test_smoke_passes_against_the_real_stack(authed: TestClient) -> None:
     assert stats['documents'] >= 3
 
 
+def test_smoke_refuses_version_disclosure_on_public_health(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(smoke, 'wait_until_healthy', lambda _: {'status': 'ok', 'version': '0.0.0'})
+    with pytest.raises(smoke.SmokeFailure, match='public /health'):
+        smoke.run(client, 'longtestpassword', ui=False)
+
+
 def test_smoke_fails_with_the_wrong_password(client: TestClient) -> None:
     with pytest.raises(smoke.SmokeFailure, match='sign-in failed'):
         smoke.run(client, 'wrong-password', ui=False)

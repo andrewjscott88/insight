@@ -12,7 +12,6 @@ from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from starlette.responses import Response
 
-from ... import __version__
 from ..auth import MFA_UNPAIRED, SessionCheck, _mfa_paired, end_sessions, start_session
 from ..boundary import tokens_match
 
@@ -25,7 +24,7 @@ def _register_page_routes(app: FastAPI, templates: Jinja2Templates) -> None:
 
     @app.get('/health')
     def health() -> dict[str, str]:
-        return {'status': 'ok', 'version': __version__}
+        return {'status': 'ok'}
 
     @app.get('/login')
     def login_page(request: Request) -> Response:

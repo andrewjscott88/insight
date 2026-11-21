@@ -23,7 +23,7 @@ The Makefile wraps these (`make help`); the commands it runs are the ones in the
 | Exchange MISP events | [MISP guide](MISP.md) | `insight misp-export FILE --max-tlp GREEN` · `insight misp-import FILE` |
 | Apply migrations explicitly | `make migrate` | `docker compose exec insight insight migrate` |
 | Smoke-test a running instance | `make smoke` (password from `.env`, no demo data) | `python scripts/smoke.py http://127.0.0.1:8080 --password "$INSIGHT_PASSWORD"` |
-| Version | `make version` · `make health` | `docker compose exec insight insight --version` · `curl -s http://127.0.0.1:8080/health` |
+| Version | `make version` | `docker compose exec insight insight --version` |
 | API key | `make api-key-create NAME=siem` · `make api-key-status` · `-rotate` · `-revoke` | `docker compose exec insight insight api-key …` |
 | Sign-in MFA (off by default) | `make mfa-enable` · `make mfa-disable` · `make mfa-status` · `make mfa-reset` | §4, "Sign-in second factor" |
 | Alert destinations | Watch terms tab: *Alerts* | `insight notify list`, `add`, `enable`, `disable` or `remove` ([alerts guide](ALERTS.md#manage-destinations-on-the-host)) |
@@ -316,7 +316,8 @@ An up-to-date database logs `Database schema at revision 0003 (up to date)`. `in
 and prints the before and after revision.
 
 ### After
-- `curl -s http://127.0.0.1:8080/health` shows the new version.
+- `curl -fsS http://127.0.0.1:8080/health` returns `{"status":"ok"}`.
+- `docker compose exec insight insight --version` shows the new version. A signed-in browser session can also read the `version` field from `GET /api/session`.
 - `python scripts/smoke.py http://127.0.0.1:8080 --password … --no-demo` passes.
 
 ### Roll back

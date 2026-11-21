@@ -31,8 +31,9 @@
 (threat guides: actors, report links, industry decisions, rules, hunts) run at start-up, or with `make migrate`. Reports stored before the upgrade get their technique tags when you run
 `make attack-backfill` once (safe to run again). The new threat-research sources start switched off: Insight
 contacts no new host until you switch one on. **Exports change for SANS ISC and NCSC reports:** their text and
-evidence are no longer included (their publishers allow metadata only). Every 0.6.0 API field is unchanged; new
-fields are additive. TLP-limited API keys may now read cached CVE scores (`GET /api/cves/{cve}/scores`) for
+evidence are no longer included (their publishers allow metadata only). The public `GET /health` response now
+contains only `{"status":"ok"}`. Clients that used it to read the running version can get `version` from
+`GET /api/session` with a signed-in browser session. TLP-limited API keys may now read cached CVE scores (`GET /api/cves/{cve}/scores`) for
 CVEs in reports they can see; starting a lookup stays refused to them. The new password-free access
 (`INSIGHT_DEV_NO_AUTH`) is off unless you set it to `on`.
 

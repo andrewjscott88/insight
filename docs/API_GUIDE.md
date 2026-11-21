@@ -40,7 +40,7 @@ curl -sS "$INSIGHT_URL/api/stats" -H "Authorization: Bearer $INSIGHT_API_KEY"
 ```
 
 ```json
-{"status":"ok","version":"0.6.0"}
+{"status":"ok"}
 {"documents":4,"entities":10,"unreviewed":4,"observations_unreviewed":12}
 ```
 
@@ -171,7 +171,7 @@ The [API reference](API.md) lists every field. Here, each route with a working c
 curl -sS "$INSIGHT_URL/health"
 ```
 
-Public, no authentication; returns `{"status":"ok","version":"..."}`. Use it for monitoring.
+This public endpoint returns `{"status":"ok"}` when Insight is up. Monitors can call it without signing in.
 
 ### Sign-in pages (browser)
 
@@ -181,7 +181,7 @@ Public, no authentication; returns `{"status":"ok","version":"..."}`. Use it for
 | `POST /login` | Form fields `csrf_token`, `password`, and `otp` when MFA is on. `303` success, `401` wrong password or code, `403` bad CSRF, `429` throttled, `503` MFA on but no app paired |
 | `GET /logout` | Sign-out confirmation form (contains `csrf_token`) |
 | `POST /logout` | Form field `csrf_token`; revokes the session, `303` to `/login` |
-| `GET /api/session` | `{"csrf_token": "..."}` for the signed-in browser session; `403` for API keys |
+| `GET /api/session` | Returns `{"csrf_token": "...", "version": "..."}` for a signed-in browser session. API keys receive `403`. |
 
 Commands: [section 2.2](#22-browser-session-what-the-workspace-uses).
 

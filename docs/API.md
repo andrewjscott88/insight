@@ -18,7 +18,8 @@ page is the field-by-field reference.
    token; `429` a wrong password after 30 failures in the last minute (each failure waits ~1 s; the right password always signs in); `503` MFA is on but no
    authenticator app is paired (sign-in locked). MFA is off by default (`INSIGHT_MFA=on` or `make mfa-enable`
    turns it on); then `otp` is the 6-digit code from the app, and each code works once.
-3. `GET /api/session` → `{"csrf_token": "…"}`. Send it as `X-CSRF-Token` on **every non-GET** API request.
+3. `GET /api/session` returns `{"csrf_token": "…", "version": "…"}` for the signed-in session.
+   Send the `csrf_token` value as `X-CSRF-Token` on **every non-GET** API request. The `version` field is the running Insight version.
 4. `POST /logout` (form field `csrf_token`) revokes the session server-side.
 
 **Temporary password-free mode:** with the explicit default-off `INSIGHT_DEV_NO_AUTH=on`, `GET /login`
@@ -500,7 +501,7 @@ makes one), so repeated coverage must not be interpreted as an increase in attac
 | `GET /api/audit` | Latest 200 audit events: `{action, object_id, detail, actor, created_at}`. Not available to TLP-limited keys |
 | `GET /api/watch-terms` | `[{id, term}]`. Not available to TLP-limited keys: terms often name clients or internal systems |
 | `POST /api/demo` | `{"created": n}`; loads the synthetic demo, idempotent. **Browser session only** (API keys get `403`: scripts must not add practice data to a real dataset); reports above `INSIGHT_MAX_TLP` are left out |
-| `GET /health` | `{"status": "ok", "version": "…"}`, no authentication required |
+| `GET /health` | Public liveness check. Returns `{"status": "ok"}`. |
 
 Audit `actor`: `operator` (browser session or workspace), `api-key:<key ID>`, `cli`, `connector:<source key>`,
 `system`, or empty for events recorded before schema revision `0005`.
