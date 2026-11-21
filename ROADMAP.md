@@ -41,7 +41,7 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
 - [x] **TIP 0.4 Pin connector connections to the checked DNS addresses,** closing the DNS-rebinding gap (code
       review L1): source syncs, CVE lookups and alert webhooks connect to the address they checked.
 - [ ] **TIP 0.5 `/health` without the version;** the version moves behind sign-in.
-- [ ] **TIP 0.6 Encrypt the TOTP secret at rest,** migrating existing rows.
+- [x] **TIP 0.6 Encrypt the TOTP secret at rest.** Revision `0017` migrates existing pairings. [Upgrade and recovery](docs/RUNBOOK.md#sign-in-second-factor-mfa)
 - [x] **Review B2 Throttles into one place** ([ADR 0023](docs/adr/0023-automatic-cve-lookups.md)): one throttle
       per provider in `insight.lookups`, shared by the API, the workspace and the automatic lookups. (The sync
       lock already lived in one place.)

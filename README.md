@@ -91,7 +91,8 @@ A single-operator threat-intelligence workbench, run locally or published behind
 - **STIX 2.1 export** shares filtered indicators, CVEs and source reports with TLP 2.0 markings. Select STIX in **Export IOCs**, run `insight export-stix FILE`, or use `GET /api/iocs/stix`. Each bundle is validated offline. [STIX export guide](docs/IOC_EXPORT.md#stix-21-export)
 - **HTTP API with an API key for scripts and SIEMs**: one key, created, rotated and revoked only on the host (`make api-key-create` / `insight api-key`), sent as `Authorization: Bearer`. Read-only unless you choose read-write; mandatory expiry; stored as a hash only; optionally limited to a TLP label (`MAX_TLP=GREEN`: more restrictive reports are invisible to it). Per-caller rate limits with `RateLimit` headers and `429` + `Retry-After`. Guide with every `curl` command: [docs/API_GUIDE.md](docs/API_GUIDE.md); field reference: [docs/API.md](docs/API.md).
 - **TLP:RED is refused by default** (`INSIGHT_MAX_TLP=AMBER+STRICT`), including reports whose text carries a RED marking, so material meant for named recipients does not end up on a server. Set `INSIGHT_MAX_TLP=RED` to allow it.
-- **Optional sign-in MFA** (authenticator-app codes), off by default: `make mfa-enable` / `make mfa-disable`.
+- **Optional sign-in MFA** uses authenticator-app codes and starts switched off. Use `make mfa-enable` or
+  `make mfa-disable`. The stored pairing is encrypted with a key derived from `INSIGHT_SESSION_SECRET`. [Setup and recovery](docs/RUNBOOK.md#sign-in-second-factor-mfa)
 - **Public deployment** behind a TLS reverse proxy: trusted proxy headers (`INSIGHT_TRUSTED_PROXIES`), secure cookies and HSTS. See [docs/RUNBOOK.md](docs/RUNBOOK.md) ("Reverse proxy").
 - The audit log records who acted: the operator, the API key (by key ID), the CLI or a connector.
 - A `Makefile` for every routine task: `make help`.
