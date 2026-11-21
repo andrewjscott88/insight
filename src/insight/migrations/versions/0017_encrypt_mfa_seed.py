@@ -12,6 +12,7 @@ from contextlib import contextmanager
 
 import sqlalchemy as sa
 from alembic import context, op
+
 from insight.mfa_crypto import decrypt_seed, encrypt_seed
 
 revision = '0017'

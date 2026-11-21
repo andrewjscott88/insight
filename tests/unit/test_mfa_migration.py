@@ -10,10 +10,10 @@ from typing import Any
 
 import pytest
 from alembic import command
-from insight.mfa_crypto import decrypt_seed
 from sqlalchemy import Engine, create_engine, event, inspect, text
 
 from insight import migrations
+from insight.mfa_crypto import decrypt_seed
 
 KEY = 'synthetic-local-migration-key-for-tests'
 OTHER_KEY = 'different-local-migration-key-for-tests'
