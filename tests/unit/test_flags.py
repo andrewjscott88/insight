@@ -55,6 +55,25 @@ def test_public_addresses_carry_no_flag(address: str) -> None:
 @pytest.mark.parametrize(
     ('value', 'expected'),
     [
+        ('203.0.113.0/25', ('documentation',)),
+        ('2001:db8::/32', ('documentation',)),
+        ('10.1.0.0/16', ('non-routable',)),
+        ('fd12:3456::/32', ('non-routable',)),
+        ('100.64.0.0/12', ('non-routable',)),
+        ('::1/128', ('non-routable',)),
+        ('8.8.8.0/24', ()),
+        ('203.0.112.0/23', ()),  # only half is reserved for examples
+        ('0.0.0.0/0', ()),
+        ('invalid', ()),
+    ],
+)
+def test_range_warnings_apply_to_the_whole_range(value: str, expected: tuple[str, ...]) -> None:
+    assert flags('cidr', value) == expected
+
+
+@pytest.mark.parametrize(
+    ('value', 'expected'),
+    [
         ('printer.corp', ('reserved-name',)),
         ('dc01.internal', ('reserved-name',)),
         ('www.example.com', ('reserved-name',)),

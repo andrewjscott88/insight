@@ -149,6 +149,21 @@ def test_expired_verdicts_leave_the_blocklist(app: FastAPI, signed_in: TestClien
     assert blocklisted(signed_in, 'sha256') == [SHA256]
 
 
+def test_reviewed_network_range_is_exportable_but_never_blocklisted(
+    app: FastAPI, signed_in: TestClient
+) -> None:
+    subnet = '203.0.113.0/24'
+    report = ingest(app, f'Reported network {subnet}.')
+    entry = report['values'][subnet]
+    accept(app, entry['observation'])
+    assert assess(signed_in, entry['entity'], verdict='malicious').status_code == 200
+    response = signed_in.get('/api/iocs/export', params={'kind': 'cidr', 'review_status': 'accepted'})
+    assert response.status_code == 200
+    assert [(ioc['value'], ioc['verdict']) for ioc in response.json()['iocs']] == [(subnet, 'malicious')]
+    assert blocklisted(signed_in, 'ip') == []
+    assert signed_in.get('/api/iocs/blocklist', params={'kind': 'cidr'}).status_code == 422
+
+
 def test_blocklist_kind_must_be_blockable(signed_in: TestClient) -> None:
     response = signed_in.get('/api/iocs/blocklist', params={'kind': 'cve'})
     assert response.status_code == 422

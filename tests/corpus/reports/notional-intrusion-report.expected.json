@@ -1,5 +1,5 @@
 {
-  "description": "Ground truth for notional-intrusion-report.md: what an analyst SHOULD extract. Defanged indicators count (refanged); e-mail addresses, file names, code identifiers, version numbers, CIDR ranges and ATT&CK IDs do not.",
+  "description": "Ground truth for notional-intrusion-report.md: what an analyst SHOULD extract. Defanged indicators count (refanged); e-mail addresses, file names, code identifiers, version numbers and ATT&CK IDs do not.",
   "expected": [
     [
       "cve",
@@ -8,6 +8,14 @@
     [
       "cve",
       "CVE-2023-4966"
+    ],
+    [
+      "cidr",
+      "203.0.113.0/24"
+    ],
+    [
+      "cidr",
+      "198.51.100.0/24"
     ],
     [
       "ip",

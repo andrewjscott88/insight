@@ -58,6 +58,68 @@ def test_ip(text: str, expected: list[str]) -> None:
 
 
 @pytest.mark.parametrize(
+    ('raw', 'expected'),
+    [
+        ('203[.]0[.]113[.]0/24', '203.0.113.0/24'),
+        ('2001[:]0DB8:0000:0000::/48', '2001:db8::/48'),
+        ('::ffff:c000:0200/120', '::ffff:192.0.2.0/120'),
+        ('::ffff:192.0.2.0/120', '::ffff:192.0.2.0/120'),
+        ('192.0.2.7/32', '192.0.2.7/32'),
+        ('2001:db8::7/128', '2001:db8::7/128'),
+        ('128.0.0.0/1', '128.0.0.0/1'),
+        ('8000::/1', '8000::/1'),
+    ],
+)
+def test_cidr_keeps_full_raw_span_and_canonical_network(raw: str, expected: str) -> None:
+    text = f'📄 Range ({raw}).'
+    (mention,) = extract(text)
+    assert (mention.kind, mention.value) == ('cidr', expected)
+    assert text[mention.start : mention.end] == raw
+    assert raw in mention.evidence
+    assert canonical('cidr', raw) == expected
+
+
+@pytest.mark.parametrize(
+    'raw',
+    [
+        '203.0.113.0/33',
+        '2001:db8::/129',
+        '2001:db8::/-1',
+        '192.0.2.0/+24',
+        '203.0.113.7/24',
+        '2001:db8::7/64',
+        '999.0.0.0/8',
+        '2001:db8:::1/128',
+        '192.0.2.0/24x',
+        '192.0.2.0/2.4',
+        'x192.0.2.0/24',
+        'é192.0.2.0/24',
+        '192.0.2.0/24é',
+        '192.0.2.0/24/32',
+        'firmware 1.2.3.0/24',
+        '::ffff:192.0.2.7/120',
+    ],
+)
+def test_invalid_or_embedded_ranges_do_not_yield_partial_addresses(raw: str) -> None:
+    assert extract(raw) == []
+
+
+def test_regression_every_address_is_not_an_indicator() -> None:
+    """Cloud reports often say a rule allowed 0.0.0.0/0; that range is every address, not an indicator."""
+    text = 'The security group allowed SSH from 0.0.0.0/0 and ::/0; the scans came from 198.51.100.0/24.'
+    assert values(text, 'cidr') == ['198.51.100.0/24']
+    assert values(text, 'ip') == []
+
+
+def test_cidr_skips_url_paths_and_leaves_bare_ips_alone() -> None:
+    text = (
+        'hxxps://example[.]org/net/192.0.2.0/24 or https://192.0.2.0/24. Range 192.0.2.0/24; host 192.0.2.1.'
+    )
+    assert values(text, 'cidr') == ['192.0.2.0/24']
+    assert values(text, 'ip') == ['192.0.2.1']
+
+
+@pytest.mark.parametrize(
     ('text', 'expected'),
     [
         ('see https://Example.COM/Path?q=1.', ['https://example.com/Path?q=1']),
@@ -146,6 +208,11 @@ def test_canonical(kind: str, raw: str, expected: str) -> None:
         ('cve', 'CVE-24-1'),
         ('domain', 'svchost.exe'),
         ('ip', '010.1.2.3'),
+        ('cidr', '192.0.2.1'),
+        ('cidr', '192.0.2.0/255.255.255.0'),
+        ('cidr', 'fe80::%eth0/64'),
+        ('cidr', '0.0.0.0/0'),
+        ('cidr', '::/0'),
     ],
 )
 def test_canonical_rejects_invalid(kind: str, raw: str) -> None:
@@ -205,6 +272,8 @@ observable_fragments = st.sampled_from(
         'CVE-2024-12345',
         '192.0.2.8',
         '2001:db8::1',
+        '192.0.2.0/24',
+        '2001:0DB8::/32',
         'https://example.com/a?b=c',
         'example.org',
         'a' * 32,

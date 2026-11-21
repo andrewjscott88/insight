@@ -46,6 +46,29 @@
       ]
     },
     {
+      "id": "cidr-defanged-and-canonical",
+      "text": "Traffic from (192[.]0[.]2[.]128/25) and 2001:0DB8:0012:0000:0000:0000:0000:0000/48 reached 203.0.113.4.",
+      "expected": [
+        [
+          "cidr",
+          "192.0.2.128/25"
+        ],
+        [
+          "cidr",
+          "2001:db8:12::/48"
+        ],
+        [
+          "ip",
+          "203.0.113.4"
+        ]
+      ]
+    },
+    {
+      "id": "cidr-invalid",
+      "text": "Discarded ranges with host bits set (192.0.2.12/24, 2001:db8::7/64) and invalid prefix lengths (198.51.100.0/33, 2001:db8:12::/129).",
+      "expected": []
+    },
+    {
       "id": "cve-mixed-case",
       "text": "Actors exploited cve-2024-3400 and CVE-2023-34362 before patches were applied.",
       "expected": [

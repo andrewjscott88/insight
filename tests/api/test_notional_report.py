@@ -40,7 +40,7 @@ def ingest(client: TestClient, **changes: str) -> dict[str, Any]:
     return result
 
 
-@pytest.mark.parametrize(('body', 'observations', 'entities'), [(GLASS, 35, 21), (SALT, 52, 41)])
+@pytest.mark.parametrize(('body', 'observations', 'entities'), [(GLASS, 37, 23), (SALT, 54, 43)])
 def test_reports_round_trip_through_ingest_and_export(
     authed: TestClient, body: str, observations: int, entities: int
 ) -> None:

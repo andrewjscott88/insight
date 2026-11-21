@@ -145,7 +145,7 @@ def test_errors_name_the_query_parameter(authed: TestClient) -> None:
     response = authed.get('/api/iocs/export', params={'kind': 'IP'})
     assert response.status_code == 422
     assert response.json()['detail'] == (
-        "kind 'IP': Input should be 'cve', 'url', 'sha512', 'sha256', 'sha1', 'md5', 'ip' or 'domain'"
+        "kind 'IP': Input should be 'cve', 'url', 'sha512', 'sha256', 'sha1', 'md5', 'ip', 'domain' or 'cidr'"
     )
 
 
@@ -157,7 +157,7 @@ def test_plus_in_amber_strict_is_encoded(authed: TestClient, reports: tuple[dict
 
 def test_sources_carry_the_extractor_version(authed: TestClient, reports: tuple[dict[str, Any], ...]) -> None:
     export = authed.get('/api/iocs/export').json()
-    assert {s['extractor_version'] for ioc in export['iocs'] for s in ioc['sources']} == {'regex-v2'}
+    assert {s['extractor_version'] for ioc in export['iocs'] for s in ioc['sources']} == {'regex-v3'}
 
 
 def test_evidence_can_be_left_out(authed: TestClient, reports: tuple[dict[str, Any], ...]) -> None:

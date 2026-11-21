@@ -284,7 +284,7 @@ rm -f insight-iocs-*.json
 
 | Parameter | Values (case-sensitive) | Default |
 | --- | --- | --- |
-| `kind` | `cve` `url` `domain` `ip` `md5` `sha1` `sha256` `sha512` | all |
+| `kind` | `cve` `url` `domain` `ip` `cidr` `md5` `sha1` `sha256` `sha512` | all |
 | `review_status` | `unreviewed` `accepted` `rejected` | `unreviewed`, `accepted` |
 | `max_tlp` | a TLP label: only reports at or below it | none (a TLP-limited key: its limit) |
 | `defang` | `true` / `false` | `false` |

@@ -22,9 +22,9 @@ from importlib import resources
 from typing import Final, Literal
 from urllib.parse import urlsplit, urlunsplit
 
-Kind = Literal['cve', 'url', 'sha512', 'sha256', 'sha1', 'md5', 'ip', 'domain']
+Kind = Literal['cve', 'url', 'sha512', 'sha256', 'sha1', 'md5', 'ip', 'domain', 'cidr']
 
-EXTRACTOR_VERSION: Final = 'regex-v2'
+EXTRACTOR_VERSION: Final = 'regex-v3'
 MAX_MENTIONS: Final = 2000
 EVIDENCE_CONTEXT: Final = 90
 
@@ -88,10 +88,13 @@ _URL = re.compile(r'\bhttps?://[^\s<>"\'`|]+', re.IGNORECASE)
 _HEX = re.compile(r'\b[0-9a-f]{32,128}\b', _ASCII_I)
 # A hash wrapped onto the next line (PDF/e-mail export): first part ends a line, second part starts the next.
 _WRAPPED_HEX = re.compile(r'\b([0-9a-f]{8,124})[ \t]*\r?\n[ \t]*([0-9a-f]{4,124})\b', _ASCII_I)
-_IPV4 = re.compile(r'(?<![\w.:])(?:\d{1,3}\.){3}\d{1,3}(?!\w|\.\w|/\d)', re.ASCII)
+_IPV4 = re.compile(r'(?<![\w.:])(?:\d{1,3}\.){3}\d{1,3}(?!\w|\.\w|/[+-]?\d)', re.ASCII)
 _IPV6 = re.compile(
-    r'(?<![\w:.])(?:[0-9a-f]{0,4}:){2,}(?:(?:\d{1,3}\.){3}\d{1,3}|[0-9a-f]{0,4})(?![\w:]|\.\w|/\d)', _ASCII_I
+    r'(?<![\w:.])(?:[0-9a-f]{0,4}:){2,}(?:(?:\d{1,3}\.){3}\d{1,3}|[0-9a-f]{0,4})(?![\w:]|\.\w|/[+-]?\d)',
+    _ASCII_I,
 )
+# 45 characters covers an IPv6 address with a dotted IPv4 tail. Validate the full candidate with ip_network.
+_CIDR = re.compile(r'(?<![\w.:/@%-])[0-9a-f:.]{2,45}/[0-9]{1,3}(?![\w/%+-]|[.:][\w:])', _ASCII_I)
 _LABEL = r'_?[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?'
 _TLD = r'(?:[a-z]{2,63}|xn--[a-z0-9-]{1,59})'
 _DOMAIN = re.compile(rf'(?<![\w@.\-])(?:{_LABEL}\.)+{_TLD}(?![\w-]|\.[a-z0-9])(?!@)', _ASCII_I)
@@ -244,6 +247,19 @@ def canonical(kind: str, value: str) -> str:
         return value.upper()
     if kind == 'ip':
         return _canonical_ip(value)
+    if kind == 'cidr':
+        candidate = refang(value)
+        if not _CIDR.fullmatch(candidate):
+            raise ValueError('Expected a network address and numeric prefix length')
+        network = ipaddress.ip_network(candidate, strict=True)
+        if network.prefixlen == 0:
+            # 0.0.0.0/0 and ::/0 mean every address (firewall and cloud rules): never an indicator.
+            raise ValueError('A /0 range covers every address')
+        address = network.network_address
+        if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped is not None:
+            # Python versions differ on how they print mapped IPv6; keep one stable entity across upgrades.
+            return f'::ffff:{address.ipv4_mapped}/{network.prefixlen}'
+        return str(network)
     if kind == 'url':
         return _canonical_url(value)
     if kind == 'domain':
@@ -381,9 +397,17 @@ def _add_domains(mentions: _Mentions, url_spans: list[Span]) -> None:
             mentions.add('domain', start, end)
 
 
-def _add_ips(mentions: _Mentions) -> None:
-    """IPv4 (not when preceded by a version/firmware/section context) and IPv6 addresses."""
+def _add_ips(mentions: _Mentions, url_spans: list[Span]) -> None:
+    """IPv4 and IPv6 addresses and standalone CIDR networks."""
     work = mentions.work
+    for match in _CIDR.finditer(work):
+        start, end = match.span()
+        if (
+            not _within(url_spans, start, end)
+            and not _is_fragment(work, start, end)
+            and not _VERSION_CONTEXT.search(work[max(0, start - 24) : start])
+        ):
+            mentions.add('cidr', start, end)
     for match in _IPV4.finditer(work):
         start, end = match.span()
         if not _VERSION_CONTEXT.search(work[max(0, start - 24) : start]):
@@ -426,7 +450,7 @@ def extract(text: str) -> list[Mention]:
     mentions = _Mentions(text)
     url_spans = _add_urls(mentions)
     _add_domains(mentions, url_spans)
-    _add_ips(mentions)
+    _add_ips(mentions, url_spans)
     _add_hashes(mentions)
     _add_cves(mentions)
     return mentions.in_order()

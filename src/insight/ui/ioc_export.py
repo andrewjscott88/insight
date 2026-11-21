@@ -33,6 +33,7 @@ KIND_LABELS: Final = {
     'url': 'URL',
     'domain': 'Domain',
     'ip': 'IP address',
+    'cidr': 'Network range (CIDR)',
     'md5': 'MD5',
     'sha1': 'SHA-1',
     'sha256': 'SHA-256',

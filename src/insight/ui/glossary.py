@@ -207,6 +207,11 @@ GLOSSARY: Final[tuple[tuple[str, str], ...]] = (
         'A number that points to one computer on a network, a bit like a phone number.',
     ),
     (
+        'Network range (CIDR)',
+        'A short way to write a group of IP addresses. For example, 203.0.113.0/24 covers all '
+        'addresses from 203.0.113.0 through 203.0.113.255.',
+    ),
+    (
         'Domain, URL',
         'A domain is a website name, such as example.com. A URL is a full web address.',
     ),
