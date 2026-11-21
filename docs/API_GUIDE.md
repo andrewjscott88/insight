@@ -226,6 +226,14 @@ curl -sS "$INSIGHT_URL/api/documents/$DOC_ID" -H "Authorization: Bearer $INSIGHT
 OBS_ID=$(curl -sS "$INSIGHT_URL/api/documents/$DOC_ID" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq -r '.observations[0].id')
 ```
 
+**Import a local STIX 2.1 bundle** with a read-write key. The response lists the report IDs and the
+number of new revisions. The same file can be imported from the workspace ingest dialog.
+
+```sh
+curl --fail-with-body -sS "$INSIGHT_URL/api/import/stix" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' --data-binary @bundle.json
+```
+
 **Triage a report** (`POST /api/documents/{id}/review`): `new`, `reviewing` or `reviewed`.
 
 ```sh
