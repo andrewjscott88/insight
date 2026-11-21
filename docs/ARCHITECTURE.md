@@ -133,7 +133,9 @@ TLS reverse proxy (optional; the container listens on loopback)
   architecture test and a leak-sweep test.
 - **Audit actor**: `services.set_actor(db, ...)` names the caller on the database session; `services.audit`
   records it on every event, so service signatures did not change.
-- **Sign-in MFA** (`totp.py`, ADR 0015): optional, `INSIGHT_MFA=on`; the TOTP secret is paired from the CLI.
+- **Sign-in MFA** is optional. The host CLI pairs the authenticator, and `INSIGHT_MFA=on` requires a code.
+  The database stores an AES-256-GCM ciphertext under a key derived from `INSIGHT_SESSION_SECRET`.
+  [ADR 0015](adr/0015-totp-second-factor.md)
 
 No live connection happens at startup. Sources sync when the operator asks (**Sync now**, **Sync all sources**)
 or on opt-in schedules, off by default ([ADR 0018](adr/0018-opt-in-scheduled-syncs.md)): both go through the

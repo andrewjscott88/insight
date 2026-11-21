@@ -11,6 +11,7 @@ optional dry runs of the gate.
 3. `docs/VALIDATION.md`: record what was validated for `X.Y.Z`.
 4. Create the upgrade fixture for this version and commit it:
    ```sh
+   # Run on Linux with libseccomp2 (the fixture includes a sandboxed PDF import).
    python scripts/make_release_fixture.py        # writes tests/fixtures/releases/insight-X.Y.Z.sqlite3
    ```
    Without a local environment, run the **Release fixture** workflow (Actions → Release fixture → Run workflow)

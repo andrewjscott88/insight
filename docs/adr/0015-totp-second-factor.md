@@ -7,8 +7,8 @@ The instance is going public with one operator and one password. ADR 0002 slows 
 phished or reused password. Identity-provider sign-in is not available yet.
 
 ## Decision
-An optional TOTP second factor (RFC 6238: HMAC-SHA1, 6 digits, 30 s, ±1 step), implemented with the standard
-library (no new dependency in the hash-pinned supply chain) and compatible with common authenticator apps.
+Insight verifies standard six-digit RFC 6238 codes using HMAC-SHA1 and a 30-second time step, accepting one
+step of clock drift in either direction. Code generation and verification use the Python standard library.
 It is **off by default**, at the operator's choice. Two separate parts: *pairing* (`insight mfa setup` shows the
 secret and saves it only after the operator types a matching code; that code's time step is recorded as used)
 and the *switch* `INSIGHT_MFA=on|off` (default off). The Makefile's `mfa-enable` pairs if needed, sets the switch
@@ -19,6 +19,15 @@ anything older, is refused afterwards. There are no recovery codes: turning the 
 and `insight mfa reset` on the host are the recovery path, the same root of trust as API key management (ADR 0012).
 
 ## Consequences
-A stolen password alone no longer signs in. The TOTP secret is stored in the database in recoverable form, so
-database backups must be protected like the password. Clock drift beyond ±30 s breaks sign-in until the clocks
-are fixed (NTP). While MFA is off (the default), the password alone protects sign-in.
+Verifying codes requires access to the original pairing secret. Insight uses the hash-pinned
+`cryptography` package to store it under AES-256-GCM, deriving a dedicated key from the existing
+`INSIGHT_SESSION_SECRET` using HKDF-SHA256. Migration `0017` encrypts an existing pairing and preserves its
+last accepted time step. Subsequent sign-ins continue to reject previously used codes.
+
+Operators restoring an encrypted pairing need the corresponding session secret. Deliberately rotating
+that secret requires a fresh pairing. A pre-`0017` database backup may contain the plaintext seed.
+Protect older copies according to the same retention policy as other credentials.
+[Operator recovery procedure](../RUNBOOK.md#sign-in-second-factor-mfa)
+
+A stolen password alone no longer signs in when MFA is on. Excessive clock drift can break sign-in
+until the clocks are synchronized. While MFA is off, the password alone protects sign-in.

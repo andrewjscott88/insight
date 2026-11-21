@@ -61,7 +61,7 @@ Set in `.env` (Compose reads it) or the process environment. Real environment va
 | Variable | Required | Default | Notes |
 | --- | --- | --- | --- |
 | `INSIGHT_PASSWORD` | yes | - | At least 12 characters. `insight init` generates one. |
-| `INSIGHT_SESSION_SECRET` | yes | - | At least 32 random characters. Changing it invalidates every session cookie. |
+| `INSIGHT_SESSION_SECRET` | yes | - | At least 32 random characters. Signs session cookies and derives the MFA encryption key. Changing it invalidates cookies and requires re-pairing any stored authenticator. |
 | `INSIGHT_DATA_DIR` | no | `data` (`/data` in the image) | SQLite file and NiceGUI storage location |
 | `INSIGHT_DATABASE_URL` | no | `sqlite:///<data dir>/insight.db` | e.g. `postgresql+psycopg://user:pass@host/insight` |
 | `INSIGHT_ALLOWED_HOSTS` | no | `localhost,127.0.0.1` | Host headers accepted. Anything else gets HTTP 400. |
@@ -150,7 +150,9 @@ Rotate at least every 90 days, when anyone who knew them leaves, and **immediate
 2. Replace `INSIGHT_PASSWORD` and `INSIGHT_SESSION_SECRET` in `.env`.
 3. `docker compose up -d` (recreates the container with the new environment).
 
-Everyone is signed out, and cookies issued with the old secret stop working.
+Everyone is signed out, and cookies issued with the old secret stop working. If an authenticator is paired,
+replace the pairing on the host using the new `INSIGHT_SESSION_SECRET`. See
+[Sign-in second factor](#sign-in-second-factor-mfa).
 
 ### Temporary password-free access
 
@@ -216,10 +218,23 @@ Without make: `docker compose run --rm insight insight mfa setup`, then set `INS
 Pairing prints a secret and an `otpauth://` URI: enter the secret in the app manually as a time-based account,
 or turn the URI into a QR code on your own machine. With MFA on, each code works once. If `INSIGHT_MFA=on` but no
 app is paired, sign-in is **locked** (the sign-in page says so) rather than falling back to the password alone;
-start-up logs an error. **Lost phone:** `make mfa-disable` (sign in with the password), then `make mfa-reset`
-and `make mfa-enable` with the new phone. Codes depend on the clock: if they are always refused, check the time
-on the phone and the server (NTP). The pairing secret is stored in the database: protect backups like the
-password.
+start-up logs an error. If codes are refused, check the time on both the phone and the server (NTP).
+
+**Upgrading an existing pairing.** Use the same `INSIGHT_SESSION_SECRET` for the migration, server and host
+CLI. Revision `0017` encrypts the stored pairing secret and preserves the last accepted time step. Continue
+using the same app entry and wait for its next code if you just used one.
+
+**Recovering an existing pairing.** A wrong session secret produces the same sign-in error as an incorrect
+code. If this starts after an environment change or database restore, recover the `INSIGHT_SESSION_SECRET`
+that matches the encrypted database. Keep the existing pairing, recreate
+the container with `docker compose up -d --no-deps insight` (or restart the Python server with the corrected
+environment), and sign in with a fresh code.
+
+**Replacing a pairing.** If the old host secret is unavailable, you deliberately rotated it, or the paired
+phone was lost, use a trusted shell with the intended session secret and database. Run `insight mfa reset`,
+then `insight mfa setup`. Reset discards the old pairing. Add the new secret to the authenticator and confirm
+one code when prompted. With MFA enabled, sign-in requires the next fresh code. The Docker equivalents for
+an MFA-enabled deployment are `make mfa-reset` followed by `make mfa-enable`.
 
 ### Colour theme and text size
 The workspace and the sign-in pages come in a light and a dark theme. **System** (the default) follows each
@@ -263,9 +278,15 @@ docker compose exec insight insight backup /data/backup-$(date +%F).db     # ref
 docker compose cp insight:/data/backup-$(date +%F).db ./backups/
 docker compose exec insight rm /data/backup-$(date +%F).db                  # optional: free volume space
 ```
-`insight backup` uses SQLite's online backup API and runs `PRAGMA integrity_check` on the copy. It prints
+`insight backup` takes a consistent snapshot of live records with SQLite's `VACUUM INTO`. This leaves historical
+free pages out of the copy. It runs `PRAGMA integrity_check` on the destination and prints
 `integrity ok` on success. Store backups with the same protection as the data (they contain TLP:RED material
 if you do). For PostgreSQL, use `pg_dump --format=custom` instead.
+
+Keep a protected copy of the matching `INSIGHT_SESSION_SECRET` in your secret store, separate from database
+backups. An encrypted pairing in a restored database needs that secret. Pre-`0017` backups, snapshots and
+old database pages or logs may still contain the plaintext MFA seed. Retain or expire them under your
+credential-backup policy. Take a fresh backup after upgrading.
 
 Host cron example (daily at 02:30, keep 14):
 ```cron
@@ -283,7 +304,7 @@ Host cron example (daily at 02:30, keep 14):
      -c 'cp /restore/backup-YYYY-MM-DD.db /data/insight.db'
    ```
 3. `docker compose up -d`. Migrations run automatically if the backup is from an older version.
-4. Sign in, and check **Source documents** and a known report.
+4. Sign in, using the paired authenticator if enabled, and check **Source documents** and a known report.
 
 Every milestone gate runs an automated backup and restore drill (`scripts/backup_restore_drill.py`). Run it
 yourself after changing the backup procedure.
@@ -327,7 +348,9 @@ Prefer **restore, not downgrade**:
 2. Switch back to the previous image digest or git tag.
 3. Restore the pre-upgrade backup (§5).
 
-Alembic downgrades exist and are tested, but a restore is simpler and loses nothing that the backup held.
+An explicit downgrade from `0017` to `0016` with a paired authenticator needs the matching session secret.
+It restores the legacy plaintext seed so that the older release can verify codes. Protect the resulting
+database and any copies as you would a pre-upgrade backup.
 
 ## 7. Migrations in detail
 
@@ -585,7 +608,7 @@ Uvicorn logs every request line.
 | Incident | Immediate actions |
 | --- | --- |
 | Password or secret may be exposed | Rotate both (§4), then review logs for sign-ins you did not make. `.env` is plaintext: check who can read it. |
-| Phone with the authenticator app lost | `make mfa-disable`, sign in with the password, `make mfa-reset`, then `make mfa-enable` with the new phone. If the phone may be in someone else's hands, also rotate `INSIGHT_PASSWORD`. |
+| Phone with the authenticator app lost | `make mfa-reset`, then `make mfa-enable` with the new phone (see §4). If the phone may be in someone else's hands, also rotate `INSIGHT_PASSWORD`. |
 | API key may be exposed | `insight api-key revoke` (immediate), then `insight api-key create` and update the client. Check `insight.auth` logs for `API key <key ID>` writes and `Rejected API key` lines, and the audit log for unexpected changes. |
 | Unknown sign-ins or brute force | Confirm the port is bound to 127.0.0.1 (`docker compose port insight 8080`); rotate credentials; find the local process responsible |
 | Secret committed to git | Rotate it, then purge the history (`git filter-repo`). gitleaks in CI should have flagged it. |
@@ -645,3 +668,19 @@ verify the signature (§6).
 | [TESTING](TESTING.md) · [CI_CD](CI_CD.md) · [RELEASING](RELEASING.md) | Quality gates and release process |
 | [VALIDATION](VALIDATION.md) | What each release was validated against |
 | [adr/](adr/) | Architecture decision records |
+
+
+### Local PDF import
+
+The official container provides the Linux PDF worker and libseccomp2. For a local Linux installation,
+install libseccomp2 or your distribution’s equivalent alongside the pinned Python dependencies. An
+unsupported operating system or unavailable kernel filter gives a 503 for PDF uploads. Other report
+ingest paths continue to work.
+
+The parser receives the original bytes through standard input. It starts at the filesystem root with a minimal environment, closed inherited application descriptors and
+kernel-enforced CPU, address-space and output-size limits. It loads trusted parser code before installing
+its default-deny syscall filter and reading the input. The filter permits in-memory decoding and communication
+over the worker’s existing descriptors. File path traversal, process creation and network calls are blocked.
+The parent enforces the wall-clock timeout, bounds the result, hashes the original bytes and writes the
+report and provenance together. To verify a retained original, compare the SHA-256 under **Where this report
+came from** with `sha256sum advisory.pdf`. [Upload limits](API.md#post-apidocumentspdf)
