@@ -107,6 +107,35 @@ def test_pin_checker(tmp_path: Path) -> None:
     ]
 
 
+DIGEST = 'sha256:' + 'f' * 64
+
+
+def test_regression_l7_third_party_docker_run_images_must_be_pinned_by_digest(tmp_path: Path) -> None:
+    """Review L7: gitleaks and ZAP ran from tags in CI, with the repository mounted or on the host network."""
+    workflow = tmp_path / 'ci.yml'
+    workflow.write_text(
+        'steps:\n'
+        '  - run: >-\n'
+        '      docker run --rm -v "${PWD}:/repo" zricethezav/gitleaks:v8.18.4\n'
+        '      detect --source /repo\n'
+        '  - run: |\n'
+        '      docker run --rm --network host -v "${PWD}/zap:/zap/wrk" \\\n'
+        '        ghcr.io/zaproxy/zaproxy:stable \\\n'
+        '        zap-baseline.py -t http://127.0.0.1:8080/\n'
+        f'      docker run -d --name registry -p 127.0.0.1:5000:5000 registry:3@{DIGEST}\n'
+        '      docker run -d --name insight --read-only -e A="$(openssl rand -hex 4)" insight:ci\n'
+        '      docker run -d "${IMAGE}@${DIGEST}"\n'
+    )
+    assert check_pins.unpinned_run_images(workflow) == [
+        'ci.yml: docker run image zricethezav/gitleaks:v8.18.4 is not pinned by digest',
+        'ci.yml: docker run image ghcr.io/zaproxy/zaproxy:stable is not pinned by digest',
+    ]
+
+
+def test_every_workflow_image_in_this_repository_is_pinned_by_digest() -> None:
+    assert [p for p in check_pins.problems() if 'docker run' in p] == []
+
+
 def test_pin_checker_strict_mode_fails_on_this_repository_until_pinned(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

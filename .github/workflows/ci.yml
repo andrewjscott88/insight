@@ -136,9 +136,12 @@ jobs:
           pip install --require-hashes -r requirements-dev.lock
           # --strict: fail if any dependency could not be audited (offline runs otherwise "pass" vacuously).
           pip-audit --strict --require-hashes --disable-pip -r requirements.lock --vulnerability-service osv
+      # Third-party images run with the repository mounted, so they are pinned by digest (code review L7);
+      # scripts/check_pins.py fails on any that is not. Refresh with the digest a run's "docker pull" prints.
       - name: Secrets in git history (gitleaks)
         run: >-
-          docker run --rm -v "${PWD}:/repo" zricethezav/gitleaks:v8.18.4
+          docker run --rm -v "${PWD}:/repo"
+          zricethezav/gitleaks:v8.18.4@sha256:75bdb2b2f4db213cde0b8295f13a88d6b333091bbfbf3012a4e083d00d31caba
           detect --source /repo --redact --verbose --exit-code 1
 
   package:

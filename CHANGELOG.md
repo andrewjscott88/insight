@@ -46,6 +46,9 @@ CVEs in reports they can see; starting a lookup stays refused to them. The new p
 - **L6, downloads without an overall time limit:** the 25 s timeout applied to each read, so a server sending a
   little data every 24 s could stretch one sync out for hours. Every download now stops after 120 seconds and is
   recorded as a failed fetch.
+- **L7, CI images pinned by tag:** gitleaks (with the repository mounted), ZAP (on the host network) and the
+  rehearsal's registry now run from digests, and `scripts/check_pins.py` fails on any third-party `docker run`
+  image that is not pinned by digest. Dependabot does not update these; docs/CI_CD.md says how to.
 
 ### Changed: a clearer executive brief (from #39)
 - Keep the **Insight** name and symbol; use **Cyber Threat Intelligence Feed** as the tagline and remove

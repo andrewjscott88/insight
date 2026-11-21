@@ -104,7 +104,7 @@ Reports are attached to the run summary and as artifacts (90 days).
 
 Final tags `vX.Y.Z` only. See `docs/RELEASING.md` for the step-by-step procedure.
 
-1. **verify**: release metadata and upgrade fixture; `check_pins.py --strict` (every base image by digest,
+1. **verify**: release metadata and upgrade fixture; `check_pins.py --strict` (every base and workflow image by digest,
    every action by commit SHA).
 2. **gate**: the whole milestone gate (Tier 3) on this commit, in the same run. Until 0.6.0 the gate ran on a
    release-candidate tag and the release only checked that it had passed, which cost one more tag and one
@@ -160,7 +160,7 @@ cosign verify ghcr.io/<org>/insight@sha256:<digest> \
 | # | Input | Why / how |
 | --- | --- | --- |
 | 1 | **Repository layout**: `insight/` must be the git repository root | GitHub only reads `.github/` at the root. |
-| 2 | ~~**Pin actions to commit SHAs and the base image to a digest**~~ | Done for 0.5.0: every `uses:` is pinned to a commit SHA with its tag in a comment, both `FROM` lines carry the `python:3.13-slim` index digest, and `.github/zizmor.yml` enforces `hash-pin`. Dependabot keeps the SHAs and digest current. `trivy-action` moved from the deleted `0.28.0` tag to `v0.36.0` (the old tags were removed after the March 2026 tag-hijack incident, GHSA-69fq-xp46-6x23). |
+| 2 | ~~**Pin actions to commit SHAs and the base image to a digest**~~ | Done for 0.5.0: every `uses:` is pinned to a commit SHA with its tag in a comment, both `FROM` lines carry the `python:3.13-slim` index digest, and `.github/zizmor.yml` enforces `hash-pin`. Dependabot keeps the SHAs and digest current. Since code review L7, the third-party images workflows start with `docker run` (gitleaks, ZAP, the rehearsal's registry) are pinned by digest too, with the tag in a comment, and `scripts/check_pins.py` fails on any that is not. Dependabot does not see images inside `run:` steps: refresh one by reading the `Digest: sha256:…` line a run's `docker pull` prints (or `docker buildx imagetools inspect IMAGE:TAG`) and replacing it. `trivy-action` moved from the deleted `0.28.0` tag to `v0.36.0` (the old tags were removed after the March 2026 tag-hijack incident, GHSA-69fq-xp46-6x23). |
 | 3 | **Confirm action and tool versions** | Written against `checkout@v7`, `setup-python@v7`, `upload-artifact@v4`, `docker/*@v4/v6/v7`, `cosign-installer@v4`, `attest-build-provenance@v4`, `codeql-action@v4`, `trivy-action@0.28.0`, `gitleaks v8.18.4`, `uv 0.13.7`. Pinning (2) also confirms these exist. |
 | 4 | **Branch protection** on `main` | Required checks listed under Tier 1; require PR review; block force-push. |
 | 5 | **`release` environment** with required reviewers | Settings → Environments. Publishing waits for a named approver. |

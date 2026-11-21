@@ -127,7 +127,9 @@ jobs:
           cookie="$(python scripts/smoke.py http://127.0.0.1:8080 --password "${E2E_PASSWORD}" --no-demo --print-cookie)"
           echo "::add-mask::${cookie#insight_session=}"
           mkdir -p zap && chmod 777 zap
-          docker run --rm --network host -v "${PWD}/zap:/zap/wrk" ghcr.io/zaproxy/zaproxy:stable \
+          # Pinned by digest (code review L7): it runs on the host network. Tag: stable.
+          docker run --rm --network host -v "${PWD}/zap:/zap/wrk" \
+            ghcr.io/zaproxy/zaproxy:stable@sha256:9624669db72f54d86c4b46a7064518bd9bf79d8c61a4c31befa9923489f328af \
             zap-baseline.py -t http://127.0.0.1:8080/ -I -r zap-report.html -J zap-report.json \
             -z "-config replacer.full_list(0).description=session -config replacer.full_list(0).enabled=true \
                 -config replacer.full_list(0).matchtype=REQ_HEADER -config replacer.full_list(0).matchstr=Cookie \
