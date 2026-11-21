@@ -36,6 +36,9 @@ from .source_registry import Source as Source
 from .source_registry import in_use
 
 MAX_BYTES: Final = 8_000_000
+#: Seconds one whole download may take (code review L6). ``httpx.Timeout(25)`` only limits each wait for data,
+#: so a server sending a little every 24 s could otherwise stretch one sync out for hours.
+DOWNLOAD_DEADLINE: Final = 120.0
 MAX_FEED_ITEMS: Final = 100
 MAX_FEED_SUMMARY: Final = 500
 MAX_KEV_ROWS: Final = 20_000
@@ -180,6 +183,21 @@ async def download(
     if validators is not None and validators.last_modified:
         request_headers['If-Modified-Since'] = validators.last_modified
     # Fixed application-owned hosts only, reached at the addresses just checked (review L1).
+    try:
+        async with asyncio.timeout(DOWNLOAD_DEADLINE):
+            return await _fetch(url, addresses, params, request_headers, validators, transport)
+    except TimeoutError as exc:  # The overall deadline (L6); a normal fetch failure, recorded like any other.
+        raise TimeoutError(f'The download took longer than {DOWNLOAD_DEADLINE:g} seconds') from exc
+
+
+async def _fetch(
+    url: str,
+    addresses: list[egress.IPAddress],
+    params: Mapping[str, str] | None,
+    request_headers: dict[str, str],
+    validators: Validators | None,
+    transport: httpx.AsyncBaseTransport | None,
+) -> bytes:
     async with httpx.AsyncClient(
         timeout=httpx.Timeout(25), follow_redirects=False, trust_env=False, transport=transport
     ) as client:

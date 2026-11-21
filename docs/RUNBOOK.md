@@ -385,6 +385,7 @@ pauses for an hour, then tries again by itself.
 | `Unchanged since the last sync.` (success) | The publisher's feed has not changed since the last successful sync | Nothing to do; nothing was re-imported. |
 | `ValueError: The CSAF index lists no advisories` / `None of the N newest CSAF advisories could be read` | CISA moved or changed its CSAF repository | Nothing was imported. Report it; the nightly live tests should also flag it. |
 | `OSError` / `ConnectError` | No network or DNS | Check host egress (an egress firewall is recommended) |
+| `TimeoutError: The download took longer than 120 seconds` | The publisher answered too slowly (every download has an overall limit, review L6) | Retry later; nothing was imported |
 | Lookup `429` / *Wait N more second(s)* | The provider's window is taken, possibly by Insight's own automatic lookups | Wait the seconds shown |
 | Lookup `502 … non-JSON` | Provider outage or HTML error page | Retry later |
 | Lookup job `NVD answered HTTP 403/404 (check INSIGHT_NVD_API_KEY)` | NVD refused the key (mistyped, revoked or expired) | Fix or remove `INSIGHT_NVD_API_KEY` and restart; jobs resume within an hour |

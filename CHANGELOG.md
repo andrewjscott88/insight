@@ -43,6 +43,9 @@ CVEs in reports they can see; starting a lookup stays refused to them. The new p
   lock, so a lookup batch made *Sync all* answer `409` and alerts waited behind long syncs. They now run in
   separate lanes, side by side, each with its own lock; only syncs share the lock of *Sync now*
   ([ADR 0018](docs/adr/0018-opt-in-scheduled-syncs.md)).
+- **L6, downloads without an overall time limit:** the 25 s timeout applied to each read, so a server sending a
+  little data every 24 s could stretch one sync out for hours. Every download now stops after 120 seconds and is
+  recorded as a failed fetch.
 
 ### Changed: a clearer executive brief (from #39)
 - Keep the **Insight** name and symbol; use **Cyber Threat Intelligence Feed** as the tagline and remove
