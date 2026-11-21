@@ -681,12 +681,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                 data = source.read(MAX_BUNDLE_BYTES + 1)
             with _current_database() as sessions, sessions.begin() as db:
                 services.set_actor(db, 'cli')
-                result = services.import_stix(db, data, max_tlp=parse_max_tlp(os.getenv('INSIGHT_MAX_TLP', '')))
-            print(f"Imported {result['reports']} report(s), {result['created']} new revision(s). SHA-256 {result['bundle_sha256']}")
+                result = services.import_stix(
+                    db, data, max_tlp=parse_max_tlp(os.getenv('INSIGHT_MAX_TLP', ''))
+                )
+            print(
+                f'Imported {result["reports"]} report(s), {result["created"]} new revision(s). '
+                f'SHA-256 {result["bundle_sha256"]}'
+            )
         except IntegrityError:
             print('Concurrent import; retry once', file=sys.stderr)
             return 1
-        except (OSError, ValueError) as exc:
+        except (OSError, ValueError, RuntimeError) as exc:
             print(f'Import failed: {exc}', file=sys.stderr)
             return 1
         return 0

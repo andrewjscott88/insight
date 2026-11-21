@@ -29,7 +29,7 @@ _TLP1 = {  # Predefined STIX 2.1 TLP 1.0 marking IDs, in addition to the TLP 2.0
 _OBSERVABLE_TYPES = {'indicator', 'vulnerability', 'attack-pattern'}
 _SUPPORTED = _OBSERVABLE_TYPES | {'report', 'identity', 'marking-definition'}
 _PATTERN = re.compile(
-    r"\[\s*(ipv[46]-addr|file|domain-name|url|email-addr):"
+    r'\[\s*(ipv[46]-addr|file|domain-name|url|email-addr):'
     r"(value|hashes\.(?:'[^']{1,12}'|MD5))\s*=\s*'((?:[^'\\]|\\['\\])*)'\s*\]"
 )
 _KINDS: dict[str, Kind] = {'domain-name': 'domain', 'url': 'url', 'email-addr': 'email'}
@@ -93,17 +93,27 @@ def _read(data: bytes) -> Object:
             pending.extend((v, depth + 1) for v in node)
         elif isinstance(node, str) and '\x00' in node:
             raise ValueError('STIX text contains a null character')
-    if not isinstance(bundle, dict) or bundle.get('type') != 'bundle' or not isinstance(bundle.get('id'), str):
+    if (
+        not isinstance(bundle, dict)
+        or bundle.get('type') != 'bundle'
+        or not isinstance(bundle.get('id'), str)
+    ):
         raise ValueError('Expected a STIX bundle with an ID')
     _uuid(bundle['id'], 'bundle')
-    objects = bundle.get('objects')
+    if 'objects' not in bundle:  # STIX represents an empty bundle by omitting this property.
+        return bundle
+    objects = bundle['objects']
     if not isinstance(objects, list) or not 1 <= len(objects) <= MAX_OBJECTS:
         raise ValueError(f'A STIX bundle must contain 1 to {MAX_OBJECTS} objects')
     return bundle
 
 
 def _indicator(obj: Object) -> tuple[Kind, str]:
-    if obj.get('pattern_type') != 'stix' or not isinstance(obj.get('pattern'), str) or len(obj['pattern']) > 8192:
+    if (
+        obj.get('pattern_type') != 'stix'
+        or not isinstance(obj.get('pattern'), str)
+        or len(obj['pattern']) > 8192
+    ):
         raise ValueError('Expected a single STIX equality pattern')
     match = _PATTERN.fullmatch(obj['pattern'])
     if not match:
@@ -130,7 +140,11 @@ def _indicator(obj: Object) -> tuple[Kind, str]:
 
 
 def _reference(obj: Object, source: str) -> str:
-    matches = {entry.get('external_id') for entry in obj.get('external_references', []) if entry.get('source_name', '').lower() == source}
+    matches = {
+        entry.get('external_id')
+        for entry in obj.get('external_references', [])
+        if entry.get('source_name', '').lower() == source
+    }
     if len(matches) != 1 or not isinstance(value := matches.pop(), str):
         raise ValueError(f'Expected one {source} external ID')
     return value
@@ -141,7 +155,11 @@ def _value(obj: Object) -> tuple[Kind | None, str]:
         return _indicator(obj)
     if obj['type'] == 'vulnerability':
         name = obj.get('name', '')
-        value = _reference(obj, 'cve') if any(r.get('source_name', '').lower() == 'cve' for r in obj.get('external_references', [])) else name
+        value = (
+            _reference(obj, 'cve')
+            if any(r.get('source_name', '').lower() == 'cve' for r in obj.get('external_references', []))
+            else name
+        )
         return 'cve', canonical('cve', value)
     attack_id = _reference(obj, 'mitre-attack')
     if not technique(attack_id):
@@ -163,9 +181,13 @@ def _labels(objects: dict[str, Object], max_tlp: str) -> dict[str, str]:
                 old_label = 'white' if label == 'CLEAR' else label.lower()
                 if obj.get('definition_type') != 'tlp' or obj.get('definition') != {'tlp': old_label}:
                     raise ValueError('Marking definition does not match its standard ID')
-            elif obj.get('name') != f'TLP:{label}' or obj.get('extensions') != {
-                TLP_EXTENSION: {'extension_type': 'property-extension', 'tlp_2_0': label.lower()}
-            } or 'definition' in obj or 'definition_type' in obj:
+            elif (
+                obj.get('name') != f'TLP:{label}'
+                or obj.get('extensions')
+                != {TLP_EXTENSION: {'extension_type': 'property-extension', 'tlp_2_0': label.lower()}}
+                or 'definition' in obj
+                or 'definition_type' in obj
+            ):
                 raise ValueError('Marking definition does not match its standard ID')
             if obj.get('object_marking_refs') or obj.get('granular_markings'):
                 raise ValueError('Nested markings are unsupported')
@@ -184,12 +206,17 @@ def _labels(objects: dict[str, Object], max_tlp: str) -> dict[str, str]:
 
 
 def _render_report(
-    report: Object, refs: list[str], values: dict[str, tuple[Kind | None, str]],
-    labels: dict[str, str], objects: dict[str, Object],
+    report: Object,
+    refs: list[str],
+    values: dict[str, tuple[Kind | None, str]],
+    labels: dict[str, str],
+    objects: dict[str, Object],
 ) -> ImportedReport:
     source_id = str(report['id'])
-    initial_id = _uuid(source_id, 'report') if report['type'] == 'report' else str(uuid5(NAMESPACE_URL, source_id))
-    publisher = next(iter(report.get('external_references', [])), {})
+    initial_id = (
+        _uuid(source_id, 'report') if report['type'] == 'report' else str(uuid5(NAMESPACE_URL, source_id))
+    )
+    publisher: Object = next(iter(report.get('external_references', [])), {})
     author = objects.get(report.get('created_by_ref', ''), {})
     marking = most_restrictive(labels.get(source_id, 'CLEAR'), *(labels[r] for r in refs))
     if author:
@@ -214,12 +241,24 @@ def _render_report(
             raise ValueError('STIX report exceeds the document or observation limit')
     body = '\n'.join(lines)
     item = DocumentInput(
-        title=report['name'], body=body, source_name=publisher.get('source_name') or author.get('name') or 'STIX import',
-        source_url=publisher.get('url', ''), tlp=cast(TLP, marking),
+        title=report['name'],
+        body=body,
+        source_name=publisher.get('source_name') or author.get('name') or 'STIX import',
+        source_url=publisher.get('url', ''),
+        tlp=cast(TLP, marking),
     )
-    mentions = [Mention(kind, value, start, end, body[max(start-EVIDENCE_CONTEXT, 0):end+EVIDENCE_CONTEXT]) for kind,value,start,end in offsets]
-    return ImportedReport(source_id, initial_id, item, mentions, metadata_only,
-                          frozenset(value for kind, value in ordered if kind is None))
+    mentions = [
+        Mention(kind, value, start, end, body[max(start - EVIDENCE_CONTEXT, 0) : end + EVIDENCE_CONTEXT])
+        for kind, value, start, end in offsets
+    ]
+    return ImportedReport(
+        source_id,
+        initial_id,
+        item,
+        mentions,
+        metadata_only,
+        frozenset(value for kind, value in ordered if kind is None),
+    )
 
 
 def parse_stix(data: bytes, max_tlp: str) -> ImportedBundle:
@@ -227,8 +266,13 @@ def parse_stix(data: bytes, max_tlp: str) -> ImportedBundle:
     bundle = _read(data)
     objects: dict[str, Object] = {}
     total_refs = report_count = 0
-    for obj in bundle['objects']:
-        if not isinstance(obj, dict) or not isinstance(obj.get('type'), str) or obj['type'] not in _SUPPORTED or not isinstance(obj.get('id'), str):
+    for obj in bundle.get('objects', []):
+        if (
+            not isinstance(obj, dict)
+            or not isinstance(obj.get('type'), str)
+            or obj['type'] not in _SUPPORTED
+            or not isinstance(obj.get('id'), str)
+        ):
             raise ValueError('Unsupported or invalid object in STIX bundle')
         _uuid(obj['id'], obj['type'])
         if obj['id'] in objects or obj.get('spec_version') != '2.1':
@@ -260,7 +304,11 @@ def parse_stix(data: bytes, max_tlp: str) -> ImportedBundle:
     total_chars = 0
     for obj in objects.values():
         creator = obj.get('created_by_ref')
-        if creator and obj['type'] != 'marking-definition' and objects.get(creator, {}).get('type') != 'identity':
+        if (
+            creator
+            and obj['type'] != 'marking-definition'
+            and objects.get(creator, {}).get('type') != 'identity'
+        ):
             raise ValueError('Unresolved creator identity')
         if creator and obj['type'] == 'identity' and creator != obj['id']:
             raise ValueError('Nested STIX publisher identities are unsupported')
@@ -271,7 +319,9 @@ def parse_stix(data: bytes, max_tlp: str) -> ImportedBundle:
             continue
         refs = obj['object_refs']
         if not refs or any(ref not in values for ref in refs):
-            raise ValueError('Every report reference must resolve to a supported observable or technique in the bundle')
+            raise ValueError(
+                'Every report reference must resolve to a supported observable or technique in the bundle'
+            )
         used.update(refs)
         imported = _render_report(obj, refs, values, labels, objects)
         total_chars += len(imported.item.body)
@@ -284,6 +334,6 @@ def parse_stix(data: bytes, max_tlp: str) -> ImportedBundle:
     if orphaned:
         standalone = {'id': bundle['id'], 'name': 'Imported STIX indicators', 'type': 'bundle'}
         reports.append(_render_report(standalone, orphaned, values, labels, objects))
-    if not reports:
+    if objects and not reports:
         raise ValueError('No supported reports or observations in STIX bundle')
     return ImportedBundle(bundle['id'], hashlib.sha256(data).hexdigest(), reports)

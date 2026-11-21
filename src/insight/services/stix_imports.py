@@ -22,15 +22,21 @@ def _preflight(db: Session, report: ImportedReport, max_tlp: str) -> SourceRef:
     ref = SourceRef(key, report.source_id)
     item = apply_tlp_policy(report.item)
     _refuse_above(report.item.tlp, item.tlp, max_tlp)
-    current = db.scalar(select(Document).where(
-        Document.source_key.in_([SOURCE, RESTRICTED_SOURCE]), Document.external_id == report.source_id,
-        Document.is_current.is_(True)))
+    current = db.scalar(
+        select(Document).where(
+            Document.source_key.in_([SOURCE, RESTRICTED_SOURCE]),
+            Document.external_id == report.source_id,
+            Document.is_current.is_(True),
+        )
+    )
     # A new bundle cannot relax an existing publisher restriction, lower a stored label,
     # or claim the identity of a document this importer did not create.
     if current and (current.source_key != key or not tlp_permitted(current.tlp, item.tlp)):
         raise ValueError('Import conflicts with an existing document or handling restriction')
-    for existing in (db.get(Document, report.initial_id),
-                     db.scalar(select(Document).where(Document.fingerprint == fingerprint(item)))):
+    for existing in (
+        db.get(Document, report.initial_id),
+        db.scalar(select(Document).where(Document.fingerprint == fingerprint(item))),
+    ):
         if existing and (existing.source_key != key or existing.external_id != report.source_id):
             raise ValueError('Import conflicts with an existing document or handling restriction')
     return ref
@@ -44,12 +50,24 @@ def import_stix(db: Session, data: bytes, *, max_tlp: str) -> dict[str, Any]:
     count = 0
     for report, ref in zip(bundle.reports, refs, strict=True):
         doc, created = ingest(
-            db, report.item, ref=ref, max_tlp=max_tlp, initial_document_id=report.initial_id,
+            db,
+            report.item,
+            ref=ref,
+            max_tlp=max_tlp,
+            initial_document_id=report.initial_id,
+            preserve_source_tlp=True,
             structured=StructuredObservations('stix-2.1', report.mentions, report.technique_ids),
         )
         audit(db, 'stix.import', doc.id, f'{bundle.bundle_id} sha256={bundle.sha256}')
         ids.append(doc.id)
         count += created
+    if not ids:
+        audit(db, 'stix.import.empty', bundle.bundle_id.removeprefix('bundle--'), bundle.sha256)
     db.flush()
-    return {'bundle_id': bundle.bundle_id, 'bundle_sha256': bundle.sha256, 'reports': len(ids),
-            'created': count, 'document_ids': ids}
+    return {
+        'bundle_id': bundle.bundle_id,
+        'bundle_sha256': bundle.sha256,
+        'reports': len(ids),
+        'created': count,
+        'document_ids': ids,
+    }

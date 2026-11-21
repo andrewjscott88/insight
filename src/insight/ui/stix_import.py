@@ -26,7 +26,9 @@ _UPLOAD = """
         });
         if (!response.ok) {
             const message = await response.json().catch(() => ({}));
-            return {error: typeof message.detail === 'string' ? message.detail : 'The server refused this bundle.'};
+            const detail = typeof message.detail === 'string'
+                ? message.detail : 'The server refused this bundle.';
+            return {error: detail};
         }
         const {created, reports} = await response.json();
         picker.value = '';
@@ -44,7 +46,8 @@ def build_stix_import(ws: Workspace, dialog: ui.dialog) -> None:
             'muted prose'
         )
         ui.element('input').props(
-            'type=file accept=".json,.stix,application/json,application/stix+json" aria-label="STIX bundle file"'
+            'type=file accept=".json,.stix,application/json,application/stix+json" '
+            'aria-label="STIX bundle file"'
         ).classes('stix-bundle-file w-full')
         problem = problem_area()
 

@@ -76,8 +76,9 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
 ## 0.9.0: speaks STIX, ATT&CK and MISP
 
 - [x] [#12](https://github.com/andrewjscott88/insight/issues/12) **TIP 2.1 STIX 2.1 export (M5),** validated on
-      every export with publisher and retention checks. The import/export round trip is tracked under TIP 2.2.
-- [ ] **TIP 2.2 STIX 2.1 import** with TLP raising and the instance TLP limit.
+      every export with publisher and retention checks. The offline round-trip test covers report IDs, values, handling and technique links.
+- [x] **TIP 2.2 STIX 2.1 import** from a local file, CLI or API, with atomic imports, publisher restrictions,
+      TLP raising and instance/key limits. [Import guide](docs/API.md#post-apiimportstix)
 - [x] **TIP 2.3 ATT&CK techniques.** STIX Reports link to the catalog techniques tagged on each included
       report revision. Each exported `attack-pattern` carries that report's sharing label and MITRE technique ID.
 - [ ] **TIP 2.9 Suricata/Snort-oriented export** of the blocklist population.

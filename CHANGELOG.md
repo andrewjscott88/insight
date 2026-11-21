@@ -8,6 +8,12 @@
   (`insight export-stix FILE`) or `GET /api/iocs/stix`. Every bundle is validated locally before download.
   The existing report, review and publisher sharing rules apply. [Export guide](docs/IOC_EXPORT.md#stix-21-export)
 
+### STIX 2.1 import
+
+- Import local STIX bundles from the ingest dialog, `insight import-stix FILE` or `POST /api/import/stix`.
+  Each report keeps its source identity, typed observations, TLP and publisher handling restrictions.
+  [Import guide](docs/API.md#post-apiimportstix)
+
 ### Optional indicator feeds
 
 - The Sources tab can now sync URLhaus, ThreatFox and MalwareBazaar using an operator's abuse.ch key.
