@@ -78,6 +78,7 @@ from .documents import (
 )
 from .entities import PIVOT_PAGE_SIZE, count_entity_documents, entity_documents, get_entity, list_entities
 from .exports import MAX_EXPORT_MENTIONS, export_iocs, export_stix, ioc_export_counts, ioc_mentions
+from .ip_enrichment import cached_greynoise_context, eligible_greynoise_ip, store_greynoise_context
 from .jobs import (
     JOB_ACTIVE,
     JOB_BACKOFF,
@@ -217,6 +218,7 @@ __all__ = [
     'blocklist',
     'brief_data',
     'cached_enrichments',
+    'cached_greynoise_context',
     'carry_decisions',
     'claim_job',
     'clear_lookup_failure',
@@ -234,6 +236,7 @@ __all__ = [
     'detail',
     'document_techniques',
     'due_alerts',
+    'eligible_greynoise_ip',
     'end_all_operator_sessions',
     'end_operator_session',
     'enqueue_due_alerts',
@@ -300,6 +303,7 @@ __all__ = [
     'stamp',
     'start_operator_session',
     'stats',
+    'store_greynoise_context',
     'stricter_limit',
     'summaries',
     'summary',

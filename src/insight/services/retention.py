@@ -22,7 +22,7 @@ from dataclasses import asdict, dataclass
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
-from ..models import Document, DocumentTechnique, Entity, EntityAssessment, Note, Observation
+from ..models import Document, DocumentTechnique, Enrichment, Entity, EntityAssessment, Note, Observation
 from .audit import audit
 
 MAX_REASON_LENGTH = 500
@@ -136,6 +136,9 @@ def delete_document(db: Session, document_id: str, reason: str) -> DeletionResul
                 .where(EntityAssessment.entity_id.in_(orphans))
             )
             or 0
+        )
+        db.execute(
+            delete(Enrichment).where(Enrichment.provider == 'greynoise', Enrichment.subject.in_(orphans))
         )
         db.execute(delete(EntityAssessment).where(EntityAssessment.entity_id.in_(orphans)))
         db.execute(delete(Entity).where(Entity.id.in_(orphans)))

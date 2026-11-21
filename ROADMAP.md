@@ -97,7 +97,7 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
       reports, linked Sigma/YARA rules, and a hunt record. Needs a bundled threat-group library (ATT&CK groups
       plus sourced industry data); builds on TIP 2.3, 2.5 and 2.7.
 - [ ] **TIP 2.7 YARA and Sigma rules as linked artifacts** (carried and exported, never executed).
-- [ ] **TIP 2.6 Optional GreyNoise enrichment** for IP addresses (operator key; never a verdict by itself).
+- [x] **TIP 2.6 Optional GreyNoise enrichment** for IP addresses (operator key; never a verdict by itself).
 - [ ] [#13](https://github.com/andrewjscott88/insight/issues/13) **TIP 2.8 PDF report ingestion,** keeping the
       file's hash as evidence.
 
