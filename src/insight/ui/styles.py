@@ -39,12 +39,42 @@ body.body--dark, body.body--light { background:var(--ins-bg);color:var(--ins-tex
 .panel { background:var(--ins-panel);border:1px solid var(--ins-line);border-radius:10px;
   color:var(--ins-text); }
 .source-card { border:1px solid var(--ins-line);background:var(--ins-card);border-radius:7px;padding:16px;
-  width:100%;cursor:pointer; }
+  width:100%;min-width:0;overflow-wrap:break-word;cursor:pointer; }
+.source-card > *, .source-card .q-btn__content, .source-card .q-btn__content > .block {
+  min-width:0;max-width:100%; }
 .source-card:hover { background:var(--ins-hover); }
 .source-selected { border-color:var(--ins-accent);border-width:2px;background:var(--ins-selected); }
-/* The intel brief's executive summary: set apart like a selected card, with an accent rule on the left. */
-.summary-box { border:1px solid var(--ins-line);border-left:4px solid var(--ins-accent);border-radius:8px;
-  background:var(--ins-selected); }
+/* The brief leads the page. Its reading column stays narrow while the scope stays alongside it. */
+.brand-description { font-size:1rem;line-height:1.5; }
+.brief-heading .page-title { font-size:2.5rem;line-height:1.2; }
+.brief-overview { display:grid;grid-template-columns:minmax(0, 1.8fr) minmax(17rem, 1fr);gap:1rem; }
+.summary-box { border:1px solid var(--ins-line);border-top:4px solid var(--ins-accent);border-radius:10px;
+  background:var(--ins-panel); }
+.brief-prose { line-height:1.7; }
+.brief-context { border:1px solid var(--ins-line);border-radius:10px;background:var(--ins-selected); }
+.brief-recent-count { font-size:2.5rem;font-weight:600;line-height:1.2; }
+.brief-scope { padding-top:1rem;border-top:1px solid var(--ins-line); }
+.brief-coverage .q-item { padding:0; }
+.brief-priorities { display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,20rem),1fr));
+  gap:1rem; }
+.brief-priority { border:1px solid var(--ins-line);border-radius:10px;background:var(--ins-panel); }
+.brief-action { border-left:3px solid var(--ins-accent);padding-left:0.75rem;margin-top:auto; }
+.brief-sections { display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:1rem; }
+.brief-section { grid-column:span 2;border:1px solid var(--ins-line);border-radius:10px;
+  background:var(--ins-panel); }
+.brief-section-primary { grid-column:span 3;background:var(--ins-card); }
+.brief-evidence { color:var(--ins-link); }
+.brief-evidence .q-btn__content { min-width:0;max-width:100%; }
+.brief-evidence .block { min-width:0;max-width:min(100%,56ch); }
+.workspace-tools { padding-top:1.5rem;border-top:1px solid var(--ins-line); }
+@media(max-width:1099px) {
+  .brief-overview { grid-template-columns:minmax(0,1fr); }
+  .brief-section { grid-column:span 3; }
+}
+@media(max-width:699px) {
+  .brief-heading .page-title { font-size:2rem; }
+  .brief-section { grid-column:span 6; }
+}
 .source-card .q-focus-helper { display:none; }
 .source-card .q-btn:hover .block { text-decoration:underline; }
 /* Reading width: about 70 characters per line (WCAG 1.4.8: at most 80; BDA: 60-70). 1ch is the width of "0",

@@ -206,13 +206,18 @@ def test_kev_growth_is_compared_with_earlier_periods() -> None:
     entries = [kev(i, FRESH_DAY) for i in range(9)] + [kev(100 + i, OLD_DAY) for i in range(8)]
     result = compose(make(reports('n', 1, FRESH_DAY), kev=entries))
     summary = ' '.join(result.summary)
-    assert 'CISA confirmed that attackers are using 9 more weaknesses, in products from Acme.' in summary
+    assert 'CISA added 9 more weaknesses to its known exploited list, in products from Acme.' in summary
     assert 'That is more than usual: CISA added about 2 a week before.' in summary
 
 
 def test_nothing_new_says_so() -> None:
     result = compose(make(reports('o', 3, OLD_DAY)))
-    assert result.summary == ('Nothing new in the last 7 days. Sync your sources to get the latest.',)
+    assert result.summary == (
+        (
+            'No recent reports are available for the last 7 days. Sync your sources, and check their '
+            'status in About this brief.'
+        ),
+    )
 
 
 def test_a_cut_off_read_is_reported() -> None:

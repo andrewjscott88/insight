@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Final
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.orm import Session
 
 from ..models import (
@@ -13,8 +13,11 @@ from ..models import (
     Entity,
     KEVRecord,
     Observation,
+    SourceRun,
 )
+from ..source_registry import SOURCES, in_use
 from .common import fold, like_pattern
+from .sources import source_switches
 from .tlp import _visible
 from .triage import list_watch_terms
 
@@ -71,6 +74,33 @@ class BriefData:
     kev: dict[str, BriefKev]
     #: Each watch term, with the IDs of the reports in ``documents`` that mention it.
     watch: dict[str, set[str]]
+    truncated: bool = False
+    #: (source key, display name, last attempt, its status, last successful check); no error text.
+    source_checks: tuple[tuple[str, str, str, str, str], ...] = ()
+
+
+def _source_checks(db: Session) -> tuple[tuple[str, str, str, str, str], ...]:
+    """The latest check of each source in use (optional sources only once switched on), in registry order."""
+    switches = source_switches(db)
+    used = [source for source in SOURCES.values() if in_use(source, switches)]
+    checks = {}
+    for key, attempted, succeeded in db.execute(
+        select(
+            SourceRun.source_key,
+            func.max(SourceRun.created_at),
+            func.max(case((SourceRun.status == 'success', SourceRun.created_at), else_=None)),
+        )
+        .where(SourceRun.source_key.in_([source.key for source in used]))
+        .group_by(SourceRun.source_key)
+    ):
+        status = db.scalar(
+            select(SourceRun.status)
+            .where(SourceRun.source_key == key, SourceRun.created_at == attempted)
+            .order_by(SourceRun.id)
+            .limit(1)
+        )
+        checks[key] = (attempted or '', status or '', succeeded or '')
+    return tuple((source.key, source.name, *checks.get(source.key, ('', '', ''))) for source in used)
 
 
 def brief_data(db: Session, *, since: str, max_tlp: str | None = None) -> BriefData:
@@ -94,8 +124,10 @@ def brief_data(db: Session, *, since: str, max_tlp: str | None = None) -> BriefD
         .outerjoin(KEVRecord, kev_report)
         .where(*window)
         .order_by(Document.created_at.desc(), Document.id)
-        .limit(MAX_BRIEF_DOCUMENTS)
+        .limit(MAX_BRIEF_DOCUMENTS + 1)
     ).all()
+    truncated = len(rows) > MAX_BRIEF_DOCUMENTS
+    rows = rows[:MAX_BRIEF_DOCUMENTS]
     ids = [r[0] for r in rows]
     bodies = dict(
         db.execute(
@@ -137,4 +169,12 @@ def brief_data(db: Session, *, since: str, max_tlp: str | None = None) -> BriefD
             select(Document.id).where(Document.id.in_(ids), Document.search_text.like(pattern, escape='\\'))
         )
         watch[term] = set(matched)
-    return BriefData(since=since, documents=documents, mentions=mentions, kev=kev, watch=watch)
+    return BriefData(
+        since=since,
+        documents=documents,
+        mentions=mentions,
+        kev=kev,
+        watch=watch,
+        truncated=truncated,
+        source_checks=_source_checks(db),
+    )

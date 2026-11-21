@@ -1,64 +1,26 @@
-"""The intel brief: an executive summary and short sections on recent intelligence, built from the data alone.
-
-No model writes it, so it never states anything the reports do not: every sentence is a count, a date or a
-value from the database, and every line below the summary opens its evidence. ``services.brief_data`` gathers
-the raw facts; :func:`compose` decides what counts as new and words it.
-
-"New" means published in the window: CISA KEV entries by the day CISA added them, CISA advisories by the day
-CISA first released them, and other reports by the day Insight received them. So a first sync of years of
-history, or CISA updating old advisories, does not flood the brief. The synthetic demo reports are left out.
-"""
+"""Deterministic executive brief from stored reports, with links back to its evidence."""
 
 from __future__ import annotations
 
-import re
-from collections import Counter, defaultdict
-from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Final
 
-from .demo import REPORTS as DEMO_REPORTS
-from .services import KEV_SOURCE, BriefData, BriefDocument, BriefKev
+from .brief_facts import DEMO as DEMO
+from .brief_facts import SECTION_ITEMS as SECTION_ITEMS
+from .brief_facts import _day, _Facts, _facts, _product, _source, _time
+from .brief_facts import count_of as count_of
+from .brief_facts import is_demo as is_demo
+from .brief_facts import name_list as name_list
+from .brief_facts import published as published
+from .brief_highlights import coverage, highlights
+from .brief_types import Brief as Brief
+from .brief_types import BriefHighlight as BriefHighlight
+from .brief_types import BriefItem as BriefItem
+from .brief_types import BriefSection as BriefSection
+from .services import BriefData, BriefKev
 
 DEFAULT_DAYS: Final = 7
 MAX_DAYS: Final = 30
-SECTION_ITEMS: Final = 5
-#: CVSS base score from which a weakness counts as critical (the CVSS v3 and v4 "Critical" band).
-CRITICAL: Final = 9.0
-#: Lines that ``connectors.parse_csaf`` writes (``tests/unit/test_brief.py`` checks the contract).
-SCORE_LINE: Final = re.compile(r'^- (CVE-\d{4}-\d{4,}), CVSS [\d.]+ base score (\d{1,2}(?:\.\d+)?):', re.M)
-VENDOR_LINE: Final = re.compile(r'^Vendors: (.+)$', re.M)
-RELEASE_LINE: Final = re.compile(
-    r'^Released (\d{4}-\d{2}-\d{2})(?:; current version .* \((\d{4}-\d{2}-\d{2})\))?\.$', re.M
-)
-DEMO: Final = frozenset((title, source) for title, source, _, _ in DEMO_REPORTS)
-
-
-@dataclass(frozen=True, slots=True)
-class BriefItem:
-    """One line of a section: it opens a report, looks up an indicator, or searches the reports for a word."""
-
-    text: str
-    document_id: str | None = None
-    entity: str | None = None
-    search: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class BriefSection:
-    title: str
-    items: tuple[BriefItem, ...]
-    #: Shown instead of the items when there are none.
-    empty: str
-
-
-@dataclass(frozen=True, slots=True)
-class Brief:
-    days: int
-    since: str
-    #: The executive summary: short plain sentences, most important first.
-    summary: tuple[str, ...]
-    sections: tuple[BriefSection, ...]
 
 
 def window_start(now: datetime, days: int = DEFAULT_DAYS) -> str:
@@ -68,139 +30,13 @@ def window_start(now: datetime, days: int = DEFAULT_DAYS) -> str:
     return (now - timedelta(days=days)).isoformat()
 
 
-# --------------------------------------------------------------------------- words
-
-
-def count_of(count: int, singular: str, plural: str | None = None) -> str:
-    return f'{count} {singular if count == 1 else plural or singular + "s"}'
-
-
-def name_list(names: list[str], limit: int = 3) -> str:
-    """``A``, ``A and B``, ``A, B and C``, or ``A, B, C and 2 others``."""
-    unique = list(dict.fromkeys(n for n in names if n))
-    shown, rest = unique[:limit], len(unique) - limit
-    if rest > 0:
-        return ', '.join(shown) + f' and {count_of(rest, "other")}'
-    return ' and '.join([', '.join(shown[:-1]), shown[-1]]) if len(shown) > 1 else ''.join(shown)
-
-
-def _product(kev: BriefKev) -> str:
-    return ' '.join(part for part in (kev.vendor, kev.product) if part) or 'Unknown product'
-
-
-# --------------------------------------------------------------------------- facts
-
-
-def published(doc: BriefDocument) -> str:
-    """When ``doc`` was published (``YYYY-MM-DD``): the publisher's date if known, else the day it arrived."""
-    # A CISA advisory counts from its first release: CISA also updates advisories that are years old.
-    dates = [doc.published, *(released for released, _ in RELEASE_LINE.findall(doc.body))]
-    return max((d for d in dates if d), default=doc.created_at[:10])
-
-
-def _cve_order(cve: str) -> tuple[int, ...]:
-    return tuple(int(part) for part in cve.split('-')[1:] if part.isdigit())
-
-
-def is_demo(doc: BriefDocument) -> bool:
-    return (doc.title, doc.source_name) in DEMO
-
-
-@dataclass(frozen=True, slots=True)
-class _Facts:
-    fresh: list[BriefDocument]
-    kev_added: list[BriefKev]
-    #: ``(kev, reports, newest report id, source names)`` for KEV CVEs that fresh non-KEV reports mention.
-    kev_mentioned: list[tuple[BriefKev, int, str, list[str]]]
-    #: ``(score, cve, title, report id)``, highest first.
-    severe: list[tuple[float, str, str, str]]
-    #: ``(kind, value, sources, reports)``.
-    shared: list[tuple[str, str, int, int]]
-    vendors: list[tuple[str, int]]
-    #: ``(term, reports)`` for terms with matches, most first; ``None`` when no watch terms exist.
-    watch: list[tuple[str, int]] | None
-    watch_reports: int
-
-
-def _facts(data: BriefData) -> _Facts:
-    since = data.since[:10]
-    fresh = [d for d in data.documents if not is_demo(d) and published(d) >= since]
-    by_id = {d.id: d for d in fresh}
-    # Newest day first; within a day, by CVE number (CVE-2026-9999 before CVE-2026-10000).
-    kev_added = sorted(
-        (k for k in data.kev.values() if k.date_added >= since), key=lambda k: _cve_order(k.cve)
-    )
-    kev_added.sort(key=lambda k: k.date_added, reverse=True)
-
-    mentioned: dict[str, list[BriefDocument]] = defaultdict(list)
-    seen_in: dict[tuple[str, str], set[str]] = defaultdict(set)
-    for doc_id, kind, value in data.mentions:
-        if (doc := by_id.get(doc_id)) is None:
-            continue
-        seen_in[(kind, value)].add(doc_id)
-        if kind == 'cve' and value in data.kev and doc.source_key != KEV_SOURCE:
-            mentioned[value].append(doc)
-    kev_mentioned = [
-        (
-            data.kev[cve],
-            len(docs),
-            max(docs, key=lambda d: (d.created_at, d.id)).id,
-            [d.source_name for d in docs],
-        )
-        for cve, docs in mentioned.items()
-    ]
-    kev_mentioned.sort(key=lambda m: (-m[1], m[0].cve))
-
-    shared = [
-        (kind, value, len({by_id[i].source_name for i in ids}), len(ids))
-        for (kind, value), ids in seen_in.items()
-        if len({by_id[i].source_name for i in ids}) >= 2
-    ]
-    shared.sort(key=lambda s: (-s[2], -s[3], s[0], s[1]))
-
-    best: dict[str, tuple[float, str, str, str]] = {}
-    spellings: dict[str, Counter[str]] = defaultdict(Counter)
-    for doc in fresh:
-        for cve, score in SCORE_LINE.findall(doc.body):
-            if (rated := float(score)) >= CRITICAL and rated > best.get(cve, (0.0,))[0]:
-                best[cve] = (rated, cve, doc.title, doc.id)
-        for line in VENDOR_LINE.findall(doc.body):
-            for name in {' '.join(v.split()) for v in line.split(',')} - {''}:
-                spellings[name.casefold()][name] += 1
-    for kev in kev_added:
-        if name := ' '.join(kev.vendor.split()):
-            spellings[name.casefold()][name] += 1
-    # One vendor per case-insensitive name, shown in its most common spelling ("Ltda" and "LTDA" are one).
-    vendors = [(names.most_common(1)[0][0], sum(names.values())) for names in spellings.values()]
-    vendors.sort(key=lambda v: (-v[1], v[0].casefold()))
-
-    watch = None
-    reports: set[str] = set()
-    if data.watch:
-        hits = {term: ids & by_id.keys() for term, ids in data.watch.items()}
-        watch = sorted(
-            ((t, len(ids)) for t, ids in hits.items() if ids), key=lambda w: (-w[1], w[0].casefold())
-        )
-        reports = set().union(*hits.values())
-    return _Facts(
-        fresh=fresh,
-        kev_added=kev_added,
-        kev_mentioned=kev_mentioned,
-        severe=sorted(best.values(), key=lambda s: (-s[0], s[1])),
-        shared=shared,
-        vendors=vendors,
-        watch=watch,
-        watch_reports=len(reports),
-    )
-
-
 # --------------------------------------------------------------------------- the brief
 
 
 def _deadline(added: list[BriefKev], today: str) -> list[str]:
     """CISA's fix-by date for US federal agencies: the next one, or else that it has passed (dates apply to
     those agencies only, not to everyone)."""
-    dues = sorted(k.due_date for k in added if k.due_date)
+    dues = sorted(k.due_date for k in added if _day(k.due_date) is not None)
     if upcoming := [d for d in dues if d >= today]:
         which = 'it' if len(added) == 1 else 'the next of them'
         return [f'US federal agencies must fix {which} by {upcoming[0]}.']
@@ -210,11 +46,11 @@ def _deadline(added: list[BriefKev], today: str) -> list[str]:
     return []
 
 
-def _summary(facts: _Facts, days: int, today: str, kev_trend: str) -> tuple[str, ...]:
+def _summary(facts: _Facts, days: int, today: str, kev_trend: str = '') -> tuple[str, ...]:
     period = f'the last {count_of(days, "day")}'
     if not facts.fresh and not facts.kev_added:
-        return (f'Nothing new in {period}. Sync your sources to get the latest.',)
-    sources = len({d.source_name for d in facts.fresh})
+        return (f'No recent reports are available for {period}. Check the source status below.',)
+    sources = len({_source(d) for d in facts.fresh})
     if facts.fresh:
         lines = [
             f'In {period}, {count_of(len(facts.fresh), "new report")} came in from '
@@ -226,7 +62,7 @@ def _summary(facts: _Facts, days: int, today: str, kev_trend: str) -> tuple[str,
         more = count_of(len(added), 'more weakness', 'more weaknesses')
         vendors = name_list([k.vendor or k.product for k in added])
         lines.append(
-            f'CISA confirmed that attackers are using {more}'
+            f'CISA added {more} to its known exploited list'
             + (f', in products from {vendors}.' if vendors else '.')
         )
         if kev_trend:
@@ -236,13 +72,13 @@ def _summary(facts: _Facts, days: int, today: str, kev_trend: str) -> tuple[str,
         verb = 'appears' if len(mentioned) == 1 else 'appear'
         sources_named = name_list([name for m in mentioned for name in m[3]])
         lines.append(
-            f'{count_of(len(mentioned), "weakness", "weaknesses")} that attackers use also {verb} in new '
+            f"{count_of(len(mentioned), 'weakness', 'weaknesses')} already on CISA's list also {verb} in new "
             f'reports from {sources_named}.'
         )
     if facts.severe:
         score, cve, title, _ = facts.severe[0]
         product = title.split(' · ', 1)[-1]
-        lines.append(f'The most serious new weakness is {cve} in {product}, scored {score:g} out of 10.')
+        lines.append(f'The highest listed base score is {score:g} out of 10 for {cve} in {product}.')
     if facts.watch is None:
         lines.append(
             'Add watch terms for the products you use, and this summary will say which reports concern you.'
@@ -260,13 +96,23 @@ def _summary(facts: _Facts, days: int, today: str, kev_trend: str) -> tuple[str,
     return tuple(lines)
 
 
-def compose(data: BriefData, days: int = DEFAULT_DAYS, *, kev_trend: str = '') -> Brief:
-    """Turn :class:`~insight.services.BriefData` into an executive summary and five short sections.
+def compose(
+    data: BriefData, days: int = DEFAULT_DAYS, *, as_of: datetime | None = None, kev_trend: str = ''
+) -> Brief:
+    """Turn :class:`~insight.services.BriefData` into an executive summary and five short sections, with
+    plain findings and their next steps (``highlights``) and the limits of the data (``coverage``).
 
-    ``kev_trend`` is a sentence that follows the one about new KEV entries (the threat landscape compares
-    their number with earlier periods).
+    ``as_of`` is the end of the window (default: ``days`` after its start). ``kev_trend`` is a sentence that
+    follows the one about new KEV entries (the threat landscape compares their number with earlier periods).
     """
-    facts = _facts(data)
+    start = _time(data.since)
+    if start is None or not 1 <= days <= MAX_DAYS:
+        raise ValueError('The brief needs an aware start time and a window of 1 to 30 days')
+    end = as_of or start + timedelta(days=days)
+    if end.tzinfo is None or end < start:
+        raise ValueError('The end of the brief must be an aware time at or after its start')
+    end = end.astimezone(UTC)
+    facts = _facts(data, end)
     added = {k.cve for k in facts.kev_added}
     exploited = [
         BriefItem(f'{k.cve} · {_product(k)} · added {k.date_added}', k.document_id or None)
@@ -289,7 +135,7 @@ def compose(data: BriefData, days: int = DEFAULT_DAYS, *, kev_trend: str = '') -
         BriefSection(
             'Exploited now',
             tuple(exploited[:SECTION_ITEMS]),
-            'Nothing new from the list of weaknesses that attackers use (CISA KEV).',
+            'No recent additions or report mentions from the CISA list of known exploited flaws.',
         ),
         BriefSection(
             'Most severe',
@@ -312,7 +158,19 @@ def compose(data: BriefData, days: int = DEFAULT_DAYS, *, kev_trend: str = '') -
             'No vendors named in the new advisories.',
         ),
     )
-    today = (datetime.fromisoformat(data.since) + timedelta(days=days)).date().isoformat()
+    recent = sum(
+        (received := _time(doc.created_at)) is not None and end - timedelta(hours=24) <= received <= end
+        for doc in facts.fresh
+    )
     return Brief(
-        days=days, since=data.since, summary=_summary(facts, days, today, kev_trend), sections=sections
+        days=days,
+        since=data.since,
+        summary=_summary(facts, days, end.date().isoformat(), kev_trend),
+        sections=sections,
+        as_of=end.isoformat(),
+        recent_reports=recent,
+        report_count=len(facts.fresh),
+        source_count=len({_source(doc) for doc in facts.fresh}),
+        highlights=highlights(data, facts, end),
+        coverage=coverage(data, facts, end),
     )

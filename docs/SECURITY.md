@@ -2,7 +2,11 @@
 
 Insight is a single-operator workbench, not a hardened multi-user service. Docker Compose binds it to loopback. It can be published for its one operator (and that operator's scripts and SIEM) behind a TLS reverse proxy, following the checklist at the end of this page; never expose port 8080 itself.
 
-Implemented controls: required operator password and signing secret; constant-time password comparison; signed HttpOnly SameSite=Strict cookie; expiring, revocable session ID stored in the database only as a hash keyed to the password and MFA setting (a database copy cannot sign anyone in, and a new password ends every session), with **Sign out everywhere**; serialised password checks with a per-failure delay (1 s) plus a 30-failures-per-minute backstop and logging of failed attempts (a delay, not a lockout, so another local process cannot lock the operator out); `Referrer-Policy: same-origin` (not `no-referrer`, under which browsers send `Origin: null` and the Origin check would block every sign-in); `Cache-Control: no-store` on application responses, never overriding immutable framework assets; CSRF for form/API writes; same-origin request and socket checks; callback authentication rechecks; bounded document/HTTP/connector inputs; parameterized database queries; text-only rendering; explicit fixed-host outbound connectors; no redirects or ambient proxy configuration; XML entity expansion disabled; local export provenance; no AI calls. Login rate limits and sessions are process-local; run one worker only. The `insight_theme` and `insight_text` cookies (Light/Dark/System and "Larger text", [ADR 0016](adr/0016-colour-themes-and-per-device-choice.md), [ADR 0017](adr/0017-readability-standard.md)) are display preferences set by the page's JavaScript: they are not credentials, only their known values (`system`, `light`, `dark`; `standard`, `large`) are accepted, and any other value falls back to the default and is never written into a page.
+The normal configuration requires sign-in. The explicit, default-off `INSIGHT_DEV_NO_AUTH` exception is
+documented under [Temporary public operator access](#temporary-public-operator-access); enabling it grants
+every visitor the browser operator's access.
+
+Implemented controls: required operator password and signing secret; constant-time password comparison; signed HttpOnly SameSite=Strict cookie; expiring, revocable session ID stored in the database only as a hash keyed to the password and MFA setting (a database copy cannot sign anyone in, and a new password ends every session), with **Sign out everywhere**; serialised password checks with a per-failure delay (1 s) plus a 30-failures-per-minute backstop and logging of failed attempts (a delay, not a lockout, so another local process cannot lock the operator out); `Referrer-Policy: same-origin` (not `no-referrer`, under which browsers send `Origin: null` and the Origin check would block every sign-in); `Cache-Control: no-store` on application responses, never overriding immutable framework assets; CSRF for form/API writes; same-origin request and socket checks; callback authentication rechecks; bounded document/HTTP/connector inputs; parameterized database queries; text-only rendering; explicit fixed-host outbound connectors; no redirects or ambient proxy configuration; XML entity expansion disabled; local export provenance; no AI calls. Login rate limits are process-local; sessions are stored in the database. Run one worker only. The `insight_theme` and `insight_text` cookies (Light/Dark/System and "Larger text", [ADR 0016](adr/0016-colour-themes-and-per-device-choice.md), [ADR 0017](adr/0017-readability-standard.md)) are display preferences set by the page's JavaScript: they are not credentials, only their known values (`system`, `light`, `dark`; `standard`, `large`) are accepted, and any other value falls back to the default and is never written into a page.
 
 The environment stores the operator password in plaintext to support a small local bootstrap. Anyone with access to `.env`, Docker inspection or the host can recover it. Treat host administrator access as trusted. Optional TOTP MFA (`make mfa-enable`) protects against a stolen password. Before any multi-user deployment use OIDC, secret management, a proper account database and durable sessions.
 
@@ -28,6 +32,33 @@ Supply chain: all Python dependencies are hash-pinned (runtime, dev, e2e and bui
 
 Logs and audit rows are not append-only or cryptographically verifiable. No data deletion endpoint is provided yet; implement policy-aware deletion/retention before storing data with strict deletion obligations.
 
+## Temporary public operator access
+
+`INSIGHT_DEV_NO_AUTH=on` is an explicit temporary switch for entering the workspace without a password.
+It is **off by default**, accepts only `on` to enable it, and refuses malformed settings. The configured
+password and signing secret remain required. Enabling this mode together with `INSIGHT_MFA=on` is rejected,
+so it cannot silently bypass an enabled second factor.
+
+While enabled, `GET /login` issues the existing expiring, revocable operator session and a fresh CSRF token,
+then redirects to the workspace. Signed HttpOnly SameSite=Strict cookies, secure-cookie configuration,
+CSRF for writes, Host/Origin/socket checks, API-key permissions and request limits still apply. API requests
+without a session or valid key still receive `401`. These controls do not make the open workspace private:
+any visitor can obtain a session, read the reports and use operator editing, export and synchronization
+tools. Browser sessions have no per-key TLP limit. Audit events identify this shared access as `operator`,
+not as distinct people.
+
+On a public domain, this is a deliberate grant of public operator access, including existing stored
+material. It is not anonymous read-only publishing. The workspace notice makes the active mode visible;
+signing out cannot restrict entry while anyone can obtain a new session. No automatic expiry is configured
+for the switch itself: an operator must turn it off.
+
+Set `INSIGHT_DEV_NO_AUTH=off` or remove it and recreate/restart the application with the changed environment
+to restore the retained password. The authentication-mode change invalidates sessions created during the
+open period. Restore the earlier MFA setting if it was changed. Verify both a fresh browser and an old
+open-mode session are refused without sign-in; the exact steps are in
+[RUNBOOK: Temporary password-free access](RUNBOOK.md#temporary-password-free-access).
+Restoration cannot reverse visitors' edits or recall reports they already read or exported.
+
 ## Publishing an instance: checklist
 
 For one operator reaching their own instance (and their scripts/SIEM) over the internet:
@@ -36,7 +67,7 @@ For one operator reaching their own instance (and their scripts/SIEM) over the i
 | --- | --- | --- |
 | TLS, HSTS | HSTS header when `INSIGHT_SECURE_COOKIES=1` | TLS at the reverse proxy; `INSIGHT_SECURE_COOKIES=1` |
 | Real client addresses, correct `Origin` checks | Trusted proxy headers, validated at start-up | `INSIGHT_TRUSTED_PROXIES`, `INSIGHT_ALLOWED_HOSTS` (RUNBOOK, "Reverse proxy") |
-| Sign-in | Password, throttling, optional TOTP MFA | A strong password (`make env`); `make mfa-enable` is strongly recommended |
+| Sign-in | Password, throttling, optional TOTP MFA | Keep `INSIGHT_DEV_NO_AUTH=off` for protected access; use a strong password (`make env`); `make mfa-enable` is strongly recommended |
 | Automation access | One hashed, expiring, scoped API key; per-key TLP limit | `make api-key-create` with the least access and lowest `MAX_TLP` that works; rotate before expiry |
 | Abuse and overload | Per-caller rate limits, invalid-key throttling, 2 MB bodies | Optional edge limits at the proxy (connections, request rate) |
 | Data on the server | TLP:RED refused by default (`INSIGHT_MAX_TLP`) | Review reports stored before the limit (start-up logs the count) |
