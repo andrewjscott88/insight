@@ -522,7 +522,7 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
 ### Phase 1 — Quick wins (7)
 
 - [ ] **1.1** Persist KEV ransomware / vulnerability name / notes / CWEs; document inbox policy
-- [ ] **1.2** Auto-enqueue NVD and EPSS lookups for new CVEs (opt-in, throttled)
+- [x] **1.2** Auto-enqueue NVD and EPSS lookups for new CVEs (opt-in, throttled): done, ADR 0023, with review B2 and C2
 - [ ] **1.3** Brief uses ransomware flag, NVD CVSS, and EPSS (fact-only wording)
 - [x] **1.4** Webhook/email notifications for watch-term hits and new KEV (`ROADMAP` #15)
 - [ ] **1.5** abuse.ch URLhaus, ThreatFox, and MalwareBazaar connectors (metadata/IOCs only)

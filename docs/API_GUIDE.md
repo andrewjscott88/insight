@@ -66,7 +66,7 @@ Send `Authorization: Bearer <key>` on every request. No cookie or CSRF token is 
 | --- | --- |
 | `ACCESS=read` (default) | `GET` routes only; any `POST` gets `403 "This API key is read-only"` |
 | `ACCESS=read-write` | Also ingest, triage, notes, demo, source sync and enrichment |
-| `MAX_TLP=GREEN` (optional) | Reports above GREEN are invisible to the key (they look like missing reports), exports are capped at GREEN, and the audit log and enrichment are refused |
+| `MAX_TLP=GREEN` (optional) | Reports above GREEN are invisible to the key (they look like missing reports), exports are capped at GREEN, and the audit log and starting CVE lookups are refused (cached scores of CVEs in reports the key can see stay readable) |
 | `EXPIRES=90` | Days until expiry (1-365, default 90). `make api-key-status` shows the date |
 
 Manage it with `make api-key-status`, `make api-key-rotate` (the old key stops working at once) and
@@ -114,12 +114,12 @@ The API is unversioned; breaking changes are listed under "Upgrade notes" in the
 | `303` | Sign-in and sign-out redirects (HTML forms only) |
 | `400` | The `Host` header is not in `INSIGHT_ALLOWED_HOSTS` |
 | `401` | No valid key or session. A bad key also gets `WWW-Authenticate: Bearer error="invalid_token"` |
-| `403` | Read-only key writing; TLP-limited key on the audit log or enrichment; missing CSRF token (sessions); cross-site `Origin`; browser-only route |
+| `403` | Read-only key writing; TLP-limited key on the audit log or starting a CVE lookup; missing CSRF token (sessions); cross-site `Origin`; browser-only route |
 | `404` | Not found, **or** above the key's TLP limit (the two are indistinguishable by design) |
 | `409` | Another source sync is running, or a concurrent import (retry once) |
 | `413` | Request body larger than 2 MB |
 | `422` | Invalid input, too many indicators in one report, a report above the instance's TLP limit, too large an IOC export |
-| `429` | Rate limited: wait for `Retry-After` seconds |
+| `429` | Rate limited, or a CVE lookup within the provider's window: wait for `Retry-After` seconds |
 | `502` | An external source or provider failed (sync, enrichment) |
 | `503` | Sign-in only: MFA is on but no authenticator app is paired |
 
@@ -364,10 +364,14 @@ curl -sS -X POST "$INSIGHT_URL/api/sources/cisa-kev/sync" -H "Authorization: Bea
 curl -sS -X POST "$INSIGHT_URL/api/sources/sync-all" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq '.results[] | {key, status}'
 # How often each source syncs by itself (0: only when asked, the default)
 curl -sS "$INSIGHT_URL/api/schedules" -H "Authorization: Bearer $INSIGHT_API_KEY"
-# Recent background jobs (scheduled syncs) and how they went
-curl -sS "$INSIGHT_URL/api/jobs?limit=5" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq '.[] | {key, status, message}'
-# Look up a CVE that a report mentions (provider: epss or nvd). Cached; one lookup per 6.5 s across all callers
+# Recent background jobs (scheduled syncs, alerts, automatic CVE lookups) and how they went
+curl -sS "$INSIGHT_URL/api/jobs?limit=5" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq '.[] | {kind, key, status, message}'
+# Look up a CVE that a report mentions (provider: epss or nvd; read-write key). Cached. One request per provider
+# window (NVD 6.5 s, or 0.7 s with a key; EPSS 1 s) across all callers and automatic lookups: 429 says how long to wait
 curl -sS -X POST "$INSIGHT_URL/api/enrichment/epss/CVE-2023-34362" -H "Authorization: Bearer $INSIGHT_API_KEY"
+# Read the cached CVSS and EPSS scores without contacting anyone (404 unless a report you can see mentions the CVE)
+curl -sS "$INSIGHT_URL/api/cves/CVE-2023-34362/scores" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  | jq '{cvss: .nvd.score, severity: .nvd.severity, epss: .epss.probability, percentile: .epss.percentile}'
 ```
 
 Turning a schedule on or off is for a signed-in browser session (the *Sources* tab, or the cookie jar of §2.2)

@@ -12,7 +12,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from insight import connectors
+from insight import connectors, services
+from insight.lookups import THROTTLES
 from insight.models import Document, KEVRecord
 
 KEV = json.dumps(
@@ -154,11 +155,15 @@ def test_enrichment_success_and_throttle(
     app: FastAPI, authed: TestClient, monkeypatch: pytest.MonkeyPatch, with_cve: str
 ) -> None:
     monkeypatch.setattr(connectors, 'download', fake_download(b'{"data": []}'))
-    response = authed.post(f'/api/enrichment/epss/{with_cve}')
+    response = authed.post(f'/api/enrichment/nvd/{with_cve}')
     assert (response.status_code, response.json()) == (200, {'data': []})
     throttled = authed.post(f'/api/enrichment/nvd/{with_cve}')
     assert throttled.status_code == 429
-    app.state.last_lookup = 0.0
+    assert throttled.headers['retry-after'] in {'6', '7'}
+    assert 'before the next lookup at NIST NVD' in throttled.json()['detail']
+    # Each provider has its own window: EPSS answers straight away.
+    assert authed.post(f'/api/enrichment/epss/{with_cve}').status_code == 200
+    THROTTLES['nvd'].reset()
     assert authed.post(f'/api/enrichment/nvd/{with_cve}').status_code == 200
 
 
@@ -170,7 +175,7 @@ def test_invalid_requests_are_422_and_do_not_consume_the_throttle(
 ) -> None:
     # Regression: invalid input used to reset the 6.5 s window and returned 429 on a valid retry.
     assert authed.post(f'/api/enrichment/{provider}/{cve}').status_code == 422
-    assert app.state.last_lookup == 0.0
+    assert all(t.wait_time() == 0 for t in THROTTLES.values())
 
 
 def test_unknown_cve_is_422_and_does_not_consume_the_throttle(
@@ -181,7 +186,7 @@ def test_unknown_cve_is_422_and_does_not_consume_the_throttle(
     response = authed.post('/api/enrichment/epss/CVE-2024-99999')
     assert response.status_code == 422
     assert 'Import a report' in response.json()['detail']
-    assert app.state.last_lookup == 0.0
+    assert all(t.wait_time() == 0 for t in THROTTLES.values())
     monkeypatch.setattr(connectors, 'download', fake_download(b'{"data": []}'))
     assert authed.post(f'/api/enrichment/epss/{with_cve}').status_code == 200
 
@@ -205,6 +210,52 @@ def test_unexpected_errors_are_502_without_details(
     response = authed.post(f'/api/enrichment/epss/{with_cve}')
     assert response.status_code == 502
     assert 'secret' not in response.text
+
+
+def test_cached_scores_are_readable_and_follow_the_keys_tlp_limit(
+    app: FastAPI, client: TestClient, authed: TestClient, monkeypatch: pytest.MonkeyPatch, with_cve: str
+) -> None:
+    nvd = {
+        'vulnerabilities': [
+            {
+                'cve': {
+                    'vulnStatus': 'Analyzed',
+                    'metrics': {
+                        'cvssMetricV31': [
+                            {'type': 'Primary', 'cvssData': {'baseScore': 9.8, 'baseSeverity': 'CRITICAL'}}
+                        ]
+                    },
+                }
+            }
+        ]
+    }
+    unchecked = authed.get(f'/api/cves/{with_cve}/scores').json()
+    assert (unchecked['cve'], unchecked['nvd'], unchecked['epss']) == (with_cve, None, None)
+    monkeypatch.setattr(connectors, 'download', fake_download(json.dumps(nvd).encode()))
+    assert authed.post(f'/api/enrichment/nvd/{with_cve}').status_code == 200
+    found = authed.get(f'/api/cves/{with_cve}/scores').json()
+    assert (found['nvd']['score'], found['nvd']['severity'], found['epss']) == (9.8, 'Critical', None)
+    assert found['nvd_checked_at']
+    # The report is AMBER+STRICT: a GREEN-limited key may not learn that this CVE was looked up.
+    with app.state.session_factory.begin() as db:
+        _, token = services.create_api_key(db, name='siem', access='read', max_tlp='GREEN')
+    bearer = {'Authorization': f'Bearer {token}'}
+    limited = client.get(f'/api/cves/{with_cve}/scores', headers=bearer)
+    assert limited.status_code == 404
+    assert limited.json()['detail'] == 'No report you can see mentions this CVE'
+    authed.post(
+        '/api/documents',
+        json={'title': 'Public', 'body': 'CVE-2024-12345', 'source_name': 's', 'tlp': 'GREEN'},
+    )
+    visible = client.get(f'/api/cves/{with_cve}/scores', headers=bearer)
+    assert (visible.status_code, visible.json()['nvd']['score']) == (200, 9.8)
+    # Starting a lookup stays closed to limited keys: it would name CVEs from any report to a provider.
+    assert client.post(f'/api/enrichment/nvd/{with_cve}', headers=bearer).status_code == 403
+    assert authed.get('/api/cves/CVE-2024-99999/scores').status_code == 404
+
+
+def test_cached_scores_need_a_signed_in_caller(client: TestClient) -> None:
+    assert client.get('/api/cves/CVE-2024-12345/scores').status_code == 401
 
 
 def test_publisher_edits_create_revisions_not_duplicates(

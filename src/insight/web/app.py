@@ -56,7 +56,6 @@ def _init_state(app: FastAPI, settings: Settings, sessions: SessionFactory) -> N
     app.state.failures = []
     app.state.login_lock = asyncio.Lock()
     app.state.sync_lock = asyncio.Lock()
-    app.state.last_lookup = 0.0
     app.state.is_authenticated = session_checker(app)
     # Two limiters so a flood of bad keys from many addresses can never evict a real caller's bucket.
     app.state.rate_limiter = RateLimiter()

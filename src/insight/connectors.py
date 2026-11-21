@@ -8,6 +8,7 @@ import hashlib
 import io
 import ipaddress
 import json
+import os
 import re
 import socket
 from collections.abc import Callable, Mapping
@@ -134,12 +135,13 @@ async def download(
     *,
     transport: httpx.AsyncBaseTransport | None = None,
     validators: Validators | None = None,
+    headers: Mapping[str, str] | None = None,
 ) -> bytes:
     """Fetch ``url`` from the curated HTTPS registry with strict size and redirect limits.
 
     With ``validators``, the request is conditional: an unchanged resource raises :class:`NotModified`, and a
-    changed one updates ``validators`` from the response. ``transport`` exists for offline testing; production
-    code never passes it.
+    changed one updates ``validators`` from the response. ``headers`` adds request headers (an NVD API key).
+    ``transport`` exists for offline testing; production code never passes it.
     """
     parts = urlsplit(url)
     if parts.scheme != 'https' or parts.hostname not in ALLOWED_HOSTS or parts.username or parts.password:
@@ -151,17 +153,17 @@ async def download(
     if port not in (None, 443):
         raise ValueError('Outbound URL is not in the curated HTTPS source registry')
     await _assert_public(parts.hostname)
-    headers = {'User-Agent': USER_AGENT, 'Accept-Encoding': 'identity'}
+    request_headers = {**(headers or {}), 'User-Agent': USER_AGENT, 'Accept-Encoding': 'identity'}
     if validators is not None and validators.etag:
-        headers['If-None-Match'] = validators.etag
+        request_headers['If-None-Match'] = validators.etag
     if validators is not None and validators.last_modified:
-        headers['If-Modified-Since'] = validators.last_modified
+        request_headers['If-Modified-Since'] = validators.last_modified
     # Fixed application-owned hosts only. An egress firewall remains recommended against DNS rebinding.
     async with (
         httpx.AsyncClient(
             timeout=httpx.Timeout(25), follow_redirects=False, trust_env=False, transport=transport
         ) as client,
-        client.stream('GET', url, params=params, headers=headers) as response,
+        client.stream('GET', url, params=params, headers=request_headers) as response,
     ):
         if response.status_code == 304:
             if validators is not None:
@@ -730,15 +732,25 @@ async def validate_enrichment(session_factory: SessionFactory, cve: str, provide
         raise ValueError('Import a report mentioning this CVE first')
 
 
-async def enrich_cve(session_factory: SessionFactory, cve: str, provider: str) -> dict[str, Any]:
-    """Look up ``cve`` at ``provider`` (``epss`` or ``nvd``) and cache the JSON response.
+def provider_headers(provider: str) -> dict[str, str]:
+    """Headers for ``provider``: the NVD ``apiKey`` if ``INSIGHT_NVD_API_KEY`` is set (never logged)."""
+    key = os.environ.get('INSIGHT_NVD_API_KEY', '').strip() if provider == 'nvd' else ''
+    return {'apiKey': key} if key else {}
 
-    Raises ``ValueError`` for invalid requests and :class:`ProviderError` for upstream failures.
-    """
-    await validate_enrichment(session_factory, cve, provider)
-    url, params = enrichment_request(cve, provider)
+
+async def fetch_provider_json(provider: str, params: Mapping[str, str]) -> dict[str, Any]:
+    """GET ``provider``'s API with ``params`` and return its JSON object. Raises :class:`ProviderError`."""
+    headers = provider_headers(provider)
     try:
-        raw = await download(url, params)
+        if headers:
+            raw = await download(PROVIDERS[provider], params, headers=headers)
+        else:  # Keeps the call the tests' fake downloads expect.
+            raw = await download(PROVIDERS[provider], params)
+    except httpx.HTTPStatusError as exc:
+        code = exc.response.status_code
+        # NVD refuses a wrong key with a client error, so point at the setting (never at the key itself).
+        hint = ' (check INSIGHT_NVD_API_KEY)' if headers and code in (401, 403, 404) else ''
+        raise ProviderError(f'{provider.upper()} answered HTTP {code}{hint}') from exc
     except (httpx.HTTPError, OSError, ValueError) as exc:
         # Size-limit, redirect and DNS-policy violations are upstream problems too, not bad client input.
         raise ProviderError(f'{provider.upper()} request failed: {type(exc).__name__}') from exc
@@ -748,5 +760,24 @@ async def enrich_cve(session_factory: SessionFactory, cve: str, provider: str) -
         raise ProviderError(f'{provider.upper()} returned a non-JSON response') from exc
     if not isinstance(payload, dict):
         raise ProviderError(f'{provider.upper()} returned an unexpected response')
+    return payload
+
+
+def store_enrichment(
+    session_factory: SessionFactory, cve: str, provider: str, payload: dict[str, Any]
+) -> None:
+    """Cache ``payload`` as ``provider``'s answer for ``cve`` (one row per CVE and provider)."""
+    _store_enrichment(session_factory, cve, provider, payload)
+
+
+async def enrich_cve(session_factory: SessionFactory, cve: str, provider: str) -> dict[str, Any]:
+    """Look up ``cve`` at ``provider`` (``epss`` or ``nvd``) and cache the JSON response, without throttling.
+
+    People's lookups go through ``insight.lookups.request_lookup``, which applies the shared throttle. Raises
+    ``ValueError`` for invalid requests and :class:`ProviderError` for upstream failures.
+    """
+    await validate_enrichment(session_factory, cve, provider)
+    _, params = enrichment_request(cve, provider)
+    payload = await fetch_provider_json(provider, params)
     await asyncio.to_thread(_store_enrichment, session_factory, cve, provider, payload)
     return payload

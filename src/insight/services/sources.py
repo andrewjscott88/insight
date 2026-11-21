@@ -28,8 +28,11 @@ def recent_source_runs(db: Session, source_key: str | None = None, limit: int = 
 
 
 def source_switches(db: Session) -> dict[str, bool]:
-    """The sources the operator switched on (``True``) or off; a source without a row keeps its default."""
-    return {s.source_key: s.enabled for s in db.scalars(select(SourceSwitch))}
+    """The sources the operator switched on (``True``) or off; a source without a row keeps its default.
+
+    Keys with a colon are other switches stored in the same table (``lookup:nvd``, ADR 0023), not sources.
+    """
+    return {s.source_key: s.enabled for s in db.scalars(select(SourceSwitch)) if ':' not in s.source_key}
 
 
 def set_source_switch(db: Session, source_key: str, enabled: bool, *, at: datetime) -> SourceSwitch:

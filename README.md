@@ -54,7 +54,11 @@ A single-operator threat-intelligence workbench, run locally or published behind
   (CISA KEV), *Most severe* (CVSS 9 or higher), *Your watch terms*, *Seen in several sources* and
   *Most-mentioned vendors*. Every line opens its report, indicator or a search. "New" means published in the
   last 7 days, so a first sync of old history does not flood it; the demo is left out. Also `GET /api/brief`.
-- On-demand NVD and FIRST EPSS CVE lookups; no API key required for this small-scale prototype. Provider throttling/outages still apply.
+- **CVE severity and attack likelihood** ([ADR 0023](docs/adr/0023-automatic-cve-lookups.md)): NIST NVD (CVSS)
+  and FIRST EPSS scores shown in plain words beside each CVE, looked up on request or, once switched on in
+  **Sources**, automatically for CVEs in TLP:CLEAR and GREEN reports. Only CVE numbers are sent. No key is
+  needed; an optional free NVD key (`INSIGHT_NVD_API_KEY`) makes NVD lookups about ten times faster. This
+  product uses the NVD API but is not endorsed or certified by the NVD.
 - JSON report exports retain provenance and TLP; they are **not STIX** and do not authorize redistribution.
 - **IOC export**: one JSON file listing every indicator across your reports once, with its source reports, evidence, KEV context and the most restrictive TLP of the reports it includes. Filter by type, review status, highest TLP or report; defang for e-mail and tickets, and leave evidence out when sharing. **Export IOCs** in the workspace (with a live count preview), **Export this report's IOCs** in the reader, `insight export-iocs FILE` or `GET /api/iocs/export`. Not STIX and not a blocklist by itself: see [docs/IOC_EXPORT.md](docs/IOC_EXPORT.md).
 - **HTTP API with an API key for scripts and SIEMs**: one key, created, rotated and revoked only on the host (`make api-key-create` / `insight api-key`), sent as `Authorization: Bearer`. Read-only unless you choose read-write; mandatory expiry; stored as a hash only; optionally limited to a TLP label (`MAX_TLP=GREEN`: more restrictive reports are invisible to it). Per-caller rate limits with `RateLimit` headers and `429` + `Retry-After`. Guide with every `curl` command: [docs/API_GUIDE.md](docs/API_GUIDE.md); field reference: [docs/API.md](docs/API.md).
@@ -233,7 +237,7 @@ docker compose cp insight:/data/backup-$(date +%Y%m%d).db ./
 
 - No team accounts, SSO, RBAC or recipient-level dissemination rules. MFA is an optional single-operator authenticator-app code, off by default (`make mfa-enable`). One API key at a time.
 - Rate limits live in server memory: one worker, and a restart resets them. Sessions are stored in the database and survive restarts. The API is unversioned (breaking changes are listed in the CHANGELOG's upgrade notes).
-- No full-text relevance ranking engine, alert delivery, case management or graph visualization yet. Source syncs can run on opt-in schedules (off by default).
+- No full-text relevance ranking engine, case management or graph visualization yet. Source syncs can run on opt-in schedules (off by default).
 - No PDF/binary parsing, arbitrary URL fetching, arbitrary feed entry, STIX/TAXII/MISP synchronization or automatic full-article storage.
 - No actor/malware attribution, ML or LLM inference. Extraction is deterministic and can still miss or mis-read unusual formats (see the known gaps in [docs/EXTRACTION.md](docs/EXTRACTION.md); the labelled benchmark `python scripts/benchmark_extraction.py` measures quality). Manual review is essential. URL extraction trims sentence punctuation and unbalanced closing brackets, so verify against the source evidence.
 - Matching is literal; watch terms are not an asset inventory. Source-language dates are not authoritative ingestion dates.

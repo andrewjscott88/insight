@@ -76,7 +76,9 @@ def render_report(ws: Workspace, data: dict[str, Any], actions: ReaderActions) -
         ui.label('Insight found no indicators in this report.').classes('muted')
     verdicts = data.get('verdicts', {})
     for obs in data['observations']:
-        _render_observation(ws, obs, actions, data['tlp'], verdicts.get(obs['entity_id']))
+        _render_observation(
+            ws, obs, actions, data['tlp'], verdicts.get(obs['entity_id']), data.get('cve_scores', {})
+        )
     render_report_techniques(ws, data['id'], data.get('techniques', []), actions.refresh)
     with ui.row().classes('gap-x-6 gap-y-0'):
         new_tab_link('Download this report as JSON', f'/api/documents/{data["id"]}/export')
@@ -115,7 +117,12 @@ def _render_revisions(data: dict[str, Any], actions: ReaderActions) -> None:
 
 
 def _render_observation(
-    ws: Workspace, obs: dict[str, Any], actions: ReaderActions, report_tlp: str, verdict: VerdictView | None
+    ws: Workspace,
+    obs: dict[str, Any],
+    actions: ReaderActions,
+    report_tlp: str,
+    verdict: VerdictView | None,
+    cve_scores: dict[str, str],
 ) -> None:
     with ui.column().classes('panel w-full p-4 gap-2'):
         with ui.row().classes('items-center w-full'):
@@ -133,6 +140,8 @@ def _render_observation(
             ).classes('text-warn text-sm prose')
             ui.label(kev['required_action']).classes('muted text-sm prose')
         if obs['kind'] == 'cve':
+            if scores := cve_scores.get(obs['value']):
+                ui.label(scores).classes('text-sm prose')
             ui.button(
                 'Look up this CVE',
                 icon='travel_explore',

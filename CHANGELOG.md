@@ -7,7 +7,24 @@
 `make attack-backfill` once (safe to run again). The new threat-research sources start switched off: Insight
 contacts no new host until you switch one on. **Exports change for SANS ISC and NCSC reports:** their text and
 evidence are no longer included (their publishers allow metadata only). Every 0.6.0 API field is unchanged; new
-fields are additive.
+fields are additive. TLP-limited API keys may now read cached CVE scores (`GET /api/cves/{cve}/scores`) for
+CVEs in reports they can see; starting a lookup stays refused to them.
+
+### Added: automatic CVE lookups at NIST NVD and FIRST EPSS (TIP 1.2)
+- **Severity and attack likelihood beside every CVE** ([ADR 0023](docs/adr/0023-automatic-cve-lookups.md)): the
+  reader shows a line such as "CVSS 9.8 (Critical), NIST NVD · EPSS 4.2% chance of exploitation attempts within
+  30 days, higher than 91% of CVEs (FIRST)", and the lookup dialog shows the parsed scores, NVD's description and
+  weakness types, with the provider's raw answer one click away (review C2).
+- **Automatic lookups**, off until switched on per provider in the **Sources** tab (audited): the job runner looks
+  up CVEs from current TLP:CLEAR and GREEN reports, newest first, and refreshes EPSS weekly and NVD monthly. CVEs
+  seen only in AMBER or RED reports are never looked up by themselves; only CVE numbers are sent.
+- **One throttle per provider** shared by people, the API and the job runner (review B2): NVD every 6.5 s, or
+  every 0.7 s with the new optional `INSIGHT_NVD_API_KEY`; EPSS every second. EPSS and NVD no longer share one
+  window, so a lookup at one never makes the other wait.
+- `GET /api/cves/{cve}/scores` reads the cached scores without contacting anyone, following the caller's TLP
+  limit.
+- Insight shows NVD's notice where NVD data appears: "This product uses the NVD API but is not endorsed or
+  certified by the NVD."
 
 ### Added: alerts (#15)
 - **Alerts when a new report mentions a watch term, or CISA adds a KEV entry** ([ADR 0022](docs/adr/0022-alerts.md),
