@@ -13,7 +13,7 @@ from collections.abc import Iterable
 from datetime import datetime, timedelta
 from typing import Final
 
-from sqlalchemy import func, select
+from sqlalchemy import Select, exists, func, select
 from sqlalchemy.orm import Session
 
 from ..cve_scores import CveScores, scores
@@ -58,11 +58,22 @@ def set_lookup_switch(db: Session, provider: str, enabled: bool, *, at: datetime
     audit(db, 'lookup.on' if enabled else 'lookup.off', provider, '')
 
 
-def cves_to_look_up(db: Session, provider: str, *, at: datetime, limit: int) -> list[str]:
-    """CVEs due for an automatic lookup at ``provider``, newest reporting first."""
-    last_seen = func.max(Document.created_at)
-    rows = db.execute(
-        select(Entity.value, last_seen)
+def _due(provider: str, at: datetime) -> Select[str]:
+    """The CVEs due at ``provider``, one row each, filtered in the database (code review N2): "no fresh
+    answer" and "no failure still waiting" (M2) are ``NOT EXISTS`` conditions, so nothing is loaded and
+    dropped."""
+    fresh = exists().where(
+        Enrichment.cve == Entity.value,
+        Enrichment.provider == provider,
+        Enrichment.fetched_at >= stamp(at - STALE_AFTER[provider]),
+    )
+    waiting = exists().where(
+        LookupFailure.cve == Entity.value,
+        LookupFailure.provider == provider,
+        LookupFailure.retry_at > stamp(at),
+    )
+    return (
+        select(Entity.value)
         .join(Observation, Observation.entity_id == Entity.id)
         .join(Document, Observation.document_id == Document.id)
         .where(
@@ -70,25 +81,17 @@ def cves_to_look_up(db: Session, provider: str, *, at: datetime, limit: int) -> 
             Document.is_current.is_(True),
             Document.tlp.in_(PUBLIC_TLPS),
             Observation.review_status != 'rejected',
+            ~fresh,
+            ~waiting,
         )
         .group_by(Entity.value)
-        .order_by(last_seen.desc(), Entity.value)
-    ).all()
-    fresh = set(
-        db.scalars(
-            select(Enrichment.cve).where(
-                Enrichment.provider == provider, Enrichment.fetched_at >= stamp(at - STALE_AFTER[provider])
-            )
-        )
     )
-    waiting = set(
-        db.scalars(
-            select(LookupFailure.cve).where(
-                LookupFailure.provider == provider, LookupFailure.retry_at > stamp(at)
-            )
-        )
-    )
-    return [cve for cve, _ in rows if cve not in fresh and cve not in waiting][:limit]
+
+
+def cves_to_look_up(db: Session, provider: str, *, at: datetime, limit: int) -> list[str]:
+    """Up to ``limit`` CVEs due for an automatic lookup at ``provider``, newest reporting first."""
+    newest = func.max(Document.created_at)
+    return list(db.scalars(_due(provider, at).order_by(newest.desc(), Entity.value).limit(limit)))
 
 
 def record_lookup_failure(db: Session, provider: str, cve: str, message: str, *, at: datetime) -> datetime:
@@ -141,7 +144,10 @@ def enqueue_due_lookups(db: Session, *, at: datetime) -> list[str]:
 
 def lookup_backlog(db: Session, *, at: datetime) -> dict[str, int]:
     """How many CVEs each provider would look up now (for the Sources tab)."""
-    return {p: len(cves_to_look_up(db, p, at=at, limit=100_000)) for p in LOOKUP_PROVIDERS}
+    return {
+        p: int(db.scalar(select(func.count()).select_from(_due(p, at).subquery())) or 0)
+        for p in LOOKUP_PROVIDERS
+    }
 
 
 def cve_scores(db: Session, cves: Iterable[str]) -> dict[str, CveScores]:

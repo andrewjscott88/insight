@@ -427,3 +427,26 @@ async def test_regression_m2_a_problem_with_the_provider_stops_the_job_without_b
         await look_up_due(session_factory, 'nvd', clock=lambda: NOW)
     assert len(provider.calls) == 1  # stopped at the first answer
     assert failures(session_factory) == {}
+
+
+def test_regression_n2_the_due_list_is_one_query_with_a_real_limit(
+    session_factory: sessionmaker[Session], count_queries: Any
+) -> None:
+    """Review N2: each 15 s tick loaded every CVE and every fresh cache row, then dropped most of them."""
+    report(session_factory, ' '.join(f'CVE-2024-{n:04d}' for n in range(1001, 1031)))
+    for n in range(1001, 1011):  # 10 answered recently, 5 waiting after a failure
+        cache(session_factory, f'CVE-2024-{n:04d}', 'nvd', {}, NOW)
+    with session_factory.begin() as db:
+        for n in range(1011, 1016):
+            services.record_lookup_failure(db, 'nvd', f'CVE-2024-{n:04d}', 'x', at=NOW)
+    with session_factory() as db:
+        engine = db.get_bind()
+        with count_queries(engine) as statements:
+            due = services.cves_to_look_up(db, 'nvd', at=NOW, limit=3)
+        assert len(statements) == 1
+        assert 'NOT (EXISTS' in statements[0]
+        assert 'LIMIT' in statements[0]
+        assert due == ['CVE-2024-1016', 'CVE-2024-1017', 'CVE-2024-1018']
+        with count_queries(engine) as statements:
+            assert services.lookup_backlog(db, at=NOW) == {'epss': 30, 'nvd': 15}
+        assert len(statements) == 2  # one count per provider

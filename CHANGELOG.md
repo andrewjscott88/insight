@@ -51,6 +51,8 @@ CVEs in reports they can see; starting a lookup stays refused to them. The new p
   image that is not pinned by digest. Dependabot does not update these; docs/CI_CD.md says how to.
 - **N1, spreadsheet formulas in the blocklist CSV:** a cell starting with `=`, `+`, `-`, `@`, a tab or a carriage
   return now gets a leading `'`, so a spreadsheet shows it as text.
+- **N2, the CVE due list:** the 15-second check for CVEs to look up now filters in the database (`NOT EXISTS`,
+  `LIMIT`) instead of loading every CVE and cache row.
 
 ### Changed: a clearer executive brief (from #39)
 - Keep the **Insight** name and symbol; use **Cyber Threat Intelligence Feed** as the tagline and remove
