@@ -27,6 +27,8 @@
 - Attach YARA or Sigma rules to reports, actors, techniques, CVEs and malware families. Download the original
   text with its SHA-256, licence, source and sharing label. [Rule files](docs/THREAT_GUIDES.md#rules)
 
+## 0.7.0 - 2026-11-21
+
 ### STIX 2.1 export
 
 - Export indicators, CVEs and report provenance with TLP 2.0 markings from the workspace, the CLI
@@ -38,6 +40,10 @@
 - Import local STIX bundles from the ingest dialog, `insight import-stix FILE` or `POST /api/import/stix`.
   Each report keeps its source identity, typed observations, TLP and publisher handling restrictions.
   [Import guide](docs/API.md#post-apiimportstix)
+
+### GreyNoise Community IP context
+
+- Entity explorer and the API support a manual GreyNoise lookup for accepted public IPv4 indicators in current TLP:CLEAR reports. Insight caches provider context and no-record responses for 24 hours. [Operator guide](docs/RUNBOOK.md#greynoise-community-ip-context)
 
 ### MISP event exchange
 
@@ -56,8 +62,9 @@
 (threat guides: actors, report links, industry decisions, rules, hunts) run at start-up, or with `make migrate`. Reports stored before the upgrade get their technique tags when you run
 `make attack-backfill` once (safe to run again). The new threat-research sources start switched off: Insight
 contacts no new host until you switch one on. **Exports change for SANS ISC and NCSC reports:** their text and
-evidence are no longer included (their publishers allow metadata only). Every 0.6.0 API field is unchanged; new
-fields are additive. TLP-limited API keys may now read cached CVE scores (`GET /api/cves/{cve}/scores`) for
+evidence are no longer included (their publishers allow metadata only). The public `GET /health` response now
+contains only `{"status":"ok"}`. Clients that used it to read the running version can get `version` from
+`GET /api/session` with a signed-in browser session. TLP-limited API keys may now read cached CVE scores (`GET /api/cves/{cve}/scores`) for
 CVEs in reports they can see; starting a lookup stays refused to them. The new password-free access
 (`INSIGHT_DEV_NO_AUTH`) is off unless you set it to `on`.
 

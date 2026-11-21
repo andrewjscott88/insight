@@ -72,7 +72,7 @@ ps: ## Show the container's status and health
 logs: ## Follow the logs (Ctrl-C to stop following)
 	$(COMPOSE) logs -f $(SERVICE)
 
-health: ## Ask the running instance for its health and version
+health: ## Ask the running instance for its public liveness status
 	@curl -fsS $(URL)/health && echo
 
 version: env-file ## Print the version of the built image

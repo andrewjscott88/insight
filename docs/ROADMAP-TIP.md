@@ -80,15 +80,9 @@ This is acceptable for loopback use. It is not acceptable for a public hostname 
 
 `download()` first checks that DNS answers for a curated hostname are globally routable (`src/insight/connectors.py:147-150`), then `httpx` resolves the name again (`src/insight/connectors.py:197-206`). A resolver that changes its answer in between can send the request to a non-public address. The code and docs already admit this: `connectors.py:203` and `docs/SECURITY.md:25, 45`. Redirects are disabled and `trust_env=False`, which is good, but the TOCTOU remains.
 
-### 2.5 Unauthenticated `/health` discloses the version (Low)
+### 2.5 Unauthenticated `/health` disclosed the version (Low, resolved)
 
-```25:27:src/insight/web/routes/pages.py
-    @app.get('/health')
-    def health() -> dict[str, str]:
-        return {'status': 'ok', 'version': __version__}
-```
-
-Useful for operators, unnecessary for anonymous clients. The Docker `HEALTHCHECK` only needs a 200 and a status (`Dockerfile:53-54`).
+At the time of the review, the public health check included the Insight version. Phase 0.5 moved it to the signed-in session response. Docker still checks `/health` for liveness.
 
 ### 2.6 TOTP secret stored in recoverable form (Low, documented)
 
@@ -161,8 +155,7 @@ opt-in schedules and the job runner, and `ROADMAP.md` marks #10 done.
 
 - **What to build:** Split liveness from version disclosure.
 - **Why:** Low-severity information disclosure (`src/insight/web/routes/pages.py:25-27`).
-- **Implementation notes:** `GET /health` returns only `{"status": "ok"}`. Expose `version` on an already-authenticated route such as `GET /api/session` (`src/insight/web/routes/workspace.py`) or a new `GET /api/version` behind `require_auth`. Keep `Dockerfile` HEALTHCHECK pointed at `/health`. Update `docs/RUNBOOK.md` and `scripts/smoke.py` / `make version` if they parse `/health`.
-- **New tables or endpoints:** Optional `GET /api/version` (authenticated). `/health` body changes.
+- **Implementation:** `GET /health` returns only `{"status": "ok"}`. After sign-in, `GET /api/session` returns the running Insight version alongside the CSRF token. Docker continues to check `/health`.
 - **Sources / libraries:** None.
 - **Effort:** S
 - **Acceptance criteria:** Unauthenticated `/health` has no version string. Authenticated clients can still read `0.6.0` (or later). Container healthcheck stays green. `tests/api` updated.
@@ -522,7 +515,7 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
 - [x] **0.2** Fix `README.md:74` and `:212`, `docs/ARCHITECTURE.md:130-132`, and mark roadmap #10 done
 - [ ] **0.3** Stronger startup warnings / optional `INSIGHT_REQUIRE_HARDENED` for internet-facing installs
 - [x] **0.4** Pin connector connections to DNS addresses already checked as public (code review L1)
-- [ ] **0.5** `/health` no longer returns the version; version is authenticated
+- [x] **0.5** `/health` reports liveness. `/api/session` returns the version after sign-in.
 - [x] **0.6** Encrypt TOTP secrets at rest and migrate existing pairings
 
 ### Phase 1 — Quick wins (7)
@@ -542,7 +535,7 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
 - [x] **2.3** ATT&CK catalog, report and analyst tags, and TLP-marked technique references in STIX Reports
 - [x] **2.4** MISP export/import (host CLI). [Event files and trusted instance exchange](MISP.md)
 - [x] **2.5** Manual actors and campaigns with TLP-marked report, indicator and technique links in STIX exports
-- [ ] **2.6** Optional GreyNoise community IP enrichment
+- [x] **2.6** Optional GreyNoise community IP enrichment
 - [x] **2.7** YARA and Sigma rules with report, actor, technique, CVE and malware-family links and a downloadable rule file and manifest
 - [x] **2.8** PDF advisory ingest with file hash (`ROADMAP` #13)
 - [x] **2.9** Suricata and Snort 3 alert rules for the IP and domain blocklists

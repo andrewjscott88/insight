@@ -2,7 +2,7 @@
 
 A single-operator threat-intelligence workbench, run locally or published behind a TLS reverse proxy. Application logic and the interactive GUI are authored in **Python**, using **NiceGUI + FastAPI + SQLAlchemy**. NiceGUI supplies the underlying browser assets; no separate React/Node build is required.
 
-**Version 0.6.0: a single-operator pilot release, not a production multi-user TIP.** Nothing is deployed or connected automatically. Operating it: [docs/RUNBOOK.md](docs/RUNBOOK.md). Scripting against it: [docs/API_GUIDE.md](docs/API_GUIDE.md) (every call, with `curl`). All documentation: [docs/README.md](docs/README.md).
+**Version 0.7.0: a single-operator pilot release, not a production multi-user TIP.** Nothing is deployed or connected automatically. Operating it: [docs/RUNBOOK.md](docs/RUNBOOK.md). Scripting against it: [docs/API_GUIDE.md](docs/API_GUIDE.md) (every call, with `curl`). All documentation: [docs/README.md](docs/README.md).
 
 ## What works
 
@@ -45,6 +45,7 @@ A single-operator threat-intelligence workbench, run locally or published behind
   The Record (news), for reporting on attacker groups, campaigns and malware. Insight keeps each item's title,
   short summary and link. Each publisher's reuse rule applies: only CISA's text leaves Insight in exports; for
   every other feed, exports carry titles, links, dates and indicators, not the publisher's words.
+- **GreyNoise Community IP context.** With a host key, analysts can approve a passive lookup of a reviewed public IPv4 address from a current TLP:CLEAR report in Entity explorer. [Runbook](docs/RUNBOOK.md#greynoise-community-ip-context)
 - **Optional abuse.ch indicator feeds.** Import recent URLs from URLhaus, network indicators and hashes from
   ThreatFox, and file hashes from MalwareBazaar. Set `INSIGHT_ABUSECH_AUTH_KEY` and enable the feeds you use.
   Each entry links to its record at the publisher. The connector reads only the provider's metadata API.

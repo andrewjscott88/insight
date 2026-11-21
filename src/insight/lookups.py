@@ -67,6 +67,10 @@ class Throttle:
         if slot > now:
             await asyncio.sleep(slot - now)
 
+    def defer(self, seconds: float) -> None:
+        """Postpone the next slot after a provider rate-limit response."""
+        self._last = max(self._last, self._clock() + seconds - self.interval)
+
     def reset(self) -> None:
         self._last = -math.inf
 
@@ -76,7 +80,11 @@ def nvd_interval() -> float:
 
 
 #: The process-wide throttles. One worker per instance (the runbook's rule), so one set.
-THROTTLES: Final[dict[str, Throttle]] = {'nvd': Throttle(nvd_interval()), 'epss': Throttle(EPSS_INTERVAL)}
+THROTTLES: Final[dict[str, Throttle]] = {
+    'nvd': Throttle(nvd_interval()),
+    'epss': Throttle(EPSS_INTERVAL),
+    'greynoise': Throttle(1.0),
+}
 
 
 class LookupThrottled(Exception):

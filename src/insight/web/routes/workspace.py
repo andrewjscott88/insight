@@ -8,7 +8,7 @@ from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, Query, Request
 
-from ... import services
+from ... import __version__, services
 from ...brief import DEFAULT_DAYS, MAX_DAYS, compose, window_start
 from ...demo import seed
 from ...models import SessionFactory
@@ -20,7 +20,7 @@ def _register_workspace_routes(app: FastAPI, sessions: SessionFactory, require_a
 
     @app.get('/api/session', dependencies=[Depends(require_auth)])
     def session_info(request: Request) -> dict[str, str]:
-        return {'csrf_token': request.session['csrf']}
+        return {'csrf_token': request.session['csrf'], 'version': __version__}
 
     @app.get('/api/stats', dependencies=[Depends(require_auth)])
     def stats(request: Request) -> dict[str, int]:

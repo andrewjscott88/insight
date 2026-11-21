@@ -1,7 +1,29 @@
-# Validation report · 0.6.0
+# Validation report · 0.7.0
 
 What was verified for each release, what was not, and how. Update this file for every release (see
 [RELEASING.md](RELEASING.md)).
+
+## 0.7.0: STIX 2.1 and MISP exchange, ATT&CK techniques, alerts, threat guides, CVE enrichment, more feeds
+
+Recorded while the work was done (pull requests #40–#72). As for 0.6.0, the release workflow runs the whole
+milestone gate on the tagged commit before publishing can be approved; its reports (benchmark, performance, backup
+drill, browser E2E with axe, ZAP, licences, SBOM) are attached to that run, not repeated here.
+
+- **Tests:** every pull request merged since 0.6.0 passed Tier 1 on SQLite and PostgreSQL 16 before it merged,
+  and CI and CodeQL are green on the `main` commit this release was prepared from.
+- **Schema:** migrations `0009` to `0014` (ATT&CK technique tags, source switches, alerts, CVE lookup failures,
+  KEV fields, threat guides) are tested by CI against the 0.1.0, 0.2.0, 0.5.0 and 0.6.0 release databases. The
+  0.7.0 upgrade fixture was created with the Release fixture workflow on the release branch, so later versions
+  must upgrade it too.
+- **Release metadata:** version, changelog section, this report and the upgrade fixture are checked by
+  `scripts/check_release.py` in the release run.
+
+**Not verified for 0.7.0 before tagging:** no benchmark, performance, ZAP or browser-E2E numbers are recorded
+here; they come from the milestone gate in the release run, which the approver reviews before publishing. Live
+calls to the optional external services (GreyNoise, NVD, EPSS, abuse.ch, OTX, MISP, alert destinations) were
+not exercised against real accounts. `make attack-backfill` on a real 0.6.0 database was not run here. One
+CodeQL alert was open when this report was written. The Makefile's Docker targets were not run against real
+containers.
 
 ## 0.6.0: verdicts and a blocklist, report deletion, scheduled syncs, stored sessions, lighter pipeline
 

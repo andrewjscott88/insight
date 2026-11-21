@@ -1,4 +1,4 @@
-# HTTP API (0.6.0)
+# HTTP API (0.7.0)
 
 JSON over HTTP on the same origin as the workspace. The API is **unversioned and intended for automation by
 the single operator** (scripts, a SIEM), signed in with a browser session or the
@@ -18,7 +18,8 @@ page is the field-by-field reference.
    token; `429` a wrong password after 30 failures in the last minute (each failure waits ~1 s; the right password always signs in); `503` MFA is on but no
    authenticator app is paired (sign-in locked). MFA is off by default (`INSIGHT_MFA=on` or `make mfa-enable`
    turns it on); then `otp` is the 6-digit code from the app, and each code works once.
-3. `GET /api/session` → `{"csrf_token": "…"}`. Send it as `X-CSRF-Token` on **every non-GET** API request.
+3. `GET /api/session` returns `{"csrf_token": "…", "version": "…"}` for the signed-in session.
+   Send the `csrf_token` value as `X-CSRF-Token` on **every non-GET** API request. The `version` field is the running Insight version.
 4. `POST /logout` (form field `csrf_token`) revokes the session server-side.
 
 **Temporary password-free mode:** with the explicit default-off `INSIGHT_DEV_NO_AUTH=on`, `GET /login`
@@ -454,6 +455,8 @@ which is not attribution.
 | `PUT /api/schedules/{key}` | Body `{"interval_minutes": 0 \| 60 \| 360 \| 1440, "at": "HH:MM"}` (`at` optional, UTC: the time of day the syncs start from; every next sync keeps that slot); returns the schedule as above. **Browser session only**: API keys get `403` (how often Insight goes online by itself is the operator's decision; `insight schedule` on the host does the same). `404` unknown source, `409` turning on a schedule for a switched-off source, `422` other intervals. Without `at`, a schedule turned on runs within a minute, then every interval. Audited as `schedule.update`. Scheduled syncs run only in a process with `INSIGHT_RUN_JOBS=on` (the default for `insight serve`). |
 | `GET /api/jobs?limit=20` | Recent background jobs (scheduled syncs, alert deliveries, automatic CVE lookups), newest first: `[{id, kind, key, status, attempts, run_after, started_at, finished_at, message, actor, created_at}]`. `status`: `queued`, `running`, `succeeded` or `failed`. A failed sync is tried again after 5, then 10 minutes, then marked `failed`. `limit` 1-100. Finished jobs are kept 30 days. |
 | `POST /api/sources/sync-all` | `{"results": [{key, name, status, message}]}`: every source in use, in registry order, one at a time. `status` is `success` or `error`; a failing source does not stop the others and is recorded as an error run. Always `200` once it has run; `409` another sync running. |
+| `POST /api/enrichment/greynoise/{ip}` | Approve a GreyNoise Community lookup of one public IPv4 accepted in a current TLP:CLEAR report. Requires a signed-in session with CSRF or an unlimited read-write key. A fresh cached answer avoids network traffic. The result includes `provider`, `ip`, `found` and `fetched_at`; a match also includes `noise`, `riot`, `classification`, `name` and `last_seen`. Returns `503` for a missing host key, `404` for an ineligible address, `429` with `Retry-After` for a rate limit or `502` for a provider error. |
+| `GET /api/ips/{ip}/greynoise` | Read the last cached response without external traffic. Available to read-only and TLP-limited keys. Returns `404` when no eligible reviewed CLEAR observation or cached response exists. |
 | `POST /api/enrichment/{provider}/{cve}` | Provider JSON (`epss`, `nvd`), cached. Only the CVE number is sent. `422` invalid input or unknown CVE (checked first, so it uses no lookup window), `429` with `Retry-After` when the provider's window is taken: one request every 6.5 s at NVD (0.7 s with `INSIGHT_NVD_API_KEY`) and every 1 s at EPSS, shared with every other caller and with automatic lookups, so the wait may come from Insight itself. `502` provider failure, `403` for TLP-limited keys (a lookup can name a CVE from any report to a provider). |
 | `GET /api/cves?days=30&limit=50` | The prioritised CVE view ([ADR 0024](adr/0024-prioritised-cves.md)): the CVEs that current reports received in the last `days` days (1-365) mention, most urgent first, from the reports the caller may see (TLP limit; the demo and rejected mentions left out). `{days, since, total, truncated, cves: [cve]}`; `limit` 1-500 rows. A row is `{cve, tier, label, reason, details: [line], reports, sources, first_seen, last_seen, report: {id, title}, kev: {date_added, due_date, ransomware, name, document_id} \| null, cvss: {score, source, csaf}, nvd, epss}`. `tier`: 1 used in ransomware (CISA KEV), 2 known exploited (KEV), 3 likely to be attacked soon (EPSS 10% or more), 4 critical (CVSS 9 or more), 5 high (CVSS 7 or more), 6 no strong signal; within a tier, higher EPSS, higher CVSS, more reports, most recently seen. `details` are plain-English lines; `nvd`/`epss` as in the scores route. `truncated`: more than 20,000 mentions, older ones left out |
 | `GET /api/cves/{cve}/scores` | The cached scores, read without contacting anyone ([ADR 0023](adr/0023-automatic-cve-lookups.md)): `{cve, nvd, epss, nvd_checked_at, epss_checked_at}`. `nvd` is `{score, severity, version, vector, status, published, description, cwes}` or `null` (not looked up, or NVD has no record); `score` is the CVSS base score from the newest version NVD has (4.0, 3.1, 3.0, then 2), `null` when NVD has not scored it (`status` says why, such as `Awaiting Analysis` or `Rejected`). `epss` is `{probability, percentile, date}` (both 0-1; probability of exploitation attempts in the next 30 days) or `null`. A `*_checked_at` time with a `null` score means the provider was asked and has none. `404` unless a current report the caller may see mentions the CVE, so TLP-limited keys can use it for their own reports. |
@@ -534,7 +537,7 @@ makes one), so repeated coverage must not be interpreted as an increase in attac
 | `GET /api/audit` | Latest 200 audit events: `{action, object_id, detail, actor, created_at}`. Not available to TLP-limited keys |
 | `GET /api/watch-terms` | `[{id, term}]`. Not available to TLP-limited keys: terms often name clients or internal systems |
 | `POST /api/demo` | `{"created": n}`; loads the synthetic demo, idempotent. **Browser session only** (API keys get `403`: scripts must not add practice data to a real dataset); reports above `INSIGHT_MAX_TLP` are left out |
-| `GET /health` | `{"status": "ok", "version": "…"}`, no authentication required |
+| `GET /health` | Public liveness check. Returns `{"status": "ok"}`. |
 
 Audit `actor`: `operator` (browser session or workspace), `api-key:<key ID>`, `cli`, `connector:<source key>`,
 `system`, or empty for events recorded before schema revision `0005`.

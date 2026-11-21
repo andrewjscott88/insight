@@ -73,6 +73,8 @@ PROTECTED = [
     ('POST', '/api/sources/sync-all'),
     ('PUT', '/api/schedules/cisa-kev'),
     ('POST', '/api/enrichment/epss/CVE-2024-12345'),
+    ('POST', '/api/enrichment/greynoise/8.8.8.8'),
+    ('GET', '/api/ips/8.8.8.8/greynoise'),
     ('GET', '/api/cves/CVE-2024-12345/scores'),
     ('GET', '/api/cves'),
     ('GET', '/api/industries'),
@@ -115,10 +117,10 @@ def test_every_api_route_requires_authentication(client: TestClient, method: str
     assert client.request(method, path).status_code == 401
 
 
-def test_health_is_public(client: TestClient) -> None:
+def test_public_health_returns_only_liveness(client: TestClient) -> None:
     response = client.get('/health')
     assert response.status_code == 200
-    assert response.json() == {'status': 'ok', 'version': __version__}
+    assert response.json() == {'status': 'ok'}
 
 
 def test_login_page_sets_csrf_and_redirects_when_signed_in(
@@ -166,8 +168,9 @@ def test_login_rotates_session_and_csrf(client: TestClient, csrf_token_from: Cal
     pre_login_token = csrf_token_from(client.get('/login').text)
     pre_login_cookie = client.cookies.get('insight_session')
     client.post('/login', data={'csrf_token': pre_login_token, 'password': 'longtestpassword'})
-    api_token = client.get('/api/session').json()['csrf_token']
-    assert api_token != pre_login_token
+    session = client.get('/api/session').json()
+    assert session['csrf_token'] != pre_login_token
+    assert session['version'] == __version__
     assert client.cookies.get('insight_session') != pre_login_cookie
 
 

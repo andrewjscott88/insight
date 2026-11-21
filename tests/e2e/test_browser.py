@@ -22,6 +22,8 @@ from typing import Any
 
 import pytest
 
+from insight import __version__
+
 pytestmark = pytest.mark.e2e
 
 BASE_URL = os.environ.get('INSIGHT_E2E_URL', '')
@@ -72,6 +74,20 @@ def test_wrong_password_is_rejected(context: Any) -> None:
     sign_in(page, 'definitely-not-the-password')
     expect(page.get_by_role('alert')).to_have_text('Incorrect password.')
     expect(page).to_have_url(re.compile(r'/login$'))
+
+
+def test_version_is_available_after_sign_in(context: Any) -> None:
+    health = context.request.get('/health')
+    assert health.status == 200
+    assert health.json() == {'status': 'ok'}
+    assert context.request.get('/api/session').status == 401
+
+    page = context.new_page()
+    sign_in(page)
+    page.wait_for_url(BASE_URL.rstrip('/') + '/')
+    session = context.request.get('/api/session')
+    assert session.status == 200
+    assert session.json()['version'] == __version__
 
 
 def test_security_headers_reach_the_browser(context: Any) -> None:
