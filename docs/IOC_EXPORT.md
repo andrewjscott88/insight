@@ -445,8 +445,9 @@ offline with the OASIS STIX 2.1 validator before recording the `stix.export` eve
 
 Each report carries its own TLP 2.0 marking. An indicator shared by several selected reports carries the
 strictest source marking. Handle the whole bundle at its highest marking, including AMBER+STRICT where
-present. Indicator IDs identify the projected values in this bundle. Report IDs retain the original document
-UUID for exchange. Empty selections produce a bundle with no objects.
+present. Across exports with different filters or TLP limits, match indicators by their canonical pattern
+or value and preserve each copy's markings. Indicator UUIDs belong to one export. Use the stable report UUID
+to match source documents. Empty selections produce a bundle with no objects.
 
 Technique tags come from the selected report revision. For example, if the report is tagged with
 `T1059.001`, its `object_refs` includes the PowerShell technique. A technique shared by two reports with
