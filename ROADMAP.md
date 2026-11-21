@@ -62,7 +62,7 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
       (above). Destinations are set in the workspace; CLI management is still to do.
 - [x] **Review J3 Per-source redistribution rules** (public, or metadata only), applied by the report and IOC
       exports ([ADR 0021](docs/adr/0021-threat-research-sources.md)); STIX and MISP must apply them too.
-- [ ] **TIP 1.5 abuse.ch connectors:** URLhaus, ThreatFox and MalwareBazaar (indicators and metadata only, never
+- [x] **TIP 1.5 abuse.ch connectors:** URLhaus, ThreatFox and MalwareBazaar (indicators and metadata only, never
       samples; keys from the environment).
 - [ ] **TIP 1.6 AlienVault OTX pulses** with the operator's own key.
 - [ ] **Review D2 E-mail and CIDR indicator kinds,** with e-mail addresses flagged as personal data.

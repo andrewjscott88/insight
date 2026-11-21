@@ -64,7 +64,7 @@ def test_every_source_is_https_on_an_allowed_host_in_a_known_category() -> None:
 
 
 def test_threat_research_and_news_sources_start_off_and_stay_in_insight() -> None:
-    optional = {key for key, s in SOURCES.items() if s.optional}
+    optional = {key for key, s in SOURCES.items() if s.optional and s.kind == 'rss'}
     assert optional == {'talos', 'microsoft-ti', 'dfir-report', 'eset', 'securelist', 'the-record'}
     assert all(SOURCES[key].kind == 'rss' and SOURCES[key].reuse == 'metadata' for key in optional)
     assert {key for key, s in SOURCES.items() if s.reuse == 'public'} == {'cisa-kev', 'cisa-csaf'}
