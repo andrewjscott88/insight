@@ -39,6 +39,8 @@ def test_report_associations_markings_and_publisher_rights(db: Session) -> None:
         ref=services.SourceRef('sans-isc', 'synthetic-1'),
     )
     bundle = services.export_stix(db, IocExportQuery())
+    audit_id = db.scalar(select(AuditEvent.object_id).where(AuditEvent.action == 'stix.export'))
+    assert audit_id == bundle['id'].removeprefix('bundle--')
     reports = {r['id']: r for r in _objects(bundle, 'report')}
     (ip,) = _objects(bundle, 'indicator')
     (cve,) = _objects(bundle, 'vulnerability')

@@ -432,7 +432,7 @@ insight export-stix partner-bundle.json --max-tlp GREEN --review-status accepted
 The authenticated `GET /api/iocs/stix` endpoint accepts the IOC export filters. The caller's API-key limit and
 the instance TLP ceiling also apply. Defanging is refused because it changes the values consumers match.
 The CLI writes an owner-only file and refuses to overwrite an existing one. Insight validates each bundle
-offline with the OASIS STIX 2.1 validator before recording the `stix.export` event with the bundle ID.
+offline with the OASIS STIX 2.1 validator before recording the `stix.export` event with the UUID from the bundle ID.
 
 | Report content | STIX representation |
 | --- | --- |
