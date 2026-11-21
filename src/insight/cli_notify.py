@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import os
 import sys
+from contextlib import ExitStack
 from getpass import getpass
+from pathlib import Path
 
 from . import services
 from .models import SessionFactory
@@ -17,20 +20,31 @@ def manage_destination(
     style: str | None,
     target_id: str | None,
     max_tlp: str | None,
+    secret_out: Path | None,
 ) -> str:
+    if secret_out is not None and (action != 'add' or style != 'json'):
+        raise ValueError('--secret-out is only used with notify add --style json.')
     if action == 'add':
         if not name or not style or target_id:
             raise ValueError('Use notify add --name NAME --style chat|json|email [--max-tlp LABEL].')
+        if style == 'json' and secret_out is None:
+            raise ValueError('Use --secret-out FILE to save the JSON signing key in a new private file.')
         # Webhook paths can be credentials. Never put them in argv, the process list or shell history.
         address = getpass('Destination address: ') if sys.stdin.isatty() else input()
-        with sessions.begin() as db:
-            services.set_actor(db, 'cli')
-            target = services.add_target(
-                db, name=name, style=style, address=address, max_tlp=(max_tlp or 'AMBER').upper()
-            )
-            message = f'Added {target.id} ({target.name}).'
-            if target.secret:
-                message += f'\nSigning secret (shown once): {target.secret}'
+        with ExitStack() as cleanup:
+            with sessions.begin() as db:
+                services.set_actor(db, 'cli')
+                target = services.add_target(
+                    db, name=name, style=style, address=address, max_tlp=(max_tlp or 'AMBER').upper()
+                )
+                if secret_out is not None and target.secret:
+                    fd = os.open(secret_out, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                    # A write or commit failure must leave neither a destination nor an orphaned key.
+                    cleanup.callback(secret_out.unlink, missing_ok=True)
+                    with os.fdopen(fd, 'w', encoding='utf-8') as stream:
+                        stream.write(target.secret + '\n')
+                message = f'Added {target.id} ({target.name}).'
+            cleanup.pop_all()
         return message
     if name is not None or style is not None or max_tlp is not None:
         raise ValueError('--name, --style and --max-tlp are only used with notify add.')

@@ -14,7 +14,7 @@ CVEs in reports they can see; starting a lookup stays refused to them. The new p
 ### Manage alert destinations on the host
 
 - `insight notify` lists, adds, enables, disables and removes destinations. It reads new addresses from
-  a hidden prompt or standard input. The list shows the name, ID, style, state and TLP limit.
+  a hidden prompt or standard input and saves JSON signing keys to a new owner-only file. The list shows the name, ID, style, state and TLP limit.
 
 ### Added: a prioritised CVE view, and a brief that uses ransomware use, NVD and EPSS (TIP 1.3)
 - **Prioritised CVEs** tab and `GET /api/cves` ([ADR 0024](docs/adr/0024-prioritised-cves.md)): the CVEs in your

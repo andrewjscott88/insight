@@ -466,9 +466,9 @@ def test_notify_manages_destinations_without_disclosing_addresses(
     assert 'No alert destinations' in capsys.readouterr().out
     address = 'https://alerts.example.org/secret-path'
     monkeypatch.setattr(sys, 'stdin', io.StringIO(address + '\n'))
-    assert (
-        cli.main(['notify', 'add', '--name', 'Incident desk', '--style', 'json', '--max-tlp', 'green']) == 0
-    )
+    key_path = sqlite_env / 'desk.key'
+    args = ['notify', 'add', '--name', 'Incident desk', '--style', 'json', '--max-tlp', 'green']
+    assert cli.main([*args, '--secret-out', str(key_path)]) == 0
     added = capsys.readouterr().out
     engine, sessions = database(f'sqlite:///{sqlite_env / "insight.db"}', migrate=False)
     try:
@@ -477,7 +477,9 @@ def test_notify_manages_destinations_without_disclosing_addresses(
             target_id, secret = target.id, target.secret
             assert (target.address, target.max_tlp, target.actor) == (address, 'GREEN', 'cli')
         assert secret
-        assert secret in added
+        assert key_path.read_text().strip() == secret
+        assert key_path.stat().st_mode & 0o777 == 0o600
+        assert secret not in added
         assert address not in added
         assert cli.main(['notify', 'disable', '--target', target_id]) == 0
         assert cli.main(['notify', 'list']) == 0
@@ -503,6 +505,20 @@ def test_notify_manages_destinations_without_disclosing_addresses(
         engine.dispose()
 
 
+def test_notify_existing_key_rolls_back_destination(
+    sqlite_env: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    key_path = sqlite_env / 'existing.key'
+    key_path.write_text('original')
+    monkeypatch.setattr(sys, 'stdin', io.StringIO('https://alerts.example.org/hook\n'))
+    args = ['notify', 'add', '--name', 'Incident desk', '--style', 'json', '--secret-out', str(key_path)]
+    assert cli.main(args) == 1
+    assert 'already exists' in capsys.readouterr().err
+    assert cli.main(['notify', 'list']) == 0
+    assert 'No alert destinations' in capsys.readouterr().out
+    assert key_path.read_text() == 'original'
+
+
 @pytest.mark.parametrize(
     'args',
     [
@@ -510,6 +526,9 @@ def test_notify_manages_destinations_without_disclosing_addresses(
         ['enable'],
         ['remove', '--target', 'missing'],
         ['list', '--style', 'email'],
+        ['add', '--style', 'json', '--name', 'desk'],
+        ['add', '--style', 'chat', '--name', 'desk', '--secret-out', 'unused'],
+        ['list', '--secret-out', 'unused'],
         ['typo'],
     ],
 )

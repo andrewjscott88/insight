@@ -178,6 +178,9 @@ def build_parser() -> argparse.ArgumentParser:
     removal.add_argument('--yes', action='store_true', help='delete-report: do not ask for confirmation')
     notify = parser.add_argument_group('notify options')
     notify.add_argument('--style', choices=['chat', 'json', 'email'], help='notify add: destination type')
+    notify.add_argument(
+        '--secret-out', type=Path, metavar='FILE', help='notify add: new private JSON signing key file'
+    )
     notify.add_argument('--target', metavar='ID', help='notify enable/disable/remove: ID from notify list')
     keys = parser.add_argument_group('api-key and destination options')
     keys.add_argument(
@@ -737,12 +740,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                         style=args.style,
                         target_id=args.target,
                         max_tlp=args.max_tlp,
+                        secret_out=args.secret_out,
                     )
                 )
         except (EOFError, KeyboardInterrupt):
             print('Cancelled.', file=sys.stderr)
             return 1
-        except ValueError as exc:
+        except FileExistsError:
+            print('Alert destination: the key file already exists. Choose a new file.', file=sys.stderr)
+            return 1
+        except (OSError, ValueError) as exc:
             print(f'Alert destination: {exc}', file=sys.stderr)
             return 1
         return 0

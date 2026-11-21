@@ -29,10 +29,11 @@ alerts until it is on again; removing it deletes them.
 
 Run `insight notify` to list the destination IDs, names, styles, sharing limits and enabled state.
 Use `add` to create a destination. Enter the address at the hidden prompt or pipe it on standard input.
-For a signed JSON webhook, the command prints the signing secret once after creating the destination.
+For a signed JSON webhook, give a new path with `--secret-out`. The command saves the signing key
+in an owner-only file. Use that key to verify deliveries at the receiver.
 
 ```sh
-insight notify add --name "Incident desk" --style json --max-tlp GREEN
+insight notify add --name "Incident desk" --style json --max-tlp GREEN --secret-out incident-desk.key
 insight notify list
 insight notify disable --target DESTINATION_ID
 insight notify enable --target DESTINATION_ID
