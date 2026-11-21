@@ -154,7 +154,9 @@ def test_new_means_published_in_the_window() -> None:
         doc(2, body=f'{first_release}\n- CVE-2021-1, CVSS 3 base score 9.8: x'),
     ]
     result = compose(data(documents=old))
-    assert result.summary == ('Nothing new in the last 7 days. Sync your sources to get the latest.',)
+    assert result.summary == (
+        'No recent reports are available for the last 7 days. Check the source status below.',
+    )
     assert result.sections[1].items == ()
 
 
@@ -165,7 +167,7 @@ def test_the_synthetic_demo_is_left_out(session_factory: sessionmaker[Session]) 
         demo = brief_data(db, since=window_start(datetime.now(UTC))).documents
     assert len(demo) == 3
     assert all(is_demo(d) for d in demo)
-    assert compose(data(documents=demo)).summary[0].startswith('Nothing new')
+    assert compose(data(documents=demo)).summary[0].startswith('No recent reports')
 
 
 # --------------------------------------------------------------------------- the executive summary
@@ -173,7 +175,9 @@ def test_the_synthetic_demo_is_left_out(session_factory: sessionmaker[Session]) 
 
 def test_an_empty_week_says_so_and_what_to_do() -> None:
     result = compose(data())
-    assert result.summary == ('Nothing new in the last 7 days. Sync your sources to get the latest.',)
+    assert result.summary == (
+        'No recent reports are available for the last 7 days. Check the source status below.',
+    )
     titles = [
         'Exploited now',
         'Most severe',
@@ -207,11 +211,11 @@ def test_a_full_week_summary_reads_from_most_to_least_urgent() -> None:
     result = compose(data(documents=docs, kev=kevs, mentions=mentions, watch=watch))
     assert result.summary == (
         'In the last 7 days, 4 new reports came in from 4 sources.',
-        'CISA confirmed that attackers are using 2 more weaknesses, in products from Acme and Bolt.',
+        'CISA added 2 more weaknesses to its known exploited list, in products from Acme and Bolt.',
         'US federal agencies must fix the next of them by 2026-11-21.',
-        '1 weakness that attackers use also appears in new reports from NCSC and SANS.',
-        'The most serious new weakness is CVE-2026-123965 in Jet Admin Cloud Platform Prompt Injection, '
-        'scored 9.9 out of 10.',
+        "1 weakness already on CISA's list also appears in new reports from NCSC and SANS.",
+        'The highest listed base score is 9.9 out of 10 for CVE-2026-123965 in '
+        'Jet Admin Cloud Platform Prompt Injection.',
         '1 new report mentions your watch terms: Jet Admin (1).',
         'First step: check whether you use any of these products, and fix the ones attackers use first.',
     )
@@ -256,7 +260,12 @@ def test_every_sentence_and_empty_message_is_plain(documents: int) -> None:
     ]
     kevs = {'CVE-2026-0001': entry('CVE-2026-0001')} if documents else {}
     result = compose(data(documents=docs, kev=kevs, watch={'Acme': {'d0'}} if documents else {}))
-    for text in [*result.summary, *(s.empty for s in result.sections)]:
+    for text in [
+        *result.summary,
+        *(s.empty for s in result.sections),
+        *result.coverage,
+        *(text for item in result.highlights for text in (item.text, item.action)),
+    ]:
         assert plain.grade(text) <= plain.MAX_GRADE, text
 
 

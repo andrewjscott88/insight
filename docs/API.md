@@ -21,6 +21,14 @@ page is the field-by-field reference.
 3. `GET /api/session` → `{"csrf_token": "…"}`. Send it as `X-CSRF-Token` on **every non-GET** API request.
 4. `POST /logout` (form field `csrf_token`) revokes the session server-side.
 
+**Temporary password-free mode:** with the explicit default-off `INSIGHT_DEV_NO_AUTH=on`, `GET /login`
+creates the normal operator session and CSRF token, then returns `303` to `/` instead of a password form.
+Anyone who can reach the site can obtain this full-access session. Direct API calls without a valid session
+or key still return `401`, and session-authenticated writes still require `X-CSRF-Token`; API-key behavior
+is unchanged. Enabling MFA and this mode together is rejected. Turning the mode off and restarting with
+the changed environment invalidates its sessions and restores password sign-in. See the
+[runbook](RUNBOOK.md#temporary-password-free-access) for enable/restore checks and the public-access tradeoff.
+
 Every request is also checked as follows:
 - The `Host` header must be in `INSIGHT_ALLOWED_HOSTS`, else `400`.
 - An `Origin` header, if present, must equal `scheme://host`, else `403`. `Origin: null` is always refused.
@@ -338,12 +346,66 @@ itself, each CVE that a current TLP:CLEAR or GREEN report mentions and that has 
 seen only in AMBER or RED reports are never looked up by themselves. The answers fill
 `GET /api/cves/{cve}/scores`. This product uses the NVD API but is not endorsed or certified by the NVD.
 
+## Executive brief
+
+### `GET /api/brief?days=7`
+
+Returns the same deterministic brief used by the landing page. Requires a browser session or API key;
+read-only keys are accepted. Uses the normal `read` rate budget. `days` is an integer from 1 to 30,
+default 7; invalid values return `422`. It reads stored data and makes no source or AI request.
+
+| Field | JSON type | Meaning |
+| --- | --- | --- |
+| `days` | integer | Requested reporting window in days. |
+| `since` | string | Window start, as an ISO-8601 UTC timestamp. |
+| `as_of` | string | Window end, as an ISO-8601 UTC timestamp. This is the brief's reference time, not a source's last successful sync. |
+| `report_count` | integer | Current, visible, non-demo reports included in this brief after its date filters. |
+| `source_count` | integer | Distinct source identities among those reports: connector key, or case/space-normalized source name for other reports. Not a count of independent confirmations or all configured connectors. |
+| `recent_reports` | integer | Included reports received during the last 24 hours relative to `as_of`. This is a receipt count, not a count of attacks or newly published vulnerabilities. |
+| `summary` | array of strings | Plain-English executive summary. The existing field is retained; its wording can change. |
+| `highlights` | array of objects | Prioritized explanations with `{title, text, action, evidence}`. The first three values are strings; `evidence` is an array of brief items described below. `action` is a conditional next step, not an instruction executed by Insight. |
+| `coverage` | array of strings | Notes explaining the data covered, count limits, excluded invalid/future dates and stored source-check freshness. Connector error details are omitted. |
+| `sections` | array of objects | Existing detail sections: `{title, items, empty}`. `title` and `empty` are strings; `items` is an array of brief items. Use `empty` when a section has no items. |
+
+The added fields are always present and are not nullable. Empty collections are `[]`; counts may be zero.
+Existing clients can continue using `summary` and `sections` and ignore the additions.
+
+A **brief item** is `{text, document_id, entity, search}`. `text` is a string; the remaining values are strings
+or `null`. A `document_id` opens a visible report; `entity` opens the indicator's evidence; `search` searches
+the collected reports. The workspace checks them in that order. The item is evidence/navigation metadata,
+not a claim that an extracted indicator is malicious.
+
+The five detail sections remain:
+
+| Section | Selection |
+| --- | --- |
+| **Exploited now** | CVEs added to the stored CISA KEV catalogue in the window, then older KEV CVEs mentioned by included reports from other sources. KEV records establish known exploitation; this label does not measure attacks happening now. |
+| **Most severe** | CVSS base scores of 9 or higher in included CISA advisories, highest first, one item per CVE. A high score does not itself establish exploitation. |
+| **Your watch terms** | Literal matches for configured terms in included reports. A match does not establish that the operator uses an affected product. |
+| **Seen in several sources** | Indicators mentioned in included reports with at least two distinct source identities. Repetition does not establish independent corroboration or rising attack volume. |
+| **Most-mentioned vendors** | Vendor names from included advisory metadata and recent KEV additions. |
+
+Each detail section and each highlight's evidence list contains at most five items. Report-derived counts,
+text and links use only current reports the caller may see, including authorized pasted reports as well as connector reports. The synthetic
+demo is excluded. The query examines at most the latest 2,000 eligible received reports; counts describe
+that bounded selection, not the entire database. Coverage notes disclose a truncated selection. Stored KEV
+catalogue facts are public and can contribute even when there is no visible report to link or `report_count`
+is zero.
+
+The reporting window preserves publication-date filtering: a KEV report uses CISA's date added; a CISA
+advisory uses its first release date, rather than the date of a later revision; reports without a known
+publisher date use their receipt date. An old advisory first downloaded today does not become a newly
+published advisory. Invalid or future dates are excluded. The separate 24-hour count uses received timestamps
+for the current report version within the included set, so a received report can be an update. No
+comparison against a previous period is made in the brief itself (the threat landscape, `GET /api/landscape`,
+makes one), so repeated coverage must not be interpreted as an increase in attacks. Full behavior and interpretation: [Executive brief](EXECUTIVE_BRIEF.md).
+
 ## Workspace
 
 | Route | Result |
 | --- | --- |
 | `GET /api/stats` | `{documents, entities, unreviewed, observations_unreviewed}` (current revisions only) |
-| `GET /api/brief?days=7` | The intel brief shown on the landing page, built from the data (no AI): `{days, since, summary: [sentence], sections: [{title, items: [{text, document_id, entity, search}], empty}]}`. `days` 1-30 (default 7). `summary` is the executive summary, most important first. Sections: *Exploited now* (CVEs added to CISA KEV in the window, then KEV CVEs that new reports from other sources mention), *Most severe* (CVSS 9 or higher in new CISA advisories), *Your watch terms*, *Seen in several sources* (indicators in new reports from two or more sources), *Most-mentioned vendors*. An item opens `document_id`, looks up the indicator `entity`, or searches reports for `search`. "New" means published in the window: KEV entries by the day CISA added them, CISA advisories by their first release, other reports by the day Insight received them; the synthetic demo is left out. Built only from reports the caller may see (TLP limit). |
+| `GET /api/brief?days=7` | Executive summary, report/source counts, last-24-hour receipt count, linked highlights, coverage notes and existing detail sections. See the [executive brief contract](#executive-brief). |
 | `GET /api/landscape?days=7` | The threat landscape that opens the workspace ([ADR 0020](adr/0020-threat-landscape.md)), built from the data (no AI). `days` 1-30 (default 7); the period is compared with the 4 periods before it. `{days, since, compared_since, compared_periods, tlp, reports, sources, summary: [sentence], caveats: [sentence], threats: [threat], quieter: [threat], tactics: [tactic], brief}`. A threat is `{key, name, change: {label, current, usual}, sources, what, impact, check, reports: [{text, document_id}], words, techniques}`; `label` is `rising`, `new`, `steady`, `quieter` or `no-history` (nothing before the period to compare with); `usual` is reports per period before, `null` without history. A tactic is `{shortname, name, plain, change, techniques: [[id, name, reports]]}`. `brief` is the intel brief below for the same period. `tlp` is the most restrictive label of the reports counted: share no wider. Built only from reports the caller may see (TLP limit) |
 | `GET /api/landscape/briefing?days=7` | The same as a Markdown briefing (`text/markdown`, attachment `insight-threat-landscape-7d.md`), marked with its TLP on the first and last lines; text from reports is escaped. Audited as `landscape.briefing` |
 | `GET /api/audit` | Latest 200 audit events: `{action, object_id, detail, actor, created_at}`. Not available to TLP-limited keys |

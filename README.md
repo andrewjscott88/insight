@@ -37,7 +37,7 @@ A single-operator threat-intelligence workbench, run locally or published behind
   short summary and link. Each publisher's reuse rule applies: only CISA's text leaves Insight in exports; for
   every other feed, exports carry titles, links, dates and indicators, not the publisher's words.
 - Curated connectors: CISA KEV, CISA security advisories (CISA's machine-readable CSAF files), SANS ISC and UK
-  NCSC feeds. **Sync now** per source, **Sync all sources** at the top of the workspace, and **opt-in
+  NCSC feeds. **Sync now** per source, **Sync all sources** beside the threat landscape, and **opt-in
   schedules** (off by default; every hour, 6 hours or day, per source or for all, from a time of day you choose,
   in UTC) so the feeds and the brief stay fresh by themselves. An unchanged feed is not downloaded again (`ETag` / `Last-Modified`). See
   [ADR 0018](docs/adr/0018-opt-in-scheduled-syncs.md).
@@ -48,12 +48,17 @@ A single-operator threat-intelligence workbench, run locally or published behind
   what attackers are doing by ATT&CK tactic, and every report behind it. Counted from your reports, not written
   by AI; marked with the most restrictive TLP it used; **Download as a briefing to share** (Markdown).
   `GET /api/landscape`, `GET /api/landscape/briefing`.
-- **Intel brief** below it: what the period adds up to, built from your reports (no AI). An
-  **executive summary** in a few plain sentences (what came in, what attackers are using now and the US federal
-  fix-by date, the most serious new weakness, what matches your watch terms, a first step), then *Exploited now*
-  (CISA KEV), *Most severe* (CVSS 9 or higher), *Your watch terms*, *Seen in several sources* and
-  *Most-mentioned vendors*. Every line opens its report, indicator or a search. "New" means published in the
-  last 7 days, so a first sync of old history does not flood it; the demo is left out. Also `GET /api/brief`.
+- **Intel brief** inside it ([docs/EXECUTIVE_BRIEF.md](docs/EXECUTIVE_BRIEF.md)): what the period adds up to,
+  built from your reports (no AI). **What needs attention** gives plain findings (known exploitation, a recurring
+  topic, the highest severity, your watch terms, the last 24 hours), each with a conditional **next step** and
+  its evidence; beside the summary, how many reports came in during the **last 24 hours**, and **About this
+  brief** says what the data covers and how fresh each source is. Then *Exploited now* (CISA KEV), *Most
+  severe* (CVSS 9 or higher), *Your watch terms*, *Seen in several sources* and *Most-mentioned vendors*. Every
+  line opens its report, indicator or a search. "New" means published in the period, so a first sync of old
+  history does not flood it; the demo is left out. Also `GET /api/brief`.
+- **Temporary password-free access** for development and demos (`INSIGHT_DEV_NO_AUTH=on`; **off by default**,
+  refused together with MFA, announced on every page). While on, anyone who can reach the site can read and
+  change everything; see the [runbook](docs/RUNBOOK.md#temporary-password-free-access) before using it.
 - **CVE severity and attack likelihood** ([ADR 0023](docs/adr/0023-automatic-cve-lookups.md)): NIST NVD (CVSS)
   and FIRST EPSS scores shown in plain words beside each CVE, looked up on request or, once switched on in
   **Sources**, automatically for CVEs in TLP:CLEAR and GREEN reports. Only CVE numbers are sent. No key is

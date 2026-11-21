@@ -59,7 +59,10 @@ async def test_the_period_can_be_thirty_days(user: User, ui_env: SimpleNamespace
     add_report(ui_env, 'Earlier', 'Phishing kit.', days_ago=20)
     await user.open('/')
     with user.scope(marker='brief-summary'):
-        await user.should_see('Nothing new in the last 7 days. Sync your sources to get the latest.')
+        await user.should_see(
+            'No recent reports are available for the last 7 days. Sync your sources, and check their '
+            'status in About this brief.'
+        )
     user.find(kind=ui.toggle).elements.pop().set_value(30)
     await user.should_see('In the last 30 days, 1 new report came in from 1 source.')
     with ui_env.app.state.session_factory() as db:

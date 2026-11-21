@@ -8,7 +8,37 @@
 contacts no new host until you switch one on. **Exports change for SANS ISC and NCSC reports:** their text and
 evidence are no longer included (their publishers allow metadata only). Every 0.6.0 API field is unchanged; new
 fields are additive. TLP-limited API keys may now read cached CVE scores (`GET /api/cves/{cve}/scores`) for
-CVEs in reports they can see; starting a lookup stays refused to them.
+CVEs in reports they can see; starting a lookup stays refused to them. The new password-free access
+(`INSIGHT_DEV_NO_AUTH`) is off unless you set it to `on`.
+
+### Changed: a clearer executive brief (from #39)
+- Keep the **Insight** name and symbol; use **Cyber Threat Intelligence Feed** as the tagline and remove
+  **Collect. Connect. Understand.** The threat landscape now leads the page, above the report tools.
+- The threat landscape adds **What needs attention**: plain findings (known exploitation, a recurring topic or
+  vendor, the highest severity, your watch terms, the last 24 hours), each with a conditional next step and
+  links to its evidence; a **Last 24 hours** count beside the executive summary; and **About this brief**, the
+  limits of the data and how fresh each source in use is.
+  **Exploited now** and **Most severe** remain separate: known exploitation and technical severity are
+  different signals. Repeated reporting is described as attention in collected sources, never as proof that
+  attacks are increasing or that the operator's systems are affected.
+- `GET /api/brief` retains `days`, `since`, `summary` and `sections`, and adds `as_of`, `recent_reports`,
+  `report_count`, `source_count`, `highlights` and `coverage`. The brief uses stored reports and public KEV
+  context; it makes no external AI call or new source request. Counts and evidence respect the caller's TLP
+  limit. No database migration is needed. Field reference: [API](docs/API.md#executive-brief).
+- Design, evidence rules and limits: [Executive brief](docs/EXECUTIVE_BRIEF.md).
+- Phone header controls wrap at narrow widths, including temporary open access with larger text at 320 px.
+  Long feed titles, URLs and source names wrap within their cards and opened reports instead of being cut off.
+  Report review controls and extracted values also stay within a narrow reader.
+
+### Added: temporary password-free operator access
+- `INSIGHT_DEV_NO_AUTH=on` lets a visitor enter through `/login` without a password. It is **off by default**,
+  rejects invalid values and cannot be combined with MFA. Password and signing-secret configuration remain
+  required. On a public domain, enabling it deliberately gives anyone access to reports and operator tools.
+- This mode uses normal expiring sessions, CSRF and same-origin checks; direct API calls still need a
+  session or key. Turning it off and restarting with the changed environment invalidates open-mode sessions
+  and restores the retained password. A workspace notice identifies the active mode.
+- Configuration, consequences and restoration checks: [Runbook](docs/RUNBOOK.md#temporary-password-free-access)
+  and [security record](docs/SECURITY.md#temporary-public-operator-access). The switch has no automatic expiry.
 
 ### Added: automatic CVE lookups at NIST NVD and FIRST EPSS (TIP 1.2)
 - **Severity and attack likelihood beside every CVE** ([ADR 0023](docs/adr/0023-automatic-cve-lookups.md)): the
