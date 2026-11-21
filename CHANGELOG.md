@@ -11,6 +11,7 @@
 - **One start-up warning** when an instance answers to a non-local host name or trusts a reverse proxy but
   secure cookies or MFA are off, or password-free access is on. It replaces the separate secure-cookie
   warning. Password-only sign-in behind a proxy is now a warning, not a note.
+
 ### Authenticator pairing secrets encrypted at rest (review L2)
 
 - Migration `0017` encrypts existing MFA pairing secrets with a key derived from `INSIGHT_SESSION_SECRET`.
