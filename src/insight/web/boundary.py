@@ -21,8 +21,9 @@ SESSION_ONLY_ROUTES: Final = frozenset({'/api/session'})
 SESSION_ONLY_WRITE_PREFIXES: Final = ('/api/schedules',)
 
 #: Routes a TLP-limited key may not use: the audit log and CVE enrichment reveal things about reports the
-#: key cannot see (audit details, whether a CVE is mentioned anywhere).
-UNLIMITED_READER_PREFIXES: Final = ('/api/audit', '/api/enrichment/')
+#: key cannot see (audit details, whether a CVE is mentioned anywhere), and watch terms often name clients,
+#: internal host names or sensitive projects (code review L3).
+UNLIMITED_READER_PREFIXES: Final = ('/api/audit', '/api/enrichment/', '/api/watch-terms')
 
 HSTS: Final = (b'strict-transport-security', b'max-age=31536000')
 

@@ -66,7 +66,7 @@ Send `Authorization: Bearer <key>` on every request. No cookie or CSRF token is 
 | --- | --- |
 | `ACCESS=read` (default) | `GET` routes only; any `POST` gets `403 "This API key is read-only"` |
 | `ACCESS=read-write` | Also ingest, triage, notes, demo, source sync and enrichment |
-| `MAX_TLP=GREEN` (optional) | Reports above GREEN are invisible to the key (they look like missing reports), exports are capped at GREEN, and the audit log and starting CVE lookups are refused (cached scores of CVEs in reports the key can see stay readable) |
+| `MAX_TLP=GREEN` (optional) | Reports above GREEN are invisible to the key (they look like missing reports), exports are capped at GREEN, and the audit log, watch terms and starting CVE lookups are refused (cached scores of CVEs in reports the key can see stay readable) |
 | `EXPIRES=90` | Days until expiry (1-365, default 90). `make api-key-status` shows the date |
 
 Manage it with `make api-key-status`, `make api-key-rotate` (the old key stops working at once) and
@@ -114,7 +114,7 @@ The API is unversioned; breaking changes are listed under "Upgrade notes" in the
 | `303` | Sign-in and sign-out redirects (HTML forms only) |
 | `400` | The `Host` header is not in `INSIGHT_ALLOWED_HOSTS` |
 | `401` | No valid key or session. A bad key also gets `WWW-Authenticate: Bearer error="invalid_token"` |
-| `403` | Read-only key writing; TLP-limited key on the audit log or starting a CVE lookup; missing CSRF token (sessions); cross-site `Origin`; browser-only route |
+| `403` | Read-only key writing; TLP-limited key on the audit log, watch terms or starting a CVE lookup; missing CSRF token (sessions); cross-site `Origin`; browser-only route |
 | `404` | Not found, **or** above the key's TLP limit (the two are indistinguishable by design) |
 | `409` | Another source sync is running, or a concurrent import (retry once) |
 | `413` | Request body larger than 2 MB |

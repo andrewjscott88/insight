@@ -35,6 +35,8 @@ CVEs in reports they can see; starting a lookup stays refused to them. The new p
 - **L2, plain-text TOTP seed (not fixed yet):** encrypting the authenticator seed at rest needs the
   `cryptography` package, which has to be added through the lock workflow first. Tracked by a strict
   expected-failure test and documented in docs/SECURITY.md; protect backups like `.env` meanwhile.
+- **L3, watch terms for TLP-limited keys:** `GET /api/watch-terms` is now refused (`403`) to TLP-limited API
+  keys, like the audit log: terms often name clients, internal hosts or sensitive projects.
 
 ### Changed: a clearer executive brief (from #39)
 - Keep the **Insight** name and symbol; use **Cyber Threat Intelligence Feed** as the tagline and remove
