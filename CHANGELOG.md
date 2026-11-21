@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Local PDF advisories
+
+- Import text from a local PDF into the normal report review workflow using the workspace, CLI or API.
+  The provenance panel and report JSON include the original file’s SHA-256, size and page count.
+  Migration `0016` adds the attachment metadata table. [Usage and limits](docs/API.md#post-apidocumentspdf)
+
 ### Manually tracked actors and campaigns
 
 - Analysts can create campaigns in the workspace or API and explicitly link their actors and campaigns to

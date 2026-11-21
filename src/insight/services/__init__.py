@@ -140,6 +140,7 @@ from .lookups import (
     record_lookup_failure,
     set_lookup_switch,
 )
+from .pdf_reports import import_pdf
 from .retention import MAX_REASON_LENGTH, DeletionPreview, DeletionResult, delete_document, deletion_preview
 from .rules import (
     LinkedRule,
@@ -343,6 +344,7 @@ __all__ = [
     'guide_data',
     'hunt_checks',
     'hunts_for',
+    'import_pdf',
     'import_stix',
     'industry_counts',
     'industry_profile',

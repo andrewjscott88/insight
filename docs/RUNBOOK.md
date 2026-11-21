@@ -635,3 +635,19 @@ verify the signature (§6).
 | [TESTING](TESTING.md) · [CI_CD](CI_CD.md) · [RELEASING](RELEASING.md) | Quality gates and release process |
 | [VALIDATION](VALIDATION.md) | What each release was validated against |
 | [adr/](adr/) | Architecture decision records |
+
+
+### Local PDF import
+
+The official container provides the Linux PDF worker and libseccomp2. For a local Linux installation,
+install libseccomp2 or your distribution’s equivalent alongside the pinned Python dependencies. An
+unsupported operating system or unavailable kernel filter gives a 503 for PDF uploads. Other report
+ingest paths continue to work.
+
+The parser receives the original bytes through standard input. It starts at the filesystem root with a minimal environment, closed inherited application descriptors and
+kernel-enforced CPU, address-space and output-size limits. It loads trusted parser code before installing
+its default-deny syscall filter and reading the input. The filter permits in-memory decoding and communication
+over the worker’s existing descriptors. File path traversal, process creation and network calls are blocked.
+The parent enforces the wall-clock timeout, bounds the result, hashes the original bytes and writes the
+report and provenance together. To verify a retained original, compare the SHA-256 under **Where this report
+came from** with `sha256sum advisory.pdf`. [Upload limits](API.md#post-apidocumentspdf)

@@ -52,14 +52,13 @@ def most_restrictive(*levels: str) -> str:
     return max(levels, key=TLP_LEVELS.index)
 
 
-class DocumentInput(BaseModel):
+class ReportMetadata(BaseModel):
     title: str = Field(min_length=1, max_length=300)
-    body: str = Field(min_length=1, max_length=200_000)
     source_name: str = Field(min_length=1, max_length=160)
     source_url: str = Field(default='', max_length=2000)
     tlp: TLP = DEFAULT_TLP
 
-    @field_validator('title', 'body', 'source_name')
+    @field_validator('title', 'source_name')
     @classmethod
     def not_blank(cls, value: str) -> str:
         return _not_blank(value)
@@ -74,6 +73,15 @@ class DocumentInput(BaseModel):
             raise ValueError('Source URL must be an HTTP(S) URL without credentials')
         _ = parts.port  # Raises ValueError for a malformed/out-of-range port.
         return value
+
+
+class DocumentInput(ReportMetadata):
+    body: str = Field(min_length=1, max_length=200_000)
+
+    @field_validator('body')
+    @classmethod
+    def body_not_blank(cls, value: str) -> str:
+        return _not_blank(value)
 
 
 class DocumentReview(BaseModel):

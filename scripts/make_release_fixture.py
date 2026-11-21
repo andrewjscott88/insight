@@ -61,6 +61,14 @@ def build(path: Path) -> None:
     try:
         with sessions.begin() as db:
             seed(db)
+            services.import_pdf(
+                db,
+                (ROOT / 'tests' / 'fixtures' / 'advisory.pdf').read_bytes(),
+                title='Fixture PDF advisory',
+                source_name='Training publisher',
+                tlp='GREEN',
+                max_tlp='GREEN',
+            )
             import_kev(db, kev('Command injection in GlobalProtect.'))
         with sessions.begin() as db:
             import_kev(db, kev('OS command injection in the GlobalProtect feature of PAN-OS.'))

@@ -545,7 +545,7 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
 - [x] **2.5** Manual actors and campaigns with TLP-marked report, indicator and technique links in STIX exports
 - [ ] **2.6** Optional GreyNoise community IP enrichment
 - [x] **2.7** YARA and Sigma rules with report, actor, technique, CVE and malware-family links and a downloadable rule file and manifest
-- [ ] **2.8** PDF advisory ingest with file hash (`ROADMAP` #13)
+- [x] **2.8** PDF advisory ingest with file hash (`ROADMAP` #13)
 - [x] **2.9** Suricata and Snort 3 alert rules for the IP and domain blocklists
 - [x] **2.10** Industry threat profiles (top ten groups per industry, with evidence) and exportable actor threat guides with a threat hunt section (hypotheses, data sources, indicator sweep list, linked rules, hunt record); needs a bundled threat-group library: done, ADR 0025, [THREAT_GUIDES.md](THREAT_GUIDES.md)
 

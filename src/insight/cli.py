@@ -88,6 +88,7 @@ def build_parser() -> argparse.ArgumentParser:
             'schedule',
             'notify',
             'import-stix',
+            'import-pdf',
             'delete-report',
             'attack-backfill',
             'threat-library-sync',
@@ -108,6 +109,7 @@ def build_parser() -> argparse.ArgumentParser:
             'schedule [SOURCE|all --every off|1h|6h|24h]: show or set scheduled syncs | '
             'notify [list|add|enable|disable|remove]: manage alert destinations | '
             'import-stix FILE: import a STIX 2.1 JSON bundle | '
+            'import-pdf FILE: add a local PDF advisory (see import-pdf --help) | '
             'delete-report ID --reason TEXT: delete one report for legal or retention reasons | '
             'attack-backfill: tag the ATT&CK techniques written in reports stored before 0.7.0 | '
             'threat-library-sync: fetch the full pinned threat library | industries | '
@@ -708,6 +710,15 @@ def export_filters(args: argparse.Namespace) -> dict[str, Any]:
 
 def main(argv: Sequence[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
+    if argv[:1] == ['import-pdf']:
+        from .cli_pdf import run_pdf
+
+        try:
+            print(run_pdf(argv[1:]))
+        except (ValueError, OSError, RuntimeError) as exc:
+            print(f'PDF import failed: {exc}', file=sys.stderr)
+            return 1
+        return 0
     if argv[:1] in (['misp-export'], ['misp-import']):
         from .cli_misp import run_misp
 
@@ -718,7 +729,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 1
         return 0
     args = build_parser().parse_args(argv)
-    if args.command in ('misp-export', 'misp-import'):
+    if args.command in ('misp-export', 'misp-import', 'import-pdf'):
         print(f'usage: insight {args.command} [OPTIONS]; place options after the command', file=sys.stderr)
         return 2
     if args.command == 'init':
