@@ -94,6 +94,13 @@ def render_report(ws: Workspace, data: dict[str, Any], actions: ReaderActions) -
     _render_notes(ws, data, actions)
     with ui.expansion('Where this report came from').classes('w-full muted'):
         ui.label('Fingerprint (SHA-256): ' + data['content_hash']).classes('break-value font-mono text-sm')
+        if attachment := data.get('attachment'):
+            ui.label('Original PDF (SHA-256): ' + attachment['sha256']).classes(
+                'break-value font-mono text-sm'
+            )
+            ui.label(f'{attachment["page_count"]} page(s) · {attachment["size_bytes"]:,} bytes').classes(
+                'text-sm'
+            )
         ui.label('Extraction rules: ' + data['extractor_version']).classes('text-sm')
         if data['source_key']:
             ui.label(f'Source item: {data["source_key"]} / {data["external_id"]}').classes(

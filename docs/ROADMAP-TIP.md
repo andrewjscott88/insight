@@ -538,7 +538,7 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
 - [ ] **2.5** Manual actor and campaign entities (no inferred attribution)
 - [ ] **2.6** Optional GreyNoise community IP enrichment
 - [ ] **2.7** YARA/Sigma rules as linked artifacts (not an engine)
-- [ ] **2.8** PDF advisory ingest with file hash (`ROADMAP` #13)
+- [x] **2.8** PDF advisory ingest with file hash (`ROADMAP` #13)
 - [x] **2.9** Suricata and Snort 3 alert rules for the IP and domain blocklists
 - [ ] **2.10** Industry threat profiles (top ten groups per industry, with evidence) and exportable actor threat guides with a threat hunt section (hypotheses, data sources, indicator sweep list, linked rules, hunt record); needs a bundled threat-group library
 

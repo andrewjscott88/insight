@@ -46,9 +46,13 @@ class StructuredObservations:
     technique_ids: frozenset[str] | None = None
 
 
-def fingerprint(item: DocumentInput) -> str:
+def fingerprint(item: DocumentInput, *, file_sha256: str | None = None) -> str:
     """Stable identity of a submission: exact title, body, source, URL and TLP."""
-    return hashlib.sha256(json.dumps(item.model_dump(), sort_keys=True).encode()).hexdigest()
+    identity = item.model_dump()
+    if file_sha256 is not None:
+        # Preserve distinct files with identical text and the historic identity of pasted reports.
+        identity['file_sha256'] = file_sha256
+    return hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
 
 
 def _current_revision(db: Session, ref: SourceRef) -> Document | None:
@@ -140,6 +144,7 @@ def ingest(
     structured: StructuredObservations | None = None,
     initial_document_id: str | None = None,
     preserve_source_tlp: bool = False,
+    file_sha256: str | None = None,
 ) -> tuple[Document, bool]:
     """Store ``item`` with its extracted observations. Returns ``(document, created)``.
 
@@ -166,7 +171,7 @@ def ingest(
     item = apply_tlp_policy(item)
     if max_tlp is not None:
         _refuse_above(submitted_tlp, item.tlp, max_tlp)
-    fp = fingerprint(item)
+    fp = fingerprint(item, file_sha256=file_sha256)
     existing = db.scalar(select(Document).where(Document.fingerprint == fp))
     if ref is None:
         if existing is not None:

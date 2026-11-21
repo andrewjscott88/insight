@@ -109,6 +109,7 @@ from .lookups import (
     record_lookup_failure,
     set_lookup_switch,
 )
+from .pdf_reports import import_pdf
 from .retention import MAX_REASON_LENGTH, DeletionPreview, DeletionResult, delete_document, deletion_preview
 from .search import (
     MAX_PAGE_SIZE,
@@ -251,6 +252,7 @@ __all__ = [
     'get_document',
     'get_entity',
     'get_fetch_state',
+    'import_pdf',
     'import_stix',
     'ingest',
     'ioc_export_counts',

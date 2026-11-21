@@ -86,6 +86,17 @@ class Document(Base):
     truncated: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
 
 
+class DocumentAttachment(Base):
+    """Provenance of the original uploaded file. Insight retains only its digest and metadata."""
+
+    __tablename__ = 'document_attachments'
+    document_id: Mapped[str] = mapped_column(ForeignKey('documents.id', ondelete='CASCADE'), primary_key=True)
+    sha256: Mapped[str] = mapped_column(String(64))
+    media_type: Mapped[str] = mapped_column(String(80))
+    size_bytes: Mapped[int]
+    page_count: Mapped[int]
+
+
 class Entity(Base):
     __tablename__ = 'entities'
     __table_args__ = (UniqueConstraint('kind', 'value'),)

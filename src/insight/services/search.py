@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from ..models import (
     Document,
+    DocumentAttachment,
     Entity,
     KEVRecord,
     Note,
@@ -148,6 +149,14 @@ def detail(db: Session, doc: Document, *, max_tlp: str | None = None) -> dict[st
         supersedes_id=doc.supersedes_id,
         revisions=revisions(db, doc, max_tlp=max_tlp),
     )
+    attachment = db.get(DocumentAttachment, doc.id)
+    if attachment is not None:
+        result['attachment'] = {
+            'sha256': attachment.sha256,
+            'size_bytes': attachment.size_bytes,
+            'page_count': attachment.page_count,
+            'media_type': attachment.media_type,
+        }
     rows = db.execute(
         select(Observation, Entity, KEVRecord)
         .join(Entity, Observation.entity_id == Entity.id)
