@@ -42,9 +42,9 @@ _UPLOAD = """
 
 def build_stix_import(ws: Workspace, dialog: ui.dialog) -> None:
     with ui.expansion('Import a STIX bundle').classes('w-full'):
-        ui.label('Choose a STIX 2.1 JSON file up to 2 megabytes. The workspace sharing limit applies.').classes(
-            'muted prose'
-        )
+        ui.label(
+            'Choose a STIX 2.1 JSON file up to 2 megabytes. The workspace sharing limit applies.'
+        ).classes('muted prose')
         ui.element('input').props(
             'type=file accept=".json,.stix,application/json,application/stix+json" '
             'aria-label="STIX bundle file"'
