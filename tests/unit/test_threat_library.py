@@ -8,6 +8,7 @@ import socket
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 import pytest
@@ -15,7 +16,7 @@ import pytest
 from insight import threat_library, threat_library_sync
 from insight.industries import BY_KEY, INDUSTRIES, industries_in, industry_for_label, plain
 from insight.threat_library import library, parse
-from insight.threat_library_build import FORMAT, build, check_sentences, sha256
+from insight.threat_library_build import FORMAT, _misp_claims, build, check_sentences, is_cfr_url, sha256
 from insight.threat_library_sync import PINNED, Pinned, render, sync_library
 
 BUNDLED = Path(threat_library.__file__).parent / 'data' / 'actors.json'
@@ -368,8 +369,46 @@ def test_the_pins_name_exact_commits_on_the_allow_listed_host() -> None:
     from insight.connectors import ALLOWED_HOSTS
 
     for pinned in PINNED.values():
-        assert pinned.url.startswith('https://raw.githubusercontent.com/')
-        assert 'raw.githubusercontent.com' in ALLOWED_HOSTS
+        parts = urlsplit(pinned.url)
+        assert (parts.scheme, parts.hostname, parts.port) == ('https', 'raw.githubusercontent.com', None)
+        assert parts.hostname in ALLOWED_HOSTS
         assert len(pinned.sha256) == 64
         commit = pinned.url.split('/')[5]
         assert len(commit) == 40, pinned.url
+
+
+@pytest.mark.parametrize(
+    ('url', 'expected'),
+    [
+        ('https://www.cfr.org/cyber-operations/apt-29', True),
+        ('https://cfr.org/cyber-operations/apt-29', True),
+        ('https://WWW.CFR.ORG/x', True),
+        ('http://www.cfr.org/cyber-operations/apt-29', False),  # citations are https only
+        ('https://cfr.org.evil.example/cyber-operations', False),
+        ('https://evil.example/?x=cfr.org', False),
+        ('https://evil.example/cfr.org/apt-29', False),
+        ('https://notcfr.org/x', False),
+        ('https://cfr.org@evil.example/x', False),
+        ('https://[not-a-host/x', False),
+    ],
+)
+def test_regression_cfr_citations_match_the_parsed_host_not_a_substring(url: str, expected: bool) -> None:
+    """CodeQL py/incomplete-url-substring-sanitization: a lookalike URL is not a CFR citation."""
+    assert is_cfr_url(url) is expected
+
+
+def test_a_lookalike_cfr_reference_is_not_cited_as_the_cfr_tracker() -> None:
+    meta: dict[str, Any] = {
+        'cfr-target-category': ['Government'],
+        'refs': ['https://cfr.org.evil.example/apt-29', 'https://www.cfr.org/cyber-operations/apt-29'],
+    }
+    entry: dict[str, Any] = {'value': 'APT29', 'meta': meta}
+    (claim,) = _misp_claims('G0016', 'APT29', entry)
+    assert claim['citations'] == [
+        {'name': 'CFR Cyber Operations Tracker', 'url': 'https://www.cfr.org/cyber-operations/apt-29'}
+    ]
+    meta['refs'] = ['https://cfr.org.evil.example/apt-29']
+    (claim,) = _misp_claims('G0016', 'APT29', entry)
+    assert claim['citations'] == [
+        {'name': 'MISP galaxy reference', 'url': 'https://cfr.org.evil.example/apt-29'}
+    ]
