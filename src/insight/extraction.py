@@ -252,6 +252,9 @@ def canonical(kind: str, value: str) -> str:
         if not _CIDR.fullmatch(candidate):
             raise ValueError('Expected a network address and numeric prefix length')
         network = ipaddress.ip_network(candidate, strict=True)
+        if network.prefixlen == 0:
+            # 0.0.0.0/0 and ::/0 mean every address (firewall and cloud rules): never an indicator.
+            raise ValueError('A /0 range covers every address')
         address = network.network_address
         if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped is not None:
             # Python versions differ on how they print mapped IPv6; keep one stable entity across upgrades.

@@ -66,8 +66,8 @@ def test_ip(text: str, expected: list[str]) -> None:
         ('::ffff:192.0.2.0/120', '::ffff:192.0.2.0/120'),
         ('192.0.2.7/32', '192.0.2.7/32'),
         ('2001:db8::7/128', '2001:db8::7/128'),
-        ('0.0.0.0/0', '0.0.0.0/0'),
-        ('::/0', '::/0'),
+        ('128.0.0.0/1', '128.0.0.0/1'),
+        ('8000::/1', '8000::/1'),
     ],
 )
 def test_cidr_keeps_full_raw_span_and_canonical_network(raw: str, expected: str) -> None:
@@ -102,6 +102,13 @@ def test_cidr_keeps_full_raw_span_and_canonical_network(raw: str, expected: str)
 )
 def test_invalid_or_embedded_ranges_do_not_yield_partial_addresses(raw: str) -> None:
     assert extract(raw) == []
+
+
+def test_regression_every_address_is_not_an_indicator() -> None:
+    """Cloud reports often say a rule allowed 0.0.0.0/0; that range is every address, not an indicator."""
+    text = 'The security group allowed SSH from 0.0.0.0/0 and ::/0; the scans came from 198.51.100.0/24.'
+    assert values(text, 'cidr') == ['198.51.100.0/24']
+    assert values(text, 'ip') == []
 
 
 def test_cidr_skips_url_paths_and_leaves_bare_ips_alone() -> None:
@@ -204,6 +211,8 @@ def test_canonical(kind: str, raw: str, expected: str) -> None:
         ('cidr', '192.0.2.1'),
         ('cidr', '192.0.2.0/255.255.255.0'),
         ('cidr', 'fe80::%eth0/64'),
+        ('cidr', '0.0.0.0/0'),
+        ('cidr', '::/0'),
     ],
 )
 def test_canonical_rejects_invalid(kind: str, raw: str) -> None:

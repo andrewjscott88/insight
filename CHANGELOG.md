@@ -16,7 +16,10 @@ CVEs in reports they can see; starting a lookup stays refused to them. The new p
 - Insight now recognizes IPv4 and IPv6 network ranges (CIDR). Analysts can review a whole range,
   find other reports that mention it, and include it in indicator exports. The original spelling stays in
   the evidence. New reports and revisions use `regex-v3`. Previously stored observations keep their
-  original extraction version and review decisions.
+  original extraction version and review decisions. `0.0.0.0/0` and `::/0` ("every address", common in
+  firewall and cloud rules) are not recorded.
+- **IOC exports:** the default (every kind) now includes `cidr` entries. Pass `--kind`, or `kinds` in the API,
+  to keep the previous set; a consumer that checks `kind` against the old schema needs the updated one.
 
 ### Added: a prioritised CVE view, and a brief that uses ransomware use, NVD and EPSS (TIP 1.3)
 - **Prioritised CVEs** tab and `GET /api/cves` ([ADR 0024](docs/adr/0024-prioritised-cves.md)): the CVEs in your
