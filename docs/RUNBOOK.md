@@ -25,6 +25,7 @@ The Makefile wraps these (`make help`); the commands it runs are the ones in the
 | Version | `make version` · `make health` | `docker compose exec insight insight --version` · `curl -s http://127.0.0.1:8080/health` |
 | API key | `make api-key-create NAME=siem` · `make api-key-status` · `-rotate` · `-revoke` | `docker compose exec insight insight api-key …` |
 | Sign-in MFA (off by default) | `make mfa-enable` · `make mfa-disable` · `make mfa-status` · `make mfa-reset` | §4, "Sign-in second factor" |
+| Alert destinations | Watch terms tab: *Alerts* | `insight notify list`, `add`, `enable`, `disable` or `remove` ([alerts guide](ALERTS.md#manage-destinations-on-the-host)) |
 | Scheduled syncs (off by default) | Sources tab: *Start at* and *Sync by itself* | `docker compose exec insight insight schedule all --every 24h --at 00:00` · `insight schedule` lists them (§8) |
 | Default colour theme (System by default) | `make theme THEME=dark` · `make up THEME=light` | Set `INSIGHT_THEME` in `.env`, then `docker compose up -d` (§4, "Colour theme") |
 
