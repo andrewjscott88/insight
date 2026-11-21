@@ -85,6 +85,7 @@ against the raw body, and refuse old timestamps to stop replays:
 ```python
 import hashlib, hmac, time
 
+
 def verify(secret: str, body: bytes, timestamp: str, signature: str, max_age: int = 300) -> bool:
     if abs(time.time() - int(timestamp)) > max_age:
         return False

@@ -8,6 +8,7 @@ Suggested interface:
 from dataclasses import dataclass
 from typing import Protocol
 
+
 @dataclass(frozen=True)
 class AnalysisRequest:
     document_id: str
@@ -15,12 +16,14 @@ class AnalysisRequest:
     permitted_text: str
     tlp: str
 
+
 @dataclass(frozen=True)
 class ProposedClaim:
     text: str
     evidence_start: int
     evidence_end: int
     model_id: str
+
 
 class AnalystAssistant(Protocol):
     async def propose(self, request: AnalysisRequest) -> list[ProposedClaim]: ...
