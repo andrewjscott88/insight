@@ -290,6 +290,14 @@ def parse_stix(data: bytes, max_tlp: str) -> ImportedBundle:
             or not isinstance(obj.get('id'), str)
         ):
             raise ValueError('Unsupported or invalid object in STIX bundle')
+        # Some OASIS checks call string methods before reporting a schema type error.
+        if 'report_types' in obj and (
+            not isinstance(obj['report_types'], list)
+            or not all(isinstance(value, str) for value in obj['report_types'])
+        ):
+            raise ValueError('Invalid STIX report types')
+        if 'identity_class' in obj and not isinstance(obj['identity_class'], str):
+            raise ValueError('Invalid STIX identity class')
         if obj['type'] != 'report' and 'x_insight_metadata_only' in obj:
             raise ValueError('The metadata-only flag must belong to a report')
         _uuid(obj['id'], obj['type'])
@@ -313,7 +321,9 @@ def parse_stix(data: bytes, max_tlp: str) -> ImportedBundle:
     # Only predefined object types and simple patterns reach the packaged OASIS schemas.
     try:
         validate_stix_bundle(bundle)
-    except (AttributeError, KeyError, IndexError, TypeError, RecursionError) as exc:
+    except Exception as exc:
+        # OASIS and its schema/pattern dependencies can raise several exception types on malformed fields.
+        # Treat all validator failures as invalid input and never return third-party error text.
         raise ValueError('Invalid STIX 2.1 object') from exc
     labels = _labels(objects, max_tlp)
     values = {key: _value(obj) for key, obj in objects.items() if obj['type'] in _OBSERVABLE_TYPES}
