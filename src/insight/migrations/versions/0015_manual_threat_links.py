@@ -4,6 +4,8 @@ Revision ID: 0015
 Revises: 0014
 """
 
+import re
+
 import sqlalchemy as sa
 from alembic import op
 
@@ -13,8 +15,48 @@ branch_labels = None
 depends_on = None
 
 
+_LABELS = ('CLEAR', 'GREEN', 'AMBER', 'AMBER+STRICT', 'RED')
+_MARKING = re.compile(r'\bTLP\s*:\s*(CLEAR|WHITE|GREEN|AMBER\+STRICT|AMBER|RED)\b', re.IGNORECASE)
+
+
+def _backfill_labels() -> None:
+    """Preserve sharing markings already written in local actor records and report-link notes."""
+    conn = op.get_bind()
+    actors = sa.table(
+        'threat_actors', *(sa.column(k) for k in ('id', 'tlp', 'name', 'aliases', 'description'))
+    )
+    docs = sa.table('documents', sa.column('id'), sa.column('tlp'))
+    links = sa.table(
+        'actor_documents', *(sa.column(k) for k in ('id', 'tlp', 'group_ref', 'document_id', 'note'))
+    )
+    rows = sa.select(actors.c.id, actors.c.tlp, actors.c.name, actors.c.aliases, actors.c.description)
+    last = ''
+    while batch := conn.execute(rows.where(actors.c.id > last).order_by(actors.c.id).limit(500)).all():
+        for last, stored, name, aliases, description in batch:
+            raised = _label(stored, 'CLEAR', f'{name} {aliases} {description}')
+            if raised != stored:
+                conn.execute(actors.update().where(actors.c.id == last).values(tlp=raised))
+    link_rows = sa.select(links.c.id, docs.c.tlp, actors.c.tlp, links.c.note).select_from(
+        links.join(docs, docs.c.id == links.c.document_id).outerjoin(actors, actors.c.id == links.c.group_ref)
+    )
+    last = ''
+    while link_batch := conn.execute(
+        link_rows.where(links.c.id > last).order_by(links.c.id).limit(500)
+    ).all():
+        for last, doc_tlp, actor_tlp, note in link_batch:
+            raised = _label(doc_tlp, actor_tlp or 'CLEAR', note)
+            if raised != 'CLEAR':
+                conn.execute(links.update().where(links.c.id == last).values(tlp=raised))
+
+
+def _label(subject: str, target: str, text: str) -> str:
+    marked = ['CLEAR' if m.upper() == 'WHITE' else m.upper() for m in _MARKING.findall(text)]
+    return max((subject, target, *marked), key=_LABELS.index)
+
+
 def upgrade() -> None:
     op.add_column('actor_documents', sa.Column('tlp', sa.String(20), nullable=False, server_default='CLEAR'))
+    _backfill_labels()
     op.create_table(
         'campaigns',
         sa.Column('id', sa.String(36), primary_key=True),

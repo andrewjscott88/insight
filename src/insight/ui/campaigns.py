@@ -160,12 +160,14 @@ def _manage(ws: Workspace, kind: ThreatSubjectKind, ref: str, name: str) -> None
 
 
 def render_tracked_threats(ws: Workspace) -> None:
-    with ui.expansion('Actors and campaigns you track').classes('w-full'):
+    with ui.expansion('Actors and campaigns you track').classes('w-full') as panel:
         ui.label('Choose a record to link a report, indicator, or technique to it.').classes('muted prose')
         text = ui.input('Find a tracked name').props('outlined debounce=200 maxlength=120')
 
         @ui.refreshable
         def records() -> None:
+            if not panel.value:
+                return
             term = (text.value or '').strip()
             with ws.read() as db:
                 ceiling = ws.app.state.settings.max_tlp
@@ -187,5 +189,6 @@ def render_tracked_threats(ws: Workspace) -> None:
         ui.button('New campaign', on_click=lambda: _new_campaign(ws, records.refresh)).props(
             'outline no-caps'
         )
+        panel.on_value_change(lambda _: records.refresh())
         text.on_value_change(lambda _: records.refresh())
         records()

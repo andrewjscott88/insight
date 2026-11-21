@@ -178,7 +178,7 @@ def _register_threat_routes(app: FastAPI, sessions: SessionFactory, require_auth
     @app.get('/api/actors/{ref}', dependencies=[Depends(require_auth)])
     def actor(request: Request, ref: str) -> dict[str, Any]:
         """One group or actor: names, the industry claims with their sources, and linked reports."""
-        limit = reader_limit(request)
+        limit = write_limit(app, request)
         with sessions() as db:
             try:
                 subject = services.resolve_group(db, ref, max_tlp=limit)
@@ -239,7 +239,7 @@ def _register_threat_routes(app: FastAPI, sessions: SessionFactory, require_auth
         """Remove a link from the group to a report. Audited as ``actor.unlink``."""
         try:
             with acting(sessions, request) as db:
-                services.unlink_report(db, ref, doc_id, max_tlp=reader_limit(request))
+                services.unlink_report(db, ref, doc_id, max_tlp=write_limit(app, request))
         except LookupError as exc:
             raise HTTPException(404, str(exc)) from exc
         return {'unlinked': doc_id}
