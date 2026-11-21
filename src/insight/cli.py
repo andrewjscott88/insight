@@ -1,4 +1,7 @@
-"""Command line: ``init``, ``serve``, ``migrate``, ``backup``, ``export-iocs``, ``api-key`` and ``mfa``."""
+"""Command line: ``init``, ``serve``, ``migrate``, ``backup``, ``export-iocs``, ``api-key``, ``mfa`` and more.
+
+The threat guide commands (TIP 2.10) live in :mod:`insight.cli_threats`.
+"""
 
 from __future__ import annotations
 
@@ -83,6 +86,11 @@ def build_parser() -> argparse.ArgumentParser:
             'schedule',
             'delete-report',
             'attack-backfill',
+            'threat-library-sync',
+            'industries',
+            'threat-profile',
+            'threat-guide',
+            'rule-add',
         ],
         nargs='?',
         default='serve',
@@ -92,15 +100,21 @@ def build_parser() -> argparse.ArgumentParser:
             'mfa ACTION: pair the sign-in authenticator app | '
             'schedule [SOURCE|all --every off|1h|6h|24h]: show or set scheduled syncs | '
             'delete-report ID --reason TEXT: delete one report for legal or retention reasons | '
-            'attack-backfill: tag the ATT&CK techniques written in reports stored before 0.7.0'
+            'attack-backfill: tag the ATT&CK techniques written in reports stored before 0.7.0 | '
+            'threat-library-sync: fetch the full pinned threat library | industries | '
+            'threat-profile INDUSTRY: the top ten groups | threat-guide REF DEST: write a threat guide | '
+            'rule-add FILE: store a YARA or Sigma rule'
         ),
     )
     parser.add_argument(
         'destination',
         nargs='?',
         help='backup/export-iocs: file to write (must not exist) | api-key: create, rotate, revoke or '
-        'status | mfa: setup, reset or status | schedule: a source key, or all | delete-report: a report ID',
+        'status | mfa: setup, reset or status | schedule: a source key, or all | delete-report: a report ID '
+        '| threat-profile: an industry key | threat-guide: a group (G0016) or actor ID '
+        '| rule-add: a rule file',
     )
+    parser.add_argument('target', nargs='?', help='threat-guide: the file to write (must not exist)')
     parser.add_argument('--host', default='127.0.0.1')
     parser.add_argument('--port', default=8080, type=int)
     export = parser.add_argument_group(
@@ -174,6 +188,31 @@ def build_parser() -> argparse.ArgumentParser:
         help='delete-report: why, e.g. a ticket number (required; kept in the audit log)',
     )
     removal.add_argument('--yes', action='store_true', help='delete-report: do not ask for confirmation')
+    threats = parser.add_argument_group(
+        'threat guide options',
+        'threat-profile and threat-guide also take --max-tlp; rule-add takes --kind, --name and --tlp '
+        "(the rule's own label, default AMBER).",
+    )
+    threats.add_argument(
+        '--format',
+        default='md',
+        metavar='FORMAT',
+        help='threat-guide: md json navigator sweep-csv sweep-json',
+    )
+    threats.add_argument(
+        '--days', type=int, default=90, help='threat-profile: count reports from the last N days'
+    )
+    threats.add_argument(
+        '--link',
+        action='append',
+        default=[],
+        metavar='REF',
+        help='rule-add: a group (G0016) or technique (T1059.001); repeatable',
+    )
+    threats.add_argument('--licence', default='', help="rule-add: the rule's licence, e.g. DRL-1.1")
+    threats.add_argument(
+        '--source-url', default='', metavar='URL', help='rule-add: where the rule came from (https)'
+    )
     keys = parser.add_argument_group('api-key options')
     keys.add_argument(
         '--name', metavar='NAME', help='create/rotate: label, e.g. siem (default on rotate: keep)'
@@ -740,7 +779,55 @@ def main(argv: Sequence[str] | None = None) -> int:
             print('\nCancelled; nothing was deleted.', file=sys.stderr)
             return 1
         return 0
+    if args.command in THREAT_COMMANDS:
+        return _threat_command(args)
     serve(args.host, args.port)
+    return 0
+
+
+THREAT_COMMANDS = ('threat-library-sync', 'industries', 'threat-profile', 'threat-guide', 'rule-add')
+
+
+def _threat_command(args: argparse.Namespace) -> int:
+    from . import cli_threats
+
+    max_tlp = args.max_tlp.upper() if args.max_tlp else None
+    usage = {
+        'threat-profile': 'insight threat-profile INDUSTRY [--max-tlp LABEL] [--days N]',
+        'threat-guide': 'insight threat-guide REF DEST [--format md|json|navigator|sweep-csv|sweep-json]',
+        'rule-add': 'insight rule-add FILE --kind yara|sigma [--name N] [--link REF] [--tlp LABEL]',
+    }
+    if args.command in usage and (
+        not args.destination or (args.command == 'threat-guide' and not args.target)
+    ):
+        print(f'usage: {usage[args.command]}', file=sys.stderr)
+        return 2
+    try:
+        if args.command == 'threat-library-sync':
+            print(cli_threats.threat_library_sync())
+        elif args.command == 'industries':
+            print(cli_threats.industries(max_tlp))
+        elif args.command == 'threat-profile':
+            print(cli_threats.threat_profile(args.destination, max_tlp, args.days))
+        elif args.command == 'threat-guide':
+            print(cli_threats.threat_guide(args.destination, Path(args.target), args.format, max_tlp))
+        else:
+            kind = (args.kind or [''])[0].lower()
+            tlp = args.tlp.upper() if args.tlp else 'AMBER'
+            print(
+                cli_threats.rule_add(
+                    Path(args.destination),
+                    kind,
+                    args.name or '',
+                    args.link,
+                    tlp,
+                    args.licence,
+                    args.source_url,
+                )
+            )
+    except ValueError as exc:
+        print(f'{args.command}: {exc}', file=sys.stderr)
+        return 1
     return 0
 
 

@@ -1,0 +1,217 @@
+"""The analyst's data in an actor threat guide (TIP 2.10, ADR 0024): reports, sweep list, rules and hunts.
+
+:func:`guide_data` gathers, for one group and one reader, everything in the guide that comes from this
+instance; :mod:`insight.threat_guide` turns it and the threat library into the guide and its exports.
+
+The **indicator sweep list** holds accepted indicators from reports the analyst *linked* to the group and,
+unless ``linked_only``, from reports that *name* it. It is a list of things to search for in your own logs,
+not a statement that the group used them: Insight never attributes from co-occurrence. Indicators with a
+warning flag, a ``benign`` verdict or a verdict whose own ``valid_until`` has passed are left out. The
+blocklist's default lifetimes are not applied (a sweep looks back), so each entry carries when it was seen.
+"""
+
+from __future__ import annotations
+
+from collections import Counter
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
+from typing import Final
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from ..flags import flags
+from ..models import Document, DocumentTechnique, Entity, Hunt, Observation
+from ..schemas import most_restrictive
+from .actors import GroupSubject, analyst_claims, linked_reports, resolve_group
+from .assessments import visible_assessments
+from .common import stamp
+from .hunts import hunt_checks, hunts_for
+from .rules import LinkedRule, rules_for_group
+from .techniques import TAGGED, technique_summary
+from .threat_profiles import PROFILE_DAYS, Mention, find_mentions
+from .tlp import _visible
+
+SWEEP_KINDS: Final = ('ip', 'domain', 'url', 'md5', 'sha1', 'sha256', 'sha512')
+MAX_NAMED: Final = 50
+MAX_SWEEP_REPORTS: Final = 200
+MAX_SWEEP: Final = 5_000
+
+
+@dataclass(frozen=True, slots=True)
+class SweepEntry:
+    kind: str
+    value: str
+    verdict: str  # 'unknown' when there is none the reader may see
+    verdict_until: str | None
+    first_seen: str
+    last_seen: str
+    reports: tuple[str, ...]  # report IDs
+    via: str  # 'linked' when any report is linked to the group, else 'named'
+    tlp: str  # most restrictive label of the reports it came from
+
+
+@dataclass(frozen=True, slots=True)
+class ReportRef:
+    document_id: str
+    title: str
+    tlp: str
+    created_at: str
+    source_name: str
+    via: str  # 'linked' or 'named'
+    evidence: str  # the analyst's note for a link, the text around the name otherwise
+
+
+@dataclass(frozen=True, slots=True)
+class HuntView:
+    hunt: Hunt
+    checks: dict[str, tuple[str, str, str, str, str]]  # technique -> (result, data, start, end, notes)
+
+
+@dataclass(frozen=True, slots=True)
+class GuideData:
+    subject: GroupSubject
+    added: tuple[tuple[str, str, str, str], ...]  # (industry, citation URL or report link, reason, TLP)
+    removed: tuple[tuple[str, str, str], ...]  # (industry, reason, TLP)
+    reports: tuple[ReportRef, ...]
+    named_total: int
+    report_techniques: dict[str, int]  # techniques tagged on linked reports: number of those reports
+    trending: dict[str, int]  # techniques on all the reader's reports in the last PROFILE_DAYS days
+    sweep: tuple[SweepEntry, ...]
+    sweep_truncated: bool
+    rules: tuple[LinkedRule, ...]
+    hunts: tuple[HuntView, ...]
+    generated: str
+    max_tlp: str | None
+    labels: tuple[str, ...] = field(default=())  # every TLP label of what went in
+
+    @property
+    def tlp(self) -> str:
+        return most_restrictive('CLEAR', self.subject.tlp, *self.labels)
+
+
+def _report_techniques(db: Session, document_ids: list[str]) -> dict[str, int]:
+    if not document_ids:
+        return {}
+    stmt = select(DocumentTechnique.technique_id, DocumentTechnique.document_id).where(
+        DocumentTechnique.document_id.in_(document_ids[:MAX_SWEEP_REPORTS]),
+        DocumentTechnique.status == TAGGED,
+    )
+    return dict(Counter(t for t, _ in set(db.execute(stmt))))
+
+
+def sweep_list(
+    db: Session, reports: list[ReportRef], *, max_tlp: str | None = None, now: datetime
+) -> tuple[list[SweepEntry], bool]:
+    """Indicators to search for, from these reports (see the module docstring for what is left out)."""
+    by_id = {r.document_id: r for r in reports[:MAX_SWEEP_REPORTS]}
+    if not by_id:
+        return [], False
+    stmt = (
+        select(Entity.id, Entity.kind, Entity.value, Observation.document_id)
+        .join(Observation, Observation.entity_id == Entity.id)
+        .join(Document, Document.id == Observation.document_id)
+        .where(
+            Observation.document_id.in_(list(by_id)),
+            Observation.review_status == 'accepted',
+            Entity.kind.in_(SWEEP_KINDS),
+            *_visible(max_tlp),
+        )
+    )
+    found: dict[str, tuple[str, str, set[str]]] = {}
+    for entity_id, kind, value, doc_id in db.execute(stmt):
+        found.setdefault(entity_id, (kind, value, set()))[2].add(doc_id)
+    verdicts = visible_assessments(db, found, max_tlp=max_tlp)
+    today = stamp(now)
+    entries = []
+    for entity_id, (kind, value, doc_ids) in found.items():
+        verdict = verdicts.get(entity_id)
+        if flags(kind, value) or (verdict is not None and verdict.verdict == 'benign'):
+            continue
+        if verdict is not None and verdict.valid_until is not None and verdict.valid_until < today:
+            continue
+        docs = sorted((by_id[d] for d in doc_ids), key=lambda r: r.created_at)
+        entries.append(
+            SweepEntry(
+                kind=kind,
+                value=value,
+                verdict=verdict.verdict if verdict else 'unknown',
+                verdict_until=verdict.valid_until if verdict else None,
+                first_seen=docs[0].created_at,
+                last_seen=docs[-1].created_at,
+                reports=tuple(d.document_id for d in docs),
+                via='linked' if any(d.via == 'linked' for d in docs) else 'named',
+                tlp=most_restrictive(*(d.tlp for d in docs), *([verdict.tlp] if verdict else [])),
+            )
+        )
+    entries.sort(key=lambda e: (e.last_seen, e.kind, e.value), reverse=True)
+    return entries[:MAX_SWEEP], len(entries) > MAX_SWEEP
+
+
+def _reports(
+    db: Session, subject: GroupSubject, max_tlp: str | None, linked_only: bool
+) -> tuple[list[ReportRef], int]:
+    linked = [
+        ReportRef(d.id, d.title, d.tlp, d.created_at, d.source_name, 'linked', link.note)
+        for d, link in linked_reports(db, subject.ref, max_tlp=max_tlp)
+    ]
+    if linked_only:
+        return linked, 0
+    seen = {r.document_id for r in linked}
+    mentions: list[Mention] = find_mentions(db, {subject.ref: subject.names}, max_tlp=max_tlp)[0][subject.ref]
+    named = [
+        ReportRef(m.document_id, m.title, m.tlp, m.created_at, m.source_name, 'named', m.evidence)
+        for m in mentions
+        if m.document_id not in seen
+    ]
+    return linked + named[:MAX_NAMED], len(mentions)
+
+
+def guide_data(
+    db: Session, ref: str, *, max_tlp: str | None = None, now: datetime, linked_only: bool = False
+) -> GuideData:
+    """Everything from this instance that goes into ``ref``'s guide for this reader (``LookupError``)."""
+    subject = resolve_group(db, ref, max_tlp=max_tlp)
+    claims = analyst_claims(db, max_tlp=max_tlp, group_ref=subject.ref)
+    reports, named_total = _reports(db, subject, max_tlp, linked_only)
+    linked_ids = [r.document_id for r in reports if r.via == 'linked']
+    report_techniques = _report_techniques(db, linked_ids)
+    trending = {
+        c.technique_id: c.reports
+        for c in technique_summary(db, max_tlp=max_tlp, since=stamp(now - timedelta(days=PROFILE_DAYS)))
+    }
+    sweep, truncated = sweep_list(db, reports, max_tlp=max_tlp, now=now)
+    techniques = {*report_techniques, *(subject.catalog.techniques if subject.catalog else ())}
+    rules = rules_for_group(db, subject.ref, techniques, max_tlp=max_tlp)
+    hunts = tuple(HuntView(h, hunt_checks(db, h.id)) for h in hunts_for(db, subject.ref, max_tlp=max_tlp))
+    labels = (
+        [c.tlp for c in claims]
+        + [r.tlp for r in reports]
+        + [r.rule.tlp for r in rules]
+        + [h.hunt.tlp for h in hunts]
+    )
+    return GuideData(
+        subject=subject,
+        added=tuple(
+            (
+                c.industry,
+                c.citation_url or (f'/?report={c.document_id}' if c.document_id else ''),
+                c.reason,
+                c.tlp,
+            )
+            for c in claims
+            if c.decision == 'added'
+        ),
+        removed=tuple((c.industry, c.reason, c.tlp) for c in claims if c.decision == 'removed'),
+        reports=tuple(reports),
+        named_total=named_total,
+        report_techniques=report_techniques,
+        trending=trending,
+        sweep=tuple(sweep),
+        sweep_truncated=truncated,
+        rules=tuple(rules),
+        hunts=hunts,
+        generated=stamp(now),
+        max_tlp=max_tlp,
+        labels=tuple(labels),
+    )

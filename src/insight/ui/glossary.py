@@ -226,6 +226,38 @@ GLOSSARY: Final[tuple[tuple[str, str], ...]] = (
         'VPN (virtual private network)',
         'A safe way to connect to a company network from outside.',
     ),
+    (
+        'CSV',
+        'A plain table file. Spreadsheets and most security tools can open it.',
+    ),
+    (
+        'Threat group, actor',
+        'A team of attackers that security researchers track under a name, such as APT29. Many groups have '
+        'more than one name.',
+    ),
+    (
+        'MISP galaxy',
+        'A free, shared list of threat groups and the sectors they attack, kept by the MISP project.',
+    ),
+    (
+        'Industry threats, top ten',
+        'The groups that a cited source says attack an industry. Insight never guesses this. Groups named in '
+        'your recent reports come first.',
+    ),
+    (
+        'Threat guide',
+        'One page about a group: who it attacks, how it works, your reports about it, and a hunt plan.',
+    ),
+    (
+        'Hunt, hunt plan',
+        'A planned search of your own logs for signs of a group. The plan lists ideas to check. The hunt '
+        'record says what you checked and what you found.',
+    ),
+    (
+        'YARA, Sigma',
+        'Two common kinds of detection rule. YARA rules match files. Sigma rules search logs. Insight keeps '
+        'them as text and never runs them.',
+    ),
 )
 
 

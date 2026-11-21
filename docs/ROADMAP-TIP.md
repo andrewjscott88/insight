@@ -478,6 +478,11 @@ opt-in schedules and the job runner, and `ROADMAP.md` marks #10 done.
 - **Sources / libraries:** [attack-stix-data](https://github.com/mitre-attack/attack-stix-data) (already used;
   terms in `NOTICE`); [MISP galaxy](https://github.com/MISP/misp-galaxy) (licence to confirm before bundling).
 - **Effort:** L (catalog and industry mapping M; ranking and views M; guide export S to M).
+- **Status (unreleased):** built. See [ADR 0024](adr/0024-threat-guides.md) and [THREAT_GUIDES.md](THREAT_GUIDES.md).
+  Differences from this plan: TIP 2.5 and 2.7 were built at their minimum (`threat_actors`, `actor_documents`,
+  `industry_claims`, `detection_rules`, `rule_links`, `hunts`, `hunt_checks`; migration `0012`), the guide is also
+  exported as JSON, a Navigator layer and a sweep list, and `insight threat-library-sync` fetches a fuller copy of
+  the same pinned releases. No print layout yet; the Markdown export prints.
 - **Acceptance criteria:** Choosing an industry lists at most ten groups, each with the catalog source naming the
   industry and its count in the analyst's reports; a group not named for that industry is never listed; a guide
   exports with aliases, industries, techniques by tactic and a Navigator layer, tools, mitigations, the analyst's
@@ -535,12 +540,12 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
 - [ ] **2.2** STIX 2.1 import with TLP enforcement
 - [x] **2.3** ATT&CK catalog + manual/extracted technique tags
 - [ ] **2.4** MISP export/import (CLI first)
-- [ ] **2.5** Manual actor and campaign entities (no inferred attribution)
+- [ ] **2.5** Manual actor and campaign entities (no inferred attribution): *minimum done with 2.10* (actors, report links, industry decisions; campaigns and STIX remain)
 - [ ] **2.6** Optional GreyNoise community IP enrichment
-- [ ] **2.7** YARA/Sigma rules as linked artifacts (not an engine)
+- [ ] **2.7** YARA/Sigma rules as linked artifacts (not an engine): *minimum done with 2.10* (store, link to group/technique/report, export in guides, delete; CVE links and STIX remain)
 - [ ] **2.8** PDF advisory ingest with file hash (`ROADMAP` #13)
 - [ ] **2.9** Suricata/Snort-oriented export of accepted network IOCs
-- [ ] **2.10** Industry threat profiles (top ten groups per industry, with evidence) and exportable actor threat guides with a threat hunt section (hypotheses, data sources, indicator sweep list, linked rules, hunt record); needs a bundled threat-group library
+- [x] **2.10** Industry threat profiles (top ten groups per industry, with evidence) and exportable actor threat guides with a threat hunt section (hypotheses, data sources, indicator sweep list, linked rules, hunt record); needs a bundled threat-group library: done, ADR 0024, [THREAT_GUIDES.md](THREAT_GUIDES.md)
 
 ### Phase 3 — Advanced (8)
 

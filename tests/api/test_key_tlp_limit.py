@@ -111,6 +111,18 @@ def test_nothing_hidden_leaks_through_any_read_route(client: TestClient, world: 
         f'/api/documents/{world["green"]}/techniques',
         f'/api/documents/{world["amber"]}/techniques',
         '/api/cves/CVE-2024-11111/scores',
+        '/api/industries',
+        '/api/industries/government/actors',
+        '/api/actors',
+        '/api/actors/G0016',
+        '/api/actors/G0016/guide',
+        '/api/actors/G0016/guide?format=md',
+        '/api/actors/G0016/navigator',
+        '/api/actors/G0016/sweep?format=csv',
+        '/api/actors/G0016/hunts',
+        '/api/hunts/x',
+        '/api/rules',
+        '/api/rules/x',
     ]
     # Every GET route of the API is covered by the sweep.
     covered = {path.split('?')[0] for path in paths}

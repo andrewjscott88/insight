@@ -196,7 +196,14 @@ def test_regression_desktop_shows_every_tab_label(browser: Any) -> None:
     context = new_context(browser, viewport={'width': 1280, 'height': 900})
     page = context.new_page()
     sign_in(page)
-    for label in ('Intelligence inbox', 'Entity explorer', 'ATT&CK techniques', 'Watch terms', 'Sources'):
+    for label in (
+        'Intelligence inbox',
+        'Entity explorer',
+        'ATT&CK techniques',
+        'Industry threats',
+        'Watch terms',
+        'Sources',
+    ):
         expect(page.get_by_role('tab', name=label)).to_be_visible()
     expect(page.get_by_text('Private intelligence workspace')).to_be_visible()
     expect(page.get_by_role('button', name='Back to list')).to_have_count(0)
@@ -230,7 +237,7 @@ def test_phone_workspace_fits_every_tab_and_dialog(phone: Any) -> None:
     sign_in(page)
     load_demo(page)
     assert overflow(page) <= 0
-    for short in ('Entities', 'ATT&CK', 'Watch', 'Sources', 'Inbox'):
+    for short in ('Entities', 'ATT&CK', 'Threats', 'Watch', 'Sources', 'Inbox'):
         tab = page.get_by_role('tab', name=short)
         expect(tab).to_be_visible()
         tab.click()

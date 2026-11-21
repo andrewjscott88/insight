@@ -136,11 +136,13 @@ async def download(
     transport: httpx.AsyncBaseTransport | None = None,
     validators: Validators | None = None,
     headers: Mapping[str, str] | None = None,
+    max_bytes: int = MAX_BYTES,
 ) -> bytes:
     """Fetch ``url`` from the curated HTTPS registry with strict size and redirect limits.
 
     With ``validators``, the request is conditional: an unchanged resource raises :class:`NotModified`, and a
     changed one updates ``validators`` from the response. ``headers`` adds request headers (an NVD API key).
+    ``max_bytes`` raises the size limit for one pinned, hash-checked download (the threat library sync).
     ``transport`` exists for offline testing; production code never passes it.
     """
     parts = urlsplit(url)
@@ -179,8 +181,8 @@ async def download(
         data = bytearray()
         async for chunk in response.aiter_bytes():
             data.extend(chunk)
-            if len(data) > MAX_BYTES:
-                raise ValueError('Source exceeds the 8 MB payload limit')
+            if len(data) > max_bytes:
+                raise ValueError(f'Source exceeds the {max_bytes // 1_000_000} MB payload limit')
         return bytes(data)
 
 

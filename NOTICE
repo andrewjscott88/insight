@@ -17,5 +17,21 @@ permission of The MITRE Corporation. MITRE ATT&CK and ATT&CK are registered
 trademarks of The MITRE Corporation. Terms of use:
 https://attack.mitre.org/resources/legal-and-branding/terms-of-use/
 
+src/insight/data/actors.json (the bundled threat-group library for threat guides)
+also contains data from MITRE ATT&CK Enterprise 20.1 (groups, their descriptions,
+campaigns, techniques, software, mitigations and detection strategies), built with
+scripts/update_actors.py from the pinned file
+https://raw.githubusercontent.com/mitre-attack/attack-stix-data/a8db2f52eb933c9c99060c123e088b3326d3a607/enterprise-attack/enterprise-attack-20.1.json
+under the same MITRE terms of use. `insight threat-library-sync` downloads the
+same release to build a fuller copy on the operator's machine.
+
+This product includes data from the MISP galaxy threat-actor cluster
+(https://github.com/MISP/misp-galaxy, clusters/threat-actor.json version 359 at
+commit 6d78ff22dd1986ffd1a74bd720e635991a52e91a), dual-licensed under CC0-1.0 or
+BSD-2-Clause; Insight uses it under CC0-1.0. src/insight/data/actors.json quotes
+its sector labels (cfr-target-category, targeted-sector) and suspected victim
+countries (cfr-suspected-victims, from the Council on Foreign Relations Cyber
+Operations Tracker as recorded in MISP), each with the MISP entry it came from.
+
 Third-party Python dependencies are installed from requirements.lock and retain
 their own licences; scripts/check_licenses.py enforces the permitted set.

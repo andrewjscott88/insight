@@ -27,6 +27,8 @@ The Makefile wraps these (`make help`); the commands it runs are the ones in the
 | Sign-in MFA (off by default) | `make mfa-enable` · `make mfa-disable` · `make mfa-status` · `make mfa-reset` | §4, "Sign-in second factor" |
 | Scheduled syncs (off by default) | Sources tab: *Start at* and *Sync by itself* | `docker compose exec insight insight schedule all --every 24h --at 00:00` · `insight schedule` lists them (§8) |
 | Default colour theme (System by default) | `make theme THEME=dark` · `make up THEME=light` | Set `INSIGHT_THEME` in `.env`, then `docker compose up -d` (§4, "Colour theme") |
+| Full threat-group library (optional, on request) | `make threat-library-sync`, then `make restart` | `docker compose run --rm insight insight threat-library-sync` (§8, "Threat library") |
+
 
 ## 1. System overview
 
@@ -364,6 +366,34 @@ full report may contain more indicators. Open the original source and paste it i
 Publisher edits become **revisions**: the inbox shows the current one, and **Include superseded revisions**
 shows history.
 
+### Threat library
+
+Industry threats and threat guides ([THREAT_GUIDES.md](THREAT_GUIDES.md)) read a threat-group library. Insight
+ships a small edition (`src/insight/data/actors.json`), so they work offline from the first start. The full
+edition adds whole group descriptions, ATT&CK procedure examples, analytics and every reference:
+
+```sh
+make threat-library-sync      # Docker: docker compose run --rm insight insight threat-library-sync
+make restart                  # load it (the running process keeps the edition it loaded)
+```
+
+The sync downloads two files whose versions and SHA-256 are pinned in the code (MITRE ATT&CK Enterprise 20.1,
+about 55 MB, and the MISP galaxy threat-actor cluster, version 359, about 1.5 MB) from `raw.githubusercontent.com`
+over HTTPS, refuses anything larger than 80 MB or 8 MB, checks both hashes before parsing, and writes
+`/data/threat-library.json` (`<INSIGHT_DATA_DIR>/threat-library.json`) atomically. It contacts nothing else
+and never runs by itself. Allow `raw.githubusercontent.com` in the egress firewall for it (the CISA CSAF source
+uses the same host).
+
+| Message | Meaning | Action |
+| --- | --- | --- |
+| `… SHA-256 … does not match the pinned release; nothing was changed` | The file served is not the pinned one | Nothing was written. Do not override; report it (a moved or altered upstream file) |
+| `Source exceeds the 80 MB payload limit` (or 8 MB) | The download exceeded its limit | Nothing was written. Report it |
+| `OSError` / `ConnectError` | No network, DNS or egress | Check host egress; the bundled edition keeps working |
+| Industry threats still says `bundled copy` after a sync | The process was not restarted, or the file is invalid (logged as `insight.threat_library` warning) | `make restart`; if it persists, delete `/data/threat-library.json` and sync again |
+
+To go back to the bundled edition, delete `/data/threat-library.json` and restart. Moving to a newer ATT&CK or
+MISP release is a code change in an Insight release (`scripts/update_actors.py`, ADR 0024), never a setting.
+
 ## 9. Data handling
 
 **TLP policy** (enforced in the service layer for the UI, the API and connectors):
@@ -505,6 +535,10 @@ verify the signature (§6).
   - evidence excerpts can contain context an analyst rejected unless evidence is left out;
   - an expired session shows `{"detail":"Sign in required"}` in the download tab.
   See [IOC_EXPORT.md](IOC_EXPORT.md).
+- Industry threats and threat guides: industry claims come only from MITRE ATT&CK prose and MISP galaxy labels
+  (plus your own), so coverage follows those sources; "reports naming a group" is a count of names, not
+  attribution; hunt hypotheses are generic starting points; rules are stored, never run. See
+  [THREAT_GUIDES.md](THREAT_GUIDES.md#limits).
 - The application checks DNS answers but does not pin connections, so use an egress firewall against DNS
   rebinding.
 

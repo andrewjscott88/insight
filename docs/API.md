@@ -314,6 +314,42 @@ Summaries and pivots count **current** reports you can see.
 | `POST /api/documents/{id}/techniques` | JSON `{technique_id}` (`T1486` or `T1059.001`) | The tag. Restores a removed one; a tag that already exists is returned unchanged. Audited as `technique.tag`. `422` for an ID not in the catalog, `404` if you cannot see the report |
 | `DELETE /api/documents/{id}/techniques/{technique_id}` | - | `{removed}`. Later revisions keep it removed. Audited as `technique.untag`. `404` if it is not tagged or you cannot see the report |
 
+## Industry threats and threat guides
+
+Industry threat profiles and actor threat guides ([ADR 0024](adr/0024-threat-guides.md),
+[THREAT_GUIDES.md](THREAT_GUIDES.md)). `{ref}` is an ATT&CK group ID from the bundled threat library (`G0016`)
+or the ID of an actor you created. Library groups are public (TLP:CLEAR); an actor you created, its links, your
+industry decisions, rules and hunts carry their own labels and are hidden from callers whose limit is lower.
+**Every industry claim names its source**: MITRE ATT&CK's own group description (with the sentence quoted), a
+MISP galaxy sector label, or your decision with a citation. Insight never infers a group from indicators,
+techniques or co-occurrence; "reports naming it" counts reports whose text contains the group's name or an alias,
+which is not attribution.
+
+| Route | Parameters | Result |
+| --- | --- | --- |
+| `GET /api/industries` | - | `{library: {edition, attack, sources}, industries: [{key, name, covers, groups}]}`; `groups` counts groups a cited source names for the industry, including your own decisions you can see |
+| `GET /api/industries/{key}/actors` | `days` (90, 1-3650), `top` (10, at most 10) | `{industry, tlp, days, candidates, reports_read, reports_capped, ranking, actors: [{rank, ref, kind, name, aliases, tlp, reports_naming_it, last_named_at, latest_public_activity, attack_techniques, evidence: [{industries, source, evidence, url, citations, match}], reasons}], removed_by_you}`. Ranked by reports naming the group in the period, then latest public campaign activity, then number of ATT&CK techniques. `tlp` is the most restrictive label used. `reports_capped`: more than 5,000 reports in the period; only the newest were read. `404` for an unknown industry |
+| `GET /api/actors` | `q` (ID, name or alias, up to 100 characters), `limit` (50, at most 200) | `{library, groups: [{ref, kind, name, aliases, url, industries, techniques}], actors: [{ref, kind, name, aliases, description, attack_group_id, tlp, created_at, created_by}]}` |
+| `POST /api/actors` | JSON `{name, aliases, description, attack_group_id, tlp}` (`aliases` up to 20; `attack_group_id` optional, `G` and four digits) | The actor (`201`). Audited as `actor.create`. `422` for an `attack_group_id` not in the library; `403` for a label above your limit or the instance limit |
+| `GET /api/actors/{ref}` | - | `{ref, kind, name, aliases, description, tlp, attack_group, industry_claims, your_industry_decisions, linked_reports}`; `404` if unknown or above your limit |
+| `POST /api/actors/{ref}/documents` | JSON `{document_id, note}` | `{ref, document_id, note}` (`201`). Links a report to the group: your decision. Linking twice returns the same link. Audited as `actor.link`. `404` if you cannot see the group or the report |
+| `DELETE /api/actors/{ref}/documents/{doc_id}` | - | `{unlinked}`. Audited as `actor.unlink` |
+| `POST /api/actors/{ref}/industries` | JSON `{industry, decision, citation_url, document_id, reason, tlp}`. `added` needs an HTTPS `citation_url` or a `document_id` you can see; `removed` needs a `reason` | `{ref, industry, decision, tlp}`. One decision per group and industry; a new one replaces it. Audited as `actor.industry`. `422` without a citation or reason, `403` above your limit (also for replacing a decision labelled above it) |
+| `GET /api/actors/{ref}/guide` | `format` (`json` or `md`), `max_tlp` (leave out anything above it), `linked_only` (`false`: also reports that name the group) | The threat guide: JSON format `insight-threat-guide-1` `{format, generated, generator, tlp, reader_limit, group, industries, removed_industries, regions, campaigns, techniques, software, mitigations, reports, reports_naming_group, hunt: {label, hypotheses, sweep, rules, records}, sources, notice}`, or a Markdown attachment with the TLP label first and last. Audited as `actor.guide` |
+| `GET /api/actors/{ref}/navigator` | `max_tlp` | An ATT&CK Navigator layer (format 4.5) of the group's techniques, scored 1 for each of: in ATT&CK, in a linked report. The label is in the layer's metadata and description. Audited |
+| `GET /api/actors/{ref}/sweep` | `format` (`json` or `csv`), `max_tlp`, `linked_only` | The indicator sweep list (format `insight-sweep-v1`): accepted IPs, domains, URLs and hashes from linked reports and reports naming the group, without indicators flagged as private or documentation, benign verdicts or expired verdicts. CSV starts with a `# TLP:` line; cells are protected against spreadsheet formulas. Things to search for, not proof of the group. Audited |
+| `GET /api/actors/{ref}/hunts` | - | `[{id, ref, title, status, summary, tlp, created_at, updated_at, created_by, checks: [{technique, result, data_checked, from, to, notes}]}]` you can see, newest first |
+| `POST /api/actors/{ref}/hunts` | JSON `{title, tlp}` | The hunt (`201`), `status: open`. Audited as `hunt.start`. `403` above your limit or the instance limit |
+| `GET /api/hunts/{hunt_id}` | - | One hunt, as above; `404` if unknown or above your limit |
+| `PUT /api/hunts/{hunt_id}` | JSON `{status, summary}` (`open` or `closed`) | The hunt. Audited as `hunt.update` |
+| `PUT /api/hunts/{hunt_id}/checks/{technique_id}` | JSON `{result, data_checked, period_start, period_end, notes}`; `result` is `not-checked`, `nothing-found`, `suspicious` or `confirmed`; dates `YYYY-MM-DD` | `{hunt, technique, result}`. One row per technique, replaced by the next save. Audited as `hunt.check`. `422` for a closed hunt, a technique not in the catalog or an end before the start |
+| `GET /api/rules` | `kind` (`yara` or `sigma`) | `[{id, kind, name, source_url, licence, sha256, tlp, created_at, created_by, linked_to: [{kind, id}], body}]` you can see |
+| `POST /api/rules` | JSON `{kind, name, body, source_url, licence, tlp}`; `body` up to 100,000 characters | The rule (`201`). Rules are stored as text and **never compiled or run**; a basic shape check (YARA `rule name { … condition: … }`, Sigma `title:` and `detection:`) catches pasting mistakes. `422` for a bad shape or the same text twice. Audited as `rule.add` |
+| `GET /api/rules/{rule_id}` | - | One rule; `404` if unknown or above your limit |
+| `DELETE /api/rules/{rule_id}` | - | `{deleted}`, with its links. Audited as `rule.delete` |
+| `POST /api/rules/{rule_id}/links` | JSON `{target_kind, target_id}`: `group` (a `{ref}`), `technique` (`T1059.001`) or `document` (a report ID) | `{rule, kind, id}`. Audited as `rule.link`. `404` if you cannot see the target |
+| `DELETE /api/rules/{rule_id}/links` | Same body | `{unlinked}`. Audited as `rule.unlink` |
+
 ## Sources and enrichment
 
 | Route | Result |

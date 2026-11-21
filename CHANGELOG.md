@@ -2,13 +2,44 @@
 
 ## Unreleased
 
-**Upgrading from 0.6.0:** migrations `0009` (ATT&CK technique tags), `0010` (source switches) and `0011`
-(alerts) run at start-up, or with `make migrate`. Reports stored before the upgrade get their technique tags when you run
+**Upgrading from 0.6.0:** migrations `0009` (ATT&CK technique tags), `0010` (source switches), `0011`
+(alerts) and `0012` (threat guides: actors, report links, industry decisions, rules, hunts) run at start-up, or with `make migrate`. Reports stored before the upgrade get their technique tags when you run
 `make attack-backfill` once (safe to run again). The new threat-research sources start switched off: Insight
 contacts no new host until you switch one on. **Exports change for SANS ISC and NCSC reports:** their text and
 evidence are no longer included (their publishers allow metadata only). Every 0.6.0 API field is unchanged; new
 fields are additive. TLP-limited API keys may now read cached CVE scores (`GET /api/cves/{cve}/scores`) for
 CVEs in reports they can see; starting a lookup stays refused to them.
+
+### Added: industry threat profiles and actor threat guides (TIP 2.10; minimum of TIP 2.5 and 2.7)
+- **Industry threats tab** ([ADR 0024](docs/adr/0024-threat-guides.md), [docs/THREAT_GUIDES.md](docs/THREAT_GUIDES.md)):
+  pick one of 15 industries and see up to ten groups that a cited source says target it, ordered by how many of
+  your reports name them, then latest public activity, then known techniques, with the evidence for each: the
+  quoted MITRE ATT&CK sentence or the MISP galaxy sector label, linked to its source. Never inferred from
+  indicators, techniques or co-occurrence.
+- **Threat guides** for any ATT&CK group or an actor you track: aliases, industries and victim countries,
+  campaigns, techniques by tactic (downloadable as an ATT&CK Navigator layer), tools and malware, mitigations,
+  your linked reports and reports that name the group, sources and the TLP label. Download as Markdown or JSON
+  (`insight-threat-guide-1`), optionally at a lower TLP (`max_tlp`), audited as `actor.guide`.
+- **Threat hunting**: one starting hypothesis per technique from ATT&CK detection strategies and data components,
+  with log sources; an indicator sweep list (JSON or CSV) from linked and naming reports, without private,
+  benign or expired indicators; YARA and Sigma rules stored as text (never run) and linked to groups,
+  techniques or reports; and hunt records of what was checked, when, and the result.
+- **Actors and report links (TIP 2.5 minimum)**: track your own actor, optionally the same as an ATT&CK group;
+  link reports to a group from the reader (**Threat groups**); add an industry with a citation or remove one
+  with a reason. Every change is audited and carries its own TLP label.
+- **A bundled threat-group library** (`src/insight/data/actors.json`, about 600 KB) built by
+  `scripts/update_actors.py` from MITRE ATT&CK Enterprise 20.1 and the MISP galaxy threat-actor cluster
+  (version 359), both pinned by commit and SHA-256, so it works offline. `insight threat-library-sync`
+  (`make threat-library-sync`) fetches the same pinned releases on request for a fuller copy (whole
+  descriptions, procedure examples, analytics). Attribution in NOTICE.
+- API: `GET /api/industries`, `GET /api/industries/{key}/actors`, `GET|POST /api/actors`,
+  `GET /api/actors/{ref}`, report links, industry decisions, `GET /api/actors/{ref}/guide|navigator|sweep`,
+  hunts (`/api/actors/{ref}/hunts`, `/api/hunts/{hunt_id}`) and rules (`/api/rules`). All follow the caller's TLP
+  limit; labelled writes also follow `INSIGHT_MAX_TLP`.
+- CLI: `insight industries`, `insight threat-profile INDUSTRY`, `insight threat-guide REF FILE`
+  (`--format md|json|navigator|sweep-csv|sweep-json`, `--max-tlp`), `insight rule-add FILE` and
+  `insight threat-library-sync`.
+- Deleting a report also removes its group and rule links, and industry decisions that cited only that report.
 
 ### Added: automatic CVE lookups at NIST NVD and FIRST EPSS (TIP 1.2)
 - **Severity and attack likelihood beside every CVE** ([ADR 0023](docs/adr/0023-automatic-cve-lookups.md)): the

@@ -23,6 +23,8 @@ SQL_BUILDERS = {'select', 'insert', 'update', 'delete', 'func', 'or_', 'and_', '
 ORM_CLASSES = {'Document', 'Entity', 'Observation', 'Note', 'AuditEvent', 'KEVRecord', 'WatchTerm'}
 ORM_CLASSES |= {'SourceRun', 'Enrichment', 'ApiKey', 'Job', 'Schedule', 'FetchState', 'EntityAssessment'}
 ORM_CLASSES |= {'DocumentTechnique', 'SourceSwitch'}
+ORM_CLASSES |= {'ThreatActor', 'ActorDocument', 'IndustryClaim', 'DetectionRule', 'RuleLink'}
+ORM_CLASSES |= {'Hunt', 'HuntCheck'}
 
 
 def imports(path: Path) -> list[tuple[str, str]]:
@@ -114,6 +116,10 @@ TLP_AWARE_SERVICES = {
     'assess_entity', 'entity_assessment', 'entity_seen', 'blocklist',
     'document_techniques', 'tag_technique', 'untag_technique', 'technique_summary', 'technique_documents',
     'landscape_data', 'cve_score_view',
+    'industry_profile', 'industry_counts', 'list_actors', 'resolve_group', 'create_actor', 'analyst_claims',
+    'linked_reports', 'link_report', 'unlink_report', 'record_industry_claim', 'guide_data',
+    'hunts_for', 'get_hunt', 'start_hunt', 'update_hunt', 'record_check',
+    'list_rules', 'add_rule', 'get_rule', 'delete_rule', 'link_rule', 'unlink_rule',
 }  # fmt: skip
 
 
