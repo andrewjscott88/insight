@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from typing import Any, Final, cast
 from uuid import NAMESPACE_URL, UUID, uuid5
 
+from pydantic import ValidationError
+
 from .attack import technique
 from .extraction import EVIDENCE_CONTEXT, MAX_MENTIONS, Kind, Mention, canonical
 from .schemas import DEFAULT_TLP, TLP, DocumentInput, most_restrictive, tlp_markings
@@ -125,7 +127,10 @@ def _indicator(obj: Object) -> tuple[Kind, str]:
     if observable == 'file' and prop.startswith('hashes.'):
         kind = _HASHES.get(prop[7:].strip("'"))
     elif prop == 'value' and observable in ('ipv4-addr', 'ipv6-addr'):
-        network = ipaddress.ip_network(value, strict=True)
+        try:
+            network = ipaddress.ip_network(value, strict=True)
+        except ValueError as exc:
+            raise ValueError('Invalid address or network in STIX indicator') from exc
         if network.version != int(observable[3]):
             raise ValueError('STIX address family does not match its value')
         kind = 'cidr' if '/' in value else 'ip'
@@ -135,7 +140,10 @@ def _indicator(obj: Object) -> tuple[Kind, str]:
         raise ValueError('Invalid control character in indicator')
     if kind is None:
         raise ValueError('Unsupported STIX observable property')
-    normalized = canonical(kind, value)
+    try:
+        normalized = canonical(kind, value)
+    except ValueError as exc:
+        raise ValueError('Invalid STIX indicator value') from exc
     if len(normalized.encode()) > 2000:
         raise ValueError('STIX indicator exceeds the value limit')
     return kind, normalized
@@ -164,9 +172,10 @@ def _value(obj: Object) -> tuple[Kind | None, str]:
         )
         return 'cve', canonical('cve', value)
     attack_id = _reference(obj, 'mitre-attack')
-    if not technique(attack_id):
+    found = technique(attack_id)
+    if found is None:
         raise ValueError('This ATT&CK technique is outside the bundled Enterprise catalog')
-    return None, attack_id
+    return None, found.id
 
 
 def _labels(objects: dict[str, Object], max_tlp: str) -> dict[str, str]:
@@ -229,6 +238,8 @@ def _render_report(
         raise ValueError('Invalid metadata-only handling flag')
     if report.get('description') and not metadata_only:
         lines.append(report['description'].replace('\r\n', '\n').replace('\r', '\n'))
+    # Keep the end of free-form prose distinct from the start of typed values for revision fingerprints.
+    lines.append('STIX references')
     offsets: list[tuple[Kind, str, int, int]] = []
     length = sum(map(len, lines)) + len(lines) - 1
     ordered = sorted({values[r] for r in refs}, key=lambda pair: (pair[0] or '', pair[1]))
@@ -242,13 +253,16 @@ def _render_report(
         if length > 200_000 or len(offsets) > MAX_MENTIONS:
             raise ValueError('STIX report exceeds the document or observation limit')
     body = '\n'.join(lines)
-    item = DocumentInput(
-        title=report['name'],
-        body=body,
-        source_name=publisher.get('source_name') or author.get('name') or 'STIX import',
-        source_url=publisher.get('url', ''),
-        tlp=cast(TLP, marking),
-    )
+    try:
+        item = DocumentInput(
+            title=report['name'],
+            body=body,
+            source_name=publisher.get('source_name') or author.get('name') or 'STIX import',
+            source_url=publisher.get('url', ''),
+            tlp=cast(TLP, marking),
+        )
+    except ValidationError as exc:
+        raise ValueError('STIX report metadata exceeds a limit or contains an invalid value') from exc
     mentions = [
         Mention(kind, value, start, end, body[max(start - EVIDENCE_CONTEXT, 0) : end + EVIDENCE_CONTEXT])
         for kind, value, start, end in offsets
@@ -299,7 +313,7 @@ def parse_stix(data: bytes, max_tlp: str) -> ImportedBundle:
     # Only predefined object types and simple patterns reach the packaged OASIS schemas.
     try:
         validate_stix_bundle(bundle)
-    except (KeyError, IndexError, TypeError, RecursionError) as exc:
+    except (AttributeError, KeyError, IndexError, TypeError, RecursionError) as exc:
         raise ValueError('Invalid STIX 2.1 object') from exc
     labels = _labels(objects, max_tlp)
     values = {key: _value(obj) for key, obj in objects.items() if obj['type'] in _OBSERVABLE_TYPES}

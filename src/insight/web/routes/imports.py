@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 
 from ... import services
@@ -30,10 +29,6 @@ def _register_import_routes(app: FastAPI, sessions: SessionFactory, require_auth
         try:
             with acting(sessions, request) as db:
                 return services.import_stix(db, data, max_tlp=limit or app.state.settings.max_tlp)
-        except ValidationError as exc:
-            raise HTTPException(
-                400, 'STIX report metadata exceeds a limit or contains an invalid value'
-            ) from exc
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
         except IntegrityError as exc:
