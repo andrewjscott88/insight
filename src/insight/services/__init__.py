@@ -79,6 +79,15 @@ from .brief import (
     BriefKev,
     brief_data,
 )
+from .campaigns import (
+    ThreatLinkView,
+    create_campaign,
+    get_campaign,
+    link_threat,
+    list_campaigns,
+    list_threat_links,
+    unlink_threat,
+)
 from .common import fold, like_pattern, stamp
 from .cves import MAX_CVE_MENTIONS, CveSignal, CveSignals, cve_signals
 from .documents import (
@@ -131,6 +140,7 @@ from .lookups import (
     record_lookup_failure,
     set_lookup_switch,
 )
+from .pdf_reports import import_pdf
 from .retention import MAX_REASON_LENGTH, DeletionPreview, DeletionResult, delete_document, deletion_preview
 from .rules import (
     LinkedRule,
@@ -269,6 +279,7 @@ __all__ = [
     'SweepEntry',
     'TechniqueCount',
     'TechniqueTag',
+    'ThreatLinkView',
     'TlpNotPermitted',
     'active_api_key',
     'actor_aliases',
@@ -296,6 +307,7 @@ __all__ = [
     'count_operator_sessions',
     'create_actor',
     'create_api_key',
+    'create_campaign',
     'cve_score_view',
     'cve_scores',
     'cve_signals',
@@ -323,6 +335,7 @@ __all__ = [
     'fingerprint',
     'finish_job',
     'fold',
+    'get_campaign',
     'get_document',
     'get_entity',
     'get_fetch_state',
@@ -331,6 +344,7 @@ __all__ = [
     'guide_data',
     'hunt_checks',
     'hunts_for',
+    'import_pdf',
     'import_stix',
     'industry_counts',
     'industry_profile',
@@ -343,13 +357,16 @@ __all__ = [
     'like_pattern',
     'link_report',
     'link_rule',
+    'link_threat',
     'linked_reports',
     'linked_rules',
     'list_actors',
+    'list_campaigns',
     'list_entities',
     'list_rules',
     'list_schedules',
     'list_targets',
+    'list_threat_links',
     'list_watch_terms',
     'lookup_backlog',
     'lookup_failures',
@@ -409,6 +426,7 @@ __all__ = [
     'tlp_permitted',
     'unlink_report',
     'unlink_rule',
+    'unlink_threat',
     'untag_technique',
     'update_hunt',
     'validate_address',

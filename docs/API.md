@@ -215,6 +215,34 @@ Each included report references its active ATT&CK techniques from the current ca
 Each successful request records `stix.export` with its bundle UUID. Empty selections return a valid empty bundle.
 [Object mapping and handling rules](IOC_EXPORT.md#stix-21-export)
 
+### `POST /api/documents/pdf`
+
+Send original PDF bytes as `application/pdf`. A read-write bearer key or signed-in session with
+`X-CSRF-Token` is required. Provide the report metadata in the `X-Insight-Document` header as unpadded
+base64url-encoded UTF-8 JSON. Required strings are `title` and `source_name`. Optional strings are
+`source_url` and `tlp`, which defaults to AMBER. Header encoding keeps the metadata out of URLs and supports
+international text. Use HTTPS when accessing a remote instance. [Upload example](API_GUIDE.md#documents-reports)
+
+The workspace accepts the same fields under **Ingest intelligence**. On the server, run
+`insight import-pdf FILE --title "Advisory" --source-name "Publisher" --tlp GREEN`. The CLI defaults to the
+file’s name without its extension for the title and **Local PDF** for the publisher. Provide the publisher's
+label when submitting a document. Printed or scanned markings depend on the PDF’s available text. Detected
+higher TLP markings raise the label as on pasted documents. Both the instance limit and the key limit apply.
+
+A successful response contains `document_id`, `created` and `file_sha256`. Identical file bytes and report
+metadata reuse the existing report. Different files with identical extracted text retain separate identities.
+`GET /api/documents/{id}` and the single-report JSON export include `attachment.sha256`, `media_type`,
+`page_count` and `size_bytes` for a PDF. The original-file SHA-256 is distinct from the existing `content_hash`
+of the normalized report text. The reader shows both under **Where this report came from**. Report deletion
+removes the attached metadata in the same transaction. The audit entry records the original digest and size.
+
+The Linux worker extracts embedded text. Only the report text and provenance are retained. Text order follows
+the PDF and may differ from the printed layout. OCR, encrypted documents and image-only scans are unsupported.
+Limits per import are 2,000,000 input bytes, 100 pages, 200,000 extracted characters, 256 MiB worker memory,
+five CPU seconds and ten elapsed seconds. Each server process admits two concurrent PDF workers. Invalid PDFs,
+empty text, parsing limits or a disallowed label return 400 with no report stored. An oversized HTTP body
+returns 413, a different content type returns 415, and an unavailable or busy sandbox returns 503.
+
 ### `POST /api/import/stix`
 
 Send a local STIX 2.1 bundle as the request body with `Content-Type: application/json` or
@@ -389,6 +417,11 @@ which is not attribution.
 | --- | --- | --- |
 | `GET /api/industries` | - | `{library: {edition, attack, sources}, industries: [{key, name, covers, groups}]}`; `groups` counts groups a cited source names for the industry, including your own decisions you can see |
 | `GET /api/industries/{key}/actors` | `days` (90, 1-3650), `top` (10, at most 10) | `{industry, tlp, days, candidates, reports_read, reports_capped, ranking, actors: [{rank, ref, kind, name, aliases, tlp, reports_naming_it, last_named_at, latest_public_activity, attack_techniques, evidence: [{industries, source, evidence, url, citations, match}], reasons}], removed_by_you}`. Ranked by reports naming the group in the period, then latest public campaign activity, then number of ATT&CK techniques. `tlp` is the most restrictive label used. `reports_capped`: more than 5,000 reports in the period; only the newest were read. `404` for an unknown industry |
+| `POST /api/campaigns` | `name`, optional `aliases`, `description`, `tlp` | Creates an analyst campaign and returns its `id` |
+| `GET /api/campaigns` or `GET /api/campaigns/{id}` | List accepts `offset` and `limit` (1–200) | Visible campaigns or the selected campaign |
+| `GET /api/actors/{id}/links` or `/api/campaigns/{id}/links` | Optional `offset` and `limit` (1–200) | `links` with target kind, target ID, name, and effective TLP |
+| `POST /api/actors/{id}/links` or `/api/campaigns/{id}/links` | `target_kind` (`document`, `indicator`, `technique`), `target_id`, optional `tlp` (default AMBER) | Links the report UUID, indicator entity UUID or ATT&CK technique ID to a local record. Saving the same link can raise its label. |
+| `DELETE /api/actors/{id}/links/{target_kind}/{target_id}` or `/api/campaigns/{id}/links/{target_kind}/{target_id}` | Both ends and the link must be visible | Removes the analyst’s link |
 | `GET /api/actors` | `q` (ID, name or alias, up to 100 characters), `limit` (50, at most 200) | `{library, groups: [{ref, kind, name, aliases, url, industries, techniques}], actors: [{ref, kind, name, aliases, description, attack_group_id, tlp, created_at, created_by}]}` |
 | `POST /api/actors` | JSON `{name, aliases, description, attack_group_id, tlp}` (`aliases` up to 20; `attack_group_id` optional, `G` and four digits) | The actor (`201`). Audited as `actor.create`. `422` for an `attack_group_id` not in the library; `403` for a label above your limit or the instance limit |
 | `GET /api/actors/{ref}` | - | `{ref, kind, name, aliases, description, tlp, attack_group, industry_claims, your_industry_decisions, linked_reports}`; `404` if unknown or above your limit |

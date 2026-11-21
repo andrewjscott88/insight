@@ -13,6 +13,7 @@ from uuid import uuid4
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Engine,
     ForeignKey,
     Index,
@@ -86,6 +87,17 @@ class Document(Base):
     search_text: Mapped[str] = mapped_column(Text, default='', server_default='')
     #: True when a connector had to shorten the publisher's text (e.g. RSS summaries are capped at 500 chars).
     truncated: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+
+
+class DocumentAttachment(Base):
+    """Provenance of the original uploaded file. Insight retains only its digest and metadata."""
+
+    __tablename__ = 'document_attachments'
+    document_id: Mapped[str] = mapped_column(ForeignKey('documents.id', ondelete='CASCADE'), primary_key=True)
+    sha256: Mapped[str] = mapped_column(String(64))
+    media_type: Mapped[str] = mapped_column(String(80))
+    size_bytes: Mapped[int]
+    page_count: Mapped[int]
 
 
 class Entity(Base):
@@ -251,13 +263,13 @@ class OperatorSession(Base):
 class OperatorMfa(Base):
     """The operator's TOTP second factor (at most one row; no row means MFA is off). See ``insight.totp``.
 
-    The shared secret must be stored in a recoverable form to verify codes; protect the database accordingly.
+    The stored secret is a versioned encrypted envelope. The operator session secret protects it.
     ``last_step`` is the 30-second time step of the last accepted code, so a code can never be used twice.
     """
 
     __tablename__ = 'operator_mfa'
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
-    secret: Mapped[str] = mapped_column(String(64))
+    secret: Mapped[str] = mapped_column(Text)
     created_at: Mapped[str] = mapped_column(String(40), default=now)
     last_step: Mapped[int] = mapped_column(default=0)
 
@@ -410,7 +422,57 @@ class ActorDocument(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     group_ref: Mapped[str] = mapped_column(String(36), index=True)
     document_id: Mapped[str] = mapped_column(ForeignKey('documents.id'), index=True)
+    tlp: Mapped[str] = mapped_column(String(20), default='CLEAR', server_default='CLEAR')
     note: Mapped[str] = mapped_column(Text, default='')
+    created_at: Mapped[str] = mapped_column(String(40), default=now)
+    actor: Mapped[str] = mapped_column(String(80), default='')
+
+
+class Campaign(Base):
+    """A campaign an analyst explicitly tracks."""
+
+    __tablename__ = 'campaigns'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    name: Mapped[str] = mapped_column(String(120))
+    aliases: Mapped[str] = mapped_column(Text, default='')
+    description: Mapped[str] = mapped_column(Text, default='')
+    tlp: Mapped[str] = mapped_column(String(20), default='AMBER')
+    created_at: Mapped[str] = mapped_column(String(40), default=now)
+    actor: Mapped[str] = mapped_column(String(80), default='')
+
+
+class ThreatLink(Base):
+    """One explicit link. Actor/report links stay in actor_documents for existing guides."""
+
+    __tablename__ = 'threat_links'
+    __table_args__ = (
+        CheckConstraint('(actor_id IS NULL) <> (campaign_id IS NULL)', name='one_threat_subject'),
+        CheckConstraint(
+            '(CASE WHEN document_id IS NULL THEN 0 ELSE 1 END + '
+            'CASE WHEN entity_id IS NULL THEN 0 ELSE 1 END + '
+            'CASE WHEN technique_id IS NULL THEN 0 ELSE 1 END) = 1',
+            name='one_threat_target',
+        ),
+        CheckConstraint('actor_id IS NULL OR document_id IS NULL', name='existing_actor_reports'),
+        UniqueConstraint('actor_id', 'entity_id'),
+        UniqueConstraint('actor_id', 'technique_id'),
+        UniqueConstraint('campaign_id', 'document_id'),
+        UniqueConstraint('campaign_id', 'entity_id'),
+        UniqueConstraint('campaign_id', 'technique_id'),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    actor_id: Mapped[str | None] = mapped_column(
+        ForeignKey('threat_actors.id', ondelete='CASCADE'), index=True
+    )
+    campaign_id: Mapped[str | None] = mapped_column(
+        ForeignKey('campaigns.id', ondelete='CASCADE'), index=True
+    )
+    document_id: Mapped[str | None] = mapped_column(
+        ForeignKey('documents.id', ondelete='CASCADE'), index=True
+    )
+    entity_id: Mapped[str | None] = mapped_column(ForeignKey('entities.id', ondelete='CASCADE'), index=True)
+    technique_id: Mapped[str | None] = mapped_column(String(16), index=True)
+    tlp: Mapped[str] = mapped_column(String(20))
     created_at: Mapped[str] = mapped_column(String(40), default=now)
     actor: Mapped[str] = mapped_column(String(80), default='')
 
@@ -549,7 +611,9 @@ def shares_one_connection(factory: SessionFactory) -> bool:
     return isinstance(getattr(engine, 'pool', None), StaticPool)
 
 
-def database(url: str, *, migrate: bool = True) -> tuple[Engine, SessionFactory]:
+def database(
+    url: str, *, migrate: bool = True, session_secret: str | None = None
+) -> tuple[Engine, SessionFactory]:
     """Create the engine and apply pending migrations (unless ``migrate=False``)."""
     is_sqlite = url.startswith('sqlite')
     options: dict[str, Any] = {}
@@ -573,5 +637,5 @@ def database(url: str, *, migrate: bool = True) -> tuple[Engine, SessionFactory]
     if migrate:
         from .migrations import upgrade  # Deferred: the migration environment imports this module.
 
-        upgrade(engine)
+        upgrade(engine, session_secret=session_secret)
     return engine, sessionmaker(engine, expire_on_commit=False)

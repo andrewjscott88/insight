@@ -35,6 +35,7 @@ WORKDIR /app
 # Debian security fixes published after the pinned base image (Trivy scans the result in CI).
 RUN apt-get update \
     && apt-get upgrade -y --no-install-recommends \
+    && apt-get install -y --no-install-recommends libseccomp2 \
     && rm -rf /var/lib/apt/lists/*
 COPY requirements.lock ./
 RUN pip install --require-hashes -r requirements.lock

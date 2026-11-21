@@ -41,7 +41,7 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
 - [x] **TIP 0.4 Pin connector connections to the checked DNS addresses,** closing the DNS-rebinding gap (code
       review L1): source syncs, CVE lookups and alert webhooks connect to the address they checked.
 - [ ] **TIP 0.5 `/health` without the version;** the version moves behind sign-in.
-- [ ] **TIP 0.6 Encrypt the TOTP secret at rest,** migrating existing rows.
+- [x] **TIP 0.6 Encrypt the TOTP secret at rest.** Revision `0017` migrates existing pairings. [Upgrade and recovery](docs/RUNBOOK.md#sign-in-second-factor-mfa)
 - [x] **Review B2 Throttles into one place** ([ADR 0023](docs/adr/0023-automatic-cve-lookups.md)): one throttle
       per provider in `insight.lookups`, shared by the API, the workspace and the automatic lookups. (The sync
       lock already lived in one place.)
@@ -87,10 +87,8 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
 
 ## 1.0: context around the indicators
 
-- [ ] **TIP 2.5 Actors and campaigns, created by the analyst.** ATT&CK groups only as a labelled catalog; never
-      attribution from shared indicators.
-      *Partly done (unreleased, with TIP 2.10):* actors the analyst creates, report links and industry decisions
-      ([ADR 0025](docs/adr/0025-threat-guides.md)); campaigns, indicator links and STIX export remain.
+- [x] **TIP 2.5 Actors and campaigns.** Analysts create records and explicitly link them to reports,
+      indicators and ATT&CK techniques. STIX exports include the selected, visible links.
 - [x] **TIP 2.10 Industry threat profiles and actor threat guides** (requested by Andrew, 2026-11-21): pick an
       industry and see the top ten threat groups known to target it, each with its evidence; open one and export
       a threat guide (aliases, targets, ATT&CK techniques and Navigator layer, tools, mitigations, your reports
@@ -103,7 +101,7 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
       *Done (unreleased):* attach rules to reports, actors, techniques, CVEs and malware families. Download
       the rule and its handling manifest together. [Rule files](docs/THREAT_GUIDES.md#rules)
 - [ ] **TIP 2.6 Optional GreyNoise enrichment** for IP addresses (operator key; never a verdict by itself).
-- [ ] [#13](https://github.com/andrewjscott88/insight/issues/13) **TIP 2.8 PDF report ingestion,** keeping the
+- [x] [#13](https://github.com/andrewjscott88/insight/issues/13) **TIP 2.8 PDF report ingestion,** keeping the
       file's hash as evidence.
 
 ## Later

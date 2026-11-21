@@ -290,11 +290,11 @@ def _mfa_paired(sessions: SessionFactory) -> bool:
         return services.mfa_paired(db)
 
 
-def _check_code(sessions: SessionFactory, code: str) -> bool:
+def _check_code(sessions: SessionFactory, code: str, session_secret: str) -> bool:
     """One transaction, so an accepted code is marked used atomically (False if no app is paired)."""
     with sessions.begin() as db:
         services.set_actor(db, 'operator')
-        return services.verify_mfa_code(db, code)
+        return services.verify_mfa_code(db, code, session_secret=session_secret)
 
 
 def _register_login(app: FastAPI, settings: Settings, templates: Jinja2Templates) -> None:
@@ -331,7 +331,7 @@ def _register_login(app: FastAPI, settings: Settings, templates: Jinja2Templates
             # a valid code. One answer for either mistake: nothing tells a guesser which factor was wrong.
             code_ok = not mfa
             if password_ok and mfa:
-                code_ok = await asyncio.to_thread(_check_code, sessions, code)
+                code_ok = await asyncio.to_thread(_check_code, sessions, code, settings.session_secret)
             failed = not (password_ok and code_ok)
             if failed and not limited:  # Bounded: at most LOGIN_MAX_FAILURES timestamps are kept.
                 app.state.failures.append(current)
