@@ -282,7 +282,7 @@ def test_runtime_dependencies_pass_the_licence_policy() -> None:
         ('backups/backup-2026-01-01-120000.db', '', True),
         ('exports/iocs-2026-01-01-120000.json', '{}', True),  # TLP-labelled data from `make export-iocs`
         ('docs/exports/guide.md', 'text', False),
-        ('siem.conf', 'api_key = insk_0123456789ab_' + 'A' * 43, True),  # built here: don't trip the scanner
+        ('siem.conf', 'api_key = insk_0123456789ab_' + 'A' * 43, True),  # fake, built here gitleaks:allow
         ('docs/API.md', 'The key (`insk_<12-hex key ID>_<43-character secret>`)', False),
     ],
 )
