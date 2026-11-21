@@ -218,3 +218,20 @@ def test_failure_after_demoting_current_rolls_back_the_whole_revision(
         current = fresh.scalars(select(Document)).one()
         assert current.id == original.id
         assert current.is_current
+
+
+def test_revisions_keep_the_existing_handling_floor_even_when_reverting(db: Session) -> None:
+    first = wire(event())
+    import_misp_event(db, first, max_tlp='GREEN')
+    raised, _ = import_misp_event(db, wire(event(Tag=[{'name': 'tlp:green'}])), max_tlp='GREEN')
+    with pytest.raises(ValueError, match='handling restriction'):
+        import_misp_event(db, first, max_tlp='GREEN')
+    assert raised.is_current
+
+
+def test_technique_like_url_text_is_not_promoted_on_import_or_backfill(db: Session) -> None:
+    attr = {'type': 'url', 'value': 'https://test.example/T1059'}
+    doc, _ = import_misp_event(db, wire(event(Attribute=[attr])), max_tlp='GREEN')
+    assert services.document_techniques(db, doc.id) == []
+    assert services.backfill_techniques(db) == (0, 0)
+    assert services.document_techniques(db, doc.id) == []
