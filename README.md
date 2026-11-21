@@ -140,7 +140,8 @@ Data survives container rebuilds in `insight_insight-data` (the exact Compose pr
 
 ## Local Python development
 
-Python 3.11, 3.12, 3.13 and 3.14 are tested (CI runs the full suite on each). The Docker image uses 3.13.
+Python 3.11, 3.12, 3.13, 3.14 and 3.15 are tested (CI runs the full suite on each). The Docker image uses 3.15, which every
+pull request tests.
 
 ```sh
 python -m venv .venv

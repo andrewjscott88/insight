@@ -1,6 +1,7 @@
 # Tier 1 - every push to main, every pull request and merge-queue entry. Blocks merging.
 # Also called by the milestone gate (workflow_call) so release candidates re-run exactly these checks.
-# Pushes and pull requests test the oldest and newest supported Python (3.11, 3.14); the nightly run tests
+# Pushes and pull requests test the oldest supported Python, 3.14, and 3.15, the version the container image
+# ships (review M3); the nightly run tests
 # 3.12 and 3.13, and the milestone gate all four (review G1: fewer CI minutes, the same guarantees).
 name: CI
 
@@ -67,7 +68,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ${{ fromJSON(inputs.all-pythons && '["3.11", "3.12", "3.13", "3.14"]' || '["3.11", "3.14"]') }}
+        python-version: ${{ fromJSON(inputs.all-pythons && '["3.11", "3.12", "3.13", "3.14", "3.15"]' || '["3.11", "3.14", "3.15"]') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -135,9 +136,12 @@ jobs:
           pip install --require-hashes -r requirements-dev.lock
           # --strict: fail if any dependency could not be audited (offline runs otherwise "pass" vacuously).
           pip-audit --strict --require-hashes --disable-pip -r requirements.lock --vulnerability-service osv
+      # Third-party images run with the repository mounted, so they are pinned by digest (code review L7);
+      # scripts/check_pins.py fails on any that is not. Refresh with the digest a run's "docker pull" prints.
       - name: Secrets in git history (gitleaks)
         run: >-
-          docker run --rm -v "${PWD}:/repo" zricethezav/gitleaks:v8.18.4
+          docker run --rm -v "${PWD}:/repo"
+          zricethezav/gitleaks:v8.18.4@sha256:75bdb2b2f4db213cde0b8295f13a88d6b333091bbfbf3012a4e083d00d31caba
           detect --source /repo --redact --verbose --exit-code 1
 
   package:

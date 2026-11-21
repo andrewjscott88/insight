@@ -21,7 +21,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import hmac
-import ipaddress
 import json
 import smtplib
 import socket
@@ -36,7 +35,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
-from . import __version__, services
+from . import __version__, egress, services
 from .config import AlertSettings
 from .models import AlertTarget, SessionFactory
 from .schemas import TLP_LEVELS
@@ -137,8 +136,9 @@ def compose(alert: DueAlert, *, public_url: str) -> Message:
 # --------------------------------------------------------------------------- webhooks
 
 
-async def check_address(url: str, *, allow_private: bool) -> None:
-    """Raise :class:`AlertError` unless ``url`` is HTTPS to an address alerts may reach."""
+async def check_address(url: str, *, allow_private: bool) -> list[egress.IPAddress]:
+    """The addresses of ``url``'s host, or :class:`AlertError` unless it is HTTPS to addresses alerts may
+    reach. The webhook is then sent to one of these exact addresses (review L1: no second DNS lookup)."""
     parts = urlsplit(url)
     if parts.scheme != 'https' or not parts.hostname or parts.username or parts.password:
         raise AlertError('The webhook address must start with https:// and hold no user name or password.')
@@ -147,17 +147,19 @@ async def check_address(url: str, *, allow_private: bool) -> None:
     except ValueError as exc:
         raise AlertError('The webhook address has an invalid port.') from exc
     try:
-        infos = await asyncio.to_thread(socket.getaddrinfo, parts.hostname, port, 0, socket.SOCK_STREAM)
+        addresses = await egress.resolve(parts.hostname, port)
     except OSError as exc:
         raise AlertError(f'Could not find {parts.hostname} (DNS).') from exc
-    for info in infos:
-        address = ipaddress.ip_address(str(info[4][0]))
-        if address.is_link_local or address.is_multicast or address.is_unspecified or address.is_reserved:
+    if not addresses:
+        raise AlertError(f'Could not find {parts.hostname} (DNS).')
+    for address in addresses:
+        if egress.never_allowed(address):
             raise AlertError(f'{parts.hostname} resolves to an address alerts never go to ({address}).')
-        if not address.is_global and not allow_private:
+        if not egress.effective(address).is_global and not allow_private:
             raise AlertError(
                 f'{parts.hostname} is on a private network. Set INSIGHT_ALERT_PRIVATE_TARGETS=on to allow it.'
             )
+    return addresses
 
 
 def _chat_text(message: Message) -> str:
@@ -178,7 +180,7 @@ async def send_webhook(
     allow_private: bool,
     transport: httpx.AsyncBaseTransport | None = None,
 ) -> None:
-    await check_address(target.address, allow_private=allow_private)
+    addresses = await check_address(target.address, allow_private=allow_private)
     if target.style == 'chat':
         body = json.dumps({'text': _chat_text(message)}).encode()
     else:
@@ -191,7 +193,19 @@ async def send_webhook(
     async with httpx.AsyncClient(
         timeout=httpx.Timeout(TIMEOUT), follow_redirects=False, trust_env=False, transport=transport
     ) as client:
-        response = await client.post(target.address, content=body, headers=headers)
+        for index, address in enumerate(addresses):
+            pinned = egress.pin(target.address, address)
+            try:
+                response = await client.post(
+                    pinned.url,
+                    content=body,
+                    headers={**headers, **pinned.headers},
+                    extensions=pinned.extensions,
+                )
+                break
+            except httpx.ConnectError:
+                if index == len(addresses) - 1:
+                    raise
     if response.is_redirect:
         raise AlertError('The webhook answered with a redirect, which alerts do not follow.')
     if not response.is_success:

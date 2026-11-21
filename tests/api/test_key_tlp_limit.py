@@ -213,7 +213,8 @@ def test_the_key_cannot_store_what_it_cannot_read(client: TestClient, world: dic
 
 
 @pytest.mark.parametrize(
-    ('method', 'path'), [('GET', '/api/audit'), ('POST', '/api/enrichment/epss/CVE-2024-11111')]
+    ('method', 'path'),
+    [('GET', '/api/audit'), ('POST', '/api/enrichment/epss/CVE-2024-11111'), ('GET', '/api/watch-terms')],
 )
 def test_routes_that_span_all_reports_are_refused(
     client: TestClient, world: dict[str, Any], method: str, path: str

@@ -34,6 +34,15 @@ IOC_EXPORT_PARAMETERS: Final = {
 }
 
 
+#: Characters that make a spreadsheet read a cell as a formula (code review N1).
+FORMULA_STARTS: Final = ('=', '+', '-', '@', '\t', '\r')
+
+
+def cell(value: str) -> str:
+    """A CSV cell that spreadsheets show as text: a leading ``'`` defuses a formula (N1)."""
+    return f"'{value}" if value.startswith(FORMULA_STARTS) else value
+
+
 def ioc_export_query(
     *,
     q: str,
@@ -169,7 +178,10 @@ def _register_export_routes(app: FastAPI, sessions: SessionFactory, require_auth
             buffer = io.StringIO()
             writer = csv.writer(buffer, lineterminator='\n')
             writer.writerow(['value', 'kind', 'decided_at', 'expires_at', 'tlp'])
-            writer.writerows((e.value, e.kind, e.decided_at, e.expires_at or '', e.tlp) for e in entries)
+            writer.writerows(
+                [cell(e.value), cell(e.kind), cell(e.decided_at), cell(e.expires_at or ''), cell(e.tlp)]
+                for e in entries
+            )
             body = buffer.getvalue()
             media_type = 'text/csv; charset=utf-8'
         filename = f'insight-blocklist-{kind}.{output}'

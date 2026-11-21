@@ -23,7 +23,14 @@ from typing import Any, Final
 
 from . import services
 from .brief import count_of
-from .connectors import CVE_RE, enrich_cve, fetch_provider_json, store_enrichment, validate_enrichment
+from .connectors import (
+    CVE_RE,
+    ProviderError,
+    enrich_cve,
+    fetch_provider_json,
+    store_enrichment,
+    validate_enrichment,
+)
 from .models import SessionFactory
 
 NVD_INTERVAL: Final = 6.5
@@ -93,6 +100,17 @@ async def request_lookup(session_factory: SessionFactory, cve: str, provider: st
     return await enrich_cve(session_factory, cve, provider)
 
 
+def _answered(session_factory: SessionFactory, provider: str, cve: str, payload: dict[str, Any]) -> None:
+    store_enrichment(session_factory, cve, provider, payload)
+    with session_factory.begin() as db:
+        services.clear_lookup_failure(db, provider, cve)
+
+
+def _failed(session_factory: SessionFactory, provider: str, cve: str, message: str, at: datetime) -> None:
+    with session_factory.begin() as db:
+        services.record_lookup_failure(db, provider, cve, message, at=at)
+
+
 def _due(session_factory: SessionFactory, provider: str, at: datetime) -> list[str]:
     with session_factory() as db:
         cves = services.cves_to_look_up(db, provider, at=at, limit=BATCH[provider])
@@ -126,8 +144,28 @@ async def look_up_due(
             }
             await asyncio.to_thread(store_enrichment, session_factory, cve, 'epss', answer)
     else:
+        # One CVE the provider cannot answer for is set aside with a growing wait and the others go on
+        # (review M2); a problem with the provider itself (network, rate limit, key) stops the job.
+        failed: list[str] = []
         for cve in cves:
             await THROTTLES['nvd'].acquire()
-            payload = await fetch_provider_json('nvd', {'cveId': cve})
-            await asyncio.to_thread(store_enrichment, session_factory, cve, 'nvd', payload)
+            try:
+                payload = await fetch_provider_json('nvd', {'cveId': cve})
+            except ProviderError as exc:
+                if exc.provider_wide:
+                    raise
+                await asyncio.to_thread(_failed, session_factory, 'nvd', cve, str(exc), clock())
+                failed.append(cve)
+                continue
+            await asyncio.to_thread(_answered, session_factory, 'nvd', cve, payload)
+        if failed and len(failed) == len(cves):
+            raise ProviderError(
+                f'{NAMES[provider]} could not answer for any of {count_of(len(cves), "CVE")}.'
+            )
+        if failed:
+            looked_up = count_of(len(cves) - len(failed), 'CVE')
+            return (
+                f'Looked up {looked_up} at {NAMES[provider]}; '
+                f'{count_of(len(failed), "CVE")} could not be answered and will be tried again later.'
+            )
     return f'Looked up {count_of(len(cves), "CVE")} at {NAMES[provider]}.'

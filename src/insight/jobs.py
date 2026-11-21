@@ -2,12 +2,18 @@
 
 Nothing is scheduled until someone turns a schedule on: in the Sources tab, with ``PUT /api/schedules/{key}``
 from a browser session, or with ``insight schedule``. The runner wakes every :data:`TICK_SECONDS`, queues the
-syncs whose schedule is due, then runs queued jobs one at a time under the same lock as *Sync now* and *Sync
-all sources*, so a schedule and a person never sync at the same moment. A failed sync is tried again after 5,
-then 10 minutes, then recorded as failed; every attempt is also a ``SourceRun`` in *Recent sync activity*.
+syncs whose schedule is due, then runs the queued jobs. A failed sync is tried again after 5, then 10 minutes,
+then recorded as failed; every attempt is also a ``SourceRun`` in *Recent sync activity*.
 
 Each tick also queues one alert-delivery job when an alert is due (ADR 0022), and a CVE lookup job for each
 provider switched on with CVEs due (ADR 0023): both run here, never while someone waits for a page.
+
+**Lanes (code review L5).** Jobs run in lanes, side by side, each lane one job at a time under its own lock:
+source syncs under the same lock as *Sync now* and *Sync all sources* (so a schedule and a person never sync
+at the same moment), CVE lookups, alert deliveries, and any other kind. Before, one lock covered everything,
+so a 65-second NVD batch made *Sync all* answer 409 and alerts waited behind long CSAF syncs. The lanes write
+different data (reports and KEV; lookup caches; alert rows), so they need no mutual exclusion. **Lock order:**
+a job takes exactly one lane lock and nothing takes two, so the lanes cannot deadlock.
 
 Run it in exactly one process (``INSIGHT_RUN_JOBS=on``, the default for ``insight serve``): at start-up it
 takes back jobs that a stopped process left running. This module builds no SQL; ``services`` owns the queries.
@@ -18,13 +24,14 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Collection, Mapping
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Final
 
 from . import alerts, lookups, services
 from .connectors import SourceSyncError, sync_source
-from .models import SessionFactory
+from .models import SessionFactory, shares_one_connection
 from .source_registry import SOURCES
 
 log = logging.getLogger('insight.jobs')
@@ -34,6 +41,16 @@ KEEP_FINISHED: Final = timedelta(days=30)
 
 Clock = Callable[[], datetime]
 Handler = Callable[[SessionFactory, str], Awaitable[str]]
+
+
+@dataclass(frozen=True, slots=True)
+class JobLocks:
+    """One lock per lane (review L5). ``sync`` is the app's ``sync_lock``, shared with *Sync now*."""
+
+    sync: asyncio.Lock = field(default_factory=asyncio.Lock)
+    lookup: asyncio.Lock = field(default_factory=asyncio.Lock)
+    alerts: asyncio.Lock = field(default_factory=asyncio.Lock)
+    other: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 
 def utcnow() -> datetime:
@@ -68,9 +85,11 @@ def _queue_due(sessions: SessionFactory, at: datetime) -> None:
         services.prune_jobs(db, before=at - KEEP_FINISHED)
 
 
-def _claim(sessions: SessionFactory, at: datetime) -> tuple[str, str, str] | None:
+def _claim(
+    sessions: SessionFactory, at: datetime, kinds: Collection[str] | None, exclude: Collection[str]
+) -> tuple[str, str, str] | None:
     with sessions.begin() as db:
-        job = services.claim_job(db, at=at)
+        job = services.claim_job(db, at=at, kinds=kinds, exclude=exclude)
         return (job.id, job.kind, job.key) if job is not None else None
 
 
@@ -79,11 +98,45 @@ def _finish(sessions: SessionFactory, job_id: str, ok: bool, message: str, at: d
         services.finish_job(db, job_id, ok=ok, message=message, at=at)
 
 
-async def run_due(sessions: SessionFactory, lock: asyncio.Lock, *, clock: Clock = utcnow) -> int:
-    """Queue the syncs whose schedule is due, then run every job that is due; returns how many ran."""
+def _lanes(locks: JobLocks) -> list[tuple[asyncio.Lock, Collection[str] | None, Collection[str]]]:
+    """``(lock, kinds, excluded kinds)`` for each lane; the last takes every kind the others do not."""
+    named = [  # Alerts first: when lanes take turns, the most time-sensitive work goes first.
+        (locks.alerts, (services.ALERT_DELIVERY,)),
+        (locks.sync, (services.SOURCE_SYNC,)),
+        (locks.lookup, (services.CVE_LOOKUP,)),
+    ]
+    known = [kind for _, kinds in named for kind in kinds]
+    return [(lock, kinds, ()) for lock, kinds in named] + [(locks.other, None, known)]
+
+
+async def run_due(sessions: SessionFactory, locks: JobLocks | asyncio.Lock, *, clock: Clock = utcnow) -> int:
+    """Queue the syncs whose schedule is due, then run every job that is due, the lanes side by side;
+    returns how many ran. A bare lock is the sync lane's (the other lanes then get their own)."""
+    if isinstance(locks, asyncio.Lock):
+        locks = JobLocks(sync=locks)
     await asyncio.to_thread(_queue_due, sessions, clock())
+    lanes = _lanes(locks)
+    if shares_one_connection(sessions):  # In-memory SQLite: one connection, so the lanes take turns.
+        return sum([await _run_lane(sessions, *lane, clock) for lane in lanes])
+    results = await asyncio.gather(
+        *(_run_lane(sessions, lock, kinds, exclude, clock) for lock, kinds, exclude in lanes),
+        return_exceptions=True,
+    )
+    for result in results:
+        if isinstance(result, BaseException):
+            raise result
+    return sum(r for r in results if isinstance(r, int))
+
+
+async def _run_lane(
+    sessions: SessionFactory,
+    lock: asyncio.Lock,
+    kinds: Collection[str] | None,
+    exclude: Collection[str],
+    clock: Clock,
+) -> int:
     ran = 0
-    while (claimed := await asyncio.to_thread(_claim, sessions, clock())) is not None:
+    while (claimed := await asyncio.to_thread(_claim, sessions, clock(), kinds, exclude)) is not None:
         job_id, kind, key = claimed
         async with lock:
             try:
@@ -119,7 +172,7 @@ def _recover(sessions: SessionFactory) -> int:
 
 async def run_forever(
     sessions: SessionFactory,
-    lock: asyncio.Lock,
+    lock: JobLocks | asyncio.Lock,
     stop: asyncio.Event,
     *,
     tick: float = TICK_SECONDS,

@@ -22,7 +22,7 @@ SERVICE_MODULES = sorted((PACKAGE / 'services').glob('*.py'))
 SQL_BUILDERS = {'select', 'insert', 'update', 'delete', 'func', 'or_', 'and_', 'text'}
 ORM_CLASSES = {'Document', 'Entity', 'Observation', 'Note', 'AuditEvent', 'KEVRecord', 'WatchTerm'}
 ORM_CLASSES |= {'SourceRun', 'Enrichment', 'ApiKey', 'Job', 'Schedule', 'FetchState', 'EntityAssessment'}
-ORM_CLASSES |= {'DocumentTechnique', 'SourceSwitch'}
+ORM_CLASSES |= {'DocumentTechnique', 'SourceSwitch', 'LookupFailure'}
 
 
 def imports(path: Path) -> list[tuple[str, str]]:

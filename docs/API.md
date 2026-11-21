@@ -15,7 +15,7 @@ page is the field-by-field reference.
    HttpOnly, SameSite=Strict).
 2. `POST /login` (form fields `csrf_token`, `password`, and `otp` when MFA is on) → `303` to `/` on
    success; `401` wrong password or authentication code (one message for both); `403` bad or missing CSRF
-   token; `429` throttled (more than 30 failures per minute; each failure waits ~1 s); `503` MFA is on but no
+   token; `429` a wrong password after 30 failures in the last minute (each failure waits ~1 s; the right password always signs in); `503` MFA is on but no
    authenticator app is paired (sign-in locked). MFA is off by default (`INSIGHT_MFA=on` or `make mfa-enable`
    turns it on); then `otp` is the 6-digit code from the app, and each code works once.
 3. `GET /api/session` → `{"csrf_token": "…"}`. Send it as `X-CSRF-Token` on **every non-GET** API request.
@@ -52,6 +52,7 @@ Minimal client:
 
 ```python
 import re, httpx
+
 c = httpx.Client(base_url='http://127.0.0.1:8080')
 token = re.search(r'name="csrf_token" value="([^"]+)"', c.get('/login').text).group(1)
 c.post('/login', data={'csrf_token': token, 'password': PASSWORD})
@@ -81,6 +82,7 @@ a URL or a repository. Send it on every request:
 
 ```python
 import httpx
+
 c = httpx.Client(base_url='https://insight.example.org', headers={'Authorization': f'Bearer {API_KEY}'})
 iocs = c.get('/api/iocs/export', params={'max_tlp': 'GREEN', 'review_status': 'accepted'}).json()
 ```
@@ -233,7 +235,9 @@ encode it for you.
 Example (using the client above):
 
 ```python
-r = c.get('/api/iocs/export', params=[('kind', 'ip'), ('kind', 'domain'), ('max_tlp', 'GREEN'), ('defang', 'true')])
+r = c.get(
+    '/api/iocs/export', params=[('kind', 'ip'), ('kind', 'domain'), ('max_tlp', 'GREEN'), ('defang', 'true')]
+)
 export = r.json()  # export['tlp'], export['counts'], export['iocs']
 ```
 
@@ -294,7 +298,9 @@ these hold:
 - the verdict's own TLP label is within your limit.
 
 `format=txt` (default): one value per line, sorted, never defanged. `format=csv`: `value,kind,decided_at,
-expires_at,tlp` with a header row. Audited as `ioc.blocklist`; shares the `ioc-export` budget.
+expires_at,tlp` with a header row; a cell that would start with `=`, `+`, `-`, `@`, a tab or a carriage return
+gets a leading `'` so spreadsheets never run it as a formula (code review N1). Audited as `ioc.blocklist`; shares
+the `ioc-export` budget.
 
 ## Entities
 
@@ -409,8 +415,8 @@ makes one), so repeated coverage must not be interpreted as an increase in attac
 | `GET /api/landscape?days=7` | The threat landscape that opens the workspace ([ADR 0020](adr/0020-threat-landscape.md)), built from the data (no AI). `days` 1-30 (default 7); the period is compared with the 4 periods before it. `{days, since, compared_since, compared_periods, tlp, reports, sources, summary: [sentence], caveats: [sentence], threats: [threat], quieter: [threat], tactics: [tactic], brief}`. A threat is `{key, name, change: {label, current, usual}, sources, what, impact, check, reports: [{text, document_id}], words, techniques}`; `label` is `rising`, `new`, `steady`, `quieter` or `no-history` (nothing before the period to compare with); `usual` is reports per period before, `null` without history. A tactic is `{shortname, name, plain, change, techniques: [[id, name, reports]]}`. `brief` is the intel brief below for the same period. `tlp` is the most restrictive label of the reports counted: share no wider. Built only from reports the caller may see (TLP limit) |
 | `GET /api/landscape/briefing?days=7` | The same as a Markdown briefing (`text/markdown`, attachment `insight-threat-landscape-7d.md`), marked with its TLP on the first and last lines; text from reports is escaped. Audited as `landscape.briefing` |
 | `GET /api/audit` | Latest 200 audit events: `{action, object_id, detail, actor, created_at}`. Not available to TLP-limited keys |
-| `GET /api/watch-terms` | `[{id, term}]` |
-| `POST /api/demo` | `{"created": n}`; loads the synthetic demo, idempotent |
+| `GET /api/watch-terms` | `[{id, term}]`. Not available to TLP-limited keys: terms often name clients or internal systems |
+| `POST /api/demo` | `{"created": n}`; loads the synthetic demo, idempotent. **Browser session only** (API keys get `403`: scripts must not add practice data to a real dataset); reports above `INSIGHT_MAX_TLP` are left out |
 | `GET /health` | `{"status": "ok", "version": "…"}`, no authentication required |
 
 Audit `actor`: `operator` (browser session or workspace), `api-key:<key ID>`, `cli`, `connector:<source key>`,

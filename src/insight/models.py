@@ -355,6 +355,19 @@ class SourceSwitch(Base):
     actor: Mapped[str] = mapped_column(String(80), default='')
 
 
+class LookupFailure(Base):
+    """A CVE a provider could not answer for (review M2): it is not looked up by itself again until
+    ``retry_at`` (1 hour after the first failure, doubling up to 7 days), so it cannot hold up the rest."""
+
+    __tablename__ = 'lookup_failures'
+    provider: Mapped[str] = mapped_column(String(10), primary_key=True)
+    cve: Mapped[str] = mapped_column(String(40), primary_key=True)
+    failures: Mapped[int] = mapped_column(default=1)
+    message: Mapped[str] = mapped_column(String(200), default='')
+    failed_at: Mapped[str] = mapped_column(String(40), default=now)
+    retry_at: Mapped[str] = mapped_column(String(40), index=True)
+
+
 class FetchState(Base):
     """What a source URL returned last time, so the next fetch can be skipped when nothing changed.
 
@@ -377,6 +390,13 @@ SessionFactory: TypeAlias = sessionmaker[Session]
 
 def _is_memory_sqlite(url: str) -> bool:
     return url in {'sqlite://', 'sqlite:///:memory:'} or 'mode=memory' in url
+
+
+def shares_one_connection(factory: SessionFactory) -> bool:
+    """Whether every session of ``factory`` uses the same connection (in-memory SQLite), which two threads
+    must never use at once: the job runner's lanes then take turns instead of running side by side (L5)."""
+    engine = factory.kw.get('bind')
+    return isinstance(getattr(engine, 'pool', None), StaticPool)
 
 
 def database(url: str, *, migrate: bool = True) -> tuple[Engine, SessionFactory]:

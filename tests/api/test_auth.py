@@ -7,6 +7,7 @@ import base64
 import contextlib
 import dataclasses
 import hashlib
+import hmac
 import json
 import logging
 import re
@@ -23,7 +24,7 @@ from sqlalchemy import select
 
 from insight import __version__, main, services
 from insight.config import Settings
-from insight.models import AuditEvent, OperatorSession
+from insight.models import AuditEvent, Document, OperatorSession
 
 CSRF = re.compile(r'name="csrf_token"[^>]*value="([^"]+)"')
 
@@ -256,18 +257,53 @@ def test_expired_session_is_rejected(
     assert authed.get('/api/session').status_code == 401
 
 
-def test_failed_logins_are_throttled_then_recover(
-    client: TestClient, csrf_token_from: Callable[[str], str], monkeypatch: pytest.MonkeyPatch
+def test_the_backstop_refuses_wrong_passwords_then_recovers(
+    app: FastAPI, client: TestClient, csrf_token_from: Callable[[str], str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     token = csrf_token_from(client.get('/login').text)
+    bad = {'csrf_token': token, 'password': 'bad'}
     for _ in range(main.LOGIN_MAX_FAILURES):
-        assert client.post('/login', data={'csrf_token': token, 'password': 'bad'}).status_code == 401
-    # Even the correct password is refused while throttled.
-    good = {'csrf_token': token, 'password': 'longtestpassword'}
-    assert client.post('/login', data=good).status_code == 429
+        assert client.post('/login', data=bad).status_code == 401
+    refused = client.post('/login', data=bad)
+    assert (refused.status_code, refused.json()) == (
+        429,
+        {'detail': 'Too many login attempts; wait one minute'},
+    )
+    assert len(app.state.failures) == main.LOGIN_MAX_FAILURES  # bounded while the flood goes on
     real_time = time.time
     monkeypatch.setattr(time, 'time', lambda: real_time() + main.LOGIN_WINDOW_SECONDS + 1)
-    assert client.post('/login', data=good).status_code == 303
+    assert client.post('/login', data=bad).status_code == 401
+
+
+def test_regression_m1_a_flood_of_failures_cannot_lock_the_operator_out(
+    app: FastAPI, csrf_token_from: Callable[[str], str]
+) -> None:
+    """Review M1: 30 wrong passwords from one client made the right password from another client get 429."""
+    attacker = TestClient(app, follow_redirects=False)
+    token = csrf_token_from(attacker.get('/login').text)
+    for _ in range(main.LOGIN_MAX_FAILURES + 5):
+        assert attacker.post('/login', data={'csrf_token': token, 'password': 'bad'}).status_code in (
+            401,
+            429,
+        )
+    operator = TestClient(app, follow_redirects=False)
+    good = {'csrf_token': csrf_token_from(operator.get('/login').text), 'password': 'longtestpassword'}
+    response = operator.post('/login', data=good)
+    assert (response.status_code, response.headers['location']) == (303, '/')
+
+
+def test_regression_l4_the_demo_stays_within_the_instance_tlp_limit(
+    settings: Settings, login: Callable[..., str]
+) -> None:
+    """Review L4: the demo's AMBER+STRICT report was stored even with INSIGHT_MAX_TLP=GREEN."""
+    app = main.create_app(dataclasses.replace(settings, max_tlp='GREEN'), with_ui=False)
+    with TestClient(app, follow_redirects=False) as client:
+        login(client)
+        csrf = client.get('/api/session').json()['csrf_token']
+        assert client.post('/api/demo', headers={'X-CSRF-Token': csrf}).json() == {'created': 2}
+        with app.state.session_factory() as db:
+            labels = set(db.scalars(select(Document.tlp)))
+    assert labels == {'CLEAR', 'GREEN'}
 
 
 def test_login_form_field_limit(client: TestClient, csrf_token_from: Callable[[str], str]) -> None:
@@ -290,22 +326,31 @@ def test_operator_is_not_locked_out_by_a_handful_of_failures(
     assert client.post('/login', data=good).status_code == 303
 
 
-async def test_failed_sign_ins_are_delayed_and_checked_one_at_a_time(settings: Settings) -> None:
-    delay = 0.2
+async def test_every_failure_waits_but_the_operator_never_waits_behind_them(settings: Settings) -> None:
+    """Review M1: the delay used to run while the sign-in lock was held, so the operator's attempt queued
+    behind every pending bad guess. Each failure still waits; a right password answers at once."""
+    delay = 0.5
     app = main.create_app(dataclasses.replace(settings, failed_login_delay=delay), with_ui=False)
     async with (
         app.router.lifespan_context(app),
         httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url='http://testserver') as client,
     ):
         token = csrf_from((await client.get('/login')).text)
-        started = time.perf_counter()
-        responses = await asyncio.gather(
-            *(client.post('/login', data={'csrf_token': token, 'password': f'bad{i}'}) for i in range(3))
-        )
-        elapsed = time.perf_counter() - started
-    assert [r.status_code for r in responses] == [401, 401, 401]
-    # Serialised: three concurrent guesses take at least three delays, not one.
-    assert elapsed >= 3 * delay * 0.9
+
+        async def timed(password: str) -> tuple[int, float]:
+            started = time.perf_counter()
+            response = await client.post('/login', data={'csrf_token': token, 'password': password})
+            return response.status_code, time.perf_counter() - started
+
+        async def operator() -> tuple[int, float]:
+            await asyncio.sleep(0.05)  # after the guesses have started their delays
+            return await timed('longtestpassword')
+
+        results = await asyncio.gather(*(timed(f'bad{i}') for i in range(5)), operator())
+    *guesses, (status, waited) = results
+    assert all(code == 401 and took >= delay * 0.9 for code, took in guesses)
+    assert status == 303
+    assert waited < delay  # not behind five delays, nor one
 
 
 def test_failed_sign_ins_are_logged_without_the_password(
@@ -319,3 +364,31 @@ def test_failed_sign_ins_are_logged_without_the_password(
     assert any('Failed sign-in attempt' in m for m in messages)
     assert any('Operator signed in' in m for m in messages)
     assert not any('hunter2' in m or 'longtestpassword' in m for m in messages)
+
+
+@pytest.mark.parametrize(
+    ('supplied', 'same'),
+    [
+        ('longtestpassword', True),
+        ('longtestpasswor', False),
+        ('', False),
+        ('longtestpassword!', False),
+        ('ü', False),
+    ],
+)
+def test_regression_n4_the_password_check_compares_fixed_length_digests(
+    supplied: str, same: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review N4: compare_digest on the raw values leaked the password's length through timing."""
+    from insight.web import auth
+
+    lengths: list[tuple[int, int]] = []
+    real = hmac.compare_digest
+
+    def spy(a: bytes, b: bytes) -> bool:
+        lengths.append((len(a), len(b)))
+        return bool(real(a, b))
+
+    monkeypatch.setattr('insight.web.auth.hmac.compare_digest', spy)
+    assert auth.same_secret(supplied, 'longtestpassword') is same
+    assert lengths == [(32, 32)]

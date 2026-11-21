@@ -2,8 +2,8 @@
 
 ## Unreleased
 
-**Upgrading from 0.6.0:** migrations `0009` (ATT&CK technique tags), `0010` (source switches) and `0011`
-(alerts) run at start-up, or with `make migrate`. Reports stored before the upgrade get their technique tags when you run
+**Upgrading from 0.6.0:** migrations `0009` (ATT&CK technique tags), `0010` (source switches), `0011`
+(alerts) and `0012` (CVE lookup failures) run at start-up, or with `make migrate`. Reports stored before the upgrade get their technique tags when you run
 `make attack-backfill` once (safe to run again). The new threat-research sources start switched off: Insight
 contacts no new host until you switch one on. **Exports change for SANS ISC and NCSC reports:** their text and
 evidence are no longer included (their publishers allow metadata only). Every 0.6.0 API field is unchanged; new
@@ -15,6 +15,50 @@ CVEs in reports they can see; starting a lookup stays refused to them. The new p
 - An empty field showed its label and its example on top of each other (for example "Watch term" over
   "e.g. Palo Alto, VPN, identity"). The example now appears only once the label has moved up, as the
   framework intends; the readable colour of examples is unchanged.
+
+### Security: fixes from the 2026-11-21 code review
+- **M1, sign-in lockout:** 30 wrong passwords a minute from anyone used to refuse every sign-in, the right
+  password included, and the operator's attempt waited behind every pending bad guess. The backstop now
+  refuses only wrong passwords (still after the 1 s delay), and the delay no longer holds the check lock
+  ([ADR 0002](docs/adr/0002-login-delay-not-lockout.md)).
+- **M2, one bad CVE could stop NVD scoring:** a CVE NVD cannot answer for is now set aside with a growing wait
+  (1 hour, doubling up to 7 days) while the rest of the batch goes on; the job fails only when every CVE in it
+  failed or the provider itself is unavailable. Migration `0012` adds `lookup_failures`
+  ([ADR 0023](docs/adr/0023-automatic-cve-lookups.md)).
+- **M3, the image's Python was not fully tested:** the container ships Python 3.15 (a Dependabot bump), but
+  pull requests ran the full suite on 3.11 and 3.14 only. 3.15 is now in the test matrix and the package
+  classifiers. Add `Tests (Python 3.15, SQLite)` to the required checks on `main` (docs/CI_CD.md).
+- **L1, DNS rebinding (TIP 0.4):** source syncs, CVE lookups and alert webhooks resolved a host to check it and
+  again to connect, so a changing DNS answer could reach loopback, a private network or cloud metadata. They
+  now connect to the checked address, keeping the host name for TLS and the `Host` header, and judge
+  IPv4-mapped IPv6 addresses (`::ffff:127.0.0.1`) by the address they reach.
+- **L2, plain-text TOTP seed (not fixed yet):** encrypting the authenticator seed at rest needs the
+  `cryptography` package, which has to be added through the lock workflow first. Tracked by a strict
+  expected-failure test and documented in docs/SECURITY.md; protect backups like `.env` meanwhile.
+- **L3, watch terms for TLP-limited keys:** `GET /api/watch-terms` is now refused (`403`) to TLP-limited API
+  keys, like the audit log: terms often name clients, internal hosts or sensitive projects.
+- **L4, the demo through an API key:** `POST /api/demo` is now for browser sessions only (keys get `403`), and
+  the demo leaves out reports above `INSIGHT_MAX_TLP` instead of storing its AMBER+STRICT report past the limit.
+- **L5, one lock for every background job:** source syncs, CVE lookups and alert deliveries shared the sync
+  lock, so a lookup batch made *Sync all* answer `409` and alerts waited behind long syncs. They now run in
+  separate lanes, side by side, each with its own lock; only syncs share the lock of *Sync now*
+  ([ADR 0018](docs/adr/0018-opt-in-scheduled-syncs.md)).
+- **L6, downloads without an overall time limit:** the 25 s timeout applied to each read, so a server sending a
+  little data every 24 s could stretch one sync out for hours. Every download now stops after 120 seconds and is
+  recorded as a failed fetch.
+- **L7, CI images pinned by tag:** gitleaks (with the repository mounted), ZAP (on the host network) and the
+  rehearsal's registry now run from digests, and `scripts/check_pins.py` fails on any third-party `docker run`
+  image that is not pinned by digest. Dependabot does not update these; docs/CI_CD.md says how to.
+- **N1, spreadsheet formulas in the blocklist CSV:** a cell starting with `=`, `+`, `-`, `@`, a tab or a carriage
+  return now gets a leading `'`, so a spreadsheet shows it as text.
+- **N2, the CVE due list:** the 15-second check for CVEs to look up now filters in the database (`NOT EXISTS`,
+  `LIMIT`) instead of loading every CVE and cache row.
+- **N3, a stale gitleaks exemption:** the test's fake API key carries an inline `gitleaks:allow`, so scans of
+  the working tree stay clean wherever the line moves; the history fingerprint stays for `gitleaks detect`.
+- **N4, the password's length:** sign-in compares SHA-256 digests of the password instead of the raw values, so
+  response times no longer hint at its length.
+- **N5, formatting:** the Python examples in docs/ALERTS.md, docs/API.md and docs/LLM_EXTENSION.md are
+  formatted, so `ruff format --check .` passes on the whole repository.
 
 ### Changed: a clearer executive brief (from #39)
 - Keep the **Insight** name and symbol; use **Cyber Threat Intelligence Feed** as the tagline and remove

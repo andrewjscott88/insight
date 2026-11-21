@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from insight import connectors, jobs, lookups, services
 from insight.connectors import ProviderError, fetch_provider_json
 from insight.lookups import THROTTLES, LookupThrottled, Throttle, look_up_due, request_lookup
-from insight.models import AuditEvent, Document, Enrichment, Job, Observation
+from insight.models import AuditEvent, Document, Enrichment, Job, LookupFailure, Observation
 from insight.schemas import DocumentInput
 from insight.services import CVE_LOOKUP, ingest
 from insight.services.common import stamp
@@ -63,10 +63,14 @@ def cached(factory: sessionmaker[Session]) -> dict[tuple[str, str], Any]:
 class FakeProvider:
     """Answers like NVD or EPSS and records each request's parameters and headers."""
 
-    def __init__(self, answers: dict[str, Any] | None = None, fail_on: str = '') -> None:
+    def __init__(
+        self, answers: dict[str, Any] | None = None, fail_on: str = '', status: dict[str, int] | None = None
+    ) -> None:
         self.calls: list[tuple[str, dict[str, str], dict[str, str]]] = []
         self.answers = answers or {}
         self.fail_on = fail_on
+        #: CVE -> the HTTP status NVD answers with for it.
+        self.status = status or {}
 
     async def __call__(self, url: str, params: Any = None, headers: Any = None, **_: Any) -> bytes:
         self.calls.append((url, dict(params or {}), dict(headers or {})))
@@ -77,6 +81,9 @@ class FakeProvider:
             ).encode()
         if params['cveId'] == self.fail_on:
             raise httpx.ConnectError('offline')
+        if code := self.status.get(params['cveId']):
+            response = httpx.Response(code, request=httpx.Request('GET', url))
+            raise httpx.HTTPStatusError('refused', request=response.request, response=response)
         return json.dumps({'vulnerabilities': [{'cve': {'id': params['cveId']}}]}).encode()
 
 
@@ -345,3 +352,101 @@ def test_cve_scores_reads_many_cves_in_chunks(session_factory: sessionmaker[Sess
     assert sorted(found) == [cves[0], cves[-1]]
     assert found[cves[-1]].nvd is None
     assert found[cves[-1]].nvd_checked_at
+
+
+# --------------------------------------------------------------------------- review M2: one bad CVE
+
+
+TEN = [f'CVE-2024-{n:04d}' for n in range(1001, 1011)]
+
+
+def failures(factory: sessionmaker[Session]) -> dict[str, tuple[int, str]]:
+    with factory() as db:
+        return {f.cve: (f.failures, f.retry_at) for f in db.scalars(select(LookupFailure))}
+
+
+async def test_regression_m2_one_failing_cve_does_not_stop_the_batch(
+    session_factory: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch, sleeps: list[float]
+) -> None:
+    report(session_factory, ' '.join(TEN))
+    provider = FakeProvider(status={TEN[0]: 404})
+    monkeypatch.setattr(connectors, 'download', provider)
+    message = await look_up_due(session_factory, 'nvd', clock=lambda: NOW)
+    assert message == (
+        'Looked up 9 CVEs at NIST NVD; 1 CVE could not be answered and will be tried again later.'
+    )
+    assert sorted(cve for cve, _ in cached(session_factory)) == TEN[1:]
+    assert failures(session_factory) == {TEN[0]: (1, stamp(NOW + timedelta(hours=1)))}
+
+
+async def test_regression_m2_a_failing_cve_waits_longer_each_time_and_is_forgotten_once_answered(
+    session_factory: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch, sleeps: list[float]
+) -> None:
+    report(session_factory, 'CVE-2024-1001 CVE-2024-1002')
+    monkeypatch.setattr(connectors, 'download', FakeProvider(status={'CVE-2024-1001': 404}))
+    await look_up_due(session_factory, 'nvd', clock=lambda: NOW)
+    with session_factory() as db:
+        assert services.cves_to_look_up(db, 'nvd', at=NOW, limit=10) == []  # 1002 cached, 1001 waits
+        later = NOW + timedelta(hours=1, minutes=1)
+        assert services.cves_to_look_up(db, 'nvd', at=later, limit=10) == ['CVE-2024-1001']
+        assert services.lookup_failures(db, at=NOW) == {'epss': 0, 'nvd': 1}
+    second = NOW + timedelta(hours=2)
+    with pytest.raises(ProviderError, match='NIST NVD could not answer for any of 1 CVE'):
+        await look_up_due(session_factory, 'nvd', clock=lambda: second)
+    assert failures(session_factory)['CVE-2024-1001'] == (2, stamp(second + timedelta(hours=2)))
+    with session_factory.begin() as db:
+        for _ in range(20):
+            services.record_lookup_failure(db, 'nvd', 'CVE-2024-1001', 'x', at=second)
+    assert failures(session_factory)['CVE-2024-1001'][1] == stamp(second + timedelta(days=7))  # capped
+    monkeypatch.setattr(connectors, 'download', FakeProvider())
+    await look_up_due(session_factory, 'nvd', clock=lambda: second + timedelta(days=8))
+    assert failures(session_factory) == {}
+
+
+async def test_regression_m2_a_batch_that_fails_entirely_still_fails_the_job(
+    session_factory: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch, sleeps: list[float]
+) -> None:
+    report(session_factory, 'CVE-2024-1001 CVE-2024-1002')
+    switch_on(session_factory, 'nvd')
+    status = {'CVE-2024-1001': 404, 'CVE-2024-1002': 400}
+    monkeypatch.setattr(connectors, 'download', FakeProvider(status=status))
+    assert await jobs.run_due(session_factory, asyncio.Lock(), clock=lambda: datetime.now(UTC)) == 1
+    with session_factory() as db:
+        (job,) = db.scalars(select(Job).where(Job.kind == CVE_LOOKUP))
+        assert job.message == 'ProviderError: NIST NVD could not answer for any of 2 CVEs.'
+
+
+@pytest.mark.parametrize('code', [429, 403, 401, 500, 503])
+async def test_regression_m2_a_problem_with_the_provider_stops_the_job_without_blaming_a_cve(
+    session_factory: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch, sleeps: list[float], code: int
+) -> None:
+    report(session_factory, 'CVE-2024-1001 CVE-2024-1002')
+    provider = FakeProvider(status={'CVE-2024-1001': code, 'CVE-2024-1002': code})
+    monkeypatch.setattr(connectors, 'download', provider)
+    with pytest.raises(ProviderError, match=f'NVD answered HTTP {code}'):
+        await look_up_due(session_factory, 'nvd', clock=lambda: NOW)
+    assert len(provider.calls) == 1  # stopped at the first answer
+    assert failures(session_factory) == {}
+
+
+def test_regression_n2_the_due_list_is_one_query_with_a_real_limit(
+    session_factory: sessionmaker[Session], count_queries: Any
+) -> None:
+    """Review N2: each 15 s tick loaded every CVE and every fresh cache row, then dropped most of them."""
+    report(session_factory, ' '.join(f'CVE-2024-{n:04d}' for n in range(1001, 1031)))
+    for n in range(1001, 1011):  # 10 answered recently, 5 waiting after a failure
+        cache(session_factory, f'CVE-2024-{n:04d}', 'nvd', {}, NOW)
+    with session_factory.begin() as db:
+        for n in range(1011, 1016):
+            services.record_lookup_failure(db, 'nvd', f'CVE-2024-{n:04d}', 'x', at=NOW)
+    with session_factory() as db:
+        engine = db.get_bind()
+        with count_queries(engine) as statements:
+            due = services.cves_to_look_up(db, 'nvd', at=NOW, limit=3)
+        assert len(statements) == 1
+        assert 'NOT (EXISTS' in statements[0]
+        assert 'LIMIT' in statements[0]
+        assert due == ['CVE-2024-1016', 'CVE-2024-1017', 'CVE-2024-1018']
+        with count_queries(engine) as statements:
+            assert services.lookup_backlog(db, at=NOW) == {'epss': 30, 'nvd': 15}
+        assert len(statements) == 2  # one count per provider

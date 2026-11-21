@@ -36,11 +36,17 @@ def build_lookup_switches(ws: Workspace) -> None:
         with ws.read() as db:
             switches = services.lookup_switches(db)
             waiting = services.lookup_backlog(db, at=datetime.now(UTC))
+            failed = services.lookup_failures(db, at=datetime.now(UTC))
         for provider in ('nvd', 'epss'):
             if switches[provider]:
                 count = waiting[provider]
                 text = 'all looked up' if not count else f'{count} CVE(s) waiting, newest reports first'
                 ui.label(f'{NAMES[provider]}: {text}').classes('muted text-sm')
+                if failed[provider]:
+                    ui.label(
+                        f'{NAMES[provider]} could not answer for {failed[provider]} CVE(s). Insight will try '
+                        'them again later, waiting longer each time.'
+                    ).classes('muted text-sm prose')
 
     with ws.read() as db:
         switches = services.lookup_switches(db)

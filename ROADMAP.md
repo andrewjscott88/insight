@@ -38,7 +38,8 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
       sessions, opt-in schedules and the job runner.
 - [ ] **TIP 0.3 Safer public-deploy defaults.** Stronger start-up warnings when Insight is internet-facing, and an
       optional `INSIGHT_REQUIRE_HARDENED=1` that refuses to start without secure cookies and MFA.
-- [ ] **TIP 0.4 Pin connector connections to the checked DNS addresses,** closing the DNS-rebinding gap.
+- [x] **TIP 0.4 Pin connector connections to the checked DNS addresses,** closing the DNS-rebinding gap (code
+      review L1): source syncs, CVE lookups and alert webhooks connect to the address they checked.
 - [ ] **TIP 0.5 `/health` without the version;** the version moves behind sign-in.
 - [ ] **TIP 0.6 Encrypt the TOTP secret at rest,** migrating existing rows.
 - [x] **Review B2 Throttles into one place** ([ADR 0023](docs/adr/0023-automatic-cve-lookups.md)): one throttle

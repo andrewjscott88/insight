@@ -126,7 +126,7 @@ def build_inbox(ws: Workspace) -> None:
         if not ws.authorized():
             return
         with ws.write() as db:
-            added = seed(db)
+            added = seed(db, max_tlp=ws.app.state.settings.max_tlp)
             newest = services.search_documents(db, services.DocumentQuery(limit=1))
             state.selected = newest[0].id if newest else None
         ws.refresh_all()

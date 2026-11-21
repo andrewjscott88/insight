@@ -515,7 +515,7 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
 - [ ] **0.1** Live deployment: anonymous `/` is 303 `/login`; public `.env` uses secure cookies, allowed hosts, trusted proxies, preferably MFA
 - [x] **0.2** Fix `README.md:74` and `:212`, `docs/ARCHITECTURE.md:130-132`, and mark roadmap #10 done
 - [ ] **0.3** Stronger startup warnings / optional `INSIGHT_REQUIRE_HARDENED` for internet-facing installs
-- [ ] **0.4** Pin connector connections to DNS addresses already checked as public
+- [x] **0.4** Pin connector connections to DNS addresses already checked as public (code review L1)
 - [ ] **0.5** `/health` no longer returns the version; version is authenticated
 - [ ] **0.6** Encrypt TOTP secrets at rest; migrate legacy rows
 

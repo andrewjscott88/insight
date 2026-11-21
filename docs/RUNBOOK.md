@@ -242,9 +242,10 @@ the GUI meets is [ADR 0017](adr/0017-readability-standard.md).
 `cli`, `connector:<source>` or `system`. Events from before schema revision `0005` have an empty actor.
 
 ### Sign-in throttling (expected behaviour)
-Each failed sign-in waits about 1 s, and sign-ins are checked one at a time. More than 30 failures in one
-minute returns HTTP 429 for the rest of that minute. A legitimate operator can always sign in again after the
-window; there is no lockout.
+Each failed sign-in waits about 1 s before it is answered. After 30 failures in one minute, wrong passwords
+get HTTP 429 for the rest of that minute (still after the delay), and the log says `Sign-in refused`. The right
+password always signs in, even during a flood of bad guesses ([ADR 0002](adr/0002-login-delay-not-lockout.md)):
+there is no lockout.
 
 ## 5. Backup and restore
 
@@ -384,11 +385,13 @@ pauses for an hour, then tries again by itself.
 | `Unchanged since the last sync.` (success) | The publisher's feed has not changed since the last successful sync | Nothing to do; nothing was re-imported. |
 | `ValueError: The CSAF index lists no advisories` / `None of the N newest CSAF advisories could be read` | CISA moved or changed its CSAF repository | Nothing was imported. Report it; the nightly live tests should also flag it. |
 | `OSError` / `ConnectError` | No network or DNS | Check host egress (an egress firewall is recommended) |
+| `TimeoutError: The download took longer than 120 seconds` | The publisher answered too slowly (every download has an overall limit, review L6) | Retry later; nothing was imported |
 | Lookup `429` / *Wait N more second(s)* | The provider's window is taken, possibly by Insight's own automatic lookups | Wait the seconds shown |
 | Lookup `502 … non-JSON` | Provider outage or HTML error page | Retry later |
 | Lookup job `NVD answered HTTP 403/404 (check INSIGHT_NVD_API_KEY)` | NVD refused the key (mistyped, revoked or expired) | Fix or remove `INSIGHT_NVD_API_KEY` and restart; jobs resume within an hour |
 | Lookup job `NVD answered HTTP 403` (no key hint) | NVD's rate limit without a key, often another tool on the same address | It retries by itself; a key avoids it |
 | Lookup job `… request failed: ConnectError` | No network or DNS | Check host egress; allow `services.nvd.nist.gov` and `api.first.org` |
+| Lookup job `Looked up N CVEs …; M could not be answered` / Sources tab *could not answer for M CVE(s)* | NVD refused those CVEs (for example a CVE number a report got wrong) | Nothing to do: each is tried again after 1 hour, then 2, 4 … up to 7 days, without holding up the rest |
 
 **CISA Security Advisories** (`cisa-csaf`) reads CISA's machine-readable CSAF 2.0 files from its GitHub
 repository (`raw.githubusercontent.com/cisagov/CSAF`): the `changes.csv` index of the OT (industrial control

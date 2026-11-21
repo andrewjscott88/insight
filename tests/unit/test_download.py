@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import socket
 from collections.abc import AsyncIterator, Callable
 from typing import Any
@@ -129,3 +130,44 @@ async def test_dns_failure_propagates() -> None:
     # The autouse guard makes getaddrinfo raise OSError, exactly like a resolver outage.
     with pytest.raises(OSError, match='disabled'):
         await download(KEV_URL)
+
+
+@pytest.mark.usefixtures('public_dns')
+async def test_regression_l6_a_slow_drip_hits_the_overall_deadline(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Review L6: the 25 s timeout applies to each read, so a server dripping data stretched a sync out."""
+    monkeypatch.setattr(connectors, 'DOWNLOAD_DEADLINE', 0.3)
+
+    async def drip() -> AsyncIterator[bytes]:
+        while True:  # a byte every 0.1 s: each read is quick, the whole never ends
+            yield b'x'
+            await asyncio.sleep(0.1)
+
+    slow = httpx.MockTransport(lambda request: httpx.Response(200, content=drip()))
+    started = asyncio.get_running_loop().time()
+    with pytest.raises(TimeoutError, match=r'longer than 0\.3 seconds'):
+        await download(KEV_URL, transport=slow)
+    assert asyncio.get_running_loop().time() - started < 2
+
+
+@pytest.mark.usefixtures('public_dns')
+async def test_a_slow_drip_is_recorded_as_a_failed_sync(
+    monkeypatch: pytest.MonkeyPatch, session_factory: Any
+) -> None:
+    monkeypatch.setattr(connectors, 'DOWNLOAD_DEADLINE', 0.2)
+
+    async def drip() -> AsyncIterator[bytes]:
+        while True:
+            yield b'x'
+            await asyncio.sleep(0.05)
+
+    real = connectors.download
+
+    async def slow_download(url: str, *args: Any, **kwargs: Any) -> bytes:
+        kwargs['transport'] = httpx.MockTransport(lambda request: httpx.Response(200, content=drip()))
+        return await real(url, *args, **kwargs)
+
+    monkeypatch.setattr(connectors, 'download', slow_download)
+    with pytest.raises(
+        connectors.SourceSyncError, match=r'TimeoutError: The download took longer than 0\.2 seconds'
+    ):
+        await connectors.sync_source(session_factory, 'sans-isc')

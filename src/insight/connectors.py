@@ -6,11 +6,9 @@ import asyncio
 import csv
 import hashlib
 import io
-import ipaddress
 import json
 import os
 import re
-import socket
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
@@ -24,7 +22,7 @@ from defusedxml import ElementTree
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from . import __version__
+from . import __version__, egress
 from .models import Enrichment, Entity, KEVRecord, SessionFactory, SourceRun, now
 from .schemas import DocumentInput
 from .services import SourceRef, get_fetch_state, ingest, save_fetch_state, set_actor, source_switches
@@ -38,6 +36,9 @@ from .source_registry import Source as Source
 from .source_registry import in_use
 
 MAX_BYTES: Final = 8_000_000
+#: Seconds one whole download may take (code review L6). ``httpx.Timeout(25)`` only limits each wait for data,
+#: so a server sending a little every 24 s could otherwise stretch one sync out for hours.
+DOWNLOAD_DEADLINE: Final = 120.0
 MAX_FEED_ITEMS: Final = 100
 MAX_FEED_SUMMARY: Final = 500
 MAX_KEV_ROWS: Final = 20_000
@@ -81,7 +82,19 @@ class ConnectorError(Exception):
 
 
 class ProviderError(ConnectorError):
-    """An upstream provider failed or returned something unusable (maps to HTTP 502)."""
+    """An upstream provider failed or returned something unusable (maps to HTTP 502).
+
+    ``provider_wide`` says whether the problem stops every lookup at the provider (no network, rate limit,
+    refused key, server error) or only concerns the one request's answer (review M2).
+    """
+
+    def __init__(self, message: str, *, provider_wide: bool = True) -> None:
+        super().__init__(message)
+        self.provider_wide = provider_wide
+
+
+#: HTTP answers that concern the whole provider, not one CVE: a refused key or rate limit, and server errors.
+PROVIDER_WIDE_STATUSES: Final = frozenset({401, 403, 429})
 
 
 class SourceSyncError(ConnectorError):
@@ -101,10 +114,21 @@ ALLOWED_HOSTS: Final[frozenset[str]] = frozenset(
 )
 
 
-async def _assert_public(hostname: str) -> None:
-    addresses = await asyncio.to_thread(socket.getaddrinfo, hostname, 443, 0, socket.SOCK_STREAM)
-    if not addresses or any(not ipaddress.ip_address(str(a[4][0])).is_global for a in addresses):
+async def _public_addresses(hostname: str) -> list[egress.IPAddress]:
+    """The addresses of ``hostname``, all of them public, or ``ValueError`` (review L1: the request then goes
+    to one of these exact addresses, so a second DNS answer cannot redirect it)."""
+    addresses = await egress.resolve(hostname, 443)
+    if not addresses or not all(egress.is_public(a) for a in addresses):
         raise ValueError('Source resolves to a non-public destination')
+    return addresses
+
+
+def _status_error(response: httpx.Response, url: str) -> httpx.HTTPStatusError:
+    """httpx's error for a failed answer, naming the host the operator knows rather than its address."""
+    code = response.status_code
+    kind = 'Client error' if code < 500 else 'Server error'
+    message = f"{kind} '{code} {response.reason_phrase}' for url '{url}'"
+    return httpx.HTTPStatusError(message, request=response.request, response=response)
 
 
 #: The run message when a source has not changed since its last successful sync.
@@ -152,36 +176,67 @@ async def download(
         port = -1
     if port not in (None, 443):
         raise ValueError('Outbound URL is not in the curated HTTPS source registry')
-    await _assert_public(parts.hostname)
+    addresses = await _public_addresses(parts.hostname)
     request_headers = {**(headers or {}), 'User-Agent': USER_AGENT, 'Accept-Encoding': 'identity'}
     if validators is not None and validators.etag:
         request_headers['If-None-Match'] = validators.etag
     if validators is not None and validators.last_modified:
         request_headers['If-Modified-Since'] = validators.last_modified
-    # Fixed application-owned hosts only. An egress firewall remains recommended against DNS rebinding.
-    async with (
-        httpx.AsyncClient(
-            timeout=httpx.Timeout(25), follow_redirects=False, trust_env=False, transport=transport
-        ) as client,
-        client.stream('GET', url, params=params, headers=request_headers) as response,
-    ):
-        if response.status_code == 304:
-            if validators is not None:
-                raise NotModified(url)
-            raise ValueError('The server answered 304 Not Modified to a request that asked for no validation')
-        # Check before raise_for_status(): httpx treats 3xx as an error, which would hide this message.
-        if response.is_redirect:
-            raise ValueError('Redirects are disabled; update the registry after reviewing the source')
-        response.raise_for_status()
+    # Fixed application-owned hosts only, reached at the addresses just checked (review L1).
+    try:
+        async with asyncio.timeout(DOWNLOAD_DEADLINE):
+            return await _fetch(url, addresses, params, request_headers, validators, transport)
+    except TimeoutError as exc:  # The overall deadline (L6); a normal fetch failure, recorded like any other.
+        raise TimeoutError(f'The download took longer than {DOWNLOAD_DEADLINE:g} seconds') from exc
+
+
+async def _fetch(
+    url: str,
+    addresses: list[egress.IPAddress],
+    params: Mapping[str, str] | None,
+    request_headers: dict[str, str],
+    validators: Validators | None,
+    transport: httpx.AsyncBaseTransport | None,
+) -> bytes:
+    async with httpx.AsyncClient(
+        timeout=httpx.Timeout(25), follow_redirects=False, trust_env=False, transport=transport
+    ) as client:
+        for index, address in enumerate(addresses):
+            target = egress.pin(url, address)
+            try:
+                async with client.stream(
+                    'GET',
+                    target.url,
+                    params=params,
+                    headers={**request_headers, **target.headers},
+                    extensions=target.extensions,
+                ) as response:
+                    return await _read(response, url, validators)
+            except httpx.ConnectError:
+                if index == len(addresses) - 1:  # Every checked address refused: report the last error.
+                    raise
+    raise AssertionError('unreachable')  # pragma: no cover - the loop returns or raises
+
+
+async def _read(response: httpx.Response, url: str, validators: Validators | None) -> bytes:
+    if response.status_code == 304:
         if validators is not None:
-            validators.etag = _validator(response, 'etag', 200)
-            validators.last_modified = _validator(response, 'last-modified', 100)
-        data = bytearray()
-        async for chunk in response.aiter_bytes():
-            data.extend(chunk)
-            if len(data) > MAX_BYTES:
-                raise ValueError('Source exceeds the 8 MB payload limit')
-        return bytes(data)
+            raise NotModified(url)
+        raise ValueError('The server answered 304 Not Modified to a request that asked for no validation')
+    # Check before the status: httpx treats 3xx as an error, which would hide this message.
+    if response.is_redirect:
+        raise ValueError('Redirects are disabled; update the registry after reviewing the source')
+    if not response.is_success:
+        raise _status_error(response, url)
+    if validators is not None:
+        validators.etag = _validator(response, 'etag', 200)
+        validators.last_modified = _validator(response, 'last-modified', 100)
+    data = bytearray()
+    async for chunk in response.aiter_bytes():
+        data.extend(chunk)
+        if len(data) > MAX_BYTES:
+            raise ValueError('Source exceeds the 8 MB payload limit')
+    return bytes(data)
 
 
 def text_only(value: str | None) -> str:
@@ -750,16 +805,17 @@ async def fetch_provider_json(provider: str, params: Mapping[str, str]) -> dict[
         code = exc.response.status_code
         # NVD refuses a wrong key with a client error, so point at the setting (never at the key itself).
         hint = ' (check INSIGHT_NVD_API_KEY)' if headers and code in (401, 403, 404) else ''
-        raise ProviderError(f'{provider.upper()} answered HTTP {code}{hint}') from exc
+        wide = code in PROVIDER_WIDE_STATUSES or code >= 500
+        raise ProviderError(f'{provider.upper()} answered HTTP {code}{hint}', provider_wide=wide) from exc
     except (httpx.HTTPError, OSError, ValueError) as exc:
         # Size-limit, redirect and DNS-policy violations are upstream problems too, not bad client input.
         raise ProviderError(f'{provider.upper()} request failed: {type(exc).__name__}') from exc
     try:
         payload = json.loads(raw)
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-        raise ProviderError(f'{provider.upper()} returned a non-JSON response') from exc
+        raise ProviderError(f'{provider.upper()} returned a non-JSON response', provider_wide=False) from exc
     if not isinstance(payload, dict):
-        raise ProviderError(f'{provider.upper()} returned an unexpected response')
+        raise ProviderError(f'{provider.upper()} returned an unexpected response', provider_wide=False)
     return payload
 
 

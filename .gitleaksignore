@@ -1,4 +1,7 @@
 # False positives, by gitleaks fingerprint (commit:file:rule:line). Each entry must be a deliberate test value,
 # never a real credential.
 # tests/unit/test_scripts.py builds a fake `insk_` API key at runtime to prove check_forbidden_files.py blocks it.
+# The line itself now carries an inline `gitleaks:allow`, which keeps `gitleaks dir` (working tree) clean wherever
+# the line moves (code review N3). This fingerprint stays for `gitleaks detect` (history, as CI runs it): commit
+# 9944fdc holds an earlier form of the line without the comment, and history cannot change.
 9944fdc0a9a63eff0566b8aa66320d23e792059c:tests/unit/test_scripts.py:generic-api-key:178

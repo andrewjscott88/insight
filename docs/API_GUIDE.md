@@ -66,7 +66,7 @@ Send `Authorization: Bearer <key>` on every request. No cookie or CSRF token is 
 | --- | --- |
 | `ACCESS=read` (default) | `GET` routes only; any `POST` gets `403 "This API key is read-only"` |
 | `ACCESS=read-write` | Also ingest, triage, notes, demo, source sync and enrichment |
-| `MAX_TLP=GREEN` (optional) | Reports above GREEN are invisible to the key (they look like missing reports), exports are capped at GREEN, and the audit log and starting CVE lookups are refused (cached scores of CVEs in reports the key can see stay readable) |
+| `MAX_TLP=GREEN` (optional) | Reports above GREEN are invisible to the key (they look like missing reports), exports are capped at GREEN, and the audit log, watch terms and starting CVE lookups are refused (cached scores of CVEs in reports the key can see stay readable) |
 | `EXPIRES=90` | Days until expiry (1-365, default 90). `make api-key-status` shows the date |
 
 Manage it with `make api-key-status`, `make api-key-rotate` (the old key stops working at once) and
@@ -114,7 +114,7 @@ The API is unversioned; breaking changes are listed under "Upgrade notes" in the
 | `303` | Sign-in and sign-out redirects (HTML forms only) |
 | `400` | The `Host` header is not in `INSIGHT_ALLOWED_HOSTS` |
 | `401` | No valid key or session. A bad key also gets `WWW-Authenticate: Bearer error="invalid_token"` |
-| `403` | Read-only key writing; TLP-limited key on the audit log or starting a CVE lookup; missing CSRF token (sessions); cross-site `Origin`; browser-only route |
+| `403` | Read-only key writing; TLP-limited key on the audit log, watch terms or starting a CVE lookup; missing CSRF token (sessions); cross-site `Origin`; browser-only route |
 | `404` | Not found, **or** above the key's TLP limit (the two are indistinguishable by design) |
 | `409` | Another source sync is running, or a concurrent import (retry once) |
 | `413` | Request body larger than 2 MB |
@@ -394,10 +394,10 @@ the 6.5 s window. TLP-limited keys cannot use enrichment (`403`).
 curl -sS "$INSIGHT_URL/api/stats" -H "Authorization: Bearer $INSIGHT_API_KEY"
 # The latest 200 audit events, with who acted: operator, api-key:<key id>, cli, connector:<source>, system
 curl -sS "$INSIGHT_URL/api/audit" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq '.[0:3]'
-# Organisation watch terms
+# Organisation watch terms (not for TLP-limited keys)
 curl -sS "$INSIGHT_URL/api/watch-terms" -H "Authorization: Bearer $INSIGHT_API_KEY"
-# Load the synthetic demo reports (idempotent; read-write key). Do not use on a production instance
-curl -sS -X POST "$INSIGHT_URL/api/demo" -H "Authorization: Bearer $INSIGHT_API_KEY"
+# Load the synthetic demo reports (idempotent; the cookie jar of §2.2). Do not use on a production instance
+curl -sS -b "$JAR" -X POST "$INSIGHT_URL/api/demo" -H "X-CSRF-Token: $CSRF"   # browser session only (API keys: 403)
 ```
 
 ## 5. Recipes
@@ -536,6 +536,6 @@ print('read budget left:', client.get('/api/stats').headers['ratelimit'])
 | `400 Invalid host header` | URL host not in `INSIGHT_ALLOWED_HOSTS` | Add the host name you use |
 | `413 Request too large` | Body over 2 MB | Split the report |
 | `422 ... cannot be stored here` / `Refused: the text carries a TLP:RED marking` | Report above `INSIGHT_MAX_TLP` (or the key's limit) | Do not store it here, or reword a marking that only mentions the label |
-| `429` | Budget used up | Wait `Retry-After` seconds (recipe 5.5). Sign-in: 30 failures per minute |
+| `429` | Budget used up | Wait `Retry-After` seconds (recipe 5.5). Sign-in: a wrong password after 30 failures per minute (the right one still signs in) |
 | `502` | The external source or provider failed | Retry later; `GET /api/sources` shows the recorded error |
 | `503` on sign-in | MFA on, no authenticator app paired | `make mfa-enable` (pairs it) or `make mfa-disable` |
