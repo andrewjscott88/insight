@@ -57,6 +57,8 @@ CVEs in reports they can see; starting a lookup stays refused to them. The new p
   the working tree stay clean wherever the line moves; the history fingerprint stays for `gitleaks detect`.
 - **N4, the password's length:** sign-in compares fixed-length HMAC tags of the password (random per-process
   key) instead of the raw values, so response times no longer hint at its length.
+- **N5, formatting:** the Python examples in docs/ALERTS.md, docs/API.md and docs/LLM_EXTENSION.md are
+  formatted, so `ruff format --check .` passes on the whole repository.
 
 ### Changed: a clearer executive brief (from #39)
 - Keep the **Insight** name and symbol; use **Cyber Threat Intelligence Feed** as the tagline and remove

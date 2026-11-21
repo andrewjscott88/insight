@@ -52,6 +52,7 @@ Minimal client:
 
 ```python
 import re, httpx
+
 c = httpx.Client(base_url='http://127.0.0.1:8080')
 token = re.search(r'name="csrf_token" value="([^"]+)"', c.get('/login').text).group(1)
 c.post('/login', data={'csrf_token': token, 'password': PASSWORD})
@@ -81,6 +82,7 @@ a URL or a repository. Send it on every request:
 
 ```python
 import httpx
+
 c = httpx.Client(base_url='https://insight.example.org', headers={'Authorization': f'Bearer {API_KEY}'})
 iocs = c.get('/api/iocs/export', params={'max_tlp': 'GREEN', 'review_status': 'accepted'}).json()
 ```
@@ -233,7 +235,9 @@ encode it for you.
 Example (using the client above):
 
 ```python
-r = c.get('/api/iocs/export', params=[('kind', 'ip'), ('kind', 'domain'), ('max_tlp', 'GREEN'), ('defang', 'true')])
+r = c.get(
+    '/api/iocs/export', params=[('kind', 'ip'), ('kind', 'domain'), ('max_tlp', 'GREEN'), ('defang', 'true')]
+)
 export = r.json()  # export['tlp'], export['counts'], export['iocs']
 ```
 
