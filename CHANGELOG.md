@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.7.0 - 2026-11-21
+
 ### STIX 2.1 export
 
 - Export indicators, CVEs and report provenance with TLP 2.0 markings from the workspace, the CLI
