@@ -122,7 +122,7 @@ operator have separate budgets, so a runaway script cannot lock the analyst out 
 | --- | --- | --- |
 | `read` | `GET`/`HEAD`, except the IOC export | 300 per minute |
 | `write` | `POST` (ingest, triage, notes, demo, sync, enrichment) | 60 per minute |
-| `ioc-export` | `GET /api/iocs/export`, `GET /api/iocs/blocklist` | 30 per hour |
+| `ioc-export` | `GET /api/iocs/export`, `GET /api/iocs/stix`, `GET /api/iocs/blocklist` | 30 per hour |
 | (invalid keys) | Requests with a wrong, revoked or expired key, per client address | 10 per minute |
 
 Budgets are token buckets: the full limit is available as a burst, then it refills evenly (`read`: 5 per
@@ -205,6 +205,14 @@ The summary plus:
 Task-oriented guide with recipes and troubleshooting: [IOC_EXPORT.md](IOC_EXPORT.md). JSON Schema:
 [schemas/insight-ioc-v1.schema.json](schemas/insight-ioc-v1.schema.json). Example file:
 [examples/insight-iocs-example.json](examples/insight-iocs-example.json).
+
+### `GET /api/iocs/stix`
+
+Download a validated STIX 2.1 bundle as `application/stix+json;version=2.1`. Use the same filters as the
+IOC export below. The request's `max_tlp`, the instance ceiling and the API key's ceiling all apply.
+Use `evidence=false` to omit excerpts. A request with `defang=true` returns 422.
+Each successful request records `stix.export` with its bundle UUID. Empty selections return a valid empty bundle.
+[Object mapping and handling rules](IOC_EXPORT.md#stix-21-export)
 
 ### `GET /api/iocs/export`
 One JSON file listing every indicator across the selected reports, each **once**, with the reports that mention
