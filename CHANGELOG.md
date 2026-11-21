@@ -2,12 +2,25 @@
 
 ## Unreleased
 
-**Upgrading from 0.6.0:** migrations `0009` (ATT&CK technique tags) and `0010` (source switches) run at
-start-up, or with `make migrate`. Reports stored before the upgrade get their technique tags when you run
+**Upgrading from 0.6.0:** migrations `0009` (ATT&CK technique tags), `0010` (source switches) and `0011`
+(alerts) run at start-up, or with `make migrate`. Reports stored before the upgrade get their technique tags when you run
 `make attack-backfill` once (safe to run again). The new threat-research sources start switched off: Insight
 contacts no new host until you switch one on. **Exports change for SANS ISC and NCSC reports:** their text and
 evidence are no longer included (their publishers allow metadata only). Every 0.6.0 API field is unchanged; new
 fields are additive.
+
+### Added: alerts (#15)
+- **Alerts when a new report mentions a watch term, or CISA adds a KEV entry** ([ADR 0022](docs/adr/0022-alerts.md),
+  [docs/ALERTS.md](docs/ALERTS.md)), to a chat webhook (Slack, Mattermost, Google Chat), a signed JSON webhook
+  (`insight-alert-v1`, HMAC-SHA256) or e-mail. Set up on the **Watch terms** tab, with **Send a test alert** and
+  **Recent alerts**; workspace only, never with an API key; audited.
+- Each alert fires once per destination: revisions and re-imports add nothing, the first KEV import is not news,
+  and the demo is quiet. Sent by the job runner within about 15 seconds; a failure is retried twice.
+- **TLP:** each destination has a limit (default AMBER). Above it, and for every TLP:RED report, an alert carries
+  only the label, the watch term and a link. Report text and evidence never leave.
+- Webhooks must be HTTPS to public addresses (`INSIGHT_ALERT_PRIVATE_TARGETS=on` for your own network; never
+  link-local), without redirects. New settings: `INSIGHT_PUBLIC_URL` (links to `/?report=<id>`, which now opens
+  that report) and `INSIGHT_SMTP_*`; a wrong value stops start-up.
 
 ### Added: threat-research sources, and each publisher's reuse rule
 - **Six optional sources** for reporting on attacker groups, campaigns and malware: Cisco Talos, Microsoft Threat

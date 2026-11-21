@@ -26,6 +26,10 @@ A single-operator threat-intelligence workbench, run locally or published behind
   the techniques in your reports by tactic over a period you choose, opens the reports behind each one, and
   downloads a layer for ATT&CK Navigator. Never guessed from prose; no attribution. `make attack-backfill` tags
   reports stored before 0.7.0. API: `/api/attack/*` and `/api/documents/{id}/techniques`.
+- **Alerts** ([docs/ALERTS.md](docs/ALERTS.md)): when a new report mentions a watch term, or CISA adds a KEV
+  entry, Insight tells a chat channel (Slack, Mattermost, Google Chat), your own tool (signed JSON webhook) or
+  an e-mail address, within about 15 seconds of the sync. Each alert fires once; report titles go only up to
+  each destination's TLP limit, and report text never leaves. Set up on the Watch terms tab.
 - Organization watch terms highlight literal product, vendor or topic matches. These are transparent keyword matches, not calibrated risk scores.
 - **Threat-research sources, off until you switch them on** ([ADR 0021](docs/adr/0021-threat-research-sources.md)):
   Cisco Talos, Microsoft Threat Intelligence, The DFIR Report, ESET WeLiveSecurity, Kaspersky Securelist and

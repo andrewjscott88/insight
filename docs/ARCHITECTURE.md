@@ -28,7 +28,8 @@ The narrower first release trades the research report's React, RabbitMQ/Celery, 
 - `ioc_export.py`: the cross-report IOC export format (`insight-ioc-v1`): grouping, TLP labelling and defanging. Pure functions, no SQL.
 - `connectors.py`: curated feed/KEV/CSAF/NVD/EPSS integration, one source at a time or all in turn (`sync_all`).
   Conditional fetching (`ETag` / `Last-Modified`, then a payload hash) skips unchanged feeds.
-- `jobs.py`: the in-process job runner for opt-in scheduled syncs ([ADR 0018](adr/0018-opt-in-scheduled-syncs.md)).
+- `jobs.py`: the in-process job runner for opt-in scheduled syncs ([ADR 0018](adr/0018-opt-in-scheduled-syncs.md)) and alert delivery.
+- `alerts.py`: what an alert says under each TLP label, signed webhooks and e-mail ([ADR 0022](adr/0022-alerts.md)); `services/alerts.py` decides when alerts fire and queues them.
   No SQL: the queue, schedules and fetch state are service functions.
 - `brief.py`: the intel brief's wording (headline and sections) from facts that `services.brief_data` gathers.
   Pure functions, no SQL, no AI.

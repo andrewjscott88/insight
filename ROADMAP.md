@@ -26,6 +26,9 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
       plain-English executive summary of what is trending against the weeks before, why it matters and what to
       check, attacker behaviour by tactic, TLP-marked and downloadable as a briefing. Next: analyst-defined
       themes, and KEV ransomware use (TIP 1.1) and EPSS (TIP 1.2) in it.
+- [x] **TIP 1.4 Alerts** (#15, [ADR 0022](docs/adr/0022-alerts.md)), brought forward from 0.8.0: watch-term
+      matches and new KEV entries to chat webhooks, signed JSON webhooks or e-mail, once each, within each
+      destination's TLP limit. Next: a daily landscape digest, CLI management.
 - [x] **Threat-research sources** ([ADR 0021](docs/adr/0021-threat-research-sources.md)): Cisco Talos,
       Microsoft Threat Intelligence, The DFIR Report, ESET, Kaspersky Securelist and The Record, off until
       switched on, with per-source reuse rules (review J3, brought forward from 0.8.0).
@@ -49,9 +52,8 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
 
 ## 0.8.0: alerts and more feeds
 
-- [ ] [#15](https://github.com/andrewjscott88/insight/issues/15) **TIP 1.4 Notifications (M4).** Signed webhooks
-      and e-mail when a new report matches a watch term or KEV gains an entry; destinations set from the CLI or the
-      workspace, never with an API key.
+- [x] [#15](https://github.com/andrewjscott88/insight/issues/15) **TIP 1.4 Notifications (M4):** done in 0.7.0
+      (above). Destinations are set in the workspace; CLI management is still to do.
 - [x] **Review J3 Per-source redistribution rules** (public, or metadata only), applied by the report and IOC
       exports ([ADR 0021](docs/adr/0021-threat-research-sources.md)); STIX and MISP must apply them too.
 - [ ] **TIP 1.5 abuse.ch connectors:** URLhaus, ThreatFox and MalwareBazaar (indicators and metadata only, never

@@ -7,7 +7,7 @@ import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Self, cast
+from typing import Final, Self, cast
 
 from .appearance import DEFAULT_THEME, Theme, parse_theme
 from .schemas import TLP, TLP_LEVELS
@@ -133,6 +133,7 @@ class Settings:
         hosts = tuple(
             host for host in (x.strip() for x in env.get('INSIGHT_ALLOWED_HOSTS', '').split(',')) if host
         )
+        AlertSettings.from_env(env)  # A wrong alert setting stops start-up, not the first alert.
         return cls(
             database_url=database_url,
             password=password,
@@ -144,4 +145,66 @@ class Settings:
             mfa=parse_mfa(env.get('INSIGHT_MFA', '')),
             theme=parse_theme(env.get('INSIGHT_THEME', '')),
             run_jobs=parse_run_jobs(env.get('INSIGHT_RUN_JOBS', '')),
+        )
+
+
+SMTP_SECURITY: Final = ('starttls', 'tls', 'none')
+_LOCAL_RELAYS: Final = frozenset({'localhost', '127.0.0.1', '::1'})
+
+
+@dataclass(frozen=True, slots=True)
+class AlertSettings:
+    """How alerts are sent (ADR 0022), read from the environment whenever alerts are sent or set up.
+
+    E-mail needs ``INSIGHT_SMTP_HOST`` and ``INSIGHT_SMTP_FROM``. ``INSIGHT_PUBLIC_URL`` (the address people
+    open Insight at) adds a link to each alert. Webhooks may only reach public internet addresses unless
+    ``INSIGHT_ALERT_PRIVATE_TARGETS=on`` (for a chat or automation server on your own network).
+    """
+
+    public_url: str = ''
+    smtp_host: str = ''
+    smtp_port: int = 587
+    smtp_username: str = ''
+    smtp_password: str = ''
+    smtp_from: str = ''
+    #: ``starttls`` (default), ``tls`` (implicit TLS, usually port 465) or ``none`` (a relay on this host).
+    smtp_security: str = 'starttls'
+    private_targets: bool = False
+
+    @property
+    def email(self) -> bool:
+        """Whether e-mail alerts can be sent."""
+        return bool(self.smtp_host and self.smtp_from)
+
+    @classmethod
+    def from_env(cls, environ: Mapping[str, str] | None = None) -> Self:
+        """Raises ``RuntimeError`` for an invalid setting (a typo must not send alerts in the clear)."""
+        env = os.environ if environ is None else environ
+        public_url = env.get('INSIGHT_PUBLIC_URL', '').strip().rstrip('/')
+        if public_url and not public_url.startswith(('https://', 'http://')):
+            raise RuntimeError(f'INSIGHT_PUBLIC_URL must start with https:// or http://; got {public_url!r}')
+        host = env.get('INSIGHT_SMTP_HOST', '').strip()
+        security = env.get('INSIGHT_SMTP_SECURITY', '').strip().lower() or 'starttls'
+        if security not in SMTP_SECURITY:
+            choices = ', '.join(SMTP_SECURITY)
+            raise RuntimeError(f'INSIGHT_SMTP_SECURITY must be one of {choices}; got {security!r}')
+        if security == 'none' and host and host not in _LOCAL_RELAYS:
+            raise RuntimeError(
+                'INSIGHT_SMTP_SECURITY=none is only for a mail relay on this host (localhost).'
+            )
+        port = env.get('INSIGHT_SMTP_PORT', '').strip()
+        if port and not (port.isdigit() and 0 < int(port) < 65536):
+            raise RuntimeError(f'INSIGHT_SMTP_PORT must be a port number; got {port!r}')
+        private = env.get('INSIGHT_ALERT_PRIVATE_TARGETS', '').strip().lower()
+        if private not in {'', 'on', 'off'}:
+            raise RuntimeError(f'INSIGHT_ALERT_PRIVATE_TARGETS must be "on" or "off"; got {private!r}')
+        return cls(
+            public_url=public_url,
+            smtp_host=host,
+            smtp_port=int(port) if port else (465 if security == 'tls' else 587),
+            smtp_username=env.get('INSIGHT_SMTP_USERNAME', '').strip(),
+            smtp_password=env.get('INSIGHT_SMTP_PASSWORD', ''),
+            smtp_from=env.get('INSIGHT_SMTP_FROM', '').strip(),
+            smtp_security=security,
+            private_targets=private == 'on',
         )

@@ -22,6 +22,7 @@ from ..schemas import (
     TLP_LEVELS,
     DocumentInput,
 )
+from .alerts import queue_report_alerts
 from .audit import audit
 from .common import fold
 from .techniques import carry_decisions, record_report_techniques
@@ -154,6 +155,7 @@ def ingest(
         _audit_tlp_raise(db, doc, submitted_tlp)
         db.flush()
         record_report_techniques(db, doc)
+        queue_report_alerts(db, doc)
         db.flush()
         return doc, True
 
@@ -188,6 +190,7 @@ def ingest(
         audit(db, 'document.revision.supersede', doc.id, current.id)
     db.flush()
     record_report_techniques(db, doc, previous=current)
+    queue_report_alerts(db, doc)
     db.flush()
     return doc, True
 

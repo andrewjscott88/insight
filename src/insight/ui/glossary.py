@@ -105,6 +105,11 @@ GLOSSARY: Final[tuple[tuple[str, str], ...]] = (
         'or fewer.',
     ),
     (
+        'Webhook',
+        'A web address that a chat app or another tool gives you, so that Insight can post alerts to it. '
+        'Keep it secret, like a password.',
+    ),
+    (
         'MITRE ATT&CK',
         'A free list of the ways attackers work, kept by the MITRE organisation. Analysts use it so that '
         'everyone names the same attack steps with the same words.',
