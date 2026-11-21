@@ -54,6 +54,7 @@ as `CVE-2024-12345@example.org` together as one observation and preserves its or
 | Service labels | `_dmarc.example.com`, `_sip._tcp.example.com` | Kept (leading underscore per label) |
 | CIDR ranges | `203[.]0[.]113[.]0/24`, `2001:0DB8::/32` | Each produces one network range. Its evidence keeps the original spelling. |
 | Invalid or ambiguous ranges | `203.0.113.0/33`, `203.0.113.17/24` | Skipped. The first prefix is too long for IPv4. The second address has host bits set, so interpreting it as a network would change the stated address. |
+| Every address | `0.0.0.0/0`, `::/0` | Skipped. Reports use these in firewall and cloud rules ("allowed from 0.0.0.0/0"); they are not indicators. |
 | Version context | `firmware 10.2.9.1`, `version 9.0.0.1`, `build: 7.1.0.2`, `section 1.2.3.4` | Not IPs. Keywords: version, ver, v, firmware, fw, build, release, agent, patch, section, chapter, step. |
 | Zero padding | `192.000.002.033` | `192.0.2.33` when every octet has 3 digits (fixed-width logs); `010.1.2.03` is rejected as ambiguous (octal?) |
 | IPv4-mapped IPv6 | `::ffff:203.0.113.9` | `203.0.113.9`: one entity to pivot on, never the truncated `::ffff:203` |
