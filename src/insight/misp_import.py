@@ -156,7 +156,7 @@ def _report(event: dict[str, Any], event_id: str) -> tuple[DocumentInput, list[M
         offset += len(line) + 1
     try:
         report = DocumentInput.model_validate(
-            {'title': title, 'body': '\n'.join(lines), 'source_name': 'MISP event file', 'tlp': tlp}
+            {'title': title, 'body': '\n'.join(lines), 'source_name': 'MISP event', 'tlp': tlp}
         )
     except ValidationError:
         # Pydantic includes sampled report content in its exception text, which may carry restricted data.

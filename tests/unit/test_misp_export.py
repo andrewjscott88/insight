@@ -220,3 +220,52 @@ async def test_pinned_read_create_and_refusal_paths(monkeypatch: pytest.MonkeyPa
     with pytest.raises(ValueError, match='connection'):
         await exchange(event_uuid=EVENT_UUID, transport=transport)
     assert len(requests) == before
+
+
+def test_remote_cli_checks_the_fetched_uuid_and_audits_a_confirmed_push(
+    database_url: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from insight import cli_misp
+    from insight.models import database
+
+    monkeypatch.setenv('INSIGHT_DATABASE_URL', database_url)
+    other_uuid = '5d5e70ac-bc34-437a-ab01-deee6a22dd5e'
+    incoming = {
+        'Event': {
+            'uuid': other_uuid,
+            'info': 'Inbox fixture',
+            'distribution': '1',
+            'Tag': [{'name': 'tlp:green'}],
+            'Attribute': [{'type': 'domain', 'value': 'test.example'}],
+        }
+    }
+    pushed = []
+
+    async def simulated(*, event_uuid: str, body: bytes | None = None) -> bytes:
+        if body is None:
+            assert event_uuid == EVENT_UUID
+            return json.dumps(incoming).encode()
+        event = json.loads(body)['Event']
+        assert event['uuid'] == event_uuid
+        pushed.append(event)
+        return b'{}'
+
+    monkeypatch.setattr(cli_misp, 'exchange', simulated)
+    assert main(['misp-import', '--fetch', EVENT_UUID]) == 1
+    assert 'UUID' in capsys.readouterr().err
+    incoming['Event']['uuid'] = EVENT_UUID
+    assert main(['misp-import', '--fetch', EVENT_UUID]) == 0
+    assert main(['misp-export', '--push', '--include-unreviewed', '--max-tlp', 'GREEN']) == 0
+    assert len(pushed) == 1
+    assert pushed[0]['published'] is False
+    assert pushed[0]['Attribute'][0]['value'] == 'test.example'
+    engine, sessions = database(database_url, migrate=False)
+    try:
+        with sessions() as db:
+            assert [d.external_id for d in db.scalars(select(Document))] == [EVENT_UUID]
+            assert any(
+                entry.action == 'misp.push' and entry.object_id == pushed[0]['uuid'] and entry.actor == 'cli'
+                for entry in services.audit_events(db)
+            )
+    finally:
+        engine.dispose()
