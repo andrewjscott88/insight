@@ -170,15 +170,16 @@ async def download(
     validators: Validators | None = None,
     headers: Mapping[str, str] | None = None,
     body: bytes | None = None,
+    allowed_hosts: frozenset[str] = ALLOWED_HOSTS,
 ) -> bytes:
-    """Fetch ``url`` from the curated HTTPS registry with strict size and redirect limits.
+    """Fetch from the curated registry or an explicitly configured host, with the same HTTPS egress policy.
 
     With ``validators``, the request is conditional: an unchanged resource raises :class:`NotModified`, and a
     changed one updates ``validators`` from the response. Keyed feeds can add headers and a fixed POST body.
     ``transport`` exists for offline testing; production code never passes it.
     """
     parts = urlsplit(url)
-    if parts.scheme != 'https' or parts.hostname not in ALLOWED_HOSTS or parts.username or parts.password:
+    if parts.scheme != 'https' or parts.hostname not in allowed_hosts or parts.username or parts.password:
         raise ValueError('Outbound URL is not in the curated HTTPS source registry')
     try:
         port = parts.port
@@ -186,15 +187,15 @@ async def download(
         port = -1
     if port not in (None, 443):
         raise ValueError('Outbound URL is not in the curated HTTPS source registry')
-    addresses = await _public_addresses(parts.hostname)
     request_headers = {**(headers or {}), 'User-Agent': USER_AGENT, 'Accept-Encoding': 'identity'}
     if validators is not None and validators.etag:
         request_headers['If-None-Match'] = validators.etag
     if validators is not None and validators.last_modified:
         request_headers['If-Modified-Since'] = validators.last_modified
-    # Fixed application-owned hosts only, reached at the addresses just checked (review L1).
+    # Include DNS in the total deadline and connect only to addresses checked here (review L1).
     try:
         async with asyncio.timeout(DOWNLOAD_DEADLINE):
+            addresses = await _public_addresses(parts.hostname)
             return await _fetch(url, addresses, params, request_headers, validators, transport, body)
     except TimeoutError as exc:  # The overall deadline (L6); a normal fetch failure, recorded like any other.
         raise TimeoutError(f'The download took longer than {DOWNLOAD_DEADLINE:g} seconds') from exc

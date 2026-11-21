@@ -80,7 +80,7 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
 - [ ] **TIP 2.2 STIX 2.1 import** with TLP raising and the instance TLP limit.
 - [x] **TIP 2.3 ATT&CK techniques:** done in 0.7.0 (above); STIX export carries them as `attack-pattern` objects.
 - [ ] **TIP 2.9 Suricata/Snort-oriented export** of the blocklist population.
-- [ ] **TIP 2.4 MISP export and import,** CLI first.
+- [x] **TIP 2.4 MISP export and import,** host CLI for event files and trusted MISP instances. [Guide](docs/MISP.md)
 
 ## 1.0: context around the indicators
 
