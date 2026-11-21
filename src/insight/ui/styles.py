@@ -38,7 +38,9 @@ body.body--dark, body.body--light { background:var(--ins-bg);color:var(--ins-tex
 .panel { background:var(--ins-panel);border:1px solid var(--ins-line);border-radius:10px;
   color:var(--ins-text); }
 .source-card { border:1px solid var(--ins-line);background:var(--ins-card);border-radius:7px;padding:16px;
-  width:100%;cursor:pointer; }
+  width:100%;min-width:0;overflow-wrap:break-word;cursor:pointer; }
+.source-card > *, .source-card .q-btn__content, .source-card .q-btn__content > .block {
+  min-width:0;max-width:100%; }
 .source-card:hover { background:var(--ins-hover); }
 .source-selected { border-color:var(--ins-accent);border-width:2px;background:var(--ins-selected); }
 /* The brief leads the page. Its reading column stays narrow while the scope stays alongside it. */
@@ -61,7 +63,8 @@ body.body--dark, body.body--light { background:var(--ins-bg);color:var(--ins-tex
   background:var(--ins-panel); }
 .brief-section-primary { grid-column:span 3;background:var(--ins-card); }
 .brief-evidence { color:var(--ins-link); }
-.brief-evidence .block { max-width:56ch; }
+.brief-evidence .q-btn__content { min-width:0;max-width:100%; }
+.brief-evidence .block { min-width:0;max-width:min(100%,56ch); }
 .workspace-tools { padding-top:1.5rem;border-top:1px solid var(--ins-line); }
 @media(max-width:1099px) {
   .brief-overview { grid-template-columns:minmax(0,1fr); }

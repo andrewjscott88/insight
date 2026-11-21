@@ -62,7 +62,7 @@ def register_ui(app: FastAPI, session_factory: SessionFactory) -> None:
                     with ui.column().classes('gap-0'):
                         ui.label('Insight').classes('text-2xl font-medium')
                         ui.label('Cyber Threat Intelligence Feed').classes('brand-description muted')
-                with ui.row(wrap=False).classes('items-center gap-2 sm:gap-4'):
+                with ui.row().classes('workspace-controls items-center gap-2 sm:gap-4 max-w-full'):
                     ThemeSwitch(ws, dark, theme)
                     TextSizeSwitch(ws, text_size)
                     # Backend provides a CSRF-protected logout confirmation form.

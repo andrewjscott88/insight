@@ -15,6 +15,8 @@
   context; it makes no external AI call or new source request. Counts and evidence respect the caller's TLP
   limit. No database migration is needed. Field reference: [API](docs/API.md#executive-brief).
 - Design, evidence rules and limits: [Executive brief](docs/EXECUTIVE_BRIEF.md).
+- Phone header controls wrap at narrow widths, including temporary open access with larger text at 320 px.
+  Long feed titles, URLs and source names wrap within their report cards instead of being cut off.
 
 ### Added: temporary password-free operator access
 - `INSIGHT_DEV_NO_AUTH=on` lets a visitor enter through `/login` without a password. It is **off by default**,
