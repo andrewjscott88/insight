@@ -113,7 +113,7 @@ TLP_AWARE_SERVICES = {
     'set_document_status', 'set_observation_status', 'add_note', 'ingest', 'brief_data',
     'assess_entity', 'entity_assessment', 'entity_seen', 'blocklist',
     'document_techniques', 'tag_technique', 'untag_technique', 'technique_summary', 'technique_documents',
-    'landscape_data', 'cve_score_view',
+    'landscape_data', 'cve_score_view', 'cve_signals',
 }  # fmt: skip
 
 

@@ -120,7 +120,16 @@ def landscape_data(
         ).all()
     )
     kev = [
-        BriefKev(k.cve, k.vendor, k.product, k.date_added, k.due_date, kev_reports.get(k.cve) or '')
+        BriefKev(
+            k.cve,
+            k.vendor,
+            k.product,
+            k.date_added,
+            k.due_date,
+            kev_reports.get(k.cve) or '',
+            ransomware=k.ransomware,
+            name=k.vulnerability_name,
+        )
         for k in records
     ]
     watch = {term.term: matching((fold(term.term),)) for term in list_watch_terms(db)}

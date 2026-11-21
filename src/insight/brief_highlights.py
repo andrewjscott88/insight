@@ -7,6 +7,8 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 
 from .brief_facts import (
+    LIKELY,
+    NIST_NVD,
     SECTION_ITEMS,
     VENDOR_LINE,
     _day,
@@ -20,13 +22,18 @@ from .brief_facts import (
     published,
 )
 from .brief_types import BriefHighlight, BriefItem
+from .cve_scores import EPSS_CAVEAT, percent
 from .services import BriefData, BriefDocument
 
 
 def _impact(doc: BriefDocument, cve: str) -> str:
     """Explain an explicitly named weakness, without inferring one from a CVSS number."""
     line = next((line for line in doc.body.splitlines() if line.startswith(f'- {cve}, CVSS ')), '')
-    description = line.partition(':')[2].strip()
+    return _described(line.partition(':')[2].strip())
+
+
+def _described(description: str) -> str:
+    """What a stated description (a CISA advisory's or NIST NVD's) says the weakness lets an attacker do."""
     meanings = (
         ('remote code execution', 'let an attacker run code on an affected system'),
         ('arbitrary code execution', 'let an attacker run code on an affected system'),
@@ -61,6 +68,25 @@ def highlights(data: BriefData, facts: _Facts, as_of: datetime) -> tuple[BriefHi
     by_id = {doc.id: doc for doc in facts.fresh}
     known = {kev.cve: kev for kev in facts.kev_added}
     known.update((kev.cve, kev) for kev, _, _, _ in facts.kev_mentioned)
+    if ransomware := [kev for kev in known.values() if kev.ransomware]:
+        # First: CISA's ransomware flag is the strongest sign of harm in the catalog (TIP 1.1, 1.3).
+        newest = {kev.cve: doc for kev, _, doc, _ in facts.kev_mentioned}
+        evidence = [
+            BriefItem(f'{kev.cve} · {_product(kev)}', kev.document_id or newest.get(kev.cve) or None)
+            for kev in ransomware
+        ]
+        products = name_list([_product(kev) for kev in ransomware])
+        result.append(
+            BriefHighlight(
+                'Used in ransomware attacks',
+                f'{count_of(len(ransomware), "flaw")} in this brief {_verb(len(ransomware), "is", "are")} '
+                f'known to CISA to be used in ransomware campaigns. Products include {products}. '
+                'Ransomware can lock your systems or leak your data. '
+                'This does not prove that your business is a target.',
+                'If you use these products, fix them first and check them for signs of an intrusion.',
+                tuple(item for item in evidence if item.document_id)[:SECTION_ITEMS],
+            )
+        )
     if known:
         evidence = [
             BriefItem(f'{kev.cve} · {_product(kev)}', kev.document_id)
@@ -134,19 +160,37 @@ def highlights(data: BriefData, facts: _Facts, as_of: datetime) -> tuple[BriefHi
             )
         )
 
+    if likely := facts.likely:
+        top = likely[:SECTION_ITEMS]
+        named = name_list([f'{cve} ({percent(p)})' for p, cve, _, _ in top])
+        result.append(
+            BriefHighlight(
+                'Likely to be attacked soon',
+                f'{count_of(len(likely), "flaw")} in this brief {_verb(len(likely), "has", "have")} '
+                f'an EPSS score of {percent(LIKELY)} or more: {named}. ' + EPSS_CAVEAT,
+                'Check whether you use these products. Fix the ones you use before less likely ones.',
+                tuple({doc: BriefItem(title, doc) for _, _, title, doc in top}.values()),
+            )
+        )
+
     if facts.severe:
-        score, cve, title, doc_id = facts.severe[0]
+        score, cve, title, doc_id, origin = facts.severe[0]
         listed = (
             cve in data.kev
             and (added := _day(data.kev[cve].date_added)) is not None
             and added <= as_of.date()
         )
+        found = data.scores.get(cve)
+        if origin == NIST_NVD:
+            stated = found.nvd.description if found and found.nvd else ''
+            where = f'NIST NVD rates it, and a new report mentions it: {title}. ' + _described(stated)
+        else:
+            where = f'Advisory: {title.split(" · ", 1)[-1]}. ' + _impact(by_id[doc_id], cve)
         result.append(
             BriefHighlight(
                 'Highest reported severity',
                 f'{cve} has the highest listed base score: {score:g} out of 10. '
-                f'Advisory: {title.split(" · ", 1)[-1]}. '
-                + _impact(by_id[doc_id], cve)
+                + where
                 + 'This score rates the flaw, not the chance of an attack. '
                 + (
                     "It is also on CISA's known exploited list."

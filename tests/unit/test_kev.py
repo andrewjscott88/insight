@@ -134,3 +134,63 @@ def test_inbox_documents_are_the_newest_entries(db: Session) -> None:
     titles = set(db.scalars(select(Document.title)))
     assert any(t.startswith('CVE-2024-99999') for t in titles)
     assert len(titles) == KEV_INBOX_LIMIT
+
+
+# --------------------------------------------------------------------------- TIP 1.1 fields (for TIP 1.3)
+
+
+def test_the_weakness_name_ransomware_use_notes_and_cwes_are_kept(db: Session) -> None:
+    row = kev_row(
+        vulnerabilityName='Fixture Gateway Command Injection',
+        knownRansomwareCampaignUse='Known',
+        notes='https://vendor.example/advisory',
+        cwes=['CWE-78', 'CWE-20', 'CWE-78'],
+    )
+    import_kev(db, payload(row))
+    record = db.get(KEVRecord, 'CVE-2024-12345')
+    assert record is not None
+    assert (record.vulnerability_name, record.ransomware_use, record.notes) == (
+        'Fixture Gateway Command Injection',
+        'Known',
+        'https://vendor.example/advisory',
+    )
+    assert record.cwes == 'CWE-78,CWE-20'
+    assert record.ransomware
+    import_kev(db, payload(kev_row(knownRansomwareCampaignUse='Unknown')))
+    updated = db.get(KEVRecord, 'CVE-2024-12345')
+    assert updated is not None
+    assert not updated.ransomware
+    assert (updated.vulnerability_name, updated.cwes) == ('', '')  # what CISA no longer says is not kept
+
+
+@pytest.mark.parametrize('value', ['known', 'Yes', 'KNOWN', ''])
+def test_any_other_ransomware_value_counts_as_not_known(db: Session, value: str) -> None:
+    import_kev(db, payload(kev_row(knownRansomwareCampaignUse=value)))
+    record = db.get(KEVRecord, 'CVE-2024-12345')
+    assert record is not None
+    assert (record.ransomware_use, record.ransomware) == ('', False)
+
+
+@pytest.mark.parametrize(
+    'cwes',
+    ['CWE-78', ['CWE-78', 7], ['CWE-78; DROP'], ['NVD-CWE-noinfo'], [f'CWE-{n}' for n in range(21)]],
+)
+def test_invalid_cwes_refuse_the_whole_import(db: Session, cwes: object) -> None:
+    with pytest.raises(ValueError, match='Invalid KEV record field'):
+        import_kev(db, payload(kev_row(n=11111), kev_row(cwes=cwes)))
+    assert db.scalar(select(func.count()).select_from(KEVRecord)) == 0
+
+
+def test_the_reader_shows_ransomware_use_and_the_weakness_name(db: Session) -> None:
+    from insight import services
+
+    import_kev(
+        db,
+        payload(
+            kev_row(knownRansomwareCampaignUse='Known', vulnerabilityName='Fixture Gateway Command Injection')
+        ),
+    )
+    doc = db.scalars(select(Document)).one()
+    (observation,) = [o for o in services.detail(db, doc)['observations'] if o['kind'] == 'cve']
+    assert observation['kev']['ransomware_use'] == 'Known'
+    assert observation['kev']['vulnerability_name'] == 'Fixture Gateway Command Injection'
