@@ -27,6 +27,8 @@ class WorkspaceState:
     tlp: str = ALL_TLP
     include_superseded: bool = False
     entity_q: str = ''
+    #: The period of the threat landscape, in days.
+    landscape_days: int = 7
     #: The period on the ATT&CK techniques tab, in days (0: all time).
     technique_days: int = 30
     #: Unsaved note text per document. Panels re-render whenever anything changes (a review, a finished source

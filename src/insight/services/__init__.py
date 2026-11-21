@@ -67,6 +67,7 @@ from .jobs import (
     set_schedule,
     time_of_day,
 )
+from .landscape import MAX_LANDSCAPE_DOCUMENTS, LandscapeData, landscape_data
 from .retention import MAX_REASON_LENGTH, DeletionPreview, DeletionResult, delete_document, deletion_preview
 from .search import (
     MAX_PAGE_SIZE,
@@ -123,6 +124,7 @@ __all__ = [
     'MAX_API_KEY_NAME_LENGTH',
     'MAX_BRIEF_DOCUMENTS',
     'MAX_EXPORT_MENTIONS',
+    'MAX_LANDSCAPE_DOCUMENTS',
     'MAX_PAGE_SIZE',
     'MAX_QUERY_LENGTH',
     'MAX_REASON_LENGTH',
@@ -140,6 +142,7 @@ __all__ = [
     'DeletionPreview',
     'DeletionResult',
     'DocumentQuery',
+    'LandscapeData',
     'SourceRef',
     'TechniqueCount',
     'TechniqueTag',
@@ -182,6 +185,7 @@ __all__ = [
     'ingest',
     'ioc_export_counts',
     'ioc_mentions',
+    'landscape_data',
     'like_pattern',
     'list_entities',
     'list_schedules',

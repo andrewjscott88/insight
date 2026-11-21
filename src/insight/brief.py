@@ -71,16 +71,16 @@ def window_start(now: datetime, days: int = DEFAULT_DAYS) -> str:
 # --------------------------------------------------------------------------- words
 
 
-def _count(count: int, singular: str, plural: str | None = None) -> str:
+def count_of(count: int, singular: str, plural: str | None = None) -> str:
     return f'{count} {singular if count == 1 else plural or singular + "s"}'
 
 
-def _names(names: list[str], limit: int = 3) -> str:
+def name_list(names: list[str], limit: int = 3) -> str:
     """``A``, ``A and B``, ``A, B and C``, or ``A, B, C and 2 others``."""
     unique = list(dict.fromkeys(n for n in names if n))
     shown, rest = unique[:limit], len(unique) - limit
     if rest > 0:
-        return ', '.join(shown) + f' and {_count(rest, "other")}'
+        return ', '.join(shown) + f' and {count_of(rest, "other")}'
     return ' and '.join([', '.join(shown[:-1]), shown[-1]]) if len(shown) > 1 else ''.join(shown)
 
 
@@ -210,30 +210,33 @@ def _deadline(added: list[BriefKev], today: str) -> list[str]:
     return []
 
 
-def _summary(facts: _Facts, days: int, today: str) -> tuple[str, ...]:
-    period = f'the last {_count(days, "day")}'
+def _summary(facts: _Facts, days: int, today: str, kev_trend: str) -> tuple[str, ...]:
+    period = f'the last {count_of(days, "day")}'
     if not facts.fresh and not facts.kev_added:
         return (f'Nothing new in {period}. Sync your sources to get the latest.',)
     sources = len({d.source_name for d in facts.fresh})
     if facts.fresh:
         lines = [
-            f'In {period}, {_count(len(facts.fresh), "new report")} came in from {_count(sources, "source")}.'
+            f'In {period}, {count_of(len(facts.fresh), "new report")} came in from '
+            f'{count_of(sources, "source")}.'
         ]
     else:
         lines = [f'No new reports came in during {period}.']
     if added := facts.kev_added:
-        more = _count(len(added), 'more weakness', 'more weaknesses')
-        vendors = _names([k.vendor or k.product for k in added])
+        more = count_of(len(added), 'more weakness', 'more weaknesses')
+        vendors = name_list([k.vendor or k.product for k in added])
         lines.append(
             f'CISA confirmed that attackers are using {more}'
             + (f', in products from {vendors}.' if vendors else '.')
         )
+        if kev_trend:
+            lines.append(kev_trend)
         lines += _deadline(added, today)
     if mentioned := facts.kev_mentioned:
         verb = 'appears' if len(mentioned) == 1 else 'appear'
-        sources_named = _names([name for m in mentioned for name in m[3]])
+        sources_named = name_list([name for m in mentioned for name in m[3]])
         lines.append(
-            f'{_count(len(mentioned), "weakness", "weaknesses")} that attackers use also {verb} in new '
+            f'{count_of(len(mentioned), "weakness", "weaknesses")} that attackers use also {verb} in new '
             f'reports from {sources_named}.'
         )
     if facts.severe:
@@ -249,7 +252,7 @@ def _summary(facts: _Facts, days: int, today: str) -> tuple[str, ...]:
     else:
         verb = 'mentions' if facts.watch_reports == 1 else 'mention'
         terms = ', '.join(f'{term} ({n})' for term, n in facts.watch[:SECTION_ITEMS])
-        lines.append(f'{_count(facts.watch_reports, "new report")} {verb} your watch terms: {terms}.')
+        lines.append(f'{count_of(facts.watch_reports, "new report")} {verb} your watch terms: {terms}.')
     if facts.kev_added or facts.kev_mentioned or facts.severe:
         lines.append(
             'First step: check whether you use any of these products, and fix the ones attackers use first.'
@@ -257,8 +260,12 @@ def _summary(facts: _Facts, days: int, today: str) -> tuple[str, ...]:
     return tuple(lines)
 
 
-def compose(data: BriefData, days: int = DEFAULT_DAYS) -> Brief:
-    """Turn :class:`~insight.services.BriefData` into an executive summary and five short sections."""
+def compose(data: BriefData, days: int = DEFAULT_DAYS, *, kev_trend: str = '') -> Brief:
+    """Turn :class:`~insight.services.BriefData` into an executive summary and five short sections.
+
+    ``kev_trend`` is a sentence that follows the one about new KEV entries (the threat landscape compares
+    their number with earlier periods).
+    """
     facts = _facts(data)
     added = {k.cve for k in facts.kev_added}
     exploited = [
@@ -266,14 +273,14 @@ def compose(data: BriefData, days: int = DEFAULT_DAYS) -> Brief:
         for k in facts.kev_added
     ]
     exploited += [
-        BriefItem(f'{k.cve} · {_product(k)} · in {_count(n, "new report")}', newest)
+        BriefItem(f'{k.cve} · {_product(k)} · in {count_of(n, "new report")}', newest)
         for k, n, newest, _ in facts.kev_mentioned
         if k.cve not in added
     ]
     severe = [BriefItem(f'{cve} · CVSS {score:g} · {title}', doc) for score, cve, title, doc in facts.severe]
-    watch = [BriefItem(f'{term} · {_count(n, "new report")}', search=term) for term, n in facts.watch or []]
+    watch = [BriefItem(f'{term} · {count_of(n, "new report")}', search=term) for term, n in facts.watch or []]
     shared = [
-        BriefItem(f'{value} · {_count(n, "source")}, {_count(reports, "report")}', entity=value)
+        BriefItem(f'{value} · {count_of(n, "source")}, {count_of(reports, "report")}', entity=value)
         for _, value, n, reports in facts.shared
     ]
     vendors = [BriefItem(f'{name} ({n})', search=name) for name, n in facts.vendors]
@@ -306,4 +313,6 @@ def compose(data: BriefData, days: int = DEFAULT_DAYS) -> Brief:
         ),
     )
     today = (datetime.fromisoformat(data.since) + timedelta(days=days)).date().isoformat()
-    return Brief(days=days, since=data.since, summary=_summary(facts, days, today), sections=sections)
+    return Brief(
+        days=days, since=data.since, summary=_summary(facts, days, today, kev_trend), sections=sections
+    )

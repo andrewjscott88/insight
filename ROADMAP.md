@@ -22,6 +22,10 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
       catalog, tags from technique IDs written in reports, analyst tags and removals kept across revisions, the
       **ATT&CK techniques** tab with report pivots, a Navigator layer export and the API. Still to do: Mobile and
       ICS catalogs.
+- [x] **Threat landscape** ([ADR 0020](docs/adr/0020-threat-landscape.md)), at the operator's request: a
+      plain-English executive summary of what is trending against the weeks before, why it matters and what to
+      check, attacker behaviour by tactic, TLP-marked and downloadable as a briefing. Next: analyst-defined
+      themes, and KEV ransomware use (TIP 1.1) and EPSS (TIP 1.2) in it.
 - [ ] **TIP 0.1 Verify every public deployment.** Anonymous `GET /` answers 303 to `/login`; `.env` sets secure
       cookies, allowed hosts and trusted proxies, preferably MFA. A smoke check for the public URL.
 - [x] **TIP 0.2 Fix stale session and scheduling documentation.** README and ARCHITECTURE now describe stored

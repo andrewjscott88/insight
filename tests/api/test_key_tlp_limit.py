@@ -40,7 +40,7 @@ def world(app: FastAPI) -> dict[str, Any]:
             db,
             report(
                 f'{MARKER} briefing',
-                f'{MARKER}: C2 at {HIDDEN_IP}, also {SHARED_IP}. {HIDDEN_TECHNIQUE}',
+                f'{MARKER}: C2 at {HIDDEN_IP}, also {SHARED_IP}. {HIDDEN_TECHNIQUE}. A wiper followed.',
                 'AMBER',
             ),
         )
@@ -100,6 +100,8 @@ def test_nothing_hidden_leaks_through_any_read_route(client: TestClient, world: 
         '/api/attack/techniques',
         '/api/attack/summary?days=0',
         '/api/attack/navigator?days=0',
+        '/api/landscape?days=7',
+        '/api/landscape/briefing?days=30',
         f'/api/attack/techniques/{HIDDEN_TECHNIQUE}/documents',
         f'/api/documents/{world["green"]}/techniques',
         f'/api/documents/{world["amber"]}/techniques',
@@ -148,6 +150,18 @@ def test_ioc_exports_are_capped_at_the_key_limit(client: TestClient, world: dict
     assert export['filters']['max_tlp'] == 'GREEN'  # the stricter of the request and the key
     assert export['tlp'] == 'GREEN'
     assert {ioc['value'] for ioc in export['iocs']} == {SHARED_IP}
+
+
+def test_the_landscape_counts_only_reports_within_the_limit(
+    client: TestClient, world: dict[str, Any]
+) -> None:
+    body = get(client, world, '/api/landscape', days=7).json()
+    assert body['tlp'] == 'GREEN'
+    assert body['reports'] == 1  # the GREEN note: the AMBER report and the AMBER current revision are hidden
+    assert 'wipers' not in {t['key'] for t in body['threats']}
+    briefing = get(client, world, '/api/landscape/briefing', days=7).text
+    assert briefing.startswith('**TLP:GREEN**')
+    assert 'Destructive attacks' not in briefing
 
 
 def test_techniques_from_hidden_reports_stay_hidden(client: TestClient, world: dict[str, Any]) -> None:

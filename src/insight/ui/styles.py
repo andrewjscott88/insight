@@ -30,6 +30,7 @@ body.body--dark, body.body--light { background:var(--ins-bg);color:var(--ins-tex
 .section-title { font-size:1.25rem;font-weight:600;line-height:1.4; }
 .report-title { font-size:1.5rem;font-weight:600;line-height:1.35; }
 .subsection-title { font-size:1.125rem;font-weight:600;line-height:1.4; }
+.card-title { font-size:1rem;font-weight:600;line-height:1.5; }
 .eyebrow { color:var(--ins-accent);font-size:1rem;font-weight:600;letter-spacing:0.01em; }
 .muted { color:var(--ins-muted); }
 .text-warn { color:var(--ins-warn); }

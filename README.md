@@ -32,7 +32,14 @@ A single-operator threat-intelligence workbench, run locally or published behind
   schedules** (off by default; every hour, 6 hours or day, per source or for all, from a time of day you choose,
   in UTC) so the feeds and the brief stay fresh by themselves. An unchanged feed is not downloaded again (`ETag` / `Last-Modified`). See
   [ADR 0018](docs/adr/0018-opt-in-scheduled-syncs.md).
-- **Intel brief** on the landing page: what the last 7 days add up to, built from your reports (no AI). An
+- **Threat landscape** opens the workspace ([ADR 0020](docs/adr/0020-threat-landscape.md)): a plain-English
+  executive summary of the last 7 or 30 days, compared with the 4 weeks or months before. Which kinds of threat
+  are **rising**, **new** or **quieter** (ransomware, phishing, data theft, supply chain, zero-days and 8 more,
+  spotted by listed words and ATT&CK techniques), what each one is, **why it matters** and **what to check**,
+  what attackers are doing by ATT&CK tactic, and every report behind it. Counted from your reports, not written
+  by AI; marked with the most restrictive TLP it used; **Download as a briefing to share** (Markdown).
+  `GET /api/landscape`, `GET /api/landscape/briefing`.
+- **Intel brief** below it: what the period adds up to, built from your reports (no AI). An
   **executive summary** in a few plain sentences (what came in, what attackers are using now and the US federal
   fix-by date, the most serious new weakness, what matches your watch terms, a first step), then *Exploited now*
   (CISA KEV), *Most severe* (CVSS 9 or higher), *Your watch terms*, *Seen in several sources* and

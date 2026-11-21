@@ -94,6 +94,17 @@ GLOSSARY: Final[tuple[tuple[str, str], ...]] = (
         'One indicator value, such as one web address, that may appear in many reports.',
     ),
     (
+        'Threat landscape',
+        'The big picture: which kinds of threat your reports describe most, how that is changing, and what '
+        'it could mean for you. Insight counts this from your reports.',
+    ),
+    (
+        'Rising, new, as usual, quieter',
+        'How a kind of threat compares with the 4 weeks (or 4 months) before. Rising means in more reports '
+        'than usual and a bigger share of them. New means it was in none of them. Quieter means half as many '
+        'or fewer.',
+    ),
+    (
         'MITRE ATT&CK',
         'A free list of the ways attackers work, kept by the MITRE organisation. Analysts use it so that '
         'everyone names the same attack steps with the same words.',

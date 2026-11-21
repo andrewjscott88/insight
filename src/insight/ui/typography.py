@@ -1,7 +1,7 @@
 """Real headings for the workspace (WCAG 1.3.1, 2.4.6, 2.4.10).
 
 Screen readers and read-aloud tools list and jump between headings; a ``div`` that only *looks* like a heading
-is invisible to them. :class:`Heading` is a NiceGUI label rendered as ``<h1>``-``<h3>``.
+is invisible to them. :class:`Heading` is a NiceGUI label rendered as ``<h1>``-``<h4>``.
 """
 
 from __future__ import annotations
@@ -10,10 +10,15 @@ from typing import Final, Literal
 
 from nicegui import ui
 
-Level = Literal[1, 2, 3]
+Level = Literal[1, 2, 3, 4]
 #: The visual style of each level (see ``styles.py``).
 NEW_TAB: Final = ' (opens in a new tab)'
-HEADING_CLASSES: Final[dict[int, str]] = {1: 'page-title', 2: 'section-title', 3: 'subsection-title'}
+HEADING_CLASSES: Final[dict[int, str]] = {
+    1: 'page-title',
+    2: 'section-title',
+    3: 'subsection-title',
+    4: 'card-title',
+}
 
 
 class Heading(ui.label):
