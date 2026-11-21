@@ -236,5 +236,5 @@ def export_stix(db: Session, query: IocExportQuery) -> dict[str, Any]:
     add_stix_techniques(db, bundle, max_tlp=query.max_tlp)
     validate_stix_bundle(bundle)
     detail = {'counts': export['counts'], 'tlp': export['tlp'], 'filters': export['filters']}
-    audit(db, 'stix.export', bundle['id'], json.dumps(detail, sort_keys=True))
+    audit(db, 'stix.export', export['export_id'], json.dumps(detail, sort_keys=True))
     return bundle
