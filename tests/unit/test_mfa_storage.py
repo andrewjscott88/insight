@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import base64
+
 import pytest
+from insight.mfa_crypto import decrypt_seed
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -59,3 +62,20 @@ def test_unreadable_storage_never_authenticates_as_a_plaintext_seed(db: Session,
     code = totp.code_at(SEED, STEP + 1)
     assert not services.verify_mfa_code(db, code, (STEP + 1) * totp.PERIOD, session_secret=SESSION_SECRET)
     assert (row.secret, row.last_step) == (stored_value, STEP)
+
+
+def test_altered_authentication_tag_is_rejected_without_consuming_the_code(db: Session) -> None:
+    services.pair_mfa(db, SEED, STEP, session_secret=SESSION_SECRET)
+    row = db.scalars(select(OperatorMfa)).one()
+    version, encoded = row.secret.split(':', 1)
+    assert decrypt_seed(row.secret, SESSION_SECRET) == SEED
+    packet = bytearray(base64.b64decode(encoded, validate=True))
+    packet[-1] ^= 1
+    row.secret = f'{version}:{base64.b64encode(packet).decode("ascii")}'
+    db.flush()
+    with pytest.raises(ValueError, match='stored MFA seed'):
+        decrypt_seed(row.secret, SESSION_SECRET)
+    assert not services.verify_mfa_code(
+        db, totp.code_at(SEED, STEP + 1), (STEP + 1) * totp.PERIOD, session_secret=SESSION_SECRET
+    )
+    assert row.last_step == STEP
