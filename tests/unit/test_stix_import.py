@@ -352,3 +352,11 @@ def test_bounded_invalid_json_refused(db: Session, raw: bytes) -> None:
     with pytest.raises(ValueError, match=r'.+'):
         services.import_stix(db, raw, max_tlp='GREEN')
     assert db.scalar(select(func.count()).select_from(Document)) == 0
+
+
+def test_bundle_envelope_cannot_silently_discard_handling_restrictions(db: Session) -> None:
+    data = bundle(indicator())
+    data['object_marking_refs'] = [RED]
+    with pytest.raises(ValueError, match='envelope markings'):
+        submit(db, data, ceiling='CLEAR')
+    assert db.scalar(select(func.count()).select_from(Document)) == 0
