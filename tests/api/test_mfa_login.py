@@ -23,6 +23,7 @@ from insight.main import create_app
 from insight.models import AuditEvent
 
 from ..conftest import PASSWORD
+from ..conftest import SECRET as SESSION_SECRET
 
 SECRET = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP'
 
@@ -38,7 +39,7 @@ def wrong_code() -> str:
 def pair(app: FastAPI) -> None:
     with app.state.session_factory.begin() as db:
         services.set_actor(db, 'cli')
-        services.pair_mfa(db, SECRET, totp.time_step() - 5)
+        services.pair_mfa(db, SECRET, totp.time_step() - 5, session_secret=app.state.settings.session_secret)
 
 
 @pytest.fixture
@@ -116,6 +117,27 @@ def test_one_generic_answer_for_either_wrong_factor(
     assert response.status_code == 401
     assert 'Incorrect password or authentication code.' in response.text
     assert mfa_client.get('/api/stats').status_code == 401
+
+
+def test_restarting_with_a_different_session_secret_fails_closed_and_preserves_pairing(
+    mfa_app: FastAPI,
+    settings: Settings,
+    csrf_token_from: Callable[[str], str],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    rotated_secret = 'different disposable session secret for this test'
+    changed = dataclasses.replace(settings, mfa=True, session_secret=rotated_secret)
+    caplog.clear()
+    with TestClient(create_app(changed, with_ui=False), follow_redirects=False) as client:
+        assert sign_in(client, csrf_token_from, PASSWORD, current_code()) == 401
+        assert client.get('/api/stats').status_code == 401
+    assert SECRET not in caplog.text
+    assert rotated_secret not in caplog.text
+    with TestClient(
+        create_app(dataclasses.replace(settings, mfa=True), with_ui=False), follow_redirects=False
+    ) as restored:
+        assert sign_in(restored, csrf_token_from, PASSWORD, current_code()) == 303
+        assert restored.get('/api/stats').status_code == 200
 
 
 def test_a_code_works_only_once(mfa_app: FastAPI, csrf_token_from: Callable[[str], str]) -> None:
@@ -209,15 +231,17 @@ def test_startup_notes(settings: Settings, caplog: pytest.LogCaptureFixture) -> 
 
 def test_pair_verify_reset(db: Session) -> None:
     assert not services.mfa_paired(db)
-    assert not services.verify_mfa_code(db, current_code())  # nothing paired: fail closed
-    services.pair_mfa(db, SECRET, totp.time_step() - 5)
+    assert not services.verify_mfa_code(
+        db, current_code(), session_secret=SESSION_SECRET
+    )  # nothing paired: fail closed
+    services.pair_mfa(db, SECRET, totp.time_step() - 5, session_secret=SESSION_SECRET)
     assert services.mfa_paired(db)
     with pytest.raises(ValueError, match='already paired'):
-        services.pair_mfa(db, SECRET, 0)
+        services.pair_mfa(db, SECRET, 0, session_secret=SESSION_SECRET)
     code = current_code()
-    assert services.verify_mfa_code(db, code)
-    assert not services.verify_mfa_code(db, code)  # each code works once
-    assert not services.verify_mfa_code(db, wrong_code())
+    assert services.verify_mfa_code(db, code, session_secret=SESSION_SECRET)
+    assert not services.verify_mfa_code(db, code, session_secret=SESSION_SECRET)  # each code works once
+    assert not services.verify_mfa_code(db, wrong_code(), session_secret=SESSION_SECRET)
     assert services.reset_mfa(db)
     assert not services.reset_mfa(db)
     assert [e.action for e in db.scalars(select(AuditEvent).order_by(AuditEvent.created_at))] == [
@@ -227,5 +251,5 @@ def test_pair_verify_reset(db: Session) -> None:
 
 
 def test_the_pairing_code_cannot_also_sign_in(db: Session) -> None:
-    services.pair_mfa(db, SECRET, totp.time_step())
-    assert not services.verify_mfa_code(db, current_code())
+    services.pair_mfa(db, SECRET, totp.time_step(), session_secret=SESSION_SECRET)
+    assert not services.verify_mfa_code(db, current_code(), session_secret=SESSION_SECRET)

@@ -5,8 +5,10 @@ from __future__ import annotations
 import io
 import logging
 import os
+import sqlite3
 import stat
 import sys
+from contextlib import closing
 from pathlib import Path
 from typing import Any
 
@@ -314,6 +316,12 @@ def test_api_key_with_a_tlp_limit(sqlite_env: Path, capsys: pytest.CaptureFixtur
 MFA_SECRET = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP'
 
 
+@pytest.fixture
+def mfa_cli_env(sqlite_env: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    monkeypatch.setenv('INSIGHT_SESSION_SECRET', 'configured session secret for MFA CLI tests')
+    return sqlite_env
+
+
 def answer_codes(monkeypatch: pytest.MonkeyPatch, *codes: str) -> list[str]:
     """Typed codes for `insight mfa setup`; returns the prompts shown."""
     from insight import totp
@@ -333,7 +341,7 @@ def answer_codes(monkeypatch: pytest.MonkeyPatch, *codes: str) -> list[str]:
 
 
 def test_mfa_setup_confirms_a_code_before_pairing(
-    sqlite_env: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    mfa_cli_env: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     from insight import totp
 
@@ -348,10 +356,13 @@ def test_mfa_setup_confirms_a_code_before_pairing(
     assert 'Authenticator app paired. MFA is still off until INSIGHT_MFA=on' in captured.out
     assert 'does not match' in captured.err
     assert prompts == ['Code shown by the app: '] * 2
+    with closing(sqlite3.connect(mfa_cli_env / 'insight.db')) as connection:
+        assert connection.execute('SELECT count(*) FROM operator_mfa').fetchone() == (1,)
+        assert MFA_SECRET not in '\n'.join(connection.iterdump())
 
 
 def test_mfa_setup_is_idempotent(
-    sqlite_env: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    mfa_cli_env: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """`make mfa-enable` runs setup every time: an already paired app is kept, and that is not an error."""
     from insight import totp
@@ -387,7 +398,7 @@ def test_mfa_setup_is_idempotent(
     ],
 )
 def test_mfa_status(
-    sqlite_env: Path,
+    mfa_cli_env: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
     switch: str,
@@ -405,7 +416,7 @@ def test_mfa_status(
     assert expected in capsys.readouterr().out
 
 
-def test_mfa_status_rejects_an_invalid_switch(sqlite_env: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_mfa_status_rejects_an_invalid_switch(mfa_cli_env: Path, capsys: pytest.CaptureFixture[str]) -> None:
     os.environ['INSIGHT_MFA'] = 'onn'
     assert cli.main(['mfa', 'status']) == 1
     assert 'INSIGHT_MFA must be "on" or "off"' in capsys.readouterr().err
@@ -413,7 +424,7 @@ def test_mfa_status_rejects_an_invalid_switch(sqlite_env: Path, capsys: pytest.C
 
 @pytest.mark.parametrize(('switch', 'message'), [('off', 'MFA is off'), ('on', 'sign-in is locked')])
 def test_mfa_reset(
-    sqlite_env: Path,
+    mfa_cli_env: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
     switch: str,
@@ -434,7 +445,7 @@ def test_mfa_reset(
 
 
 def test_mfa_setup_saves_nothing_without_a_matching_code(
-    sqlite_env: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    mfa_cli_env: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     answer_codes(monkeypatch, 'nope', '123', 'abcdef')
     assert cli.main(['mfa', 'setup']) == 1
@@ -444,7 +455,7 @@ def test_mfa_setup_saves_nothing_without_a_matching_code(
 
 
 def test_mfa_setup_can_be_cancelled(
-    sqlite_env: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    mfa_cli_env: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     answer_codes(monkeypatch)  # end of input at the first prompt (Ctrl-D)
     assert cli.main(['mfa', 'setup']) == 1
