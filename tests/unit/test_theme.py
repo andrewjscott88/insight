@@ -370,3 +370,15 @@ def test_regression_the_sign_in_card_fits_a_phone_screen() -> None:
     assert block
     assert 'width: min(28rem, calc(100vw - 32px));' in block.group(1)
     assert 'max-width: calc(100%' not in block.group(1)
+
+
+def test_a_field_example_stays_hidden_while_the_label_sits_in_the_field() -> None:
+    """Regression: the readable placeholder colour must not undo Quasar's hiding of an example (overlap)."""
+    shown = STYLE.index(
+        '.q-field__native::placeholder, .q-field__input::placeholder { color:var(--ins-muted)'
+    )
+    hidden = STYLE.index('.q-field--labeled:not(.q-field--float) .q-field__native::placeholder')
+    assert shown < hidden
+    rule = STYLE[hidden : STYLE.index('}', hidden)]
+    assert '.q-field--labeled:not(.q-field--float) .q-field__input::placeholder' in rule
+    assert 'color:transparent' in rule

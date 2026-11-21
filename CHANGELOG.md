@@ -11,6 +11,11 @@ fields are additive. TLP-limited API keys may now read cached CVE scores (`GET /
 CVEs in reports they can see; starting a lookup stays refused to them. The new password-free access
 (`INSIGHT_DEV_NO_AUTH`) is off unless you set it to `on`.
 
+### Fixed: field labels no longer overlap their examples
+- An empty field showed its label and its example on top of each other (for example "Watch term" over
+  "e.g. Palo Alto, VPN, identity"). The example now appears only once the label has moved up, as the
+  framework intends; the readable colour of examples is unchanged.
+
 ### Changed: a clearer executive brief (from #39)
 - Keep the **Insight** name and symbol; use **Cyber Threat Intelligence Feed** as the tagline and remove
   **Collect. Connect. Understand.** The threat landscape now leads the page, above the report tools.
