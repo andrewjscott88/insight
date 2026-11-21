@@ -360,3 +360,46 @@ def test_bundle_envelope_cannot_silently_discard_handling_restrictions(db: Sessi
     with pytest.raises(ValueError, match='envelope markings'):
         submit(db, data, ceiling='CLEAR')
     assert db.scalar(select(func.count()).select_from(Document)) == 0
+
+
+def test_validation_errors_omit_submitted_values(db: Session) -> None:
+    secret = 'EXAMPLE-PRIVATE-FIXTURE-328'
+    bad = indicator(secret)
+    bad['object_marking_refs'] = [RED]
+    ip = indicator()
+    long_title = report(ip['id'])
+    long_title['name'] = secret * 20
+    for data in (bundle(bad), bundle(ip, long_title)):
+        with pytest.raises(ValueError, match=r'.+') as exc:
+            submit(db, data, ceiling='AMBER')
+        assert secret not in str(exc.value)
+
+
+def test_catalog_ref_uses_canonical_technique_id(db: Session) -> None:
+    attack = obj(
+        'attack-pattern',
+        name='Phishing',
+        external_references=[{'source_name': 'mitre-attack', 'external_id': '   t1566   '}],
+    )
+    ip = indicator()
+    supplied = report(ip['id'], attack['id'])
+    did = submit(db, bundle(supplied, ip, attack))['document_ids'][0]
+    assert [t.technique_id for t in services.document_techniques(db, did)] == ['T1566']
+    exported = services.export_stix(db, IocExportQuery())
+    assert any(
+        o['type'] == 'attack-pattern' and o['external_references'][0]['external_id'] == 'T1566'
+        for o in exported['objects']
+    )
+
+
+def test_indicator_moved_to_free_text_creates_new_membership(db: Session) -> None:
+    previous = indicator('192.0.2.7')
+    kept = indicator('192.0.2.8')
+    record = report(previous['id'], kept['id'])
+    original = submit(db, bundle(previous, kept, record))['document_ids'][0]
+    record['object_refs'] = [kept['id']]
+    record['description'] = 'ip: 192.0.2.7'
+    changed = submit(db, bundle(kept, record))['document_ids'][0]
+    assert changed != original
+    values = db.scalars(select(Entity.value).join(Observation).where(Observation.document_id == changed))
+    assert list(values) == ['192.0.2.8']
