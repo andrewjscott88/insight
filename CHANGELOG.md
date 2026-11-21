@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Optional abuse.ch indicator feeds
+
+- The Sources tab can now sync URLhaus, ThreatFox and MalwareBazaar using an operator's abuse.ch key.
+  The feeds start switched off. They ingest recent indicator metadata and keep source evidence in Insight.
+
 **Upgrading from 0.6.0:** migrations `0009` (ATT&CK technique tags), `0010` (source switches), `0011`
 (alerts), `0012` (CVE lookup failures) and `0013` (more KEV fields; the next KEV sync fills them) run at start-up, or with `make migrate`. Reports stored before the upgrade get their technique tags when you run
 `make attack-backfill` once (safe to run again). The new threat-research sources start switched off: Insight
@@ -25,6 +30,11 @@ CVEs in reports they can see; starting a lookup stays refused to them. The new p
   `0.0.0.0/0` and `::/0`, which occur in firewall and cloud rules.
 - **IOC exports:** the default now includes `cidr` entries. Select the previous kinds with `--kind` or the API's
   `kinds` field. Consumers that validate indicator kinds need the updated schema.
+
+### Manage alert destinations on the host
+
+- `insight notify` lists, adds, enables, disables and removes destinations. It reads new addresses from
+  a hidden prompt or standard input and saves JSON signing keys to a new owner-only file. The list shows the name, ID, style, state and TLP limit.
 
 ### Added: a prioritised CVE view, and a brief that uses ransomware use, NVD and EPSS (TIP 1.3)
 - **Prioritised CVEs** tab and `GET /api/cves` ([ADR 0024](docs/adr/0024-prioritised-cves.md)): the CVEs in your

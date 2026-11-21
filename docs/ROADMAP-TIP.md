@@ -525,7 +525,7 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
 - [x] **1.2** Auto-enqueue NVD and EPSS lookups for new CVEs (opt-in, throttled): done, ADR 0023, with review B2 and C2
 - [x] **1.3** Brief uses ransomware flag, NVD CVSS, and EPSS (fact-only wording): done, ADR 0024, with a prioritised CVE view
 - [x] **1.4** Webhook/email notifications for watch-term hits and new KEV (`ROADMAP` #15)
-- [ ] **1.5** abuse.ch URLhaus, ThreatFox, and MalwareBazaar connectors (metadata/IOCs only)
+- [x] **1.5** abuse.ch URLhaus, ThreatFox, and MalwareBazaar connectors (metadata/IOCs only)
 - [ ] **1.6** AlienVault OTX connector (operator API key)
 - [ ] **1.7** Extraction-quality corpus and benchmark ratchet (`ROADMAP` #9)
 

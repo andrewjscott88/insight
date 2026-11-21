@@ -15,6 +15,7 @@ import os
 import pytest
 
 from insight import connectors
+from insight.abusech import parse_abusech
 
 pytestmark = pytest.mark.live
 
@@ -29,6 +30,14 @@ def test_source_is_reachable_and_parsable(key: str) -> None:
         items, skipped = asyncio.run(connectors.fetch_csaf(source))
         assert skipped == 0, f'{key}: {skipped} of the newest advisories could not be read'
         assert len(items) == connectors.CSAF_INBOX_LIMIT
+        assert all(item.external_id for item in items)
+        return
+    if source.kind == 'abusech':
+        if not os.environ.get('INSIGHT_ABUSECH_AUTH_KEY'):
+            pytest.skip('set INSIGHT_ABUSECH_AUTH_KEY to test keyed indicator feeds')
+        headers, body = connectors.abusech_request(source)
+        payload = asyncio.run(connectors.download(source.fetch_urls[0], headers=headers, body=body))
+        items = parse_abusech(payload, source)  # A short observation window may be empty.
         assert all(item.external_id for item in items)
         return
     payload = asyncio.run(connectors.download(source.url))
