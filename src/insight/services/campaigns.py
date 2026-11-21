@@ -20,7 +20,7 @@ from ..schemas import (
     most_restrictive,
     tlp_markings,
 )
-from .actors import _check_label, _who, link_report, unlink_report
+from .actors import _check_label, _insert_link, _who, link_report, unlink_report
 from .audit import audit
 from .common import like_pattern
 from .tlp import _visible, visible_levels
@@ -124,30 +124,24 @@ def link_threat(
     label = most_restrictive(subject.tlp, payload.tlp, floor)
     _check_label(label, max_tlp, 'links')
     if kind == 'actor' and payload.target_kind == 'document':
-        prior = db.scalar(
-            select(ActorDocument).where(
-                ActorDocument.group_ref == ref, ActorDocument.document_id == target_id
-            )
-        )
-        if prior is not None and prior.tlp not in visible_levels(max_tlp):
-            raise LookupError('Link unavailable')
-        item = ActorLinkInput.model_validate(
-            {'document_id': target_id, 'tlp': label, 'note': prior.note if prior else ''}
-        )
-        row = link_report(db, ref, item, max_tlp=max_tlp)
+        item = ActorLinkInput.model_validate({'document_id': target_id, 'tlp': label})
+        row = link_report(db, ref, item, max_tlp=max_tlp, preserve_note=True)
         return ThreatLinkView('document', target_id, name, row.tlp)
     target = _TARGETS[payload.target_kind]
     owner = _owner(kind)
-    existing = db.scalar(select(ThreatLink).where(owner == ref, target == target_id))
-    if existing is not None:
+    created = _insert_link(
+        db, ThreatLink, {owner.key: ref, target.key: target_id, 'tlp': label, 'actor': _who(db)}
+    )
+    if not created:
+        existing = db.scalars(
+            select(ThreatLink).where(owner == ref, target == target_id).with_for_update()
+        ).one()
         if existing.tlp not in visible_levels(max_tlp):
             raise LookupError('Link unavailable')
         label = most_restrictive(label, existing.tlp)
         if label == existing.tlp:
             return ThreatLinkView(payload.target_kind, target_id, name, label)
         existing.tlp = label
-    else:
-        db.add(ThreatLink(**{owner.key: ref, target.key: target_id}, tlp=label, actor=_who(db)))
     db.flush()
     audit(db, f'{kind}.link', ref, f'{payload.target_kind} {target_id}')
     return ThreatLinkView(payload.target_kind, target_id, name, label)

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Manually tracked actors and campaigns
+
+- Analysts can create campaigns in the workspace or API and explicitly link their actors and campaigns to
+  reports, indicators and ATT&CK techniques. STIX exports carry the selected links with their TLP markings.
+- Migration `0015` adds campaigns, explicit links and sharing labels for existing actor/report links.
+  Existing notes and actor descriptions that contain a higher TLP marker now raise the label.
+
 ### Detection rule files
 
 - Attach YARA or Sigma rules to reports, actors, techniques, CVEs and malware families. Download the original
