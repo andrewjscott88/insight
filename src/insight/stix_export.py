@@ -37,7 +37,7 @@ def stix_timestamp(value: str) -> str:
     return stamp.astimezone(UTC).isoformat(timespec='microseconds').replace('+00:00', 'Z')
 
 
-def _marking(label: str) -> dict[str, Any]:
+def tlp_marking(label: str) -> dict[str, Any]:
     return {
         'type': 'marking-definition',
         'spec_version': '2.1',
@@ -109,7 +109,9 @@ def _report(source: dict[str, Any], modified: str, metadata_only: bool) -> dict[
     }
 
 
-def build_stix_bundle(export: dict[str, Any], metadata_only_ids: set[str]) -> dict[str, Any]:
+def build_stix_bundle(
+    export: dict[str, Any], metadata_only_ids: set[str], *, entities: dict[str, dict[str, Any]] | None = None
+) -> dict[str, Any]:
     """Use only selected reports/indicators and permitted excerpts. Report references retain membership."""
     bundle: dict[str, Any] = {'type': 'bundle', 'id': 'bundle--' + export['export_id']}
     if not export['iocs']:
@@ -121,6 +123,8 @@ def build_stix_bundle(export: dict[str, Any], metadata_only_ids: set[str]) -> di
     labels: set[str] = set()
     for ioc in export['iocs']:
         indicator = _indicator(ioc, modified)
+        if entities is not None:
+            entities[ioc['entity_id']] = indicator
         objects.append(indicator)
         labels.add(ioc['tlp'])
         for source in ioc['sources']:
@@ -134,6 +138,6 @@ def build_stix_bundle(export: dict[str, Any], metadata_only_ids: set[str]) -> di
     for doc_id, quotes in excerpts.items():
         reports[doc_id]['description'] = '\n\n'.join(quotes)
     bundle['objects'] = (
-        [_marking(label) for label in TLP_MARKINGS if label in labels] + objects + list(reports.values())
+        [tlp_marking(label) for label in TLP_MARKINGS if label in labels] + objects + list(reports.values())
     )
     return bundle
