@@ -6,7 +6,7 @@ import ipaddress
 import json
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from .. import egress
@@ -65,6 +65,14 @@ def cached_greynoise_context(db: Session, value: str) -> dict[str, Any] | None:
 
 
 def store_greynoise_context(db: Session, value: str, payload: dict[str, Any]) -> dict[str, Any]:
+    # The cache has no entity FK. Acquire the entity's write lock on SQLite and PostgreSQL before
+    # rechecking eligibility or writing. Retention removes its cache after deleting the locked entity.
+    db.execute(
+        update(Entity)
+        .where(Entity.kind == 'ip', Entity.value == value)
+        .values(value=Entity.value)
+        .execution_options(synchronize_session=False)
+    )
     entity_id = eligible_greynoise_ip(db, value)
     if not entity_id:
         raise LookupError('No eligible reviewed public IPv4 in a current TLP:CLEAR report')

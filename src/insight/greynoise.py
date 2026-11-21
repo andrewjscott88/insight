@@ -107,17 +107,21 @@ async def lookup(sessions: SessionFactory, value: str, *, actor: str) -> dict[st
     if not (key := _key()):
         raise NotConfigured('Set INSIGHT_GREYNOISE_KEY on the host to enable GreyNoise Community lookups')
 
-    def read() -> dict[str, Any] | None:
+    def fresh() -> dict[str, Any] | None:
         with sessions() as db:
-            return services.cached_greynoise_context(db, value)
-
-    acquired = _BUSY.acquire(blocking=False)
-    try:
-        found = await asyncio.to_thread(read)
+            found = services.cached_greynoise_context(db, value)
         if found and datetime.fromisoformat(found['fetched_at']) > datetime.now(UTC) - _TTL:
             return found
-        if not acquired:
-            raise RateLimited(1)
+        return None
+
+    if cached := await asyncio.to_thread(fresh):
+        return cached
+    if not _BUSY.acquire(blocking=False):
+        raise RateLimited(1)
+    try:
+        # Another request may have completed while this caller was checking the cache.
+        if cached := await asyncio.to_thread(fresh):
+            return cached
         if wait := THROTTLES['greynoise'].try_acquire():
             raise RateLimited(wait)
         payload = await _fetch(value, key)
@@ -129,5 +133,4 @@ async def lookup(sessions: SessionFactory, value: str, *, actor: str) -> dict[st
 
         return await asyncio.to_thread(save)
     finally:
-        if acquired:
-            _BUSY.release()
+        _BUSY.release()
