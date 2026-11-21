@@ -62,6 +62,31 @@ def test_filters_by_kind_and_highest_tlp(authed: TestClient, reports: tuple[dict
     assert export['filters']['kinds'] == ['ip', 'domain']
 
 
+def test_stix_download_filters_reports_and_does_not_leak_disabled_evidence(
+    authed: TestClient, reports: tuple[dict[str, Any], ...]
+) -> None:
+    _, second = reports
+    response = authed.get(
+        '/api/iocs/stix', params={'document_id': second['id'], 'kind': 'ip', 'evidence': 'false'}
+    )
+    assert response.status_code == 200
+    assert response.headers['content-type'] == 'application/stix+json;version=2.1'
+    assert response.headers['cache-control'] == 'no-store'
+    bundle = response.json()
+    assert bundle['type'] == 'bundle'
+    assert response.headers['content-disposition'].endswith(bundle['id'].removeprefix('bundle--') + '.json"')
+    assert '192.0.2.8' in response.text
+    assert 'CVE-2024-12345' not in response.text
+    assert 'Beacon to 192.0.2.8.' not in response.text
+    assert any(event['action'] == 'stix.export' for event in authed.get('/api/audit').json())
+
+
+def test_stix_rejects_defanged_values(authed: TestClient) -> None:
+    response = authed.get('/api/iocs/stix', params={'defang': 'true'})
+    assert response.status_code == 422
+    assert not any(event['action'] == 'stix.export' for event in authed.get('/api/audit').json())
+
+
 def test_filters_reports_like_the_inbox(authed: TestClient, reports: tuple[dict[str, Any], ...]) -> None:
     first, second = reports
     assert document_ids(authed.get('/api/iocs/export', params={'q': 'beacon'}).json()) == {second['id']}

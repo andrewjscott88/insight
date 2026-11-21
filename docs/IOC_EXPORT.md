@@ -200,6 +200,22 @@ Files saved from the browser or the API get your normal file permissions. Restri
 > holds only values an analyst judged `malicious`, with an accepted mention and no warning flag, until the
 > verdict expires. In an export, filter with `verdict=malicious` and check each IOC's `flags`.
 
+## Network sensor rules
+
+On `GET /api/iocs/blocklist`, choose `kind=ip` or `kind=domain` and `format=suricata` or `format=snort`.
+The download contains passive alert rules for the selected engine. Each indicator has a current malicious
+verdict, an accepted mention within the caller's sharing limit and no warning flag. An empty selection
+returns HTTP 422. IPs and domains appear in live, machine-readable form. Review the staged file and check
+the sensor configuration before loading it. Refresh the file to retire expired verdicts.
+
+- **IPs.** IPv4 and IPv6 rules match traffic in either direction involving the exact address.
+- **Suricata domains.** The DNS query buffer matches the entire queried name, case-insensitively.
+- **Snort 3 domains.** The rule checks the first uncompressed question in a standard UDP query to port 53.
+  DNS over TCP and encrypted DNS are outside the scope of these Snort signatures.
+- **Rule IDs.** Reserve local SIDs 1,000,000,000–1,499,999,999 for these IP rules and
+  1,500,000,000–1,999,999,999 for domains. IDs derive from the canonical value, with collisions resolved
+  within the sorted file. Replace each file as a unit. Review the matched value when correlating alerts.
+
 ## 4. How the filters combine
 
 - **Every filter must match** (AND). Within **types**, **review statuses** and **reports** (`--document`), any of
@@ -420,18 +436,43 @@ To validate files automatically, use the JSON Schema
 ([schemas/insight-ioc-v1.schema.json](schemas/insight-ioc-v1.schema.json)), for example
 `check-jsonschema --schemafile docs/schemas/insight-ioc-v1.schema.json insight-iocs.json`.
 
-**Converting to STIX 2.1 yourself.** Insight does not produce STIX. If you convert, these are the usual
-mappings. Convert from an export **without** defanging:
+### STIX 2.1 export
 
-| Insight `kind` | STIX 2.1 |
+In **Export IOCs**, choose **STIX 2.1 bundle** and select the reports, indicator kinds, review states and TLP
+limit to include. From the command line, for example:
+
+```sh
+insight export-stix partner-bundle.json --max-tlp GREEN --review-status accepted --no-evidence
+```
+
+The authenticated `GET /api/iocs/stix` endpoint accepts the IOC export filters. The caller's API-key limit and
+the instance TLP ceiling also apply. Defanging is refused because it changes the values consumers match.
+The CLI writes an owner-only file and refuses to overwrite an existing one. Insight validates each bundle
+offline with the OASIS STIX 2.1 validator before recording the `stix.export` event with the UUID from the bundle ID.
+
+| Report content | STIX representation |
 | --- | --- |
-| `ip`, `cidr` | `ipv4-addr` or `ipv6-addr` (a `:` in the value means IPv6) |
-| `domain` | `domain-name` |
-| `email` | `email-addr` |
-| `url` | `url` |
-| `md5`, `sha1`, `sha256`, `sha512` | `file` with `hashes` keys `MD5`, `SHA-1`, `SHA-256`, `SHA-512` |
-| `cve` | `vulnerability` (with an external reference to the CVE), not an indicator |
-| file and entry `tlp` | the matching TLP 2.0 marking definition |
+| IPv4, IPv6 and CIDR | An `indicator` with an `ipv4-addr:value` or `ipv6-addr:value` pattern |
+| Domain, URL, e-mail address | An `indicator` with a `domain-name`, `url` or `email-addr` value pattern |
+| MD5, SHA-1, SHA-256, SHA-512 | An `indicator` with a `file:hashes` pattern |
+| CVE | A `vulnerability` with the CVE external reference and, where available, CISA KEV context |
+| Source report | A `report` with the source document UUID, selected object references and publisher provenance |
+| Tagged ATT&CK technique | An `attack-pattern` in the report's `object_refs`, with the MITRE technique ID, URL, tactics and copyright notice |
+
+Each report carries its own TLP 2.0 marking. An indicator shared by several selected reports carries the
+strictest source marking. Handle the whole bundle at its highest marking, including AMBER+STRICT where
+present. Indicator IDs identify the projected values in this bundle. Report IDs retain the original document
+UUID for exchange. Empty selections produce a bundle with no objects.
+
+Technique tags come from the selected report revision. For example, if the report is tagged with
+`T1059.001`, its `object_refs` includes the PowerShell technique. A technique shared by two reports with
+the same marking appears once in the bundle. Different markings get separate copies. Use the `mitre-attack`
+external ID to match techniques across exports. Only active tags in the bundled Enterprise catalog qualify.
+Tag evidence and analyst names stay in Insight. Each STIX export supports up to 100,000 active report tags.
+
+Only permitted excerpts enter report descriptions. Turn evidence off to omit all excerpts. Feed items whose
+publisher permits metadata only carry `x_insight_metadata_only: true` and omit their text. Source titles,
+links and indicator values can still identify people. Honor the original publisher's terms when sharing.
 
 ## 9. Limits and troubleshooting
 

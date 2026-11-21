@@ -43,6 +43,7 @@ class StructuredObservations:
 
     version: str
     mentions: list[Mention]
+    technique_ids: frozenset[str] | None = None
 
 
 def fingerprint(item: DocumentInput) -> str:
@@ -138,6 +139,7 @@ def ingest(
     max_tlp: str | None = None,
     structured: StructuredObservations | None = None,
     initial_document_id: str | None = None,
+    preserve_source_tlp: bool = False,
 ) -> tuple[Document, bool]:
     """Store ``item`` with its extracted observations. Returns ``(document, created)``.
 
@@ -158,6 +160,7 @@ def ingest(
 
     A structured importer can supply its validated, typed observations and the initial source document ID.
     Later revisions get new IDs as usual. Evidence offsets must refer to the supplied document body.
+    With ``preserve_source_tlp``, a revision may keep or raise the current label.
     """
     submitted_tlp = item.tlp
     item = apply_tlp_policy(item)
@@ -174,12 +177,14 @@ def ingest(
         )
         _audit_tlp_raise(db, doc, submitted_tlp)
         db.flush()
-        record_report_techniques(db, doc)
+        record_report_techniques(db, doc, allowed=observations.technique_ids)
         queue_report_alerts(db, doc)
         db.flush()
         return doc, True
 
     current = _current_revision(db, ref)
+    if current and preserve_source_tlp and not tlp_permitted(current.tlp, item.tlp):
+        raise ValueError('Import conflicts with an existing document or handling restriction')
     if existing is not None:
         if (
             existing.is_current
@@ -217,7 +222,7 @@ def ingest(
         doc.supersedes_id = current.id
         audit(db, 'document.revision.supersede', doc.id, current.id)
     db.flush()
-    record_report_techniques(db, doc, previous=current)
+    record_report_techniques(db, doc, previous=current, allowed=observations.technique_ids)
     queue_report_alerts(db, doc)
     db.flush()
     return doc, True

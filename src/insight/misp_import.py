@@ -212,7 +212,8 @@ def import_misp_event(
         report,
         ref=services.SourceRef('misp', event_id),
         max_tlp=max_tlp,
-        structured=services.StructuredObservations(version='misp-event-v1', mentions=mentions),
+        structured=services.StructuredObservations('misp-event-v1', mentions, technique_ids=frozenset()),
+        preserve_source_tlp=True,
     )
     if (doc.source_key, doc.external_id) != ('misp', event_id):
         # The shared fingerprint index also covers manual submissions. Preserve both provenance and types.

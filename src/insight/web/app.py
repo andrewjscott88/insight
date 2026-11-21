@@ -35,6 +35,7 @@ from .routes.cves import _register_cve_routes
 from .routes.documents import _register_document_routes
 from .routes.entities import _register_entity_routes
 from .routes.exports import _register_export_routes
+from .routes.imports import _register_import_routes
 from .routes.landscape import _register_landscape_routes
 from .routes.pages import _register_page_routes
 from .routes.sources import _register_enrichment_route, _register_source_routes
@@ -182,6 +183,7 @@ def create_app(settings: Settings | None = None, *, with_ui: bool = True) -> Fas
         _register_document_routes,
         _register_triage_routes,
         _register_export_routes,
+        _register_import_routes,
         _register_entity_routes,
         _register_technique_routes,
         _register_source_routes,

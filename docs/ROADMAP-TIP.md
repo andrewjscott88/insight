@@ -531,15 +531,15 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
 
 ### Phase 2 — Core TIP features (10)
 
-- [ ] **2.1** STIX 2.1 export, validated (`ROADMAP` #12)
-- [ ] **2.2** STIX 2.1 import with TLP enforcement
-- [x] **2.3** ATT&CK catalog + manual/extracted technique tags
+- [x] **2.1** STIX 2.1 export, validated (`ROADMAP` #12)
+- [x] **2.2** STIX 2.1 import with TLP enforcement
+- [x] **2.3** ATT&CK catalog, report and analyst tags, and TLP-marked technique references in STIX Reports
 - [x] **2.4** MISP export/import (host CLI). [Event files and trusted instance exchange](MISP.md)
 - [ ] **2.5** Manual actor and campaign entities (no inferred attribution)
 - [ ] **2.6** Optional GreyNoise community IP enrichment
 - [ ] **2.7** YARA/Sigma rules as linked artifacts (not an engine)
 - [ ] **2.8** PDF advisory ingest with file hash (`ROADMAP` #13)
-- [ ] **2.9** Suricata/Snort-oriented export of accepted network IOCs
+- [x] **2.9** Suricata and Snort 3 alert rules for the IP and domain blocklists
 - [ ] **2.10** Industry threat profiles (top ten groups per industry, with evidence) and exportable actor threat guides with a threat hunt section (hypotheses, data sources, indicator sweep list, linked rules, hunt record); needs a bundled threat-group library
 
 ### Phase 3 — Advanced (8)

@@ -43,6 +43,7 @@ export-iocs examples:
   insight export-iocs share.json --max-tlp GREEN --review-status accepted --defang --no-evidence
   insight export-iocs hashes.json --kind md5 --kind sha1 --kind sha256 --kind sha512
   insight export-iocs report.json --document DOCUMENT_ID
+  insight export-stix bundle.json --max-tlp GREEN --review-status accepted
   In Docker, write under /data, e.g. /data/iocs.json. Guide: docs/IOC_EXPORT.md
 
 api-key examples (one key at a time; the key is printed once, only its hash is stored):
@@ -78,10 +79,12 @@ def build_parser() -> argparse.ArgumentParser:
             'migrate',
             'backup',
             'export-iocs',
+            'export-stix',
             'api-key',
             'mfa',
             'schedule',
             'notify',
+            'import-stix',
             'delete-report',
             'attack-backfill',
             'misp-export',
@@ -91,10 +94,12 @@ def build_parser() -> argparse.ArgumentParser:
         default='serve',
         help=(
             'init: create .env | serve: run (default) | migrate: upgrade the database | backup DEST | '
-            'export-iocs DEST: write a JSON IOC export | api-key ACTION: manage the API key | '
+            'export-iocs DEST: write a JSON IOC export | export-stix DEST: write a STIX 2.1 bundle | '
+            'api-key ACTION: manage the API key | '
             'mfa ACTION: pair the sign-in authenticator app | '
             'schedule [SOURCE|all --every off|1h|6h|24h]: show or set scheduled syncs | '
             'notify [list|add|enable|disable|remove]: manage alert destinations | '
+            'import-stix FILE: import a STIX 2.1 JSON bundle | '
             'delete-report ID --reason TEXT: delete one report for legal or retention reasons | '
             'attack-backfill: tag the ATT&CK techniques written in reports stored before 0.7.0 | '
             'misp-export / misp-import: exchange a MISP event (see command --help)'
@@ -103,13 +108,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         'destination',
         nargs='?',
-        help='backup/export-iocs: file to write (must not exist) | api-key: create, rotate, revoke or '
+        help='backup and export commands: new file to write | api-key: create, rotate, revoke or '
         'status | mfa: setup, reset or status | schedule: a source key, or all | delete-report: a report ID',
     )
     parser.add_argument('--host', default='127.0.0.1')
     parser.add_argument('--port', default=8080, type=int)
     export = parser.add_argument_group(
-        'export-iocs options',
+        'export-iocs and export-stix options',
         'Values are case-insensitive. The file is created owner-only (0600) and never overwritten.',
     )
     export.add_argument(
@@ -294,38 +299,26 @@ def backup(destination: Path) -> str:
     return f'Backed up {source_path} to {destination} (integrity ok).'
 
 
-def export_iocs(destination: Path, filters: Mapping[str, Any]) -> str:
-    """Write a cross-report IOC export (``insight-ioc-v1``) to ``destination``; never overwrites.
-
-    The file is created with mode 0600 because it carries TLP-labelled data. Read-only apart from the
-    ``ioc.export`` audit event; the schema must already be current (``insight migrate``).
-    """
+def export_iocs(destination: Path, filters: Mapping[str, Any], *, stix: bool = False) -> str:
+    """Write an audited, owner-only IOC export or STIX bundle, refusing to overwrite existing files."""
     import json  # Deferred imports keep `insight --version`/`init` lightweight.
 
     from pydantic import ValidationError
-    from sqlalchemy import make_url
 
     from . import services
-    from .config import database_url_from_env
-    from .migrations import current_revision, head_revision
-    from .models import database
+    from .config import parse_max_tlp
     from .schemas import IocExportQuery, validation_message
 
     try:
         query = IocExportQuery.model_validate(dict(filters))
     except ValidationError as exc:
         raise ValueError(validation_message(exc, EXPORT_OPTIONS)) from exc
-    load_env_file()
-    database_url = database_url_from_env()
-    url = make_url(database_url)
-    if url.get_backend_name() == 'sqlite' and (
-        not url.database or url.database == ':memory:' or not Path(url.database).is_file()
-    ):
-        raise ValueError(f'No database at {url.database or "(in-memory)"}')
-    engine, sessions = database(database_url, migrate=False)
-    try:
-        if current_revision(engine) != head_revision():
-            raise ValueError('The database schema is not current; run `insight migrate` first.')
+    with _current_database() as sessions:
+        if stix:
+            instance_limit = parse_max_tlp(os.environ.get('INSIGHT_MAX_TLP', ''))
+            query = query.model_copy(
+                update={'max_tlp': services.stricter_limit(query.max_tlp, instance_limit)}
+            )
         try:  # Exclusive create: never overwrite an existing file.
             fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         except FileExistsError as exc:
@@ -341,7 +334,7 @@ def export_iocs(destination: Path, filters: Mapping[str, Any]) -> str:
         try:
             with os.fdopen(fd, 'w', encoding='utf-8') as file, sessions.begin() as db:
                 services.set_actor(db, 'cli')
-                result = services.export_iocs(db, query)
+                result = services.export_stix(db, query) if stix else services.export_iocs(db, query)
                 json.dump(result, file, ensure_ascii=False, indent=2)
                 file.write('\n')
                 file.flush()  # Surface write errors before the audit event is committed.
@@ -351,8 +344,8 @@ def export_iocs(destination: Path, filters: Mapping[str, Any]) -> str:
         finally:
             if not written:
                 destination.unlink(missing_ok=True)
-    finally:
-        engine.dispose()
+    if stix:
+        return f'Exported {_plural(len(result.get("objects", [])), "STIX object")} to {destination}.'
     return export_summary(result, destination)
 
 
@@ -689,6 +682,35 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == 'migrate':
         print(migrate())
         return 0
+    if args.command == 'import-stix':
+        from sqlalchemy.exc import IntegrityError
+
+        from . import services
+        from .config import parse_max_tlp
+        from .stix_import import MAX_BUNDLE_BYTES
+
+        if not args.destination:
+            print('usage: insight import-stix FILE', file=sys.stderr)
+            return 2
+        try:
+            with Path(args.destination).open('rb') as source:
+                data = source.read(MAX_BUNDLE_BYTES + 1)
+            with _current_database() as sessions, sessions.begin() as db:
+                services.set_actor(db, 'cli')
+                result = services.import_stix(
+                    db, data, max_tlp=parse_max_tlp(os.getenv('INSIGHT_MAX_TLP', ''))
+                )
+            print(
+                f'Imported {result["reports"]} report(s), {result["created"]} new revision(s). '
+                f'SHA-256 {result["bundle_sha256"]}'
+            )
+        except IntegrityError:
+            print('Concurrent import; retry once', file=sys.stderr)
+            return 1
+        except (OSError, ValueError, RuntimeError) as exc:
+            print(f'Import failed: {exc}', file=sys.stderr)
+            return 1
+        return 0
     if args.command == 'backup':
         if not args.destination:
             print('usage: insight backup DEST', file=sys.stderr)
@@ -699,13 +721,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f'Backup failed: {exc}', file=sys.stderr)
             return 1
         return 0
-    if args.command == 'export-iocs':
+    if args.command in ('export-iocs', 'export-stix'):
         if not args.destination:
-            print('usage: insight export-iocs DEST [options]; see `insight --help`', file=sys.stderr)
+            print(f'usage: insight {args.command} DEST [options]; see `insight --help`', file=sys.stderr)
             return 2
         try:
-            print(export_iocs(Path(args.destination), export_filters(args)))
-        except (ValueError, FileExistsError) as exc:
+            print(
+                export_iocs(Path(args.destination), export_filters(args), stix=args.command == 'export-stix')
+            )
+        except (ValueError, FileExistsError, RuntimeError) as exc:
             print(f'Export failed: {exc}', file=sys.stderr)
             return 1
         return 0

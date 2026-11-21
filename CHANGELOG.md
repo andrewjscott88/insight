@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### STIX 2.1 export
+
+- Export indicators, CVEs and report provenance with TLP 2.0 markings from the workspace, the CLI
+  (`insight export-stix FILE`) or `GET /api/iocs/stix`. Every bundle is validated locally before download.
+  The existing report, review and publisher sharing rules apply. [Export guide](docs/IOC_EXPORT.md#stix-21-export)
+
+### STIX 2.1 import
+
+- Import local STIX bundles from the ingest dialog, `insight import-stix FILE` or `POST /api/import/stix`.
+  Each report keeps its source identity, typed observations, TLP and publisher handling restrictions.
+  [Import guide](docs/API.md#post-apiimportstix)
+
 ### MISP event exchange
 
 - The host CLI now exports reviewed indicators to MISP event JSON and imports trusted events into the inbox.
@@ -35,6 +47,11 @@ CVEs in reports they can see; starting a lookup stays refused to them. The new p
 - Insight can highlight an e-mail address in its source report and show other reports that mention the same
   mailbox. Each address carries a personal-data warning. IOC exports can filter out entries with that flag.
 - E-mail support was introduced with `regex-v4`. Earlier reports keep their original observations and review decisions.
+
+### Alerts for network sensors
+
+- Download Suricata or Snort 3 rules from the IP or domain blocklist. Rules alert on traffic involving a
+  reviewed address or a DNS lookup for an exact reviewed name. [Sensor rule formats](docs/IOC_EXPORT.md#network-sensor-rules).
 
 ### Network ranges in reports
 
@@ -202,6 +219,10 @@ CVEs in reports they can see; starting a lookup stays refused to them. The new p
   see. `GET /api/brief` is unchanged.
 
 ### Added: MITRE ATT&CK® techniques on reports
+
+- STIX exports now link each included report to its tagged ATT&CK techniques. Each technique includes a
+  MITRE reference and keeps the report's TLP label. Removed tags and tags outside the current catalog are
+  omitted.
 - **Tags from the report text.** A report is tagged with every Enterprise ATT&CK technique ID written in it
   (`T1059`, `T1059.001`), with the words around it as evidence. Insight never guesses a technique from prose and
   never infers an actor ([ADR 0019](docs/adr/0019-attack-techniques.md)).
