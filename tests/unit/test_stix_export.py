@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from insight import services
 from insight.models import AuditEvent
 from insight.schemas import DocumentInput, IocExportQuery
-from insight.stix_export import TLP_MARKINGS
+from insight.stix_export import TLP_EXTENSION, TLP_MARKINGS
 from insight.stix_validation import validate_stix_bundle
 
 
@@ -103,6 +103,23 @@ def test_every_indicator_kind_has_a_valid_stix_representation(db: Session) -> No
         ],
     }
     assert len(_objects(bundle, 'vulnerability')) == 1
+
+
+@pytest.mark.parametrize('label', list(TLP_MARKINGS))
+def test_bundle_contains_the_matching_tlp2_definition(db: Session, label: str) -> None:
+    item = DocumentInput.model_validate(
+        {'title': 'Fixture', 'body': 'Traffic included 203.0.113.12.', 'source_name': 'Lab', 'tlp': label}
+    )
+    services.ingest(db, item)
+    bundle = services.export_stix(db, IocExportQuery())
+    (marking,) = _objects(bundle, 'marking-definition')
+    assert marking['id'] == TLP_MARKINGS[label]
+    assert marking['extensions'][TLP_EXTENSION] == {
+        'extension_type': 'property-extension',
+        'tlp_2_0': label.lower(),
+    }
+    with pytest.raises(ValueError, match='Expected a STIX'):
+        validate_stix_bundle(marking)
 
 
 def test_oasis_validator_rejects_a_damaged_export(db: Session) -> None:
