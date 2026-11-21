@@ -119,7 +119,7 @@ def test_sync_all_reports_each_source_and_records_every_run(
         'key': 'cisa-csaf', 'name': connectors.SOURCES['cisa-csaf'].name, 'status': 'error',
         'message': 'OSError: offline',
     }  # fmt: skip
-    listed = {s['key']: s['runs'][0]['status'] for s in authed.get('/api/sources').json()}
+    listed = {s['key']: s['runs'][0]['status'] for s in authed.get('/api/sources').json() if s['runs']}
     assert listed == {'cisa-kev': 'success', 'cisa-csaf': 'error', 'sans-isc': 'success', 'ncsc': 'success'}
 
 

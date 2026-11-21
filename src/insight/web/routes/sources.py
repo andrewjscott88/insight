@@ -10,8 +10,8 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request
 
 from ... import services
 from ...connectors import (
-    SOURCES,
     ProviderError,
+    SourceSwitchedOff,
     SourceSyncError,
     enrich_cve,
     sync_all,
@@ -22,6 +22,7 @@ from ...models import SessionFactory
 from ...schemas import (
     ScheduleInput,
 )
+from ...source_registry import SOURCES, in_use
 from ..auth import AuthDependency, acting
 
 ENRICHMENT_INTERVAL_SECONDS: Final = 6.5
@@ -34,12 +35,17 @@ def _register_source_routes(app: FastAPI, sessions: SessionFactory, require_auth
     @app.get('/api/sources', dependencies=[Depends(require_auth)])
     def sources() -> list[dict[str, Any]]:
         with sessions() as db:
+            switches = services.source_switches(db)
             return [
                 {
                     'key': s.key,
                     'name': s.name,
                     'url': s.url,
                     'note': s.note,
+                    'category': s.category,
+                    'optional': s.optional,
+                    'reuse': s.reuse,
+                    'in_use': in_use(s, switches),
                     'runs': [
                         {'status': r.status, 'message': r.message, 'created_at': r.created_at}
                         for r in services.recent_source_runs(db, s.key, limit=5)
@@ -57,6 +63,8 @@ def _register_source_routes(app: FastAPI, sessions: SessionFactory, require_auth
         async with app.state.sync_lock:
             try:
                 return {'message': await sync_source(sessions, key)}
+            except SourceSwitchedOff as exc:
+                raise HTTPException(409, str(exc)) from exc
             except SourceSyncError as exc:
                 raise HTTPException(502, str(exc)) from exc
 
@@ -85,6 +93,8 @@ def _register_source_routes(app: FastAPI, sessions: SessionFactory, require_auth
             now = datetime.now(UTC)
             starts_at = services.time_of_day(body.at, now) if body.at else None
             with acting(sessions, request) as db:
+                if body.interval_minutes and not in_use(SOURCES[key], services.source_switches(db)):
+                    raise HTTPException(409, f'{SOURCES[key].name} is switched off. Switch it on first.')
                 schedule = services.set_schedule(db, key, body.interval_minutes, at=now, starts_at=starts_at)
                 return schedule_view(key, schedule)
         except ValueError as exc:

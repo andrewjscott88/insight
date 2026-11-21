@@ -26,6 +26,9 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
       plain-English executive summary of what is trending against the weeks before, why it matters and what to
       check, attacker behaviour by tactic, TLP-marked and downloadable as a briefing. Next: analyst-defined
       themes, and KEV ransomware use (TIP 1.1) and EPSS (TIP 1.2) in it.
+- [x] **Threat-research sources** ([ADR 0021](docs/adr/0021-threat-research-sources.md)): Cisco Talos,
+      Microsoft Threat Intelligence, The DFIR Report, ESET, Kaspersky Securelist and The Record, off until
+      switched on, with per-source reuse rules (review J3, brought forward from 0.8.0).
 - [ ] **TIP 0.1 Verify every public deployment.** Anonymous `GET /` answers 303 to `/login`; `.env` sets secure
       cookies, allowed hosts and trusted proxies, preferably MFA. A smoke check for the public URL.
 - [x] **TIP 0.2 Fix stale session and scheduling documentation.** README and ARCHITECTURE now describe stored
@@ -49,8 +52,8 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
 - [ ] [#15](https://github.com/andrewjscott88/insight/issues/15) **TIP 1.4 Notifications (M4).** Signed webhooks
       and e-mail when a new report matches a watch term or KEV gains an entry; destinations set from the CLI or the
       workspace, never with an API key.
-- [ ] **Review J3 Per-source redistribution rules** (allow, or metadata only), applied by every export, before the
-      new feeds and before STIX and MISP.
+- [x] **Review J3 Per-source redistribution rules** (public, or metadata only), applied by the report and IOC
+      exports ([ADR 0021](docs/adr/0021-threat-research-sources.md)); STIX and MISP must apply them too.
 - [ ] **TIP 1.5 abuse.ch connectors:** URLhaus, ThreatFox and MalwareBazaar (indicators and metadata only, never
       samples; keys from the environment).
 - [ ] **TIP 1.6 AlienVault OTX pulses** with the operator's own key.

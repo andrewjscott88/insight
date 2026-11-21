@@ -656,11 +656,13 @@ async def test_a_source_can_sync_by_itself(user: User, ui_env: SimpleNamespace) 
 
 
 async def test_one_choice_schedules_every_source(user: User, ui_env: SimpleNamespace) -> None:
-    user.find(kind=ui.select, content='Sync all sources by themselves').elements.pop().set_value(1440)
+    user.find(kind=ui.select, content='Sync all sources you use by themselves').elements.pop().set_value(1440)
     # The test server runs no job runner, and the workspace says so rather than pretending.
     await user.should_see('The schedule is saved, but this server does not run scheduled syncs')
-    assert scheduled(ui_env) == dict.fromkeys(connectors.SOURCES, 1440)
-    assert all(s.value == 1440 for s in user.find(kind=ui.select, content='Sync by itself').elements)
+    in_use = [key for key, source in connectors.SOURCES.items() if not source.optional]
+    assert scheduled(ui_env) == dict.fromkeys(in_use, 1440)  # optional sources are off: not scheduled
+    selects = {s.value for s in user.find(kind=ui.select, content='Sync by itself').elements if s.enabled}
+    assert selects == {1440}
 
 
 async def test_schedules_can_start_at_a_time_of_day(user: User, ui_env: SimpleNamespace) -> None:
@@ -668,8 +670,8 @@ async def test_schedules_can_start_at_a_time_of_day(user: User, ui_env: SimpleNa
 
     ui_env.app.state.settings = dataclasses.replace(ui_env.app.state.settings, run_jobs=True)
     user.find(kind=ui.select, content='Start at').elements.pop().set_value('00:00')
-    user.find(kind=ui.select, content='Sync all sources by themselves').elements.pop().set_value(1440)
-    await user.should_see('All sources sync by itself every day, starting at 00:00 UTC.')
+    user.find(kind=ui.select, content='Sync all sources you use by themselves').elements.pop().set_value(1440)
+    await user.should_see('All sources you use sync by themselves every day, starting at 00:00 UTC.')
     await user.should_see('00:00 UTC')
     with ui_env.app.state.session_factory() as db:
         nexts = {s.next_run_at for s in services.list_schedules(db).values()}

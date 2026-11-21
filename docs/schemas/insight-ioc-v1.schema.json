@@ -148,7 +148,7 @@
         },
         "include_evidence": {
           "type": "boolean",
-          "description": "False if evidence excerpts were left out (every source's `evidence` is then null)."
+          "description": "False if evidence excerpts were left out (every source's `evidence` is then null). Even when true, `evidence` is null for reports from publishers that allow metadata only (ADR 0021)."
         },
         "verdicts": {
           "type": "array",

@@ -310,6 +310,11 @@ How to read it:
   In the example, an accepted-only export labels `relay.example.org` **CLEAR**: only the CLEAR report's accepted
   mention is included. Labels are never lowered ([ADR 0009](adr/0009-tlp-policy.md)).
 - **An empty file is labelled AMBER**, the workspace default, never CLEAR.
+- **Publishers' words stay in Insight unless they allow otherwise.** For reports synced from a source whose
+  publisher allows metadata only (every feed except CISA's KEV list and CSAF advisories), `evidence` is `null`
+  even when evidence is included; the indicator, its title, link and dates are still exported
+  ([ADR 0021](adr/0021-threat-research-sources.md)). Reports you pasted yourself are yours: their evidence is
+  included as chosen.
 - **To share at a given level, filter when exporting** (`max_tlp`), rather than editing a larger file afterwards.
   That way, evidence and titles from more restricted reports are never in the file at all.
 - **Leave evidence out when sharing.** An excerpt is raw report text around a mention, so it can carry things you

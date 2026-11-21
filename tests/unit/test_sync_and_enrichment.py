@@ -127,7 +127,8 @@ async def test_sync_all_runs_every_source_in_order_and_keeps_going_after_failure
     monkeypatch.setattr(connectors, 'download', fake)
     started: list[tuple[int, int, str]] = []
     results = await sync_all(session_factory, on_start=lambda n, total, s: started.append((n, total, s.key)))
-    assert started == [(n, len(SOURCES), key) for n, key in enumerate(SOURCES, start=1)]
+    core = [key for key, source in SOURCES.items() if not source.optional]  # optional sources start off
+    assert started == [(n, len(core), key) for n, key in enumerate(core, start=1)]
     assert [(r.key, r.ok) for r in results] == [
         ('cisa-kev', True), ('cisa-csaf', False), ('sans-isc', False), ('ncsc', True)
     ]  # fmt: skip

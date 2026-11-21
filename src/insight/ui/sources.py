@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Final
 
 from nicegui import ui
 
 from .. import services
-from ..connectors import SOURCES, Source, sync_all, sync_source
+from ..connectors import sync_all, sync_source
+from ..source_registry import CATEGORIES, SOURCES, Source, in_use
 from .messages import tell
 from .schedules import ScheduleControls, build_all_sources_schedule, build_schedule_control
 from .typography import heading, new_tab_link
@@ -54,25 +56,53 @@ def build_sources(ws: Workspace) -> None:
         finally:
             button.enable()
 
+    def switch(source: Source, on: bool, sync_button: ui.button, schedule: ui.select) -> None:
+        if not ws.authorized():
+            return
+        with ws.write() as db:
+            services.set_source_switch(db, source.key, on, at=datetime.now(UTC))
+        sync_button.set_enabled(on)
+        schedule.set_enabled(on)
+        if on:
+            tell(f'{source.name} is on. Press Sync now to fetch its reports.', 'success')
+        else:
+            schedule.set_value(0)  # Switching off turned the schedule off too.
+            tell(f'{source.name} is off. Insight will not contact it.', 'success')
+
+    def source_panel(source: Source, on: bool, controls: ScheduleControls) -> None:
+        with ui.column().classes('panel w-full p-4 my-3'):
+            heading(source.name, 4)
+            ui.label(source.note).classes('muted text-sm prose')
+            new_tab_link(f'View the {source.name} feed', source.url)
+            toggle = ui.switch('Use this source', value=on)
+            with ui.row().classes('items-center gap-3 flex-wrap'):
+                sync_button = ui.button('Sync now')
+                sync_button.on_click(lambda key=source.key, button=sync_button: run(key, button))
+                schedule = build_schedule_control(ws, source, controls)
+            sync_button.set_enabled(on)
+            schedule.set_enabled(on)
+            toggle.on_value_change(lambda e: switch(source, bool(e.value), sync_button, schedule))
+
     ws.on_refresh(source_history.refresh)
     heading('Public sources', 2)
     ui.label(
         'Nothing syncs by itself unless you turn on a schedule. When you press Sync now, Insight fetches '
         'public reports from that publisher and keeps them here. Sync all sources, at the top of the page, '
-        'does this for each one in turn. A schedule does it for you, and skips a feed that has not changed. '
-        'Insight never sends your own reports anywhere.'
+        'does this for each source you use, in turn. A schedule does it for you, and skips a feed that has '
+        'not changed. Insight never sends your own reports anywhere.'
+    ).classes('muted prose')
+    ui.label(
+        'Threat research and news sources are off until you switch them on. Insight keeps only the title, '
+        'a short summary and the link from them, and leaves their words out of exports.'
     ).classes('muted prose')
     controls = ScheduleControls()
     build_all_sources_schedule(ws, controls)
-    for source in SOURCES.values():
-        with ui.column().classes('panel w-full p-4 my-3'):
-            heading(source.name, 3)
-            ui.label(source.note).classes('muted text-sm prose')
-            new_tab_link(f'View the {source.name} feed', source.url)
-            with ui.row().classes('items-center gap-3 flex-wrap'):
-                sync_button = ui.button('Sync now')
-                sync_button.on_click(lambda key=source.key, button=sync_button: run(key, button))
-                build_schedule_control(ws, source, controls)
+    with ws.read() as db:
+        switches = services.source_switches(db)
+    for category, title in CATEGORIES.items():
+        heading(title, 3, 'subsection-title mt-4')
+        for source in (s for s in SOURCES.values() if s.category == category):
+            source_panel(source, in_use(source, switches), controls)
     heading('Recent sync activity', 3, 'subsection-title mt-4')
     with ui.column().classes('w-full gap-3'):
         source_history()

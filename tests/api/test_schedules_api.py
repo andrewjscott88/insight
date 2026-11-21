@@ -34,7 +34,7 @@ def test_the_operator_turns_a_schedule_on_and_off(app: FastAPI, authed: TestClie
     assert (body['source_key'], body['interval_minutes']) == ('cisa-kev', 360)
     assert body['next_run_at'] <= datetime.now(UTC).isoformat()  # runs at the next tick
     listed = {s['source_key']: s['interval_minutes'] for s in authed.get('/api/schedules').json()}
-    assert listed == {'cisa-kev': 360, 'cisa-csaf': 0, 'sans-isc': 0, 'ncsc': 0}
+    assert listed == {key: 360 if key == 'cisa-kev' else 0 for key in SOURCES}
     assert authed.put('/api/schedules/cisa-kev', json={'interval_minutes': 0}).json()['interval_minutes'] == 0
     with app.state.session_factory() as db:
         events = db.scalars(select(AuditEvent).where(AuditEvent.action == 'schedule.update')).all()

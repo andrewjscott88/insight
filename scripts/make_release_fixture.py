@@ -95,6 +95,7 @@ def build(path: Path) -> None:
             services.create_api_key(db, name='fixture', access='read', max_tlp='GREEN')
             services.start_operator_session(db, binding='fixture', at=when)  # its ID is thrown away
             services.tag_technique(db, manual.id, 'T1071.001')  # 0.7.0: an analyst's ATT&CK tag
+            services.set_source_switch(db, 'talos', True, at=when)  # 0.7.0: an optional source on
     finally:
         engine.dispose()
 

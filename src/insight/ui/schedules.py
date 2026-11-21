@@ -11,7 +11,7 @@ from typing import Final
 from nicegui import ui
 
 from .. import services
-from ..connectors import SOURCES, Source
+from ..source_registry import SOURCES, Source, in_use
 from .messages import tell
 from .workspace import Workspace
 
@@ -38,6 +38,13 @@ def _interval(ws: Workspace, key: str) -> tuple[int, str | None]:
     return schedule.interval_minutes, schedule.next_run_at
 
 
+def _in_use(ws: Workspace) -> list[str]:
+    """Keys of the sources Insight may contact: a schedule for every source covers only these."""
+    with ws.read() as db:
+        switches = services.source_switches(db)
+    return [key for key, source in SOURCES.items() if in_use(source, switches)]
+
+
 def _save(ws: Workspace, keys: list[str], minutes: int, start: str) -> None:
     now = datetime.now(UTC)
     starts_at = services.time_of_day(start, now) if start != SOON else None
@@ -46,7 +53,8 @@ def _save(ws: Workspace, keys: list[str], minutes: int, start: str) -> None:
             services.set_schedule(db, key, minutes, at=now, starts_at=starts_at)
 
 
-def _confirm(ws: Workspace, what: str, minutes: int, start: str) -> None:
+def _confirm(ws: Workspace, what: str, minutes: int, start: str, *, plural: bool = False) -> None:
+    itself = 'by themselves' if plural else 'by itself'
     if not minutes:
         tell(f'{what} now only when you press Sync now.', 'success')
     elif not ws.app.state.settings.run_jobs:
@@ -55,11 +63,9 @@ def _confirm(ws: Workspace, what: str, minutes: int, start: str) -> None:
             'warning',
         )
     elif start == SOON:
-        tell(
-            f'{what} by itself {CHOICES[minutes].lower()}. The first sync starts within a minute.', 'success'
-        )
+        tell(f'{what} {itself} {CHOICES[minutes].lower()}. The first sync starts within a minute.', 'success')
     else:
-        tell(f'{what} by itself {CHOICES[minutes].lower()}, starting at {start} UTC.', 'success')
+        tell(f'{what} {itself} {CHOICES[minutes].lower()}, starting at {start} UTC.', 'success')
 
 
 def build_all_sources_schedule(ws: Workspace, controls: ScheduleControls) -> None:
@@ -73,7 +79,7 @@ def build_all_sources_schedule(ws: Workspace, controls: ScheduleControls) -> Non
         if start is None or not ws.authorized():
             return
         controls.start = start
-        on = [key for key in SOURCES if _interval(ws, key)[0]]
+        on = [key for key in _in_use(ws) if _interval(ws, key)[0]]
         if start != SOON and on:
             with ws.write() as db:
                 for key in on:
@@ -87,10 +93,12 @@ def build_all_sources_schedule(ws: Workspace, controls: ScheduleControls) -> Non
     def changed(minutes: int | None) -> None:
         if minutes is None or not ws.authorized():
             return
-        _save(ws, list(SOURCES), minutes, controls.start)
-        for select in controls.selects.values():
-            select.set_value(minutes)  # Each source's own control runs nothing new for an unchanged value.
-        _confirm(ws, 'All sources sync', minutes, controls.start)
+        keys = _in_use(ws)
+        _save(ws, keys, minutes, controls.start)
+        for key in keys:
+            # Each source's own control runs nothing new for an unchanged value.
+            controls.selects[key].set_value(minutes)
+        _confirm(ws, 'All sources you use sync', minutes, controls.start, plural=True)
         redraw()
 
     with ui.row().classes('items-center gap-3 flex-wrap'):
@@ -98,7 +106,7 @@ def build_all_sources_schedule(ws: Workspace, controls: ScheduleControls) -> Non
             START_TIMES, value=SOON, label='Start at', on_change=lambda e: start_changed(e.value)
         ).props('outlined dense').classes('min-w-[12rem]')
         ui.select(
-            CHOICES, label='Sync all sources by themselves', on_change=lambda e: changed(e.value)
+            CHOICES, label='Sync all sources you use by themselves', on_change=lambda e: changed(e.value)
         ).props('outlined dense').classes('min-w-[16rem]')
     ui.label(
         'Times are in UTC. A schedule repeats from its start time, so a daily sync keeps its hour.'

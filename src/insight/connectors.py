@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from html import unescape
 from itertools import islice
-from typing import Any, Final, Literal
+from typing import Any, Final
 from urllib.parse import urlsplit
 
 import httpx
@@ -26,7 +26,14 @@ from sqlalchemy.orm import Session
 from . import __version__
 from .models import Enrichment, Entity, KEVRecord, SessionFactory, SourceRun, now
 from .schemas import DocumentInput
-from .services import SourceRef, get_fetch_state, ingest, save_fetch_state, set_actor
+from .services import SourceRef, get_fetch_state, ingest, save_fetch_state, set_actor, source_switches
+
+# Re-exported: the registry used to live here, and tests and scripts still name it through this module.
+from .source_registry import CSAF_BASE as CSAF_BASE
+from .source_registry import CSAF_INBOX_LIMIT as CSAF_INBOX_LIMIT
+from .source_registry import SOURCES as SOURCES
+from .source_registry import Source as Source
+from .source_registry import in_use
 
 MAX_BYTES: Final = 8_000_000
 MAX_FEED_ITEMS: Final = 100
@@ -34,11 +41,6 @@ MAX_FEED_SUMMARY: Final = 500
 MAX_KEV_ROWS: Final = 20_000
 MAX_KEV_FIELD: Final = 10_000
 KEV_INBOX_LIMIT: Final = 100
-#: CISA publishes its advisories as CSAF 2.0 files on GitHub (its RSS feeds refuse automated clients).
-#: Folder OT holds the industrial control system advisories, IT the other vulnerability advisories; VA
-#: repeats IT.
-CSAF_BASE: Final = 'https://raw.githubusercontent.com/cisagov/CSAF/develop/csaf_files/'
-CSAF_INBOX_LIMIT: Final = 25
 MAX_CSAF_INDEX_ROWS: Final = 50_000
 MAX_CSAF_VULNERABILITIES: Final = 100
 MAX_CSAF_NOTE: Final = 4_000
@@ -84,60 +86,13 @@ class SourceSyncError(ConnectorError):
     """A curated source sync failed. The failure has already been recorded as a ``SourceRun``."""
 
 
-@dataclass(frozen=True, slots=True)
-class Source:
-    key: str
-    name: str
-    #: The feed for ``kev`` and ``rss`` sources. For ``csaf`` sources, the page people open to browse them.
-    url: str
-    kind: Literal['kev', 'rss', 'csaf']
-    note: str
-    #: ``csaf`` sources: the ``changes.csv`` index of each CSAF folder that is read.
-    indexes: tuple[str, ...] = ()
+class SourceSwitchedOff(ConnectorError):
+    """The source is switched off: Insight does not contact it (nothing is recorded)."""
 
-    @property
-    def fetch_urls(self) -> tuple[str, ...]:
-        """The URLs a sync requests first (advisory files named by a CSAF index sit beside it)."""
-        return self.indexes or (self.url,)
+    def __init__(self, source: Source) -> None:
+        super().__init__(f'{source.name} is switched off. Switch it on in the Sources tab first.')
 
 
-SOURCES: Final[dict[str, Source]] = {
-    s.key: s
-    for s in (
-        Source(
-            'cisa-kev',
-            'CISA Known Exploited Vulnerabilities',
-            'https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json',
-            'kev',
-            'Known exploitation evidence; due dates apply to covered federal agencies, '
-            'not a universal deadline.',
-        ),
-        Source(
-            'cisa-csaf',
-            'CISA Security Advisories',
-            'https://github.com/cisagov/CSAF',
-            'csaf',
-            f'The {CSAF_INBOX_LIMIT} newest advisories CISA has published about weaknesses in industrial '
-            "control systems and other products, from CISA's machine-readable files (CSAF). Advisories about "
-            'attacker groups are not included.',
-            indexes=(CSAF_BASE + 'OT/white/changes.csv', CSAF_BASE + 'IT/white/changes.csv'),
-        ),
-        Source(
-            'sans-isc',
-            'SANS Internet Storm Center',
-            'https://isc.sans.edu/rssfeed.xml',
-            'rss',
-            'Feed metadata only. Publisher terms still apply; free access is not a redistribution license.',
-        ),
-        Source(
-            'ncsc',
-            'UK NCSC Reports',
-            'https://www.ncsc.gov.uk/api/1/services/v1/report-rss-feed.xml',
-            'rss',
-            'Feed metadata only. Check publisher attribution and reuse terms.',
-        ),
-    )
-}
 ALLOWED_HOSTS: Final[frozenset[str]] = frozenset(
     {h for s in SOURCES.values() for u in s.fetch_urls if (h := urlsplit(u).hostname)}
     | {urlsplit(u).hostname or '' for u in PROVIDERS.values()}
@@ -661,16 +616,30 @@ def _record_failure(session_factory: SessionFactory, key: str, message: str) -> 
         db.add(SourceRun(source_key=key, status='error', message=message))
 
 
+def switches(session_factory: SessionFactory) -> dict[str, bool]:
+    with session_factory() as db:
+        return source_switches(db)
+
+
+def sources_in_use(session_factory: SessionFactory) -> list[Source]:
+    """The sources Insight may contact, in registry order (optional ones only once switched on)."""
+    current = switches(session_factory)
+    return [s for s in SOURCES.values() if in_use(s, current)]
+
+
 async def sync_source(session_factory: SessionFactory, key: str) -> str:
     """Download, validate and store one curated source. Every attempt is recorded as a ``SourceRun``.
 
     A source that has not changed since its last successful sync is not read again (:data:`UNCHANGED`).
 
-    Raises ``ValueError`` for an unknown source and :class:`SourceSyncError` for any sync failure.
+    Raises ``ValueError`` for an unknown source, :class:`SourceSwitchedOff` for a source that is switched off
+    and :class:`SourceSyncError` for any sync failure.
     """
     source = SOURCES.get(key)
     if source is None:
         raise ValueError('Unknown source')
+    if not in_use(source, await asyncio.to_thread(switches, session_factory)):
+        raise SourceSwitchedOff(source)
     try:
         # Database work is synchronous; keep it off the event loop so the UI stays responsive.
         if source.kind == 'csaf':
@@ -703,16 +672,17 @@ class SyncResult:
 async def sync_all(
     session_factory: SessionFactory, *, on_start: Callable[[int, int, Source], None] | None = None
 ) -> list[SyncResult]:
-    """Sync every curated source in registry order, one at a time, and report each result.
+    """Sync every source in use (:func:`sources_in_use`) in registry order, one at a time, and report each.
 
     A failing source does not stop the others: its failure is recorded as a ``SourceRun`` (as for
     :func:`sync_source`) and returned. ``on_start(position, total, source)`` is called before each source,
     so a front end can show progress. Callers hold the sync lock, as for a single sync.
     """
     results: list[SyncResult] = []
-    for position, source in enumerate(SOURCES.values(), start=1):
+    sources = await asyncio.to_thread(sources_in_use, session_factory)
+    for position, source in enumerate(sources, start=1):
         if on_start is not None:
-            on_start(position, len(SOURCES), source)
+            on_start(position, len(sources), source)
         try:
             results.append(
                 SyncResult(source.key, source.name, True, await sync_source(session_factory, source.key))

@@ -2,9 +2,26 @@
 
 ## Unreleased
 
-**Upgrading from 0.6.0:** migration `0009` (ATT&CK technique tags) runs at start-up, or with `make migrate`.
-Reports stored before the upgrade get their technique tags when you run `make attack-backfill` once (safe to run
-again). Every 0.6.0 API field is unchanged.
+**Upgrading from 0.6.0:** migrations `0009` (ATT&CK technique tags) and `0010` (source switches) run at
+start-up, or with `make migrate`. Reports stored before the upgrade get their technique tags when you run
+`make attack-backfill` once (safe to run again). The new threat-research sources start switched off: Insight
+contacts no new host until you switch one on. **Exports change for SANS ISC and NCSC reports:** their text and
+evidence are no longer included (their publishers allow metadata only). Every 0.6.0 API field is unchanged; new
+fields are additive.
+
+### Added: threat-research sources, and each publisher's reuse rule
+- **Six optional sources** for reporting on attacker groups, campaigns and malware: Cisco Talos, Microsoft Threat
+  Intelligence, The DFIR Report, ESET WeLiveSecurity, Kaspersky Securelist, and The Record (security news)
+  ([ADR 0021](docs/adr/0021-threat-research-sources.md)). They feed the threat landscape and the inbox like
+  any source. Insight keeps each item's title, the publisher's short summary and the link, never the article.
+- **Switch any source on or off** in the Sources tab (audited as `source.on` / `source.off`). A source that is
+  off is never contacted: *Sync now* refuses it, *Sync all sources* and "schedule every source" skip it, and
+  switching it off also turns its schedule off. `insight schedule` follows the same rule.
+- **Per-source reuse rules (review J3).** Only CISA's KEV list and CSAF advisories are exported with their text.
+  For every other feed, the report export leaves out the text and evidence, and the IOC export's `evidence` is
+  `null` for its mentions; titles, links, dates and indicators are still exported.
+- `GET /api/sources` gains `category`, `optional`, `reuse` and `in_use`; syncing or scheduling a source that is
+  off answers `409`.
 
 ### Added: a threat landscape that opens the workspace
 - **An executive summary of what is trending and why it matters**, in plain English, for the last 7 or 30 days,

@@ -27,6 +27,11 @@ A single-operator threat-intelligence workbench, run locally or published behind
   downloads a layer for ATT&CK Navigator. Never guessed from prose; no attribution. `make attack-backfill` tags
   reports stored before 0.7.0. API: `/api/attack/*` and `/api/documents/{id}/techniques`.
 - Organization watch terms highlight literal product, vendor or topic matches. These are transparent keyword matches, not calibrated risk scores.
+- **Threat-research sources, off until you switch them on** ([ADR 0021](docs/adr/0021-threat-research-sources.md)):
+  Cisco Talos, Microsoft Threat Intelligence, The DFIR Report, ESET WeLiveSecurity, Kaspersky Securelist and
+  The Record (news), for reporting on attacker groups, campaigns and malware. Insight keeps each item's title,
+  short summary and link. Each publisher's reuse rule applies: only CISA's text leaves Insight in exports; for
+  every other feed, exports carry titles, links, dates and indicators, not the publisher's words.
 - Curated connectors: CISA KEV, CISA security advisories (CISA's machine-readable CSAF files), SANS ISC and UK
   NCSC feeds. **Sync now** per source, **Sync all sources** at the top of the workspace, and **opt-in
   schedules** (off by default; every hour, 6 hours or day, per source or for all, from a time of day you choose,
