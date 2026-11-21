@@ -311,6 +311,15 @@ curl -sS "$INSIGHT_URL/api/iocs/blocklist?kind=ip" -H "Authorization: Bearer $IN
 curl -sS "$INSIGHT_URL/api/iocs/blocklist?kind=domain&format=csv" -H "Authorization: Bearer $INSIGHT_API_KEY"
 ```
 
+For a sensor, download rules to a staging file and review them before replacing a loaded file.
+
+```sh
+curl --fail -sS "$INSIGHT_URL/api/iocs/blocklist?kind=domain&format=suricata" \
+  -H "Authorization: Bearer $INSIGHT_API_KEY" -o insight-domains.staging.rules
+curl --fail -sS "$INSIGHT_URL/api/iocs/blocklist?kind=ip&format=snort" \
+  -H "Authorization: Bearer $INSIGHT_API_KEY" -o insight-ips.staging.rules
+```
+
 ### Entities (indicators and pivots)
 
 ```sh

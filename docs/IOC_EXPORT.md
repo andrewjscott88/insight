@@ -200,6 +200,22 @@ Files saved from the browser or the API get your normal file permissions. Restri
 > holds only values an analyst judged `malicious`, with an accepted mention and no warning flag, until the
 > verdict expires. In an export, filter with `verdict=malicious` and check each IOC's `flags`.
 
+## Network sensor rules
+
+On `GET /api/iocs/blocklist`, choose `kind=ip` or `kind=domain` and `format=suricata` or `format=snort`.
+The download contains passive alert rules for the selected engine. Each indicator has a current malicious
+verdict, an accepted mention within the caller's sharing limit and no warning flag. An empty selection
+returns HTTP 422. IPs and domains appear in live, machine-readable form. Review the staged file and check
+the sensor configuration before loading it. Refresh the file to retire expired verdicts.
+
+- **IPs.** IPv4 and IPv6 rules match traffic in either direction involving the exact address.
+- **Suricata domains.** The DNS query buffer matches the entire queried name, case-insensitively.
+- **Snort 3 domains.** The rule checks the first uncompressed question in a standard UDP query to port 53.
+  DNS over TCP and encrypted DNS are outside the scope of these Snort signatures.
+- **Rule IDs.** Reserve local SIDs 1,000,000,000–1,499,999,999 for these IP rules and
+  1,500,000,000–1,999,999,999 for domains. IDs derive from the canonical value, with collisions resolved
+  within the sorted file. Replace each file as a unit. Review the matched value when correlating alerts.
+
 ## 4. How the filters combine
 
 - **Every filter must match** (AND). Within **types**, **review statuses** and **reports** (`--document`), any of

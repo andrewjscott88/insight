@@ -19,6 +19,7 @@ from ...schemas import (
     IocExportQuery,
     validation_message,
 )
+from ...sensor_rules import sensor_rules
 from ...source_registry import metadata_only
 from ..auth import AuthDependency, acting, reader_limit
 from .documents import get_document_or_404
@@ -156,7 +157,7 @@ def _register_export_routes(app: FastAPI, sessions: SessionFactory, require_auth
     def blocklist(
         request: Request,
         kind: str,
-        output: Annotated[Literal['txt', 'csv'], Query(alias='format')] = 'txt',
+        output: Annotated[Literal['txt', 'csv', 'suricata', 'snort'], Query(alias='format')] = 'txt',
     ) -> Response:
         """Values safe to block, one per line (``txt``) or with dates and labels (``csv``). Audited.
 
@@ -169,6 +170,14 @@ def _register_export_routes(app: FastAPI, sessions: SessionFactory, require_auth
                 entries = services.blocklist(db, kind, max_tlp=limit)
                 detail = {'format': output, 'entries': len(entries), 'max_tlp': limit}
                 services.audit(db, 'ioc.blocklist', kind, json.dumps(detail, sort_keys=True))
+                if output == 'suricata' or output == 'snort':
+                    rules = sensor_rules(output, kind, (entry.value for entry in entries))
+                    filename = f'insight-{output}-{kind}.rules'
+                    return Response(
+                        rules,
+                        media_type='text/plain',
+                        headers={'Content-Disposition': f'attachment; filename="{filename}"'},
+                    )
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
         if output == 'txt':
