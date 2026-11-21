@@ -21,8 +21,9 @@ from typing import Final, Literal
 #: repeats IT.
 CSAF_BASE: Final = 'https://raw.githubusercontent.com/cisagov/CSAF/develop/csaf_files/'
 CSAF_INBOX_LIMIT: Final = 25
+OTX_SUBSCRIBED_URL: Final = 'https://otx.alienvault.com/api/v1/pulses/subscribed'
 
-Category = Literal['vulnerabilities', 'threat research', 'news']
+Category = Literal['vulnerabilities', 'threat research', 'news', 'indicators']
 Reuse = Literal['public', 'metadata']
 
 #: The order categories are shown in, with their headings.
@@ -30,6 +31,7 @@ CATEGORIES: Final[dict[str, str]] = {
     'vulnerabilities': 'Weaknesses and advisories',
     'threat research': 'Threat research',
     'news': 'Security news',
+    'indicators': 'Indicator feeds',
 }
 
 _RESEARCH: Final = (
@@ -44,9 +46,9 @@ class Source:
     name: str
     #: The feed for ``kev`` and ``rss`` sources. For ``csaf`` sources, the page people open to browse them.
     url: str
-    kind: Literal['kev', 'rss', 'csaf']
+    kind: Literal['kev', 'rss', 'csaf', 'abusech', 'otx']
     note: str
-    #: ``csaf`` sources: the ``changes.csv`` index of each CSAF folder that is read.
+    #: Fixed download URLs when ``url`` points to the publisher page people can open in the workspace.
     indexes: tuple[str, ...] = ()
     category: Category = 'vulnerabilities'
     #: Switched off until the operator switches it on.
@@ -151,6 +153,48 @@ SOURCES: Final[dict[str, Source]] = {
             'rss',
             'News on attacks, breaches, ransomware and cyber policy, several times a day. ' + _RESEARCH,
             category='news',
+            optional=True,
+        ),
+        Source(
+            'urlhaus',
+            'URLhaus',
+            'https://urlhaus.abuse.ch/',
+            'abusech',
+            'Recent URLs reported for malware delivery. Requires your abuse.ch key. Insight reads the list '
+            'and keeps the reported links as text.',
+            indexes=('https://urlhaus-api.abuse.ch/v1/urls/recent/limit/100/',),
+            category='indicators',
+            optional=True,
+        ),
+        Source(
+            'threatfox',
+            'ThreatFox',
+            'https://threatfox.abuse.ch/',
+            'abusech',
+            'Recent network indicators and file hashes reported to ThreatFox. Requires your abuse.ch key.',
+            indexes=('https://threatfox-api.abuse.ch/api/v1/',),
+            category='indicators',
+            optional=True,
+        ),
+        Source(
+            'malwarebazaar',
+            'MalwareBazaar',
+            'https://bazaar.abuse.ch/',
+            'abusech',
+            'File hashes from recent reports about malware. Requires your abuse.ch key. Insight reads only '
+            'the file details.',
+            indexes=('https://mb-api.abuse.ch/api/v1/',),
+            category='indicators',
+            optional=True,
+        ),
+        Source(
+            'alienvault-otx',
+            'AlienVault Open Threat Exchange (OTX)',
+            OTX_SUBSCRIBED_URL,
+            'otx',
+            'Import public pulses you subscribe to with your own OTX key. Insight reads only pulses marked '
+            'CLEAR or WHITE. It keeps the title, link and indicators. Publisher terms apply.',
+            category='threat research',
             optional=True,
         ),
     )

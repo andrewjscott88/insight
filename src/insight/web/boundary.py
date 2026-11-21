@@ -13,16 +13,18 @@ MAX_BODY_BYTES: Final = 2_000_000
 
 SAFE_METHODS: Final = frozenset({'GET', 'HEAD', 'OPTIONS'})
 
-#: Routes only a signed-in browser session may use (an API key has no CSRF token to fetch).
-SESSION_ONLY_ROUTES: Final = frozenset({'/api/session'})
+#: Routes only a signed-in browser session may use (an API key has no CSRF token to fetch). The demo loads
+#: synthetic reports: a script must not add practice data to a production dataset (code review L4).
+SESSION_ONLY_ROUTES: Final = frozenset({'/api/session', '/api/demo'})
 
 #: Settings only a signed-in browser session (or the host's CLI) may change: how often Insight goes online by
 #: itself is the operator's decision, not a script's.
 SESSION_ONLY_WRITE_PREFIXES: Final = ('/api/schedules',)
 
 #: Routes a TLP-limited key may not use: the audit log and CVE enrichment reveal things about reports the
-#: key cannot see (audit details, whether a CVE is mentioned anywhere).
-UNLIMITED_READER_PREFIXES: Final = ('/api/audit', '/api/enrichment/')
+#: key cannot see (audit details, whether a CVE is mentioned anywhere), and watch terms often name clients,
+#: internal host names or sensitive projects (code review L3).
+UNLIMITED_READER_PREFIXES: Final = ('/api/audit', '/api/enrichment/', '/api/watch-terms')
 
 HSTS: Final = (b'strict-transport-security', b'max-age=31536000')
 

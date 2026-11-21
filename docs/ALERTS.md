@@ -13,7 +13,7 @@ More than 10 new KEV entries in one import become a single alert that lists them
 
 ## Destinations
 
-Add them in the workspace, on the **Watch terms** tab, under **Alerts**. API keys cannot add, change or read
+Add them on the **Watch terms** tab under **Alerts**, or use the host CLI. API keys cannot add, change or read
 them, as they cannot change schedules.
 
 | Kind | What it sends |
@@ -24,6 +24,24 @@ them, as they cannot change schedules.
 
 **Send a test alert** sends straight away and shows the result. Turning a destination off keeps its queued
 alerts until it is on again; removing it deletes them.
+
+## Manage destinations on the host
+
+Run `insight notify` to list the destination IDs, names, styles, sharing limits and enabled state.
+Use `add` to create a destination. Enter the address at the hidden prompt or pipe it on standard input.
+For a signed JSON webhook, give a new path with `--secret-out`. The command saves the signing key
+in an owner-only file. Use that key to verify deliveries at the receiver.
+
+```sh
+insight notify add --name "Incident desk" --style json --max-tlp GREEN --secret-out incident-desk.key
+insight notify list
+insight notify disable --target DESTINATION_ID
+insight notify enable --target DESTINATION_ID
+insight notify remove --target DESTINATION_ID
+```
+
+The styles are `chat`, `json` and `email`. The default sharing limit is AMBER. Removing a destination
+also deletes its queued alerts. These commands use the same database and audit events as the workspace.
 
 ## TLP
 
@@ -84,6 +102,7 @@ against the raw body, and refuse old timestamps to stop replays:
 
 ```python
 import hashlib, hmac, time
+
 
 def verify(secret: str, body: bytes, timestamp: str, signature: str, max_age: int = 300) -> bool:
     if abs(time.time() - int(timestamp)) > max_age:

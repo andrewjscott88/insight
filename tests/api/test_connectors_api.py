@@ -283,3 +283,40 @@ def test_publisher_edits_create_revisions_not_duplicates(
     assert old['is_current'] is False
     assert 'Command injection.' in old['body']
     assert authed.get('/api/stats').json()['documents'] == 1
+
+
+def test_prioritised_cves_rank_with_reasons_and_follow_the_keys_tlp_limit(
+    app: FastAPI, client: TestClient, authed: TestClient
+) -> None:
+    """TIP 1.3: GET /api/cves, most urgent first, each row saying why."""
+    for title, body, tlp in (
+        ('Public note', 'CVE-2026-1111 and CVE-2026-2222.', 'GREEN'),
+        ('Partner only', 'CVE-2026-3333.', 'AMBER'),
+    ):
+        response = authed.post(
+            '/api/documents', json={'title': title, 'body': body, 'source_name': 's', 'tlp': tlp}
+        )
+        assert response.status_code == 200
+    with app.state.session_factory.begin() as db:
+        db.add(
+            KEVRecord(
+                cve='CVE-2026-2222', vendor='Acme', product='Gateway', date_added='2026-11-10',
+                due_date='2026-12-01', required_action='Patch', ransomware_use='Known',
+            )
+        )  # fmt: skip
+        _, token = services.create_api_key(db, name='siem', access='read', max_tlp='GREEN')
+    everything = authed.get('/api/cves').json()
+    assert (everything['days'], everything['total'], everything['truncated']) == (30, 3, False)
+    first = everything['cves'][0]
+    assert (first['cve'], first['tier'], first['label']) == ('CVE-2026-2222', 1, 'Used in ransomware')
+    assert first['kev']['ransomware'] is True
+    assert first['details'][0].startswith(
+        "On CISA's known exploited list since 2026-11-10, used in ransomware"
+    )
+    assert first['report']['title'] == 'Public note'
+    assert authed.get('/api/cves', params={'limit': 1}).json()['total'] == 3
+    assert len(authed.get('/api/cves', params={'limit': 1}).json()['cves']) == 1
+    limited = client.get('/api/cves', headers={'Authorization': f'Bearer {token}'}).json()
+    assert {c['cve'] for c in limited['cves']} == {'CVE-2026-1111', 'CVE-2026-2222'}
+    for bad in ({'days': 0}, {'days': 366}, {'limit': 0}, {'limit': 501}):
+        assert authed.get('/api/cves', params=bad).status_code == 422

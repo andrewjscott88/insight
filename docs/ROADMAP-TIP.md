@@ -229,7 +229,7 @@ opt-in schedules and the job runner, and `ROADMAP.md` marks #10 done.
 - **Effort:** M
 - **Acceptance criteria:** Offline tests with recorded fixtures (follow `tests/fixtures` and `tests/unit/test_feeds.py` / `test_kev.py` style). Each source can sync, is idempotent, creates entities (url/domain/ip/hash), and shows up in Sources + Sync all. Live tests stay behind `INSIGHT_LIVE_TESTS=1`. No sample binaries stored.
 
-### 1.6 Add an AlienVault OTX pulse connector
+### 1.6 Add an AlienVault OTX pulse connector (implemented)
 
 - **What to build:** Optional curated connector for OTX pulses the operator subscribes to (API key required).
 - **Why / which TIP capability:** Community IOC sharing, closer to MISP-style pulses than to Mandiant IR reporting.
@@ -478,9 +478,9 @@ opt-in schedules and the job runner, and `ROADMAP.md` marks #10 done.
 - **Sources / libraries:** [attack-stix-data](https://github.com/mitre-attack/attack-stix-data) (already used;
   terms in `NOTICE`); [MISP galaxy](https://github.com/MISP/misp-galaxy) (licence to confirm before bundling).
 - **Effort:** L (catalog and industry mapping M; ranking and views M; guide export S to M).
-- **Status (unreleased):** built. See [ADR 0024](adr/0024-threat-guides.md) and [THREAT_GUIDES.md](THREAT_GUIDES.md).
+- **Status (unreleased):** built. See [ADR 0025](adr/0025-threat-guides.md) and [THREAT_GUIDES.md](THREAT_GUIDES.md).
   Differences from this plan: TIP 2.5 and 2.7 were built at their minimum (`threat_actors`, `actor_documents`,
-  `industry_claims`, `detection_rules`, `rule_links`, `hunts`, `hunt_checks`; migration `0012`), the guide is also
+  `industry_claims`, `detection_rules`, `rule_links`, `hunts`, `hunt_checks`; migration `0014`), the guide is also
   exported as JSON, a Navigator layer and a sweep list, and `insight threat-library-sync` fetches a fuller copy of
   the same pinned releases. No print layout yet; the Markdown export prints.
 - **Acceptance criteria:** Choosing an industry lists at most ten groups, each with the catalog source naming the
@@ -510,8 +510,8 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
   manual lookup, not a third copy of it.
 - **J3, per-source redistribution rules** (allow, or metadata only), before 1.5 / 1.6 add feeds with their own
   terms and before 2.1 / 2.4 / 3.1 send publishers' text to other tools.
-- **D2, e-mail and CIDR indicator kinds**, before 2.1: STIX patterns and MISP attributes expect them, and e-mail
-  addresses need the personal-data warning flag (review J1).
+- **D2, e-mail and CIDR indicator kinds** (implemented for 0.8.0), before 2.1: STIX patterns and MISP
+  attributes use these kinds. E-mail indicators carry the personal-data warning flag (review J1).
 
 ## 5. Checklist
 
@@ -520,19 +520,19 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
 - [ ] **0.1** Live deployment: anonymous `/` is 303 `/login`; public `.env` uses secure cookies, allowed hosts, trusted proxies, preferably MFA
 - [x] **0.2** Fix `README.md:74` and `:212`, `docs/ARCHITECTURE.md:130-132`, and mark roadmap #10 done
 - [ ] **0.3** Stronger startup warnings / optional `INSIGHT_REQUIRE_HARDENED` for internet-facing installs
-- [ ] **0.4** Pin connector connections to DNS addresses already checked as public
+- [x] **0.4** Pin connector connections to DNS addresses already checked as public (code review L1)
 - [ ] **0.5** `/health` no longer returns the version; version is authenticated
 - [ ] **0.6** Encrypt TOTP secrets at rest; migrate legacy rows
 
 ### Phase 1 — Quick wins (7)
 
-- [ ] **1.1** Persist KEV ransomware / vulnerability name / notes / CWEs; document inbox policy
+- [ ] **1.1** Persist KEV ransomware / vulnerability name / notes / CWEs (done, ADR 0024); document inbox policy (open)
 - [x] **1.2** Auto-enqueue NVD and EPSS lookups for new CVEs (opt-in, throttled): done, ADR 0023, with review B2 and C2
-- [ ] **1.3** Brief uses ransomware flag, NVD CVSS, and EPSS (fact-only wording)
+- [x] **1.3** Brief uses ransomware flag, NVD CVSS, and EPSS (fact-only wording): done, ADR 0024, with a prioritised CVE view
 - [x] **1.4** Webhook/email notifications for watch-term hits and new KEV (`ROADMAP` #15)
-- [ ] **1.5** abuse.ch URLhaus, ThreatFox, and MalwareBazaar connectors (metadata/IOCs only)
-- [ ] **1.6** AlienVault OTX connector (operator API key)
-- [ ] **1.7** Extraction-quality corpus and benchmark ratchet (`ROADMAP` #9)
+- [x] **1.5** abuse.ch URLhaus, ThreatFox, and MalwareBazaar connectors (metadata/IOCs only)
+- [x] **1.6** AlienVault OTX subscriptions with an operator API key, bounded to explicitly public CLEAR/WHITE pulses
+- [x] **1.7** 0.8.0 extraction-quality corpus expansion and benchmark ratchet (`ROADMAP` #9, ongoing)
 
 ### Phase 2 — Core TIP features (10)
 
@@ -545,7 +545,7 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
 - [ ] **2.7** YARA/Sigma rules as linked artifacts (not an engine): *minimum done with 2.10* (store, link to group/technique/report, export in guides, delete; CVE links and STIX remain)
 - [ ] **2.8** PDF advisory ingest with file hash (`ROADMAP` #13)
 - [ ] **2.9** Suricata/Snort-oriented export of accepted network IOCs
-- [x] **2.10** Industry threat profiles (top ten groups per industry, with evidence) and exportable actor threat guides with a threat hunt section (hypotheses, data sources, indicator sweep list, linked rules, hunt record); needs a bundled threat-group library: done, ADR 0024, [THREAT_GUIDES.md](THREAT_GUIDES.md)
+- [x] **2.10** Industry threat profiles (top ten groups per industry, with evidence) and exportable actor threat guides with a threat hunt section (hypotheses, data sources, indicator sweep list, linked rules, hunt record); needs a bundled threat-group library: done, ADR 0025, [THREAT_GUIDES.md](THREAT_GUIDES.md)
 
 ### Phase 3 — Advanced (8)
 

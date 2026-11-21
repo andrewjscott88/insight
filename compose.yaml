@@ -16,11 +16,15 @@ services:
       INSIGHT_MAX_TLP: ${INSIGHT_MAX_TLP:-AMBER+STRICT}
       # Authenticator-app code at sign-in: off by default. Turn on with `make mfa-enable` (docs/RUNBOOK.md).
       INSIGHT_MFA: ${INSIGHT_MFA:-off}
+      # Explicit temporary public access for development; defaults off. See docs/RUNBOOK.md.
+      INSIGHT_DEV_NO_AUTH: ${INSIGHT_DEV_NO_AUTH:-off}
       # Default colour theme (system, light or dark) for browsers that have not picked one in the workspace
       # header. `make theme THEME=dark` sets it. "system" follows each device's light/dark setting.
       INSIGHT_THEME: ${INSIGHT_THEME:-system}
       # Optional NIST NVD API key: CVE lookups at NVD every 0.7 s instead of every 6.5 s (ADR 0023).
       INSIGHT_NVD_API_KEY: ${INSIGHT_NVD_API_KEY:-}
+      INSIGHT_ABUSECH_AUTH_KEY: ${INSIGHT_ABUSECH_AUTH_KEY:-}
+      INSIGHT_OTX_API_KEY: ${INSIGHT_OTX_API_KEY:-}
       # Alerts (docs/ALERTS.md): a link back to Insight, an optional mail server, and private webhook targets.
       INSIGHT_PUBLIC_URL: ${INSIGHT_PUBLIC_URL:-}
       INSIGHT_SMTP_HOST: ${INSIGHT_SMTP_HOST:-}

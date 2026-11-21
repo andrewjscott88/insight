@@ -1,4 +1,4 @@
-"""Command line for industry threat profiles and actor threat guides (TIP 2.10, ADR 0024).
+"""Command line for industry threat profiles and actor threat guides (TIP 2.10, ADR 0025).
 
 ``threat-library-sync``, ``industries``, ``threat-profile INDUSTRY``, ``threat-guide REF DEST`` and
 ``rule-add FILE``. Reads act as an unlimited reader unless ``--max-tlp`` is given; files are created

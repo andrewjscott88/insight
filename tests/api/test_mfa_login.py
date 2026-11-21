@@ -146,6 +146,15 @@ def test_failures_count_towards_the_sign_in_throttle(
     assert 'Failed sign-in attempt: wrong authentication code (1 in the last minute)' in caplog.text
 
 
+def test_regression_m1_the_right_password_and_code_pass_the_backstop(
+    mfa_app: FastAPI, mfa_client: TestClient, csrf_token_from: Callable[[str], str]
+) -> None:
+    for _ in range(30):
+        sign_in(mfa_client, csrf_token_from, 'wrong password', wrong_code())
+    assert sign_in(mfa_client, csrf_token_from, PASSWORD, wrong_code()) == 429
+    assert sign_in(mfa_client, csrf_token_from, PASSWORD, current_code()) == 303
+
+
 @pytest.mark.parametrize('code', ['１２３４５６', '١٢٣٤٥٦', '12345\u00b2'])
 def test_non_ascii_digits_are_refused_not_a_server_error(
     mfa_client: TestClient, csrf_token_from: Callable[[str], str], code: str

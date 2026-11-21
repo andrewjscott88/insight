@@ -6,14 +6,20 @@
 </head>
 <body class="login-page">
 <main class="login-card">
-<a class="brand" href="/"><span class="brand-mark" aria-hidden="true">✳</span><span>Insight<small>Intelligence workspace</small></span></a>
+<a class="brand" href="/"><span class="brand-mark" aria-hidden="true">✳</span><span>Insight<small>Cyber Threat Intelligence Feed</small></span></a>
 <h1>Sign out of Insight?</h1>
+{% if dev_no_auth %}
+<p class="eyebrow">Temporary open access</p>
+<p class="muted">This ends your current session. Open access is on, so returning to Insight starts a new one.</p>
+{% else %}
 <p class="muted">This signs you out here and in your other open tabs.</p>
+{% endif %}
 <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 <button class="primary" type="submit">Sign out</button>
 </form>
 <p class="muted">Used Insight on a computer that is not yours, or think someone else signed in? Sign out every
 browser and device at once.</p>
+{% if dev_no_auth %}<p class="muted">Other visitors can still start a new session while open access is on.</p>{% endif %}
 <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 <input type="hidden" name="everywhere" value="1">
 <button class="secondary" type="submit">Sign out everywhere</button>

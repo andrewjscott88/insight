@@ -1,4 +1,4 @@
-"""YARA and Sigma rules in a threat guide (TIP 2.7 minimum, TIP 2.10; ADR 0024).
+"""YARA and Sigma rules in a threat guide (TIP 2.7 minimum, TIP 2.10; ADR 0025).
 
 Insight keeps the text of a rule, where it came from and its licence, and links it to a group or technique.
 It never runs a rule. Rule text is shown as plain text.

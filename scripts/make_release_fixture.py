@@ -112,6 +112,8 @@ def build(path: Path) -> None:
                 db, name='Team chat', style='chat', address='https://hooks.example.org/x'
             )
             services.queue_test_alert(db, alert_to.id)  # 0.7.0: an alert destination and a queued alert
+            # 0.7.0: a CVE NVD could not answer for, waiting to be tried again (review M2)
+            services.record_lookup_failure(db, 'nvd', 'CVE-2024-3400', 'NVD answered HTTP 404', at=when)
             # 0.7.0: threat guides (TIP 2.10): an actor, a report link, an industry decision, a rule, a hunt
             actor = services.create_actor(db, ActorInput(name='Fixture Fox', aliases=('FF-1',), tlp='AMBER'))
             services.link_report(db, actor.id, ActorLinkInput(document_id=manual.id, note='Same beacon'))

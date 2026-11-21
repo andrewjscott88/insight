@@ -1,5 +1,5 @@
 {
-  "description": "Hand-labelled, synthetic threat-report snippets. Labels are what an analyst SHOULD get (ground truth), not what the extractor currently returns. All infrastructure uses reserved documentation ranges/names. Add real, permitted examples during Milestone 1.",
+  "description": "Hand-labelled analyst ground truth. The synthetic snippets and reports use reserved infrastructure. Government advisory excerpts identify their sources and reuse basis on each entry.",
   "documents": [
     {
       "id": "basic-ipv4",
@@ -44,6 +44,29 @@
           "2001:db8::7"
         ]
       ]
+    },
+    {
+      "id": "cidr-defanged-and-canonical",
+      "text": "Traffic from (192[.]0[.]2[.]128/25) and 2001:0DB8:0012:0000:0000:0000:0000:0000/48 reached 203.0.113.4.",
+      "expected": [
+        [
+          "cidr",
+          "192.0.2.128/25"
+        ],
+        [
+          "cidr",
+          "2001:db8:12::/48"
+        ],
+        [
+          "ip",
+          "203.0.113.4"
+        ]
+      ]
+    },
+    {
+      "id": "cidr-invalid",
+      "text": "Discarded ranges with host bits set (192.0.2.12/24, 2001:db8::7/64) and invalid prefix lengths (198.51.100.0/33, 2001:db8:12::/129).",
+      "expected": []
     },
     {
       "id": "cve-mixed-case",
@@ -225,8 +248,45 @@
     {
       "id": "email-only",
       "text": "Report phishing to soc@example.org; the sender was spoof.user@example.net.",
-      "expected": [],
-      "note": "E-mail addresses are not an entity kind; their parts must not become domains."
+      "expected": [
+        [
+          "email",
+          "soc@example.org"
+        ],
+        [
+          "email",
+          "spoof.user@example.net"
+        ]
+      ]
+    },
+    {
+      "id": "email-defanged-idn",
+      "text": "The sender was <Reply.Team+Case42[@]Café[.]EXAMPLE>.",
+      "expected": [
+        [
+          "email",
+          "Reply.Team+Case42@xn--caf-dma.example"
+        ]
+      ]
+    },
+    {
+      "id": "email-malformed",
+      "text": "Rejected .leading@example.org, trailing.@example.net and two..dots@example.com.",
+      "expected": []
+    },
+    {
+      "id": "email-in-url",
+      "text": "Archived directory: https://portal.example.org/profiles/owner@example.net",
+      "expected": [
+        [
+          "url",
+          "https://portal.example.org/profiles/owner@example.net"
+        ],
+        [
+          "domain",
+          "portal.example.org"
+        ]
+      ]
     },
     {
       "id": "file-names",
@@ -275,6 +335,104 @@
     {
       "id": "no-indicators",
       "text": "This advisory discusses patching cadence and contains no technical indicators.",
+      "expected": []
+    },
+    {
+      "id": "cisa-aa23-349a-patch",
+      "text": "The assessment team identified several unpatched systems including instances of CVE-2019-0708 (known as “BlueKeep”) and EternalBlue.",
+      "expected": [
+        [
+          "cve",
+          "CVE-2019-0708"
+        ]
+      ],
+      "source": {
+        "author": "CISA",
+        "advisory": "AA23-349A",
+        "page": 13,
+        "url": "https://www.cisa.gov/sites/default/files/2023-12/aa23-349a-risk-vulnerability-assessment-healthcare-public-health-sector.pdf",
+        "reuse": "U.S. government-authored text (17 U.S.C. § 105), whitespace normalized."
+      }
+    },
+    {
+      "id": "cisa-fbi-aa20-296b-updates",
+      "text": "Apply system and software updates regularly, particularly if you are deploying products affected by CVE-2020-5902 and CVE-2017-9248.",
+      "expected": [
+        [
+          "cve",
+          "CVE-2020-5902"
+        ],
+        [
+          "cve",
+          "CVE-2017-9248"
+        ]
+      ],
+      "source": {
+        "author": "FBI and CISA",
+        "advisory": "AA20-296B",
+        "page": 3,
+        "url": "https://www.cisa.gov/sites/default/files/Joint_CISA_FBI_CSA-AA20-296B_Iranian_APT_Actors_Threaten_Election-Related_Systems.pdf",
+        "reuse": "U.S. government-authored text (17 U.S.C. § 105), whitespace normalized."
+      }
+    },
+    {
+      "id": "cisa-fbi-aa23-158a-mitigation",
+      "text": "Apply phishing-resistant multifactor authentication (MFA).",
+      "expected": [],
+      "source": {
+        "author": "FBI and CISA",
+        "advisory": "AA23-158A",
+        "page": 18,
+        "url": "https://www.cisa.gov/sites/default/files/2023-06/aa23-158a-stopransomware-cl0p-ransomware-gang-exploits-moveit-vulnerability_2.pdf",
+        "reuse": "U.S. government-authored text (17 U.S.C. § 105), whitespace normalized."
+      }
+    },
+    {
+      "id": "bracketed-https-scheme",
+      "text": "Report link: [https]://files[.]example/brief/report.example.",
+      "expected": [
+        [
+          "url",
+          "https://files.example/brief/report.example"
+        ],
+        [
+          "domain",
+          "files.example"
+        ]
+      ],
+      "note": "Synthetic example using the bracketed scheme in draft-grimminck-safe-ioc-sharing-14. The path is evidence, not a domain."
+    },
+    {
+      "id": "bracketed-http-scheme",
+      "text": "The second report lists [HTTP]://portal[.]example:8080/day/2.",
+      "expected": [
+        [
+          "url",
+          "http://portal.example:8080/day/2"
+        ],
+        [
+          "domain",
+          "portal.example"
+        ]
+      ]
+    },
+    {
+      "id": "word-at-mailboxes",
+      "text": "The bulletin lists Ops.Team[at]desk[.]example and Contact(AT)Bücher[.]example.",
+      "expected": [
+        [
+          "email",
+          "Ops.Team@desk.example"
+        ],
+        [
+          "email",
+          "Contact@xn--bcher-kva.example"
+        ]
+      ]
+    },
+    {
+      "id": "marker-prose",
+      "text": "Examples of formatting include [https], [http], [at], and (at) the start of a line.",
       "expected": []
     },
     {

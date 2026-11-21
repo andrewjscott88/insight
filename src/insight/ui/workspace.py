@@ -31,6 +31,8 @@ class WorkspaceState:
     landscape_days: int = 7
     #: The period on the ATT&CK techniques tab, in days (0: all time).
     technique_days: int = 30
+    #: The period on the prioritised CVE tab, in days.
+    cve_days: int = 30
     #: The industry on the industry threats tab (TIP 2.10).
     threat_industry: str = 'government'
     #: Unsaved note text per document. Panels re-render whenever anything changes (a review, a finished source

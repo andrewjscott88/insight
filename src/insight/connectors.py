@@ -6,11 +6,9 @@ import asyncio
 import csv
 import hashlib
 import io
-import ipaddress
 import json
 import os
 import re
-import socket
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
@@ -24,7 +22,10 @@ from defusedxml import ElementTree
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from . import __version__
+from . import __version__, egress, otx
+from .abusech import parse_abusech
+from .feed_items import MAX_FEED_ITEMS as MAX_FEED_ITEMS
+from .feed_items import FeedItem as FeedItem
 from .models import Enrichment, Entity, KEVRecord, SessionFactory, SourceRun, now
 from .schemas import DocumentInput
 from .services import SourceRef, get_fetch_state, ingest, save_fetch_state, set_actor, source_switches
@@ -33,12 +34,14 @@ from .services.alerts import known_kev, queue_kev_alerts
 # Re-exported: the registry used to live here, and tests and scripts still name it through this module.
 from .source_registry import CSAF_BASE as CSAF_BASE
 from .source_registry import CSAF_INBOX_LIMIT as CSAF_INBOX_LIMIT
+from .source_registry import OTX_SUBSCRIBED_URL, in_use
 from .source_registry import SOURCES as SOURCES
 from .source_registry import Source as Source
-from .source_registry import in_use
 
 MAX_BYTES: Final = 8_000_000
-MAX_FEED_ITEMS: Final = 100
+#: Seconds one whole download may take (code review L6). ``httpx.Timeout(25)`` only limits each wait for data,
+#: so a server sending a little every 24 s could otherwise stretch one sync out for hours.
+DOWNLOAD_DEADLINE: Final = 120.0
 MAX_FEED_SUMMARY: Final = 500
 MAX_KEV_ROWS: Final = 20_000
 MAX_KEV_FIELD: Final = 10_000
@@ -67,7 +70,14 @@ KEV_STRING_FIELDS: Final = (
     'dueDate',
     'requiredAction',
     'shortDescription',
+    'vulnerabilityName',
+    'knownRansomwareCampaignUse',
+    'notes',
 )
+#: CISA writes ``Known`` or ``Unknown``; anything else is stored as ``''`` (not known either way).
+KEV_RANSOMWARE: Final = frozenset({'Known', 'Unknown'})
+KEV_CWE: Final = re.compile(r'CWE-\d{1,5}', re.ASCII)
+MAX_KEV_CWES: Final = 20
 
 PROVIDERS: Final[dict[str, str]] = {
     'epss': 'https://api.first.org/data/v1/epss',
@@ -81,7 +91,19 @@ class ConnectorError(Exception):
 
 
 class ProviderError(ConnectorError):
-    """An upstream provider failed or returned something unusable (maps to HTTP 502)."""
+    """An upstream provider failed or returned something unusable (maps to HTTP 502).
+
+    ``provider_wide`` says whether the problem stops every lookup at the provider (no network, rate limit,
+    refused key, server error) or only concerns the one request's answer (review M2).
+    """
+
+    def __init__(self, message: str, *, provider_wide: bool = True) -> None:
+        super().__init__(message)
+        self.provider_wide = provider_wide
+
+
+#: HTTP answers that concern the whole provider, not one CVE: a refused key or rate limit, and server errors.
+PROVIDER_WIDE_STATUSES: Final = frozenset({401, 403, 429})
 
 
 class SourceSyncError(ConnectorError):
@@ -101,10 +123,21 @@ ALLOWED_HOSTS: Final[frozenset[str]] = frozenset(
 )
 
 
-async def _assert_public(hostname: str) -> None:
-    addresses = await asyncio.to_thread(socket.getaddrinfo, hostname, 443, 0, socket.SOCK_STREAM)
-    if not addresses or any(not ipaddress.ip_address(str(a[4][0])).is_global for a in addresses):
+async def _public_addresses(hostname: str) -> list[egress.IPAddress]:
+    """The addresses of ``hostname``, all of them public, or ``ValueError`` (review L1: the request then goes
+    to one of these exact addresses, so a second DNS answer cannot redirect it)."""
+    addresses = await egress.resolve(hostname, 443)
+    if not addresses or not all(egress.is_public(a) for a in addresses):
         raise ValueError('Source resolves to a non-public destination')
+    return addresses
+
+
+def _status_error(response: httpx.Response, url: str) -> httpx.HTTPStatusError:
+    """httpx's error for a failed answer, naming the host the operator knows rather than its address."""
+    code = response.status_code
+    kind = 'Client error' if code < 500 else 'Server error'
+    message = f"{kind} '{code} {response.reason_phrase}' for url '{url}'"
+    return httpx.HTTPStatusError(message, request=response.request, response=response)
 
 
 #: The run message when a source has not changed since its last successful sync.
@@ -136,12 +169,13 @@ async def download(
     transport: httpx.AsyncBaseTransport | None = None,
     validators: Validators | None = None,
     headers: Mapping[str, str] | None = None,
+    body: bytes | None = None,
     max_bytes: int = MAX_BYTES,
 ) -> bytes:
     """Fetch ``url`` from the curated HTTPS registry with strict size and redirect limits.
 
     With ``validators``, the request is conditional: an unchanged resource raises :class:`NotModified`, and a
-    changed one updates ``validators`` from the response. ``headers`` adds request headers (an NVD API key).
+    changed one updates ``validators`` from the response. Keyed feeds can add headers and a fixed POST body.
     ``max_bytes`` raises the size limit for one pinned, hash-checked download (the threat library sync).
     ``transport`` exists for offline testing; production code never passes it.
     """
@@ -154,36 +188,74 @@ async def download(
         port = -1
     if port not in (None, 443):
         raise ValueError('Outbound URL is not in the curated HTTPS source registry')
-    await _assert_public(parts.hostname)
+    addresses = await _public_addresses(parts.hostname)
     request_headers = {**(headers or {}), 'User-Agent': USER_AGENT, 'Accept-Encoding': 'identity'}
     if validators is not None and validators.etag:
         request_headers['If-None-Match'] = validators.etag
     if validators is not None and validators.last_modified:
         request_headers['If-Modified-Since'] = validators.last_modified
-    # Fixed application-owned hosts only. An egress firewall remains recommended against DNS rebinding.
-    async with (
-        httpx.AsyncClient(
-            timeout=httpx.Timeout(25), follow_redirects=False, trust_env=False, transport=transport
-        ) as client,
-        client.stream('GET', url, params=params, headers=request_headers) as response,
-    ):
-        if response.status_code == 304:
-            if validators is not None:
-                raise NotModified(url)
-            raise ValueError('The server answered 304 Not Modified to a request that asked for no validation')
-        # Check before raise_for_status(): httpx treats 3xx as an error, which would hide this message.
-        if response.is_redirect:
-            raise ValueError('Redirects are disabled; update the registry after reviewing the source')
-        response.raise_for_status()
+    # Fixed application-owned hosts only, reached at the addresses just checked (review L1).
+    try:
+        async with asyncio.timeout(DOWNLOAD_DEADLINE):
+            return await _fetch(
+                url, addresses, params, request_headers, validators, transport, body, max_bytes
+            )
+    except TimeoutError as exc:  # The overall deadline (L6); a normal fetch failure, recorded like any other.
+        raise TimeoutError(f'The download took longer than {DOWNLOAD_DEADLINE:g} seconds') from exc
+
+
+async def _fetch(
+    url: str,
+    addresses: list[egress.IPAddress],
+    params: Mapping[str, str] | None,
+    request_headers: dict[str, str],
+    validators: Validators | None,
+    transport: httpx.AsyncBaseTransport | None,
+    body: bytes | None,
+    max_bytes: int = MAX_BYTES,
+) -> bytes:
+    async with httpx.AsyncClient(
+        timeout=httpx.Timeout(25), follow_redirects=False, trust_env=False, transport=transport
+    ) as client:
+        for index, address in enumerate(addresses):
+            target = egress.pin(url, address)
+            try:
+                async with client.stream(
+                    'GET' if body is None else 'POST',
+                    target.url,
+                    content=body,
+                    params=params,
+                    headers={**request_headers, **target.headers},
+                    extensions=target.extensions,
+                ) as response:
+                    return await _read(response, url, validators, max_bytes)
+            except httpx.ConnectError:
+                if index == len(addresses) - 1:  # Every checked address refused: report the last error.
+                    raise
+    raise AssertionError('unreachable')  # pragma: no cover - the loop returns or raises
+
+
+async def _read(
+    response: httpx.Response, url: str, validators: Validators | None, max_bytes: int = MAX_BYTES
+) -> bytes:
+    if response.status_code == 304:
         if validators is not None:
-            validators.etag = _validator(response, 'etag', 200)
-            validators.last_modified = _validator(response, 'last-modified', 100)
-        data = bytearray()
-        async for chunk in response.aiter_bytes():
-            data.extend(chunk)
-            if len(data) > max_bytes:
-                raise ValueError(f'Source exceeds the {max_bytes // 1_000_000} MB payload limit')
-        return bytes(data)
+            raise NotModified(url)
+        raise ValueError('The server answered 304 Not Modified to a request that asked for no validation')
+    # Check before the status: httpx treats 3xx as an error, which would hide this message.
+    if response.is_redirect:
+        raise ValueError('Redirects are disabled; update the registry after reviewing the source')
+    if not response.is_success:
+        raise _status_error(response, url)
+    if validators is not None:
+        validators.etag = _validator(response, 'etag', 200)
+        validators.last_modified = _validator(response, 'last-modified', 100)
+    data = bytearray()
+    async for chunk in response.aiter_bytes():
+        data.extend(chunk)
+        if len(data) > max_bytes:
+            raise ValueError(f'Source exceeds the {max_bytes // 1_000_000} MB payload limit')
+    return bytes(data)
 
 
 def text_only(value: str | None) -> str:
@@ -203,16 +275,6 @@ def _atom_link(item: Any) -> str:
         if el.get('rel', 'alternate') == 'alternate':
             return str(el.get('href', ''))
     return ''
-
-
-@dataclass(frozen=True, slots=True)
-class FeedItem:
-    """A parsed feed entry and its stable identity at the publisher (``None`` if it has none)."""
-
-    document: DocumentInput
-    external_id: str | None
-    #: The publisher's summary was longer than :data:`MAX_FEED_SUMMARY` and was cut.
-    truncated: bool = False
 
 
 def parse_feed(payload: bytes, source: Source) -> list[FeedItem]:
@@ -467,6 +529,14 @@ def _validate_kev_rows(payload: bytes) -> list[dict[str, str]]:
             if not isinstance(value, str) or len(value) > MAX_KEV_FIELD:
                 raise ValueError('Invalid KEV record field')
             clean[key] = value
+        if clean['knownRansomwareCampaignUse'] not in KEV_RANSOMWARE:
+            clean['knownRansomwareCampaignUse'] = ''
+        cwes = row.get('cwes', [])
+        if not isinstance(cwes, list) or len(cwes) > MAX_KEV_CWES:
+            raise ValueError('Invalid KEV record field')
+        if not all(isinstance(c, str) and KEV_CWE.fullmatch(c) for c in cwes):
+            raise ValueError('Invalid KEV record field')
+        clean['cwes'] = ','.join(dict.fromkeys(cwes))
         validated.append(clean)
     return validated
 
@@ -493,6 +563,10 @@ def import_kev(db: Session, payload: bytes) -> tuple[int, int]:
         record.date_added = row['dateAdded']
         record.due_date = row['dueDate']
         record.required_action = row['requiredAction']
+        record.vulnerability_name = row['vulnerabilityName']
+        record.ransomware_use = row['knownRansomwareCampaignUse']
+        record.notes = row['notes']
+        record.cwes = row['cwes']
         record.imported_at = imported_at
     added = 0
     newest = sorted(validated, key=lambda r: r['dateAdded'], reverse=True)[:KEV_INBOX_LIMIT]
@@ -548,7 +622,13 @@ def _load_validators(session_factory: SessionFactory, url: str) -> tuple[Validat
         return Validators(state.etag, state.last_modified), state.payload_sha256
 
 
-async def fetch_if_changed(session_factory: SessionFactory, url: str) -> Fetched | None:
+async def fetch_if_changed(
+    session_factory: SessionFactory,
+    url: str,
+    *,
+    headers: Mapping[str, str] | None = None,
+    body: bytes | None = None,
+) -> Fetched | None:
     """Download ``url`` unless it is unchanged since it was last stored: ``None`` then.
 
     Unchanged means a ``304`` to a conditional request, or the same bytes as last time (for servers that
@@ -557,7 +637,9 @@ async def fetch_if_changed(session_factory: SessionFactory, url: str) -> Fetched
     stored = await asyncio.to_thread(_load_validators, session_factory, url)
     validators = Validators(stored[0].etag, stored[0].last_modified) if stored else Validators()
     try:
-        payload = await download(url, validators=validators)
+        payload = await download(
+            url, headers=headers, body=body, validators=validators if body is None else None
+        )
     except NotModified:
         return None
     digest = hashlib.sha256(payload).hexdigest()
@@ -583,7 +665,7 @@ def _store_source(session_factory: SessionFactory, source: Source, fetched: Fetc
                 f'Updated {count} KEV records; {added} new reports from the latest {KEV_INBOX_LIMIT} entries.'
             )
         else:
-            docs = parse_feed(payload, source)
+            docs = parse_abusech(payload, source) if source.kind == 'abusech' else parse_feed(payload, source)
             message = f'Read {len(docs)} feed items; {_ingest_items(db, source, docs)} new reports.'
         db.add(SourceRun(source_key=source.key, status='success', message=message))
     return message
@@ -625,6 +707,38 @@ def _record_failure(session_factory: SessionFactory, key: str, message: str) -> 
         db.add(SourceRun(source_key=key, status='error', message=message))
 
 
+async def fetch_otx() -> bytes:
+    """Fetch page one of this operator's subscriptions. Never follow provider-supplied links."""
+    key = os.environ.get('INSIGHT_OTX_API_KEY', '').strip()
+    if not key:
+        raise ValueError('Set INSIGHT_OTX_API_KEY to sync subscribed pulses')
+    if len(key) > 512 or not key.isascii() or not key.isprintable() or ' ' in key:
+        raise ValueError('Check INSIGHT_OTX_API_KEY: the key must be one printable token')
+    try:
+        return await download(
+            OTX_SUBSCRIBED_URL, {'page': '1', 'limit': str(otx.PAGE_SIZE)}, headers={'X-OTX-API-KEY': key}
+        )
+    except httpx.HTTPStatusError as exc:
+        status = exc.response.status_code
+        hint = ' (check INSIGHT_OTX_API_KEY)' if status in (401, 403) else ''
+        raise ValueError(f'OTX answered HTTP {status}{hint}') from None
+    except Exception:
+        # Transport diagnostics can quote a request header, including its secret value.
+        raise ValueError('The OTX subscription request failed') from None
+
+
+def _store_otx(session_factory: SessionFactory, source: Source, payload: bytes) -> str:
+    batch = otx.parse_pulses(payload, source)
+    with session_factory.begin() as db:
+        set_actor(db, f'connector:{source.key}')
+        added = _ingest_items(db, source, batch.items)
+        message = (
+            f'Read {len(batch.items)} public pulses; {added} new reports. Skipped {batch.skipped} pulses.'
+        )
+        db.add(SourceRun(source_key=source.key, status='success', message=message))
+    return message
+
+
 def switches(session_factory: SessionFactory) -> dict[str, bool]:
     with session_factory() as db:
         return source_switches(db)
@@ -634,6 +748,28 @@ def sources_in_use(session_factory: SessionFactory) -> list[Source]:
     """The sources Insight may contact, in registry order (optional ones only once switched on)."""
     current = switches(session_factory)
     return [s for s in SOURCES.values() if in_use(s, current)]
+
+
+def abusech_request(source: Source) -> tuple[dict[str, str], bytes | None]:
+    """One fixed, read-only metadata query per source. The key is sent only as an HTTP header."""
+    if source.kind != 'abusech':
+        raise ValueError('Expected an abuse.ch source')
+    key = os.environ.get('INSIGHT_ABUSECH_AUTH_KEY', '')
+    if not key:
+        raise ValueError('Set INSIGHT_ABUSECH_AUTH_KEY to use this source')
+    if len(key) > 512 or not re.fullmatch(r'[!-~]+', key):
+        raise ValueError('INSIGHT_ABUSECH_AUTH_KEY must be a single printable token')
+    headers = {'Auth-Key': key}
+    if source.key == 'urlhaus':
+        return headers, None
+    if source.key == 'threatfox':
+        return {**headers, 'Content-Type': 'application/json'}, b'{"query":"get_iocs","days":1}'
+    if source.key == 'malwarebazaar':
+        return {
+            **headers,
+            'Content-Type': 'application/x-www-form-urlencoded',
+        }, b'query=get_recent&selector=time'
+    raise ValueError('Unknown abuse.ch source')
 
 
 async def sync_source(session_factory: SessionFactory, key: str) -> str:
@@ -651,13 +787,26 @@ async def sync_source(session_factory: SessionFactory, key: str) -> str:
         raise SourceSwitchedOff(source)
     try:
         # Database work is synchronous; keep it off the event loop so the UI stays responsive.
+        if source.kind == 'otx':
+            return await asyncio.to_thread(_store_otx, session_factory, source, await fetch_otx())
         if source.kind == 'csaf':
             changed = [f for url in source.indexes if (f := await fetch_if_changed(session_factory, url))]
             if not changed:
                 return await asyncio.to_thread(_record_unchanged, session_factory, source)
             items, skipped = await fetch_csaf(source, {f.url: f.payload for f in changed})
             return await asyncio.to_thread(_store_csaf, session_factory, source, items, skipped, changed)
-        fetched = await fetch_if_changed(session_factory, source.url)
+        if source.kind == 'abusech':
+            headers, body = abusech_request(source)
+            try:
+                fetched = await fetch_if_changed(
+                    session_factory, source.fetch_urls[0], headers=headers, body=body
+                )
+            except httpx.HTTPStatusError as exc:
+                raise ValueError(f'{source.name} answered HTTP {exc.response.status_code}') from None
+            except httpx.RequestError as exc:
+                raise ValueError(f'{source.name} request failed ({type(exc).__name__})') from None
+        else:
+            fetched = await fetch_if_changed(session_factory, source.url)
         if fetched is None:
             return await asyncio.to_thread(_record_unchanged, session_factory, source)
         return await asyncio.to_thread(_store_source, session_factory, source, fetched)
@@ -752,16 +901,17 @@ async def fetch_provider_json(provider: str, params: Mapping[str, str]) -> dict[
         code = exc.response.status_code
         # NVD refuses a wrong key with a client error, so point at the setting (never at the key itself).
         hint = ' (check INSIGHT_NVD_API_KEY)' if headers and code in (401, 403, 404) else ''
-        raise ProviderError(f'{provider.upper()} answered HTTP {code}{hint}') from exc
+        wide = code in PROVIDER_WIDE_STATUSES or code >= 500
+        raise ProviderError(f'{provider.upper()} answered HTTP {code}{hint}', provider_wide=wide) from exc
     except (httpx.HTTPError, OSError, ValueError) as exc:
         # Size-limit, redirect and DNS-policy violations are upstream problems too, not bad client input.
         raise ProviderError(f'{provider.upper()} request failed: {type(exc).__name__}') from exc
     try:
         payload = json.loads(raw)
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-        raise ProviderError(f'{provider.upper()} returned a non-JSON response') from exc
+        raise ProviderError(f'{provider.upper()} returned a non-JSON response', provider_wide=False) from exc
     if not isinstance(payload, dict):
-        raise ProviderError(f'{provider.upper()} returned an unexpected response')
+        raise ProviderError(f'{provider.upper()} returned an unexpected response', provider_wide=False)
     return payload
 
 

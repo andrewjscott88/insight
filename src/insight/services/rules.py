@@ -1,4 +1,4 @@
-"""YARA and Sigma rules as linked artifacts (TIP 2.7 minimum, for TIP 2.10 threat guides; ADR 0024).
+"""YARA and Sigma rules as linked artifacts (TIP 2.7 minimum, for TIP 2.10 threat guides; ADR 0025).
 
 Insight *carries* detection content: it stores the rule text with its source, licence and SHA-256, links it
 to groups, ATT&CK techniques or reports, and exports it with threat guides. It never compiles, evaluates or

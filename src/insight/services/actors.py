@@ -1,4 +1,4 @@
-"""Threat actors and groups as the analyst records them (TIP 2.5 minimum, TIP 2.10; ADR 0024).
+"""Threat actors and groups as the analyst records them (TIP 2.5 minimum, TIP 2.10; ADR 0025).
 
 A *group reference* is either an ATT&CK group ID from the threat library (``G0016``, catalog data, TLP:CLEAR)
 or the ID of a :class:`ThreatActor` the analyst created. Everything the analyst adds is an explicit decision:

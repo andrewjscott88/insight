@@ -28,7 +28,7 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
       themes, and KEV ransomware use (TIP 1.1) and EPSS (TIP 1.2) in it.
 - [x] **TIP 1.4 Alerts** (#15, [ADR 0022](docs/adr/0022-alerts.md)), brought forward from 0.8.0: watch-term
       matches and new KEV entries to chat webhooks, signed JSON webhooks or e-mail, once each, within each
-      destination's TLP limit. Next: a daily landscape digest, CLI management.
+      destination's TLP limit. CLI management is available with `insight notify`. Next: a daily landscape digest.
 - [x] **Threat-research sources** ([ADR 0021](docs/adr/0021-threat-research-sources.md)): Cisco Talos,
       Microsoft Threat Intelligence, The DFIR Report, ESET, Kaspersky Securelist and The Record, off until
       switched on, with per-source reuse rules (review J3, brought forward from 0.8.0).
@@ -38,34 +38,40 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
       sessions, opt-in schedules and the job runner.
 - [ ] **TIP 0.3 Safer public-deploy defaults.** Stronger start-up warnings when Insight is internet-facing, and an
       optional `INSIGHT_REQUIRE_HARDENED=1` that refuses to start without secure cookies and MFA.
-- [ ] **TIP 0.4 Pin connector connections to the checked DNS addresses,** closing the DNS-rebinding gap.
+- [x] **TIP 0.4 Pin connector connections to the checked DNS addresses,** closing the DNS-rebinding gap (code
+      review L1): source syncs, CVE lookups and alert webhooks connect to the address they checked.
 - [ ] **TIP 0.5 `/health` without the version;** the version moves behind sign-in.
 - [ ] **TIP 0.6 Encrypt the TOTP secret at rest,** migrating existing rows.
 - [x] **Review B2 Throttles into one place** ([ADR 0023](docs/adr/0023-automatic-cve-lookups.md)): one throttle
       per provider in `insight.lookups`, shared by the API, the workspace and the automatic lookups. (The sync
       lock already lived in one place.)
-- [ ] **TIP 1.1 Complete KEV fields:** known ransomware use, vulnerability name, notes and CWEs; a documented inbox
-      policy for older KEV entries.
+- [ ] **TIP 1.1 Complete KEV fields:** ~~known ransomware use, vulnerability name, notes and CWEs~~ (done with TIP
+      1.3, [ADR 0024](docs/adr/0024-prioritised-cves.md)); still to do: a documented inbox policy for older KEV
+      entries.
 - [x] **TIP 1.2 Automatic NVD and EPSS lookups** ([ADR 0023](docs/adr/0023-automatic-cve-lookups.md)): off until
       switched on per provider; CVEs from TLP:CLEAR and GREEN reports, newest first, through the job queue;
       optional `INSIGHT_NVD_API_KEY`. With review C2: a parsed score per CVE in the reader, the dialog and
       `GET /api/cves/{cve}/scores`.
-- [ ] **TIP 1.3 The brief and a prioritised CVE view use them:** ransomware-used KEV entries, NVD CVSS next to
-      CSAF scores, EPSS with a plain-language caveat (review C2).
+- [x] **TIP 1.3 The brief and a prioritised CVE view use them** ([ADR 0024](docs/adr/0024-prioritised-cves.md)):
+      ransomware-used KEV entries first, NVD CVSS next to CSAF scores, EPSS with a plain-language caveat; the
+      *Prioritised CVEs* tab and `GET /api/cves` rank by stated rules and say why.
 
 ## 0.8.0: alerts and more feeds
 
 - [x] [#15](https://github.com/andrewjscott88/insight/issues/15) **TIP 1.4 Notifications (M4):** done in 0.7.0
-      (above). Destinations are set in the workspace; CLI management is still to do.
+      (above). Destinations are managed in the workspace or with `insight notify`.
 - [x] **Review J3 Per-source redistribution rules** (public, or metadata only), applied by the report and IOC
       exports ([ADR 0021](docs/adr/0021-threat-research-sources.md)); STIX and MISP must apply them too.
-- [ ] **TIP 1.5 abuse.ch connectors:** URLhaus, ThreatFox and MalwareBazaar (indicators and metadata only, never
+- [x] **TIP 1.5 abuse.ch connectors:** URLhaus, ThreatFox and MalwareBazaar (indicators and metadata only, never
       samples; keys from the environment).
-- [ ] **TIP 1.6 AlienVault OTX pulses** with the operator's own key.
-- [ ] **Review D2 E-mail and CIDR indicator kinds,** with e-mail addresses flagged as personal data.
-- [ ] [#9](https://github.com/andrewjscott88/insight/issues/9) **TIP 1.7 Extraction quality (M1),** ongoing: a
-      larger labelled corpus, the defanged-indicator gaps in [docs/EXTRACTION.md](docs/EXTRACTION.md), a
-      ratcheted benchmark.
+- [x] **TIP 1.6 AlienVault OTX pulses** with the operator's own key. Imports subscribed public CLEAR/WHITE
+      pulses and their supported indicators. [Operator guide](docs/RUNBOOK.md#8-sources-enrichment-and-their-failures).
+- [x] **Review D2 CIDR indicator kind:** IPv4 and IPv6 network ranges in report review, search and IOC export.
+- [x] **Review D2 E-mail indicator kind:** review and find full addresses across reports, with a personal-data warning on each address.
+- [x] [#9](https://github.com/andrewjscott88/insight/issues/9) **TIP 1.7 Extraction quality (M1), 0.8.0:**
+      three attributed government advisory excerpts, four labelled syntax cases, bracketed HTTP(S) schemes,
+      word-form e-mail separators, and an updated [benchmark](docs/EXTRACTION.md#measuring-quality).
+      Corpus expansion is ongoing.
 
 ## 0.9.0: speaks STIX, ATT&CK and MISP
 
@@ -81,7 +87,7 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
 - [ ] **TIP 2.5 Actors and campaigns, created by the analyst.** ATT&CK groups only as a labelled catalog; never
       attribution from shared indicators.
       *Partly done (unreleased, with TIP 2.10):* actors the analyst creates, report links and industry decisions
-      ([ADR 0024](docs/adr/0024-threat-guides.md)); campaigns, indicator links and STIX export remain.
+      ([ADR 0025](docs/adr/0025-threat-guides.md)); campaigns, indicator links and STIX export remain.
 - [x] **TIP 2.10 Industry threat profiles and actor threat guides** (requested by Andrew, 2026-11-21): pick an
       industry and see the top ten threat groups known to target it, each with its evidence; open one and export
       a threat guide (aliases, targets, ATT&CK techniques and Navigator layer, tools, mitigations, your reports
@@ -89,7 +95,7 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
       from it: hypotheses per technique with the data sources to search, an indicator sweep list from your
       reports, linked Sigma/YARA rules, and a hunt record. Needs a bundled threat-group library (ATT&CK groups
       plus sourced industry data); builds on TIP 2.3, 2.5 and 2.7.
-      *Done (unreleased):* [docs/THREAT_GUIDES.md](docs/THREAT_GUIDES.md), [ADR 0024](docs/adr/0024-threat-guides.md).
+      *Done (unreleased):* [docs/THREAT_GUIDES.md](docs/THREAT_GUIDES.md), [ADR 0025](docs/adr/0025-threat-guides.md).
 - [ ] **TIP 2.7 YARA and Sigma rules as linked artifacts** (carried and exported, never executed).
       *Partly done (unreleased, with TIP 2.10):* rules stored as text, linked to groups, techniques and reports,
       exported in threat guides, deleted with an audit event; linking to CVEs and STIX export remain.

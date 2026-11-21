@@ -1,4 +1,4 @@
-"""Hunt records started from a threat guide (TIP 2.10, ADR 0024).
+"""Hunt records started from a threat guide (TIP 2.10, ADR 0025).
 
 A hunt belongs to one group and has one check per hypothesis (ATT&CK technique): what data was searched, over
 which time range, and the result. It makes a hunt repeatable and lets the next analyst see what was covered.

@@ -1,4 +1,4 @@
-"""The analyst's own threat data (TIP 2.5 minimum, TIP 2.10; ADR 0024): actors, industries, report links.
+"""The analyst's own threat data (TIP 2.5 minimum, TIP 2.10; ADR 0025): actors, industries, report links.
 
 Each of these is a decision the analyst makes and Insight records with an audit event. Insight never links a
 report to a group by itself, and never from shared indicators.

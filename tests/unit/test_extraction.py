@@ -58,6 +58,68 @@ def test_ip(text: str, expected: list[str]) -> None:
 
 
 @pytest.mark.parametrize(
+    ('raw', 'expected'),
+    [
+        ('203[.]0[.]113[.]0/24', '203.0.113.0/24'),
+        ('2001[:]0DB8:0000:0000::/48', '2001:db8::/48'),
+        ('::ffff:c000:0200/120', '::ffff:192.0.2.0/120'),
+        ('::ffff:192.0.2.0/120', '::ffff:192.0.2.0/120'),
+        ('192.0.2.7/32', '192.0.2.7/32'),
+        ('2001:db8::7/128', '2001:db8::7/128'),
+        ('128.0.0.0/1', '128.0.0.0/1'),
+        ('8000::/1', '8000::/1'),
+    ],
+)
+def test_cidr_keeps_full_raw_span_and_canonical_network(raw: str, expected: str) -> None:
+    text = f'📄 Range ({raw}).'
+    (mention,) = extract(text)
+    assert (mention.kind, mention.value) == ('cidr', expected)
+    assert text[mention.start : mention.end] == raw
+    assert raw in mention.evidence
+    assert canonical('cidr', raw) == expected
+
+
+@pytest.mark.parametrize(
+    'raw',
+    [
+        '203.0.113.0/33',
+        '2001:db8::/129',
+        '2001:db8::/-1',
+        '192.0.2.0/+24',
+        '203.0.113.7/24',
+        '2001:db8::7/64',
+        '999.0.0.0/8',
+        '2001:db8:::1/128',
+        '192.0.2.0/24x',
+        '192.0.2.0/2.4',
+        'x192.0.2.0/24',
+        'é192.0.2.0/24',
+        '192.0.2.0/24é',
+        '192.0.2.0/24/32',
+        'firmware 1.2.3.0/24',
+        '::ffff:192.0.2.7/120',
+    ],
+)
+def test_invalid_or_embedded_ranges_do_not_yield_partial_addresses(raw: str) -> None:
+    assert extract(raw) == []
+
+
+def test_regression_every_address_is_not_an_indicator() -> None:
+    """Cloud reports often say a rule allowed 0.0.0.0/0; that range is every address, not an indicator."""
+    text = 'The security group allowed SSH from 0.0.0.0/0 and ::/0; the scans came from 198.51.100.0/24.'
+    assert values(text, 'cidr') == ['198.51.100.0/24']
+    assert values(text, 'ip') == []
+
+
+def test_cidr_skips_url_paths_and_leaves_bare_ips_alone() -> None:
+    text = (
+        'hxxps://example[.]org/net/192.0.2.0/24 or https://192.0.2.0/24. Range 192.0.2.0/24; host 192.0.2.1.'
+    )
+    assert values(text, 'cidr') == ['192.0.2.0/24']
+    assert values(text, 'ip') == ['192.0.2.1']
+
+
+@pytest.mark.parametrize(
     ('text', 'expected'),
     [
         ('see https://Example.COM/Path?q=1.', ['https://example.com/Path?q=1']),
@@ -104,6 +166,83 @@ def test_domain(text: str, expected: list[str]) -> None:
     assert values(text, 'domain') == expected
 
 
+@pytest.mark.parametrize(
+    ('raw', 'expected'),
+    [
+        ('InBox.Team+VIP@Dept.EXAMPLE.Org', 'InBox.Team+VIP@dept.example.org'),
+        ('Ops_2-Test[@]Relay[.]Example', 'Ops_2-Test@relay.example'),
+        ('Alice@bücher.example', 'Alice@xn--bcher-kva.example'),
+        ("O'Brien@example.org", "O'Brien@example.org"),
+        ('192.0.2.8@relay.example', '192.0.2.8@relay.example'),
+        ('CVE-2026-12345@relay.example', 'CVE-2026-12345@relay.example'),
+        ('a' * 32 + '@relay.example', 'a' * 32 + '@relay.example'),
+        ('sales.example+eu@sub.example.org', 'sales.example+eu@sub.example.org'),
+    ],
+)
+def test_email_is_one_mention_with_its_original_evidence(raw: str, expected: str) -> None:
+    text = f'📄 The report lists <{raw}>.'
+    (mention,) = extract(text)
+    assert (mention.kind, mention.value) == ('email', expected)
+    assert text[mention.start : mention.end] == raw
+    assert raw in mention.evidence
+    assert canonical('email', raw) == expected
+
+
+@pytest.mark.parametrize(
+    'raw',
+    [
+        '.name@example.org',
+        'name.@example.org',
+        'a..b@example.org',
+        'a@b@example.org',
+        'a[@]b@example.org',
+        'a@example.org[@]x.example',
+        "'desk@example.org",
+        "part.''desk@example.org",
+        'éname@example.org',
+        'name@host.bad-tld',
+        'name@example.org..invalid',
+        'a@_sip.example.org',
+        'a' * 65 + '@example.org',
+        'a@' + ('a' * 62 + '.') * 4 + 'org',
+        '"two names"@example.org',
+        'support@[192.0.2.1]',
+        'a@localhost',
+    ],
+)
+def test_email_rejects_malformed_or_unsupported_forms(raw: str) -> None:
+    assert values(raw, 'email') == []
+    with pytest.raises(ValueError):  # noqa: PT011 - the canonicalisation contract.
+        canonical('email', raw)
+
+
+def test_email_ignores_credentials_paths_and_queries_even_in_unsupported_or_invalid_urls() -> None:
+    text = (
+        'https://operator:secret@example.org/a@relay.example '
+        'hxxps://docs.example/query?q=admin[@]example[.]org '
+        'ftp://user:pass@relay.example and https://user@bad.example:badport/ '
+        'then Analyst@Example.org. The other address is analyst@example.org.'
+    )
+    assert values(text, 'email') == ['Analyst@example.org', 'analyst@example.org']
+
+
+def test_single_quoted_mailbox_excludes_the_delimiters() -> None:
+    raw = "O'Brien@example.org"
+    text = f"Send to '{raw}'."
+    (mention,) = extract(text)
+    assert (mention.kind, mention.value, text[mention.start : mention.end]) == ('email', raw, raw)
+
+
+def test_mailto_only_extracts_a_single_explicit_recipient() -> None:
+    raw = 'Desk[@]Reports[.]Example'
+    text = f'Use MAILTO:{raw}?cc=other[@]sample[.]example&body=visit.example now.'
+    (mention,) = extract(text)
+    assert (mention.kind, mention.value) == ('email', 'Desk@reports.example')
+    assert text[mention.start : mention.end] == raw
+    assert extract('mailto:a@example.org,b[@]relay[.]example') == []
+    assert extract('mailto:?cc=other[@]sample[.]example') == []
+
+
 def test_invalid_candidate_does_not_stop_later_matches() -> None:
     """Found by mutation testing: ``continue`` -> ``break`` after an invalid candidate survived."""
     text = '999.1.2.3 then 192.0.2.8; ftp://bad.example/ then https://good.example/'
@@ -146,6 +285,11 @@ def test_canonical(kind: str, raw: str, expected: str) -> None:
         ('cve', 'CVE-24-1'),
         ('domain', 'svchost.exe'),
         ('ip', '010.1.2.3'),
+        ('cidr', '192.0.2.1'),
+        ('cidr', '192.0.2.0/255.255.255.0'),
+        ('cidr', 'fe80::%eth0/64'),
+        ('cidr', '0.0.0.0/0'),
+        ('cidr', '::/0'),
     ],
 )
 def test_canonical_rejects_invalid(kind: str, raw: str) -> None:
@@ -205,6 +349,8 @@ observable_fragments = st.sampled_from(
         'CVE-2024-12345',
         '192.0.2.8',
         '2001:db8::1',
+        '192.0.2.0/24',
+        '2001:0DB8::/32',
         'https://example.com/a?b=c',
         'example.org',
         'a' * 32,
@@ -434,6 +580,44 @@ def test_domain_at_the_start_of_text_ending_in_a_non_ascii_letter() -> None:
 
 def test_bracketed_scheme_separator_is_refanged() -> None:
     assert values('payload at hxxps[://]evil.example/p', 'url') == ['https://evil.example/p']
+
+
+@pytest.mark.parametrize('raw_scheme', ['[http]', '[HTTPS]'])
+def test_bracketed_web_scheme_preserves_offsets_and_authority(raw_scheme: str) -> None:
+    """Regression: bracketed schemes lost the URL and exposed domain-like fragments from its path."""
+    raw = f'{raw_scheme}://reports[.]example/notes/sibling.example'
+    text = f'📄 URL ({raw}).'
+    found = extract(text)
+    assert [(m.kind, m.value) for m in found] == [
+        ('url', f'{raw_scheme[1:-1].lower()}://reports.example/notes/sibling.example'),
+        ('domain', 'reports.example'),
+    ]
+    url, host = found
+    assert text[url.start : url.end] == raw
+    assert text[host.start : host.end] == 'reports[.]example'
+    assert all(canonical(m.kind, text[m.start : m.end]) == m.value for m in found)
+
+
+def test_bracketed_scheme_only_applies_at_the_start_of_an_indicator() -> None:
+    url = 'https://files.example/notes/[https]://else.example'
+    assert [(m.kind, m.value) for m in extract(url)] == [('url', url), ('domain', 'files.example')]
+    assert values('see the [https] heading', 'url') == []
+
+
+@pytest.mark.parametrize('separator', ['[at]', '(AT)'])
+def test_word_at_defanging_is_limited_to_mailboxes(separator: str) -> None:
+    raw = f'Ops.Team{separator}Bücher[.]example'
+    text = f'📄 Mail to <{raw}>, or use [https]://desk[.]example/query?address={raw}'
+    found = extract(text)
+    email = found[0]
+    assert (email.kind, email.value, text[email.start : email.end]) == (
+        'email',
+        'Ops.Team@xn--bcher-kva.example',
+        raw,
+    )
+    assert [m.kind for m in found] == ['email', 'url', 'domain']
+    assert separator in found[1].value  # a query is part of a URL and remains literal
+    assert values(f'a{separator}b{separator}example.org', 'email') == []
 
 
 @pytest.mark.parametrize(('kind', 'raw'), [('md5', 'z' * 32), ('sha1', 'g' * 40), ('sha256', 'x' * 64)])

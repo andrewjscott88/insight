@@ -28,4 +28,5 @@ superseded ones are marked, never deleted.
 | [0021](0021-threat-research-sources.md) | Threat-research sources, switched on by the operator, with per-publisher reuse rules | Accepted |
 | [0022](0022-alerts.md) | Alerts on watch-term matches and new KEV entries, sent by the job runner | Accepted |
 | [0023](0023-automatic-cve-lookups.md) | Automatic NVD and EPSS lookups, with one throttle per provider | Accepted |
-| [0024](0024-threat-guides.md) | Industry threat profiles and actor threat guides from a sourced, pinned threat-group library | Accepted |
+| [0024](0024-prioritised-cves.md) | A prioritised CVE view, and a brief that uses KEV ransomware use, NVD CVSS and EPSS | Accepted |
+| [0025](0025-threat-guides.md) | Industry threat profiles and actor threat guides from a sourced, pinned threat-group library | Accepted |

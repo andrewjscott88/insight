@@ -10,7 +10,7 @@ A single-operator threat-intelligence workbench, run locally or published behind
 - **Light and dark themes, readable on phones.** The workspace follows each device's light/dark setting by default; the **Light / Dark / System** buttons in the header override it for that browser. The instance default is `INSIGHT_THEME` (`make theme THEME=dark`). On a phone the layout uses larger text, no zoom-on-focus, big touch targets, and opening a report scrolls to it (with **← Back to list**). Text in both themes meets WCAG AA contrast (tested).
 - Password-protected analyst inbox with split-pane report reader, search and TLP/status filters. Search ignores case, accents and Unicode normal form identically on SQLite and PostgreSQL.
 - Paste reports with title, source, URL and handling label; preserve original text and its SHA-256 hash.
-- Deterministic extraction of CVEs, IPv4/IPv6, URLs, domains and MD5/SHA1/SHA256/SHA512 mentions, including defanged (`hxxp`, `[.]`) and international (punycode) forms. It is precision-first: about 98% precision and recall on the labelled corpus ([docs/EXTRACTION.md](docs/EXTRACTION.md)).
+- Deterministic extraction of CVEs, IPv4/IPv6 addresses and network ranges (CIDR), URLs, domains, e-mail addresses and MD5/SHA1/SHA256/SHA512 mentions, including defanged (`hxxp`, `[.]`) and international (punycode) forms. It is precision-first: about 98% precision and recall on the labelled corpus ([docs/EXTRACTION.md](docs/EXTRACTION.md)).
 - TLP defaults to AMBER, and a `TLP:` marking inside a report can only raise its label, never lower it.
 - Exact character offsets and contextual evidence, canonical entities and cross-report pivots.
 - Accept/reject/reset observations, triage reports and add analyst notes with audit events. Delete a report
@@ -27,7 +27,7 @@ A single-operator threat-intelligence workbench, run locally or published behind
   downloads a layer for ATT&CK Navigator. Never guessed from prose; no attribution. `make attack-backfill` tags
   reports stored before 0.7.0. API: `/api/attack/*` and `/api/documents/{id}/techniques`.
 - **Industry threats and threat guides** ([docs/THREAT_GUIDES.md](docs/THREAT_GUIDES.md),
-  [ADR 0024](docs/adr/0024-threat-guides.md)): pick an industry and see up to ten threat groups that a cited
+  [ADR 0025](docs/adr/0025-threat-guides.md)): pick an industry and see up to ten threat groups that a cited
   source (MITRE ATT&CK or the MISP galaxy) says target it, each with the quoted evidence. Open one for a threat
   guide: aliases, targets, ATT&CK techniques and a Navigator layer, tools, mitigations, your reports that name it,
   sources and the TLP label, plus a hunt plan (starting hypotheses with log sources), an indicator sweep list,
@@ -43,11 +43,16 @@ A single-operator threat-intelligence workbench, run locally or published behind
   The Record (news), for reporting on attacker groups, campaigns and malware. Insight keeps each item's title,
   short summary and link. Each publisher's reuse rule applies: only CISA's text leaves Insight in exports; for
   every other feed, exports carry titles, links, dates and indicators, not the publisher's words.
+- **Optional abuse.ch indicator feeds.** Import recent URLs from URLhaus, network indicators and hashes from
+  ThreatFox, and file hashes from MalwareBazaar. Set `INSIGHT_ABUSECH_AUTH_KEY` and enable the feeds you use.
+  Each entry links to its record at the publisher. The connector reads only the provider's metadata API.
 - Curated connectors: CISA KEV, CISA security advisories (CISA's machine-readable CSAF files), SANS ISC and UK
-  NCSC feeds. **Sync now** per source, **Sync all sources** at the top of the workspace, and **opt-in
+  NCSC feeds. **Sync now** per source, **Sync all sources** beside the threat landscape, and **opt-in
   schedules** (off by default; every hour, 6 hours or day, per source or for all, from a time of day you choose,
   in UTC) so the feeds and the brief stay fresh by themselves. An unchanged feed is not downloaded again (`ETag` / `Last-Modified`). See
   [ADR 0018](docs/adr/0018-opt-in-scheduled-syncs.md).
+- **OTX subscriptions** import public CLEAR/WHITE pulses as reports with their indicators and source links.
+  Set your own `INSIGHT_OTX_API_KEY` and turn on the source in the workspace. [Runbook](docs/RUNBOOK.md#8-sources-enrichment-and-their-failures)
 - **Threat landscape** opens the workspace ([ADR 0020](docs/adr/0020-threat-landscape.md)): a plain-English
   executive summary of the last 7 or 30 days, compared with the 4 weeks or months before. Which kinds of threat
   are **rising**, **new** or **quieter** (ransomware, phishing, data theft, supply chain, zero-days and 8 more,
@@ -55,12 +60,20 @@ A single-operator threat-intelligence workbench, run locally or published behind
   what attackers are doing by ATT&CK tactic, and every report behind it. Counted from your reports, not written
   by AI; marked with the most restrictive TLP it used; **Download as a briefing to share** (Markdown).
   `GET /api/landscape`, `GET /api/landscape/briefing`.
-- **Intel brief** below it: what the period adds up to, built from your reports (no AI). An
-  **executive summary** in a few plain sentences (what came in, what attackers are using now and the US federal
-  fix-by date, the most serious new weakness, what matches your watch terms, a first step), then *Exploited now*
-  (CISA KEV), *Most severe* (CVSS 9 or higher), *Your watch terms*, *Seen in several sources* and
-  *Most-mentioned vendors*. Every line opens its report, indicator or a search. "New" means published in the
-  last 7 days, so a first sync of old history does not flood it; the demo is left out. Also `GET /api/brief`.
+- **Intel brief** inside it ([docs/EXECUTIVE_BRIEF.md](docs/EXECUTIVE_BRIEF.md)): what the period adds up to,
+  built from your reports (no AI). **What needs attention** gives plain findings (known exploitation, a recurring
+  topic, the highest severity, your watch terms, the last 24 hours), each with a conditional **next step** and
+  its evidence; beside the summary, how many reports came in during the **last 24 hours**, and **About this
+  brief** says what the data covers and how fresh each source is. Then *Exploited now* (CISA KEV), *Most
+  severe* (CVSS 9 or higher), *Your watch terms*, *Seen in several sources* and *Most-mentioned vendors*. Every
+  line opens its report, indicator or a search. "New" means published in the period, so a first sync of old
+  history does not flood it; the demo is left out. Also `GET /api/brief`.
+- **Temporary password-free access** for development and demos (`INSIGHT_DEV_NO_AUTH=on`; **off by default**,
+  refused together with MFA, announced on every page). While on, anyone who can reach the site can read and
+  change everything; see the [runbook](docs/RUNBOOK.md#temporary-password-free-access) before using it.
+- **Prioritised CVEs** ([ADR 0024](docs/adr/0024-prioritised-cves.md)): the CVEs in your reports, most urgent
+  first by stated rules (used in ransomware, known exploited, likely to be attacked soon, critical, high), each
+  saying why. The brief names ransomware-linked and likely-to-be-attacked weaknesses too. `GET /api/cves`.
 - **CVE severity and attack likelihood** ([ADR 0023](docs/adr/0023-automatic-cve-lookups.md)): NIST NVD (CVSS)
   and FIRST EPSS scores shown in plain words beside each CVE, looked up on request or, once switched on in
   **Sources**, automatically for CVEs in TLP:CLEAR and GREEN reports. Only CVE numbers are sent. No key is
@@ -142,7 +155,8 @@ Data survives container rebuilds in `insight_insight-data` (the exact Compose pr
 
 ## Local Python development
 
-Python 3.11, 3.12, 3.13 and 3.14 are tested (CI runs the full suite on each). The Docker image uses 3.13.
+Python 3.11, 3.12, 3.13, 3.14 and 3.15 are tested (CI runs the full suite on each). The Docker image uses 3.15, which every
+pull request tests.
 
 ```sh
 python -m venv .venv

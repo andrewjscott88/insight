@@ -1,4 +1,4 @@
-"""Regenerate ``src/insight/data/actors.json``, the bundled threat-group library (TIP 2.10, ADR 0024).
+"""Regenerate ``src/insight/data/actors.json``, the bundled threat-group library (TIP 2.10, ADR 0025).
 
     curl -sSfO https://raw.githubusercontent.com/mitre-attack/attack-stix-data/<commit>/enterprise-attack/enterprise-attack-<version>.json
     curl -sSfO https://raw.githubusercontent.com/MISP/misp-galaxy/<commit>/clusters/threat-actor.json

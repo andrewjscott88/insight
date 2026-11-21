@@ -1,4 +1,4 @@
-"""Industry threat profiles, actor threat guides, hunts and rules over the API (TIP 2.10, ADR 0024)."""
+"""Industry threat profiles, actor threat guides, hunts and rules over the API (TIP 2.10, ADR 0025)."""
 
 from __future__ import annotations
 

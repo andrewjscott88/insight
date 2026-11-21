@@ -80,6 +80,7 @@ from .brief import (
     brief_data,
 )
 from .common import fold, like_pattern, stamp
+from .cves import MAX_CVE_MENTIONS, CveSignal, CveSignals, cve_signals
 from .documents import SourceRef, count_documents_above, fingerprint, get_document, ingest, revisions
 from .entities import PIVOT_PAGE_SIZE, count_entity_documents, entity_documents, get_entity, list_entities
 from .exports import MAX_EXPORT_MENTIONS, export_iocs, ioc_export_counts, ioc_mentions
@@ -111,12 +112,15 @@ from .landscape import MAX_LANDSCAPE_DOCUMENTS, LandscapeData, landscape_data
 from .lookups import (
     CVE_LOOKUP,
     LOOKUP_PROVIDERS,
+    clear_lookup_failure,
     cve_score_view,
     cve_scores,
     cves_to_look_up,
     enqueue_due_lookups,
     lookup_backlog,
+    lookup_failures,
     lookup_switches,
+    record_lookup_failure,
     set_lookup_switch,
 )
 from .retention import MAX_REASON_LENGTH, DeletionPreview, DeletionResult, delete_document, deletion_preview
@@ -216,6 +220,7 @@ __all__ = [
     'LOOKUP_PROVIDERS',
     'MAX_API_KEY_NAME_LENGTH',
     'MAX_BRIEF_DOCUMENTS',
+    'MAX_CVE_MENTIONS',
     'MAX_EXPORT_MENTIONS',
     'MAX_LANDSCAPE_DOCUMENTS',
     'MAX_PAGE_SIZE',
@@ -233,6 +238,8 @@ __all__ = [
     'BriefData',
     'BriefDocument',
     'BriefKev',
+    'CveSignal',
+    'CveSignals',
     'DeletionPreview',
     'DeletionResult',
     'DocumentQuery',
@@ -270,6 +277,7 @@ __all__ = [
     'carry_decisions',
     'case_sensitive',
     'claim_job',
+    'clear_lookup_failure',
     'content_hash',
     'count_documents_above',
     'count_entity_documents',
@@ -278,6 +286,7 @@ __all__ = [
     'create_api_key',
     'cve_score_view',
     'cve_scores',
+    'cve_signals',
     'cves_to_look_up',
     'delete_document',
     'delete_rule',
@@ -327,6 +336,7 @@ __all__ = [
     'list_targets',
     'list_watch_terms',
     'lookup_backlog',
+    'lookup_failures',
     'lookup_switches',
     'mark_alert',
     'mfa_paired',
@@ -343,6 +353,7 @@ __all__ = [
     'recent_source_runs',
     'record_check',
     'record_industry_claim',
+    'record_lookup_failure',
     'record_report_techniques',
     'remove_watch_term',
     'report_groups',

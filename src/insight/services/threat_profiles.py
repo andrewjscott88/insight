@@ -1,4 +1,4 @@
-"""Industry threat profiles and the data behind actor threat guides (TIP 2.10, ADR 0024).
+"""Industry threat profiles and the data behind actor threat guides (TIP 2.10, ADR 0025).
 
 * **Which groups target an industry**: only groups a cited source names for it (the threat library's
   ATT&CK and MISP galaxy claims, and the analyst's own mappings with their citations), less the catalog

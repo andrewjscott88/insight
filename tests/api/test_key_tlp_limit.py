@@ -111,6 +111,7 @@ def test_nothing_hidden_leaks_through_any_read_route(client: TestClient, world: 
         f'/api/documents/{world["green"]}/techniques',
         f'/api/documents/{world["amber"]}/techniques',
         '/api/cves/CVE-2024-11111/scores',
+        '/api/cves?days=365&limit=500',
         '/api/industries',
         '/api/industries/government/actors',
         '/api/actors',
@@ -225,7 +226,8 @@ def test_the_key_cannot_store_what_it_cannot_read(client: TestClient, world: dic
 
 
 @pytest.mark.parametrize(
-    ('method', 'path'), [('GET', '/api/audit'), ('POST', '/api/enrichment/epss/CVE-2024-11111')]
+    ('method', 'path'),
+    [('GET', '/api/audit'), ('POST', '/api/enrichment/epss/CVE-2024-11111'), ('GET', '/api/watch-terms')],
 )
 def test_routes_that_span_all_reports_are_refused(
     client: TestClient, world: dict[str, Any], method: str, path: str

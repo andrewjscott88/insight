@@ -1,4 +1,4 @@
-"""Industry threat profiles and actor threat guides (TIP 2.10, ADR 0024): industries, groups, guides, exports.
+"""Industry threat profiles and actor threat guides (TIP 2.10, ADR 0025): industries, groups, guides, exports.
 
 Reads take the caller's TLP limit; writes that carry a label also respect the instance limit
 (``INSIGHT_MAX_TLP``). Guide exports may be made at a stricter label than the caller's (``max_tlp``) and are

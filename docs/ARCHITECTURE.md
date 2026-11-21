@@ -16,7 +16,7 @@ The narrower first release trades the research report's React, RabbitMQ/Celery, 
 - `models.py`: relational schema (kept in sync with the migrations by a test).
 - `migrations/`: Alembic revisions, shipped inside the package and applied automatically at start-up.
 - `schemas.py`: bounded validated inputs.
-- `extraction.py`: deterministic mention extraction (`regex-v2`: refanging, TLD validation, context rules). See [EXTRACTION.md](EXTRACTION.md).
+- `extraction.py`: deterministic mention extraction (`regex-v5`: refanging, TLD validation, context rules). See [EXTRACTION.md](EXTRACTION.md).
 - `data/tlds.txt`: bundled ICANN TLD list (from the Public Suffix List; see `NOTICE`).
 - `services/`: the only SQL layer, one module per domain. `__init__` re-exports every public name, so callers
   write `services.ingest(...)` without knowing the module. `tlp` (levels and visibility, the security core;
@@ -24,7 +24,7 @@ The narrower first release trades the research report's React, RabbitMQ/Celery, 
   `documents` (ingest, fingerprints, revisions), `search` (search, summaries, the reader view, stats),
   `entities` (pivots), `triage` (review, notes, watch terms), `brief` (the intel brief's facts), `exports`
   (IOC export queries), `sources` (source runs, enrichment cache, fetch state), `jobs` (queue and schedules),
-  `access` (API keys, MFA), and for threat guides ([ADR 0024](adr/0024-threat-guides.md)) `actors` (actors,
+  `access` (API keys, MFA), and for threat guides ([ADR 0025](adr/0025-threat-guides.md)) `actors` (actors,
   report links, industry decisions), `threat_profiles` (an industry's top ten), `threat_guides` (a guide's
   facts and the sweep list), `rules` (YARA and Sigma as text) and `hunts` (hunt records).
 - `industries.py`: the fixed industry list and the reviewed words that map catalog labels and ATT&CK prose to it.

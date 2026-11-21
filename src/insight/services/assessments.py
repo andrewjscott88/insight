@@ -22,7 +22,7 @@ from .audit import DEFAULT_ACTOR, audit
 from .entities import count_entity_documents
 from .tlp import TlpNotPermitted, _visible, tlp_permitted, visible_levels
 
-#: Kinds a blocklist can hold. CVE identifiers name weaknesses, not things to block.
+#: Block individual indicators. A verdict on a CIDR range does not establish a verdict for each host.
 BLOCKLIST_KINDS: Final = ('ip', 'domain', 'url', 'md5', 'sha1', 'sha256', 'sha512')
 #: How long a ``malicious`` verdict without its own expiry stays on the blocklist (review finding J2):
 #: addresses and domains are reassigned, a file hash names the same file forever. Change to suit your feeds.

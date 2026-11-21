@@ -205,8 +205,27 @@ def test_regression_desktop_shows_every_tab_label(browser: Any) -> None:
         'Sources',
     ):
         expect(page.get_by_role('tab', name=label)).to_be_visible()
-    expect(page.get_by_text('Private intelligence workspace')).to_be_visible()
+    expect(page.get_by_text('Cyber Threat Intelligence Feed', exact=True)).to_be_visible()
     expect(page.get_by_role('button', name='Back to list')).to_have_count(0)
+    context.close()
+
+
+@pytest.mark.parametrize('scheme', ['light', 'dark'])
+def test_regression_a_field_example_never_covers_its_label(browser: Any, scheme: str) -> None:
+    """Regression: the readable placeholder colour undid Quasar's hiding of an example while the label sits in
+    the empty field, so "Watch term" and "e.g. Palo Alto, VPN, identity" were drawn on top of each other."""
+    context = new_context(browser, viewport={'width': 390, 'height': 844}, color_scheme=scheme)
+    page = context.new_page()
+    sign_in(page)
+    page.get_by_role('tab', name='Watch').click()
+    field = page.get_by_label('Watch term', exact=True)
+    expect(field).to_be_visible()
+    hidden = 'e => getComputedStyle(e, "::placeholder").color'
+    assert field.evaluate(hidden) == 'rgba(0, 0, 0, 0)', 'the example shows under the label'
+    field.focus()  # The label moves up; now the example may show, in a readable colour.
+    page.wait_for_function(
+        'e => getComputedStyle(e, "::placeholder").color !== "rgba(0, 0, 0, 0)"', arg=field.element_handle()
+    )
     context.close()
 
 

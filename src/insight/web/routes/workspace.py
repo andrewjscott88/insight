@@ -39,8 +39,10 @@ def _register_workspace_routes(app: FastAPI, sessions: SessionFactory, require_a
 
     @app.post('/api/demo', dependencies=[Depends(require_auth)])
     def demo(request: Request) -> dict[str, int]:
+        """Load the synthetic demo: browser sessions only (code review L4), within the TLP limit."""
+        limit = services.stricter_limit(app.state.settings.max_tlp, reader_limit(request))
         with acting(sessions, request) as db:
-            return {'created': seed(db)}
+            return {'created': seed(db, max_tlp=limit)}
 
     @app.get('/api/audit', dependencies=[Depends(require_auth)])
     def events() -> list[dict[str, str]]:

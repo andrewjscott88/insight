@@ -12,13 +12,14 @@ from nicegui import ui
 from ..appearance import TEXT_SIZE_COOKIE, THEME_COOKIE, dark_mode_value, text_size_choice, theme_choice
 from ..models import SessionFactory
 from .appearance import TextSizeSwitch, ThemeSwitch
+from .cves import build_cves
 from .entities import build_entities
 from .glossary import open_glossary
 from .inbox import build_inbox
 from .ingest import build_ingest_dialog
 from .ioc_export import open_ioc_export_dialog
 from .landscape import build_landscape
-from .sources import build_sources, build_sync_all_button
+from .sources import build_sources
 from .stats import build_stats
 from .techniques import build_techniques
 from .theme import apply_theme
@@ -46,7 +47,7 @@ def _tab(label: str, short: str) -> ui.tab:
 def register_ui(app: FastAPI, session_factory: SessionFactory) -> None:
     """Register pages and mount NiceGUI after the backend routes and middleware."""
 
-    @ui.page('/', title='Insight · Intelligence workspace')
+    @ui.page('/', title='Insight · Cyber Threat Intelligence Feed')
     async def workspace(request: Request) -> RedirectResponse | None:
         if not app.state.is_authenticated(request.session):
             return RedirectResponse('/login', status_code=303)
@@ -61,23 +62,34 @@ def register_ui(app: FastAPI, session_factory: SessionFactory) -> None:
             with ui.row().classes('w-full justify-between items-center border-b divider pb-3 sm:pb-5 gap-2'):
                 with ui.row(wrap=False).classes('items-center gap-2 sm:gap-3'):
                     ui.label('✳').classes('text-3xl sm:text-4xl text-primary')
-                    ui.label('Insight').classes('text-2xl font-medium')
-                    ui.label('Private intelligence workspace').classes('eyebrow max-md:hidden ml-4')
-                with ui.row(wrap=False).classes('items-center gap-2 sm:gap-4'):
+                    with ui.column().classes('gap-0'):
+                        ui.label('Insight').classes('text-2xl font-medium')
+                        ui.label('Cyber Threat Intelligence Feed').classes('brand-description muted')
+                with ui.row().classes('workspace-controls items-center gap-2 sm:gap-4 max-w-full'):
                     ThemeSwitch(ws, dark, theme)
                     TextSizeSwitch(ws, text_size)
                     # Backend provides a CSRF-protected logout confirmation form.
-                    ui.link('Sign out', '/logout').classes('muted target-link whitespace-nowrap')
-            with ui.row().classes('w-full justify-between items-center gap-4'):
+                    ui.link(
+                        'End session' if app.state.settings.dev_no_auth else 'Sign out', '/logout'
+                    ).classes('muted target-link whitespace-nowrap')
+            if app.state.settings.dev_no_auth:
+                with ui.column().classes('panel w-full p-3 sm:p-4 gap-1').mark('open-access-banner'):
+                    ui.label('Temporary open access').classes('font-semibold')
+                    ui.label('Anyone with this link can view or change the data in this workspace.').classes(
+                        'prose'
+                    )
+            build_landscape(ws)
+            ui.link_target('report-tools')
+            with ui.row().classes('workspace-tools w-full justify-between items-center gap-4'):
                 with ui.column().classes('gap-1'):
-                    ui.label('Collect. Connect. Understand.').classes('eyebrow max-sm:hidden')
-                    heading('Intelligence workspace', 1)
-                    ui.label('Turn reports into checked, connected intelligence.').classes('muted prose')
+                    heading('Work with the evidence', 2)
+                    ui.label(
+                        'Read the reports, check the details, and keep your sources up to date.'
+                    ).classes('muted prose')
                 with ui.row().classes('items-center gap-3 w-full sm:w-auto'):
                     ui.button('What the words mean', icon='help_outline', on_click=open_glossary).props(
                         'flat no-caps'
                     ).classes('w-full sm:w-auto')
-                    build_sync_all_button(ws)
                     ui.button('Export IOCs', on_click=lambda: open_ioc_export_dialog(ws)).props(
                         'outline'
                     ).classes('flex-1 sm:flex-none')
@@ -85,9 +97,9 @@ def register_ui(app: FastAPI, session_factory: SessionFactory) -> None:
                         'flex-1 sm:flex-none'
                     )
             build_stats(ws)
-            build_landscape(ws)
-            with ui.tabs().props('align=left no-caps').classes('w-full') as tabs:
+            with ui.tabs().props('align=left no-caps').classes('evidence-tabs w-full') as tabs:
                 inbox_tab = _tab('Intelligence inbox', 'Inbox')
+                cves_tab = _tab('Prioritised CVEs', 'CVEs')
                 entities_tab = _tab('Entity explorer', 'Entities')
                 techniques_tab = _tab('ATT&CK techniques', 'ATT&CK')
                 threats_tab = _tab('Industry threats', 'Threats')
@@ -106,6 +118,8 @@ def register_ui(app: FastAPI, session_factory: SessionFactory) -> None:
             with ui.tab_panels(tabs, value=inbox_tab).classes('w-full bg-transparent p-0'):
                 with ui.tab_panel(inbox_tab).classes('p-0'):
                     build_inbox(ws)
+                with ui.tab_panel(cves_tab).classes('panel p-4 sm:p-5'):
+                    build_cves(ws)
                 with ui.tab_panel(entities_tab).classes('panel p-4 sm:p-5'):
                     build_entities(ws)
                 with ui.tab_panel(techniques_tab).classes('panel p-4 sm:p-5'):

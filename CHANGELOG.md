@@ -2,16 +2,143 @@
 
 ## Unreleased
 
+### Optional indicator feeds
+
+- The Sources tab can now sync URLhaus, ThreatFox and MalwareBazaar using an operator's abuse.ch key.
+  The feeds start switched off. They ingest recent indicator metadata and keep source evidence in Insight.
+- Added optional AlienVault OTX subscription sync. With your own key, Insight imports public CLEAR/WHITE
+  pulses as reports and links revisions to their OTX pulse ID. [Runbook](docs/RUNBOOK.md#8-sources-enrichment-and-their-failures).
+
 **Upgrading from 0.6.0:** migrations `0009` (ATT&CK technique tags), `0010` (source switches), `0011`
-(alerts) and `0012` (threat guides: actors, report links, industry decisions, rules, hunts) run at start-up, or with `make migrate`. Reports stored before the upgrade get their technique tags when you run
+(alerts), `0012` (CVE lookup failures), `0013` (more KEV fields; the next KEV sync fills them) and `0014`
+(threat guides: actors, report links, industry decisions, rules, hunts) run at start-up, or with `make migrate`. Reports stored before the upgrade get their technique tags when you run
 `make attack-backfill` once (safe to run again). The new threat-research sources start switched off: Insight
 contacts no new host until you switch one on. **Exports change for SANS ISC and NCSC reports:** their text and
 evidence are no longer included (their publishers allow metadata only). Every 0.6.0 API field is unchanged; new
 fields are additive. TLP-limited API keys may now read cached CVE scores (`GET /api/cves/{cve}/scores`) for
-CVEs in reports they can see; starting a lookup stays refused to them.
+CVEs in reports they can see; starting a lookup stays refused to them. The new password-free access
+(`INSIGHT_DEV_NO_AUTH`) is off unless you set it to `on`.
+
+### More defanged indicators in reports
+
+- The extractor now recognizes web links beginning with `[http]://` or `[https]://`, plus e-mail addresses
+  written with `[at]` or `(at)`. The highlighted text keeps the spelling from the source report.
+- New reports and revisions record extractor version `regex-v5`. The benchmark includes three attributed
+  U.S. government advisory excerpts and four new synthetic cases.
+
+### E-mail addresses in reports
+
+- Insight can highlight an e-mail address in its source report and show other reports that mention the same
+  mailbox. Each address carries a personal-data warning. IOC exports can filter out entries with that flag.
+- E-mail support was introduced with `regex-v4`. Earlier reports keep their original observations and review decisions.
+
+### Network ranges in reports
+
+- Insight now recognizes IPv4 and IPv6 network ranges (CIDR). Analysts can review a whole range,
+  find other reports that mention it, and include it in indicator exports. The original spelling stays in
+  the evidence. CIDR support was introduced with `regex-v3`. Insight skips the universal networks
+  `0.0.0.0/0` and `::/0`, which occur in firewall and cloud rules.
+- **IOC exports:** the default now includes `cidr` entries. Select the previous kinds with `--kind` or the API's
+  `kinds` field. Consumers that validate indicator kinds need the updated schema.
+
+### Manage alert destinations on the host
+
+- `insight notify` lists, adds, enables, disables and removes destinations. It reads new addresses from
+  a hidden prompt or standard input and saves JSON signing keys to a new owner-only file. The list shows the name, ID, style, state and TLP limit.
+
+### Added: a prioritised CVE view, and a brief that uses ransomware use, NVD and EPSS (TIP 1.3)
+- **Prioritised CVEs** tab and `GET /api/cves` ([ADR 0024](docs/adr/0024-prioritised-cves.md)): the CVEs in your
+  reports, most urgent first by stated rules: used in ransomware (CISA KEV), known exploited, likely to be
+  attacked soon (EPSS 10% or more), critical (CVSS 9 or more), high (CVSS 7 or more). Each row says why it is
+  there, lists the facts behind it and opens its newest report. Follows the TLP limit; the demo is left out.
+- **The brief:** *Exploited now* lists ransomware-linked entries first; the summary says how many; new findings
+  **Used in ransomware attacks** (first) and **Likely to be attacked soon** (with the EPSS caveat). *Most
+  severe* now also uses NIST NVD's score for any CVE a new report mentions, says where each score comes from,
+  and shows NVD's beside a CISA advisory's when they differ.
+- **More of CISA KEV (TIP 1.1):** the weakness name, known ransomware use, notes and CWEs are kept (migration
+  `0013`), and the reader shows ransomware use and the name beside a CVE. KEV report text is unchanged.
+
+### Fixed: field labels no longer overlap their examples
+- An empty field showed its label and its example on top of each other (for example "Watch term" over
+  "e.g. Palo Alto, VPN, identity"). The example now appears only once the label has moved up, as the
+  framework intends; the readable colour of examples is unchanged.
+
+### Security: fixes from the 2026-11-21 code review
+- **M1, sign-in lockout:** 30 wrong passwords a minute from anyone used to refuse every sign-in, the right
+  password included, and the operator's attempt waited behind every pending bad guess. The backstop now
+  refuses only wrong passwords (still after the 1 s delay), and the delay no longer holds the check lock
+  ([ADR 0002](docs/adr/0002-login-delay-not-lockout.md)).
+- **M2, one bad CVE could stop NVD scoring:** a CVE NVD cannot answer for is now set aside with a growing wait
+  (1 hour, doubling up to 7 days) while the rest of the batch goes on; the job fails only when every CVE in it
+  failed or the provider itself is unavailable. Migration `0012` adds `lookup_failures`
+  ([ADR 0023](docs/adr/0023-automatic-cve-lookups.md)).
+- **M3, the image's Python was not fully tested:** the container ships Python 3.15 (a Dependabot bump), but
+  pull requests ran the full suite on 3.11 and 3.14 only. 3.15 is now in the test matrix and the package
+  classifiers. Add `Tests (Python 3.15, SQLite)` to the required checks on `main` (docs/CI_CD.md).
+- **L1, DNS rebinding (TIP 0.4):** source syncs, CVE lookups and alert webhooks resolved a host to check it and
+  again to connect, so a changing DNS answer could reach loopback, a private network or cloud metadata. They
+  now connect to the checked address, keeping the host name for TLS and the `Host` header, and judge
+  IPv4-mapped IPv6 addresses (`::ffff:127.0.0.1`) by the address they reach.
+- **L2, plain-text TOTP seed (not fixed yet):** encrypting the authenticator seed at rest needs the
+  `cryptography` package, which has to be added through the lock workflow first. Tracked by a strict
+  expected-failure test and documented in docs/SECURITY.md; protect backups like `.env` meanwhile.
+- **L3, watch terms for TLP-limited keys:** `GET /api/watch-terms` is now refused (`403`) to TLP-limited API
+  keys, like the audit log: terms often name clients, internal hosts or sensitive projects.
+- **L4, the demo through an API key:** `POST /api/demo` is now for browser sessions only (keys get `403`), and
+  the demo leaves out reports above `INSIGHT_MAX_TLP` instead of storing its AMBER+STRICT report past the limit.
+- **L5, one lock for every background job:** source syncs, CVE lookups and alert deliveries shared the sync
+  lock, so a lookup batch made *Sync all* answer `409` and alerts waited behind long syncs. They now run in
+  separate lanes, side by side, each with its own lock; only syncs share the lock of *Sync now*
+  ([ADR 0018](docs/adr/0018-opt-in-scheduled-syncs.md)).
+- **L6, downloads without an overall time limit:** the 25 s timeout applied to each read, so a server sending a
+  little data every 24 s could stretch one sync out for hours. Every download now stops after 120 seconds and is
+  recorded as a failed fetch.
+- **L7, CI images pinned by tag:** gitleaks (with the repository mounted), ZAP (on the host network) and the
+  rehearsal's registry now run from digests, and `scripts/check_pins.py` fails on any third-party `docker run`
+  image that is not pinned by digest. Dependabot does not update these; docs/CI_CD.md says how to.
+- **N1, spreadsheet formulas in the blocklist CSV:** a cell starting with `=`, `+`, `-`, `@`, a tab or a carriage
+  return now gets a leading `'`, so a spreadsheet shows it as text.
+- **N2, the CVE due list:** the 15-second check for CVEs to look up now filters in the database (`NOT EXISTS`,
+  `LIMIT`) instead of loading every CVE and cache row.
+- **N3, a stale gitleaks exemption:** the test's fake API key carries an inline `gitleaks:allow`, so scans of
+  the working tree stay clean wherever the line moves; the history fingerprint stays for `gitleaks detect`.
+- **N4, the password's length:** sign-in pads the supplied and stored password to one fixed width before the
+  constant-time comparison (no hashing), so response times no longer hint at its length. (The first version
+  compared SHA-256 digests, which CodeQL flags as weak password hashing.)
+- **N5, formatting:** the Python examples in docs/ALERTS.md, docs/API.md and docs/LLM_EXTENSION.md are
+  formatted, so `ruff format --check .` passes on the whole repository.
+
+### Changed: a clearer executive brief (from #39)
+- Keep the **Insight** name and symbol; use **Cyber Threat Intelligence Feed** as the tagline and remove
+  **Collect. Connect. Understand.** The threat landscape now leads the page, above the report tools.
+- The threat landscape adds **What needs attention**: plain findings (known exploitation, a recurring topic or
+  vendor, the highest severity, your watch terms, the last 24 hours), each with a conditional next step and
+  links to its evidence; a **Last 24 hours** count beside the executive summary; and **About this brief**, the
+  limits of the data and how fresh each source in use is.
+  **Exploited now** and **Most severe** remain separate: known exploitation and technical severity are
+  different signals. Repeated reporting is described as attention in collected sources, never as proof that
+  attacks are increasing or that the operator's systems are affected.
+- `GET /api/brief` retains `days`, `since`, `summary` and `sections`, and adds `as_of`, `recent_reports`,
+  `report_count`, `source_count`, `highlights` and `coverage`. The brief uses stored reports and public KEV
+  context; it makes no external AI call or new source request. Counts and evidence respect the caller's TLP
+  limit. No database migration is needed. Field reference: [API](docs/API.md#executive-brief).
+- Design, evidence rules and limits: [Executive brief](docs/EXECUTIVE_BRIEF.md).
+- Phone header controls wrap at narrow widths, including temporary open access with larger text at 320 px.
+  Long feed titles, URLs and source names wrap within their cards and opened reports instead of being cut off.
+  Report review controls and extracted values also stay within a narrow reader.
+
+### Added: temporary password-free operator access
+- `INSIGHT_DEV_NO_AUTH=on` lets a visitor enter through `/login` without a password. It is **off by default**,
+  rejects invalid values and cannot be combined with MFA. Password and signing-secret configuration remain
+  required. On a public domain, enabling it deliberately gives anyone access to reports and operator tools.
+- This mode uses normal expiring sessions, CSRF and same-origin checks; direct API calls still need a
+  session or key. Turning it off and restarting with the changed environment invalidates open-mode sessions
+  and restores the retained password. A workspace notice identifies the active mode.
+- Configuration, consequences and restoration checks: [Runbook](docs/RUNBOOK.md#temporary-password-free-access)
+  and [security record](docs/SECURITY.md#temporary-public-operator-access). The switch has no automatic expiry.
 
 ### Added: industry threat profiles and actor threat guides (TIP 2.10; minimum of TIP 2.5 and 2.7)
-- **Industry threats tab** ([ADR 0024](docs/adr/0024-threat-guides.md), [docs/THREAT_GUIDES.md](docs/THREAT_GUIDES.md)):
+- **Industry threats tab** ([ADR 0025](docs/adr/0025-threat-guides.md), [docs/THREAT_GUIDES.md](docs/THREAT_GUIDES.md)):
   pick one of 15 industries and see up to ten groups that a cited source says target it, ordered by how many of
   your reports name them, then latest public activity, then known techniques, with the evidence for each: the
   quoted MITRE ATT&CK sentence or the MISP galaxy sector label, linked to its source. Never inferred from

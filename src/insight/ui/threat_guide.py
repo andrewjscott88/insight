@@ -1,4 +1,4 @@
-"""A group's threat guide in the workspace (TIP 2.10, ADR 0024): who it targets, how it works, your reports.
+"""A group's threat guide in the workspace (TIP 2.10, ADR 0025): who it targets, how it works, your reports.
 
 The same guide as ``GET /api/actors/{id}/guide``, built by :mod:`insight.threat_guide`. The hunt plan, rules
 and hunt records are in ``hunts.py`` and ``rules.py``; the analyst's own changes in ``actors.py``.

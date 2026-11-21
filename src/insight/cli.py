@@ -84,6 +84,7 @@ def build_parser() -> argparse.ArgumentParser:
             'api-key',
             'mfa',
             'schedule',
+            'notify',
             'delete-report',
             'attack-backfill',
             'threat-library-sync',
@@ -99,6 +100,7 @@ def build_parser() -> argparse.ArgumentParser:
             'export-iocs DEST: write a JSON IOC export | api-key ACTION: manage the API key | '
             'mfa ACTION: pair the sign-in authenticator app | '
             'schedule [SOURCE|all --every off|1h|6h|24h]: show or set scheduled syncs | '
+            'notify [list|add|enable|disable|remove]: manage alert destinations | '
             'delete-report ID --reason TEXT: delete one report for legal or retention reasons | '
             'attack-backfill: tag the ATT&CK techniques written in reports stored before 0.7.0 | '
             'threat-library-sync: fetch the full pinned threat library | industries | '
@@ -114,7 +116,10 @@ def build_parser() -> argparse.ArgumentParser:
         '| threat-profile: an industry key | threat-guide: a group (G0016) or actor ID '
         '| rule-add: a rule file',
     )
-    parser.add_argument('target', nargs='?', help='threat-guide: the file to write (must not exist)')
+    # Not ``target``: ``notify --target`` uses that name (dest), and a positional would overwrite it.
+    parser.add_argument(
+        'output', nargs='?', metavar='FILE', help='threat-guide: the file to write (must not exist)'
+    )
     parser.add_argument('--host', default='127.0.0.1')
     parser.add_argument('--port', default=8080, type=int)
     export = parser.add_argument_group(
@@ -125,7 +130,7 @@ def build_parser() -> argparse.ArgumentParser:
         '--kind',
         action='append',
         metavar='KIND',
-        help='indicator type: cve url domain ip md5 sha1 sha256 sha512 (repeatable; default: all)',
+        help='indicator type: cve url domain ip cidr email md5 sha1 sha256 sha512 (repeatable; default: all)',
     )
     export.add_argument(
         '--review-status',
@@ -219,9 +224,17 @@ def build_parser() -> argparse.ArgumentParser:
     threats.add_argument(
         '--source-url', default='', metavar='URL', help='rule-add: where the rule came from (https)'
     )
-    keys = parser.add_argument_group('api-key options')
+    notify = parser.add_argument_group('notify options')
+    notify.add_argument('--style', choices=['chat', 'json', 'email'], help='notify add: destination type')
+    notify.add_argument(
+        '--secret-out', type=Path, metavar='FILE', help='notify add: new private JSON signing key file'
+    )
+    notify.add_argument('--target', metavar='ID', help='notify enable/disable/remove: ID from notify list')
+    keys = parser.add_argument_group('api-key and destination options')
     keys.add_argument(
-        '--name', metavar='NAME', help='create/rotate: label, e.g. siem (default on rotate: keep)'
+        '--name',
+        metavar='NAME',
+        help='api-key create/rotate or notify add: a label for this key or destination',
     )
     keys.add_argument(
         '--access',
@@ -762,6 +775,32 @@ def main(argv: Sequence[str] | None = None) -> int:
             print('\nCancelled; no authenticator app was paired (nothing was saved).', file=sys.stderr)
             return 1
         return 0
+    if args.command == 'notify':
+        from .cli_notify import manage_destination
+
+        try:
+            with _current_database() as sessions:
+                print(
+                    manage_destination(
+                        sessions,
+                        args.destination or 'list',
+                        name=args.name,
+                        style=args.style,
+                        target_id=args.target,
+                        max_tlp=args.max_tlp,
+                        secret_out=args.secret_out,
+                    )
+                )
+        except (EOFError, KeyboardInterrupt):
+            print('Cancelled.', file=sys.stderr)
+            return 1
+        except FileExistsError:
+            print('Alert destination: the key file already exists. Choose a new file.', file=sys.stderr)
+            return 1
+        except (OSError, ValueError) as exc:
+            print(f'Alert destination: {exc}', file=sys.stderr)
+            return 1
+        return 0
     if args.command == 'schedule':
         try:
             print(schedule(args.destination, args.every, args.at))
@@ -807,7 +846,7 @@ def _threat_command(args: argparse.Namespace) -> int:
         'rule-add': 'insight rule-add FILE --kind yara|sigma [--name N] [--link REF] [--tlp LABEL]',
     }
     if args.command in usage and (
-        not args.destination or (args.command == 'threat-guide' and not args.target)
+        not args.destination or (args.command == 'threat-guide' and not args.output)
     ):
         print(f'usage: {usage[args.command]}', file=sys.stderr)
         return 2
@@ -821,7 +860,7 @@ def _threat_command(args: argparse.Namespace) -> int:
         elif args.command == 'threat-guide':
             print(
                 cli_threats.threat_guide(
-                    args.destination, Path(args.target), args.format, max_tlp, args.include_named
+                    args.destination, Path(args.output), args.format, max_tlp, args.include_named
                 )
             )
         else:

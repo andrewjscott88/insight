@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from insight import services
 from insight.ratelimit import IOC_EXPORT, READ, WRITE
+from insight.web.boundary import SESSION_ONLY_ROUTES
 
 from .test_auth import PROTECTED
 
@@ -42,7 +43,7 @@ def write_key(app: FastAPI) -> str:
 # --------------------------------------------------------------------------- authentication
 
 
-@pytest.mark.parametrize(('method', 'path'), [r for r in PROTECTED if r[1] != '/api/session'])
+@pytest.mark.parametrize(('method', 'path'), [r for r in PROTECTED if r[1] not in SESSION_ONLY_ROUTES])
 def test_a_read_key_can_read_everything_and_write_nothing(
     client: TestClient, read_key: str, method: str, path: str
 ) -> None:
@@ -63,6 +64,15 @@ def test_a_read_write_key_writes_without_csrf(client: TestClient, write_key: str
     ).json() == {'status': 'reviewed'}
     listed = client.get('/api/documents', headers=bearer(write_key)).json()
     assert [d['id'] for d in listed] == [doc_id]
+
+
+@pytest.mark.parametrize('route', ['/api/demo'])
+def test_regression_l4_the_demo_is_for_browser_sessions_only(
+    client: TestClient, write_key: str, route: str
+) -> None:
+    """Review L4: any read-write key could add synthetic reports to a production dataset."""
+    response = client.post(route, headers=bearer(write_key))
+    assert (response.status_code, response.json()) == (403, {'detail': 'Not available to API keys'})
 
 
 def test_the_session_route_is_for_browsers_only(client: TestClient, write_key: str) -> None:
@@ -196,8 +206,11 @@ def test_reads_are_limited_per_caller_with_standard_headers(
 
 
 def test_writes_have_a_smaller_budget(client: TestClient, write_key: str, clock: FrozenClock) -> None:
-    exhaust(lambda: client.post('/api/demo', headers=bearer(write_key)).status_code, WRITE.limit)
-    refused = client.post('/api/demo', headers=bearer(write_key))
+    exhaust(
+        lambda: client.post('/api/documents', json=DOCUMENT, headers=bearer(write_key)).status_code,
+        WRITE.limit,
+    )
+    refused = client.post('/api/documents', json=DOCUMENT, headers=bearer(write_key))
     assert refused.status_code == 429
     assert refused.headers['ratelimit-policy'] == '"write";q=60;w=60'
     assert client.get('/api/stats', headers=bearer(write_key)).status_code == 200  # reads unaffected

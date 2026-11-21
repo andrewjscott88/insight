@@ -52,7 +52,9 @@ async def test_unauthenticated_visitors_are_redirected(ui_env: SimpleNamespace) 
 
 
 async def test_workspace_renders_empty_state(user: User) -> None:
-    await user.should_see('Intelligence workspace')
+    await user.should_see('Threat landscape')
+    await user.should_see('Cyber Threat Intelligence Feed')
+    await user.should_not_see('Collect. Connect. Understand.')
     await user.should_see('No reports match.')
     await user.should_see('Choose a report from the list')
     await user.should_see('No watch terms yet.')
@@ -148,6 +150,45 @@ async def test_ioc_export_dialog_opens_with_its_options(user: User) -> None:
     await user.should_see('Export indicators of compromise')
     await user.should_see('Most restrictive TLP to include')
     await user.should_see('Defang values')
+
+
+@pytest.mark.parametrize(
+    ('kind', 'kind_label', 'raw', 'value', 'warning'),
+    [
+        ('cidr', 'Network range (CIDR)', '203[.]0[.]113[.]0/24', '203.0.113.0/24', 'Example address'),
+        ('email', 'E-mail address', 'team+lab@EXAMPLE[.]ORG', 'team+lab@example.org', 'Personal data'),
+    ],
+)
+async def test_review_find_and_export_an_indicator_across_reports(
+    user: User, ui_env: SimpleNamespace, kind: str, kind_label: str, raw: str, value: str, warning: str
+) -> None:
+    add_report(ui_env, 'First advisory', 'Lab', f'{"Context " * 14}<b>Evidence</b> {raw}.')
+    add_report(ui_env, 'Second advisory', 'Partner', f'The same value is {value}.')
+    await user.open('/')
+    await open_document(user, 'First advisory')
+    with user.scope(marker='document-detail'):
+        await user.should_see(kind=ui.label, content=value)
+        await user.should_see(kind=ui.label, content=warning)
+        marked = [label for label in user.find(kind=ui.label).elements if label.tag == 'mark']
+        assert [label.text for label in marked] == [raw]
+        user.find(kind=ui.button, content='Accept').click()
+        await user.should_see('· accepted')
+
+    user.find('Search entity values').type(value)
+    name = f'{kind.upper()} · {value} · 2 source(s)'
+    await user.should_see(kind=ui.expansion, content=name)
+    user.find(kind=ui.expansion, content=name).elements.pop().open()
+    await user.should_see(kind=ui.button, content='First advisory · TLP:CLEAR')
+    await user.should_see(kind=ui.button, content='Second advisory · TLP:CLEAR')
+
+    user.find('Export IOCs').click()
+    await user.should_see('Indicator types')
+    kinds = user.find(kind=ui.select, content='Indicator types').elements.pop()
+    assert isinstance(kinds.options, dict)
+    assert kinds.options[kind] == kind_label
+    kinds.set_value([kind])
+    await user.should_see('Will export 1 indicator from 2 reports (2 mentions).')
+    await user.should_see('Check for personal data before sharing.')
 
 
 async def test_ioc_export_dialog_requires_an_indicator_type(user: User) -> None:
@@ -419,7 +460,7 @@ async def test_full_length_report_through_the_ingest_dialog(user: User, ui_env: 
     user.find('Source content').type(text)
     user.find('Ingest document').click()
     await user.should_see('Document ingested.')
-    await user.should_see('Extracted observations (35)')
+    await user.should_see('Extracted observations (38)')
     await user.should_see('CVE-2024-3400')
     with ui_env.app.state.session_factory() as db:
         stored = db.scalar(select(Document))
@@ -550,10 +591,10 @@ async def test_intel_brief_starts_empty_and_links_to_the_evidence(
     user: User, ui_env: SimpleNamespace
 ) -> None:
     with user.scope(marker='brief-summary'):
-        await user.should_see('Nothing new in the last 7 days. Sync your sources to get the latest.')
+        await user.should_see('No recent reports are available for the last 7 days.')
     await load_demo(user)  # practice data: not part of the brief
     with user.scope(marker='brief-summary'):
-        await user.should_see('Nothing new in the last 7 days.')
+        await user.should_see('No recent reports are available for the last 7 days.')
     with ui_env.app.state.session_factory.begin() as db:
         services.add_watch_term(db, 'Scanning')
     add_report(ui_env, 'Scanning wave', 'SANS', 'Scanning from 198.51.100.23.')
@@ -562,17 +603,41 @@ async def test_intel_brief_starts_empty_and_links_to_the_evidence(
     with user.scope(marker='brief-summary'):
         await user.should_see('In the last 7 days, 2 new reports came in from 2 sources.')
         await user.should_see('1 new report mentions your watch terms: Scanning (1).')
-    with user.scope(marker='intel-brief'):
+    with user.scope(marker='brief-section-3'):
         user.find(kind=ui.button, content='198.51.100.23 · 2 sources, 2 reports').click()
     # The entity explorer opens, already searching for that indicator.
     await user.should_see('IP · 198.51.100.23 · 2 source(s)')
     await user.should_not_see('IP · 192.0.2.44')
-    with user.scope(marker='intel-brief'):
+    with user.scope(marker='brief-section-2'):
         user.find(kind=ui.button, content='Scanning · 1 new report').click()
     # The inbox opens, already searching for the watch term.
     with user.scope(marker='document-list'):
         await user.should_see('Scanning wave')
         await user.should_not_see('Partner note')
+
+
+async def test_brief_highlight_opens_its_report_and_explains_the_time_window(
+    user: User, ui_env: SimpleNamespace
+) -> None:
+    add_report(ui_env, 'Gateway check', 'Vendor', 'Check the fix for CVE-2026-12345.')
+    add_report(ui_env, 'Partner assessment', 'Partner', 'Our report also covers CVE-2026-12345.')
+    await user.open('/')
+    with user.scope(marker='brief-context'):
+        await user.should_see('2 reports · 2 sources')
+        await user.should_see('Reports in this brief received in the last 24 hours.')
+        await user.should_see('Across the last 7 days')
+    with user.scope(marker='brief-priority-0'):
+        await user.should_see('A recurring topic in the reports')
+        await user.should_see('More mentions do not mean more attacks.')
+        await user.should_see('Next step')
+        user.find(kind=ui.button, content='View evidence: Partner assessment').click()
+    with user.scope(marker='document-detail'):
+        await user.should_see(kind=ui.label, content='Partner assessment')
+        await user.should_see('Our report also covers CVE-2026-12345.')
+    with user.scope(marker='brief-section-0'):
+        await user.should_see('This does not show attacks today or whether your systems are at risk.')
+    with user.scope(marker='brief-section-1'):
+        await user.should_see('It does not show that attackers are using it.')
 
 
 async def test_sync_all_sources_names_the_ones_that_failed(
@@ -626,10 +691,11 @@ async def test_sync_all_sources_success_feeds_the_brief(user: User, monkeypatch:
     with user.scope(marker='brief-summary'):
         await user.should_see('In the last 7 days, 4 new reports came in from 4 sources.')
         await user.should_see(
-            'CISA confirmed that attackers are using 1 more weakness, in products from Acme.'
+            'CISA added 1 more weakness to its known exploited list, in products from Acme.'
         )
-    with user.scope(marker='intel-brief'):
+    with user.scope(marker='brief-section-4'):
         await user.should_see('libumqtt (1)')
+    with user.scope(marker='brief-section-0'):
         user.find(kind=ui.button, content=f'CVE-2024-12345 · Acme Gateway · added {today}').click()
     with user.scope(marker='document-detail'):
         await user.should_see(kind=ui.label, content='CVE-2024-12345 · Acme Gateway')

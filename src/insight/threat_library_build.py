@@ -1,4 +1,4 @@
-"""Build Insight's threat-group library from MITRE ATT&CK and the MISP galaxy (TIP 2.10, ADR 0024).
+"""Build Insight's threat-group library from MITRE ATT&CK and the MISP galaxy (TIP 2.10, ADR 0025).
 
 Pure functions: a parsed Enterprise ATT&CK STIX bundle and a parsed MISP galaxy ``threat-actor`` cluster go
 in, the library Insight reads (``insight.threat_library``) comes out. Used by ``scripts/update_actors.py`` for

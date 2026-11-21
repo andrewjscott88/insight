@@ -38,9 +38,10 @@ async def load_demo_and_open(user: User, title: str) -> None:
 
 async def test_the_workspace_has_one_h1_and_real_section_headings(user: User) -> None:
     """Regression: every heading was a styled ``div``, so assistive technology saw none (WCAG 1.3.1)."""
-    await user.should_see('Intelligence workspace')
+    await user.should_see('Threat landscape')
     found = headings(user)
-    assert [text for tag, text in found if tag == 'h1'] == ['Intelligence workspace']
+    assert [text for tag, text in found if tag == 'h1'] == ['Threat landscape']
+    assert found.index(('h2', 'Executive summary')) < found.index(('h2', 'Work with the evidence'))
     assert {'Reports', 'Your intelligence, connected.'} <= {text for tag, text in found if tag == 'h2'}
 
 

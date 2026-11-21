@@ -1,4 +1,4 @@
-"""The threat-group library: MITRE ATT&CK groups with sourced industry claims (TIP 2.10, ADR 0024).
+"""The threat-group library: MITRE ATT&CK groups with sourced industry claims (TIP 2.10, ADR 0025).
 
 Two editions, one format (``insight.threat_library_build``):
 

@@ -1,7 +1,7 @@
 # Industry threats and threat guides
 
 Insight's **Industry threats** tab answers two questions: *which groups target my industry?* and *what do I do
-about this group?* It is TIP roadmap item 2.10 ([ADR 0024](adr/0024-threat-guides.md)); it also brings the
+about this group?* It is TIP roadmap item 2.10 ([ADR 0025](adr/0025-threat-guides.md)); it also brings the
 minimum of item 2.5 (actors you track) and item 2.7 (YARA and Sigma rules as linked artifacts).
 
 Insight has no analyst team writing adversary profiles. It puts together what two public catalogs say, your own

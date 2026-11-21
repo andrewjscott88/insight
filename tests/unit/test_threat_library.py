@@ -1,4 +1,4 @@
-"""The threat-group library: industry wording, the builder, the bundled edition and the sync (ADR 0024)."""
+"""The threat-group library: industry wording, the builder, the bundled edition and the sync (ADR 0025)."""
 
 from __future__ import annotations
 
@@ -318,7 +318,11 @@ def _public_dns(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def _serve(payloads: dict[str, bytes]) -> Callable[[httpx.Request], httpx.Response]:
     def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, content=payloads[str(request.url)])
+        # Downloads go to the checked address with the real host in Host and SNI (insight.egress).
+        host = request.headers['host']
+        assert request.url.host == '8.8.8.8'
+        assert request.extensions['sni_hostname'] == host
+        return httpx.Response(200, content=payloads[str(request.url.copy_with(host=host))])
 
     return handler
 

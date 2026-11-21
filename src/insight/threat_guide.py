@@ -1,4 +1,4 @@
-"""Actor threat guides: compose the threat library and the analyst's data into one guide (TIP 2.10, ADR 0024).
+"""Actor threat guides: compose the threat library and the analyst's data into one guide (TIP 2.10, ADR 0025).
 
 Pure functions, no database: :func:`compose` takes :class:`insight.services.GuideData` (what this instance
 knows, already limited to the reader's TLP) and the threat library, and returns a :class:`ThreatGuide`.

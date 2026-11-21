@@ -103,7 +103,7 @@ def test_analyst_workflow(context: Any) -> None:
     title = f'E2E report {uuid.uuid4().hex[:8]}'
     page = context.new_page()
     sign_in(page)
-    expect(page.get_by_text('Intelligence workspace', exact=True)).to_be_visible()
+    expect(page.get_by_role('heading', name='Threat landscape', exact=True)).to_be_visible()
     page.get_by_role('button', name='Ingest intelligence').click()
     page.get_by_label('Document title').fill(title)
     page.get_by_label('Source name').fill('Browser test')
@@ -131,7 +131,7 @@ def test_search_filters_the_inbox(context: Any) -> None:
 def test_sign_out_revokes_other_tabs(context: Any) -> None:
     workspace = context.new_page()
     sign_in(workspace)
-    expect(workspace.get_by_text('Intelligence workspace', exact=True)).to_be_visible()
+    expect(workspace.get_by_role('heading', name='Threat landscape', exact=True)).to_be_visible()
     other = context.new_page()
     other.goto('/logout')
     # exact: the page also has "Sign out everywhere", and Playwright matches names by substring.
@@ -146,13 +146,13 @@ def test_sign_out_everywhere_reaches_another_browser(browser: Any, context: Any)
     """Review B4: a second browser (its own cookies, like another device) signs this one out too."""
     workspace = context.new_page()
     sign_in(workspace)
-    expect(workspace.get_by_text('Intelligence workspace', exact=True)).to_be_visible()
+    expect(workspace.get_by_role('heading', name='Threat landscape', exact=True)).to_be_visible()
     other_device = browser.new_context(base_url=BASE_URL)
     other_device.set_default_timeout(TIMEOUT)
     try:
         page = other_device.new_page()
         sign_in(page)
-        expect(page.get_by_text('Intelligence workspace', exact=True)).to_be_visible()
+        expect(page.get_by_role('heading', name='Threat landscape', exact=True)).to_be_visible()
         page.goto('/logout')
         page.get_by_role('button', name='Sign out everywhere', exact=True).click()
         expect(page).to_have_url(re.compile(r'/login$'))
@@ -182,7 +182,8 @@ def test_full_length_notional_report(context: Any) -> None:
     page.get_by_label('Source content').fill(text)
     page.get_by_role('button', name='Ingest document').click()
     expect(page.locator('.document-reader h2', has_text=title)).to_be_visible()
-    expect(page.get_by_text('Extracted observations (35)')).to_be_visible()
+    expect(page.get_by_text('Extracted observations (38)')).to_be_visible()
+    expect(page.locator('.document-reader').get_by_text('Personal data', exact=True)).to_be_visible()
     assert page.locator('script[src*="cdn-update"]').count() == 0
     assert not [url for url in requests if 'example.com' in url or 'example.net' in url]
 
@@ -203,7 +204,7 @@ def test_second_notional_report_tlp_and_javascript_offsets(context: Any) -> None
     page.get_by_role('button', name='Ingest document').click()
     expect(page.locator('.document-reader h2', has_text=title)).to_be_visible()
     expect(page.get_by_text('Handling label raised from TLP:AMBER to TLP:RED')).to_be_visible()
-    expect(page.get_by_text('Extracted observations (52)')).to_be_visible()
+    expect(page.get_by_text('Extracted observations (55)')).to_be_visible()
     doc_id = page.locator('a', has_text='Download this report as JSON').get_attribute('href').split('/')[3]
     # Array.from() iterates code points (Python semantics); String.slice() uses UTF-16 code units.
     check = page.evaluate(

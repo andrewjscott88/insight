@@ -1,11 +1,11 @@
-"""The analyst's data in an actor threat guide (TIP 2.10, ADR 0024): reports, sweep list, rules and hunts.
+"""The analyst's data in an actor threat guide (TIP 2.10, ADR 0025): reports, sweep list, rules and hunts.
 
 :func:`guide_data` gathers, for one group and one reader, everything in the guide that comes from this
 instance; :mod:`insight.threat_guide` turns it and the threat library into the guide and its exports.
 
 The **indicator sweep list** holds accepted indicators from reports the analyst *linked* to the group. Only
 when asked (``linked_only=False``) does it also take them from reports that merely *name* the group; those
-reports are always listed in the guide, but by default their indicators stay out of the sweep list (ADR 0024).
+reports are always listed in the guide, but by default their indicators stay out of the sweep list (ADR 0025).
 It is a list of things to search for in your own logs,
 not a statement that the group used them: Insight never attributes from co-occurrence. Indicators with a
 warning flag, a ``benign`` verdict or a verdict whose own ``valid_until`` has passed are left out. The

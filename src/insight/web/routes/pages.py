@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import secrets
+import time
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import RedirectResponse
@@ -12,7 +13,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.responses import Response
 
 from ... import __version__
-from ..auth import MFA_UNPAIRED, SessionCheck, _mfa_paired, end_sessions
+from ..auth import MFA_UNPAIRED, SessionCheck, _mfa_paired, end_sessions, start_session
 from ..boundary import tokens_match
 
 log = logging.getLogger('insight.auth')
@@ -29,6 +30,12 @@ def _register_page_routes(app: FastAPI, templates: Jinja2Templates) -> None:
     @app.get('/login')
     def login_page(request: Request) -> Response:
         if authenticated(request.session):
+            return RedirectResponse('/', status_code=303)
+        if app.state.settings.dev_no_auth:
+            # This explicit mode skips only the password prompt. Every subsequent request still uses the
+            # regular signed, stored session, same-origin checks, CSRF checks and rate limits.
+            start_session(app, request, time.time())
+            log.info('Password-free browser session started (temporary development access)')
             return RedirectResponse('/', status_code=303)
         request.session.setdefault('csrf', secrets.token_urlsafe(32))
         mfa: bool = app.state.settings.mfa
@@ -48,7 +55,12 @@ def _register_page_routes(app: FastAPI, templates: Jinja2Templates) -> None:
         if not authenticated(request.session):
             return RedirectResponse('/login', status_code=303)
         return templates.TemplateResponse(
-            request=request, name='logout.html', context={'csrf_token': request.session['csrf']}
+            request=request,
+            name='logout.html',
+            context={
+                'csrf_token': request.session['csrf'],
+                'dev_no_auth': app.state.settings.dev_no_auth,
+            },
         )
 
     @app.post('/logout')

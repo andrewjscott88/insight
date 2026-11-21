@@ -15,6 +15,7 @@ from nicegui import ui
 from pydantic import ValidationError
 
 from .. import services
+from ..extraction import EVIDENCE_CONTEXT
 from ..schemas import DOCUMENT_STATUSES, NoteInput
 from .actors import render_report_groups
 from .enrichment import open_enrichment_dialog
@@ -49,13 +50,15 @@ def render_empty() -> None:
 def render_report(ws: Workspace, data: dict[str, Any], actions: ReaderActions) -> None:
     back_to_list_button()
     tlp_badge(data['tlp'])
-    heading(data['title'], 2, 'report-title break-value')
+    heading(data['title'], 2, 'report-title break-value w-full')
     if data['truncated']:
         ui.label(
             'Only part of this report was saved. The publisher’s text was longer than the summary Insight '
             'keeps, so the full report may have more indicators. Open the original to read all of it.'
         ).classes('text-warn prose')
-    ui.label(f'{data["source_name"]} · {data["created_at"][:10]}').classes('muted text-sm')
+    ui.label(f'{data["source_name"]} · {data["created_at"][:10]}').classes(
+        'muted text-sm prose break-value w-full'
+    )
     if data['source_url']:
         new_tab_link('Open the original report', data['source_url'])
     _render_revisions(data, actions)
@@ -64,7 +67,7 @@ def render_report(ws: Workspace, data: dict[str, Any], actions: ReaderActions) -
         value=data['status'],
         label='Document review',
         on_change=lambda event: actions.review_document(data['id'], event.value),
-    ).props('outlined').classes('w-60')
+    ).props('outlined').classes('w-60 max-w-full')
     heading('Report text', 3, 'subsection-title mt-3')
     ui.label(data['body']).classes('source-body panel p-4 w-full').props(
         'role=region aria-label="Report text"'
@@ -86,6 +89,10 @@ def render_report(ws: Workspace, data: dict[str, Any], actions: ReaderActions) -
         new_tab_link('Download this report as JSON', f'/api/documents/{data["id"]}/export')
         new_tab_link("Export this report's IOCs", f'/api/iocs/export?document_id={data["id"]}')
     ui.label('Exports keep the TLP label. They do not give permission to share.').classes('muted prose')
+    if any(obs['kind'] == 'email' for obs in data['observations']):
+        ui.label('This report includes e-mail addresses. Check who may receive them before sharing.').classes(
+            'text-warn prose'
+        )
     _render_notes(ws, data, actions)
     with ui.expansion('Where this report came from').classes('w-full muted'):
         ui.label('Fingerprint (SHA-256): ' + data['content_hash']).classes('break-value font-mono text-sm')
@@ -129,9 +136,19 @@ def _render_observation(
     with ui.column().classes('panel w-full p-4 gap-2'):
         with ui.row().classes('items-center w-full'):
             ui.badge(obs['kind']).props('outline')
-            ui.label(obs['value']).classes('font-mono break-value flex-1')
+            ui.label(obs['value']).classes('font-mono break-value flex-1 min-w-0')
         flag_badges(obs['kind'], obs['value'])
-        ui.label(obs['evidence']).classes('evidence text-sm w-full')
+        if obs['kind'] in ('cidr', 'email'):
+            # The excerpt starts at most EVIDENCE_CONTEXT characters before the exact source span.
+            start = min(obs['start_offset'], EVIDENCE_CONTEXT)
+            end = start + obs['end_offset'] - obs['start_offset']
+            evidence = obs['evidence']
+            with ui.element('div').classes('evidence text-sm w-full'):
+                ui.label(evidence[:start]).tag = 'span'
+                ui.label(evidence[start:end]).tag = 'mark'
+                ui.label(evidence[end:]).tag = 'span'
+        else:
+            ui.label(obs['evidence']).classes('evidence text-sm w-full')
         ui.label(
             f'Position {obs["start_offset"]}–{obs["end_offset"]} in the text · {obs["review_status"]}'
         ).classes('muted text-sm')
@@ -140,6 +157,10 @@ def _render_observation(
                 'On the CISA list of Known Exploited Vulnerabilities (KEV) · '
                 f'added {kev["date_added"]} · fix by {kev["due_date"]}'
             ).classes('text-warn text-sm prose')
+            if kev.get('ransomware_use') == 'Known':
+                ui.label('CISA knows of ransomware campaigns that use it.').classes('text-warn text-sm prose')
+            if kev.get('vulnerability_name'):
+                ui.label(kev['vulnerability_name']).classes('text-sm prose break-value')
             ui.label(kev['required_action']).classes('muted text-sm prose')
         if obs['kind'] == 'cve':
             if scores := cve_scores.get(obs['value']):

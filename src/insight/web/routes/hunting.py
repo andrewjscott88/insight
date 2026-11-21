@@ -1,4 +1,4 @@
-"""Hunt records and detection rules for threat guides (TIP 2.10; TIP 2.7 minimum; ADR 0024).
+"""Hunt records and detection rules for threat guides (TIP 2.10; TIP 2.7 minimum; ADR 0025).
 
 Rules are carried as text: stored, linked and exported, never compiled or run. Hunts record what was checked
 for each hypothesis. Every change is audited; labels above the caller's or the instance's limit are refused.

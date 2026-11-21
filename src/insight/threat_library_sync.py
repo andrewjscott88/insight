@@ -4,7 +4,7 @@ The two files are fetched with :func:`insight.connectors.download` (HTTPS, curat
 URLs that name an exact commit, and each must match its pinned SHA-256 before anything is parsed. Then
 :func:`insight.threat_library_build.build` writes the full edition atomically to
 ``<INSIGHT_DATA_DIR>/threat-library.json``. Nothing else is contacted, and the sync runs only when someone
-asks for it (ADR 0018, ADR 0024).
+asks for it (ADR 0018, ADR 0025).
 """
 
 from __future__ import annotations

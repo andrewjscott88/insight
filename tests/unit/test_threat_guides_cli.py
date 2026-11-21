@@ -1,4 +1,4 @@
-"""``insight industries``, ``threat-profile``, ``threat-guide`` and ``rule-add`` (TIP 2.10, ADR 0024)."""
+"""``insight industries``, ``threat-profile``, ``threat-guide`` and ``rule-add`` (TIP 2.10, ADR 0025)."""
 
 from __future__ import annotations
 

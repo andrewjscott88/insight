@@ -28,7 +28,11 @@ Two constraints shape the answer:
    `insight serve`; settings built in code default to off, so tests and tools never start one). It wakes every
    15 seconds, queues due schedules, and runs jobs one at a time under the same lock as Sync now, so a schedule
    and a person never sync at the same moment. At start-up it takes back jobs that a stopped process left
-   running.
+   running. **Revised (code review L5):** syncs, CVE lookups (ADR 0023) and alert deliveries (ADR 0022) now
+   run in separate lanes, side by side, each one job at a time under its own lock; only syncs share Sync now's
+   lock. A long lookup batch no longer makes Sync all answer `409`, and alerts no longer wait behind a long
+   sync. Each job takes exactly one lane lock, so the lanes cannot deadlock. On an in-memory SQLite database
+   (one shared connection) the lanes take turns, alerts first.
 4. **Retries with back-off.** A failed sync is tried again after 5, then 10 minutes, then marked `failed`. Every
    attempt is also a `SourceRun`, so *Recent sync activity* shows exactly what happened.
 6. **A time of day.** A schedule can start at a chosen time (UTC), and every next run keeps that slot: a daily

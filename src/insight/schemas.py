@@ -198,7 +198,7 @@ class IocExportQuery(BaseModel):
         return self.verdicts != VERDICTS or bool(self.exclude_flags)
 
 
-# ------------------------------------------------------------------------- threat guides (TIP 2.10, ADR 0024)
+# ------------------------------------------------------------------------- threat guides (TIP 2.10, ADR 0025)
 
 ClaimDecision = Literal['added', 'removed']
 RuleKind = Literal['yara', 'sigma']

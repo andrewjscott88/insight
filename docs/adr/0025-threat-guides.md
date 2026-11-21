@@ -1,4 +1,4 @@
-# ADR 0024: Industry threat profiles and actor threat guides from a sourced, pinned threat-group library
+# ADR 0025: Industry threat profiles and actor threat guides from a sourced, pinned threat-group library
 
 Status: accepted (unreleased)
 
@@ -78,4 +78,4 @@ and decisions, and say exactly where each statement comes from. Constraints:
 - The industry vocabulary is Insight's own; a new source or a change to the words is a reviewed code change.
 - Moving to a new ATT&CK or MISP release means updating `PINNED`, rerunning `scripts/update_actors.py` and
   `scripts/update_attack.py`, and reading the diff of claims; the tests check every quoted sentence.
-- Seven new tables (migration `0012_threat_guides`, reversible); no change to existing tables.
+- Seven new tables (migration `0014_threat_guides`, reversible); no change to existing tables.

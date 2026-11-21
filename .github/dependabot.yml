@@ -1,6 +1,8 @@
 # Python dependencies are refreshed by .github/workflows/lock-refresh.yml (uv keeps all hash-pinned lock files
 # consistent). Dependabot covers GitHub Actions and the container base image, batched into one pull request
 # each per month (review G1). Dependabot security updates, when on in the repository settings, ignore this.
+# Images started with `docker run` inside workflow steps (gitleaks, ZAP, registry) are digest-pinned but not
+# seen by Dependabot: refresh them by hand (docs/CI_CD.md); scripts/check_pins.py keeps them pinned.
 version: 2
 updates:
   - package-ecosystem: github-actions

@@ -1,4 +1,4 @@
-"""The fixed list of industries for threat profiles (TIP 2.10, ADR 0024) and how catalog labels map to them.
+"""The fixed list of industries for threat profiles (TIP 2.10, ADR 0025) and how catalog labels map to them.
 
 Catalogs name sectors in their own words: MISP galaxy uses labels such as ``Healthcare`` or ``Telecoms``, and
 MITRE ATT&CK writes them only in its prose ("has targeted banks, financial institutions ..."). This module is

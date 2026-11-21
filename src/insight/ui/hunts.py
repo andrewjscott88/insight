@@ -1,4 +1,4 @@
-"""The hunt plan in a threat guide (TIP 2.10, ADR 0024): hypotheses, the sweep list, rules and hunt records.
+"""The hunt plan in a threat guide (TIP 2.10, ADR 0025): hypotheses, the sweep list, rules and hunt records.
 
 Hypotheses come from ATT&CK's detection strategies and data components; they are starting points, not
 detections. A hunt record keeps, for each hypothesis, what was searched, over which dates and what was found.

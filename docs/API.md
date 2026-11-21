@@ -15,11 +15,19 @@ page is the field-by-field reference.
    HttpOnly, SameSite=Strict).
 2. `POST /login` (form fields `csrf_token`, `password`, and `otp` when MFA is on) → `303` to `/` on
    success; `401` wrong password or authentication code (one message for both); `403` bad or missing CSRF
-   token; `429` throttled (more than 30 failures per minute; each failure waits ~1 s); `503` MFA is on but no
+   token; `429` a wrong password after 30 failures in the last minute (each failure waits ~1 s; the right password always signs in); `503` MFA is on but no
    authenticator app is paired (sign-in locked). MFA is off by default (`INSIGHT_MFA=on` or `make mfa-enable`
    turns it on); then `otp` is the 6-digit code from the app, and each code works once.
 3. `GET /api/session` → `{"csrf_token": "…"}`. Send it as `X-CSRF-Token` on **every non-GET** API request.
 4. `POST /logout` (form field `csrf_token`) revokes the session server-side.
+
+**Temporary password-free mode:** with the explicit default-off `INSIGHT_DEV_NO_AUTH=on`, `GET /login`
+creates the normal operator session and CSRF token, then returns `303` to `/` instead of a password form.
+Anyone who can reach the site can obtain this full-access session. Direct API calls without a valid session
+or key still return `401`, and session-authenticated writes still require `X-CSRF-Token`; API-key behavior
+is unchanged. Enabling MFA and this mode together is rejected. Turning the mode off and restarting with
+the changed environment invalidates its sessions and restores password sign-in. See the
+[runbook](RUNBOOK.md#temporary-password-free-access) for enable/restore checks and the public-access tradeoff.
 
 Every request is also checked as follows:
 - The `Host` header must be in `INSIGHT_ALLOWED_HOSTS`, else `400`.
@@ -44,6 +52,7 @@ Minimal client:
 
 ```python
 import re, httpx
+
 c = httpx.Client(base_url='http://127.0.0.1:8080')
 token = re.search(r'name="csrf_token" value="([^"]+)"', c.get('/login').text).group(1)
 c.post('/login', data={'csrf_token': token, 'password': PASSWORD})
@@ -73,6 +82,7 @@ a URL or a repository. Send it on every request:
 
 ```python
 import httpx
+
 c = httpx.Client(base_url='https://insight.example.org', headers={'Authorization': f'Bearer {API_KEY}'})
 iocs = c.get('/api/iocs/export', params={'max_tlp': 'GREEN', 'review_status': 'accepted'}).json()
 ```
@@ -175,7 +185,7 @@ The summary plus:
 
 | Field | Meaning |
 | --- | --- |
-| `id`, `entity_id`, `kind`, `value` | Kinds: `cve url domain ip md5 sha1 sha256 sha512` |
+| `id`, `entity_id`, `kind`, `value` | Kinds: `cve url domain ip cidr email md5 sha1 sha256 sha512`. A `cidr` value includes its network prefix length. An `email` value preserves the mailbox case and uses a lower-case domain. |
 | `evidence` | Source text around the mention |
 | `start_offset`, `end_offset` | Code-point offsets into `body` (Python indexing) |
 | `start_offset_utf16`, `end_offset_utf16` | The same span for JavaScript (`body.slice(start, end)`) |
@@ -205,7 +215,7 @@ Query parameters (all optional; values are **case-sensitive**):
 
 | Parameter | Default | Meaning |
 | --- | --- | --- |
-| `kind` (repeatable) | all | `cve` `url` `domain` `ip` `md5` `sha1` `sha256` `sha512` |
+| `kind` (repeatable) | all | `cve` `url` `domain` `ip` `cidr` `email` `md5` `sha1` `sha256` `sha512` |
 | `review_status` (repeatable) | `unreviewed`, `accepted` | Review state of each **mention** (`unreviewed` / `accepted` / `rejected`); rejected mentions are left out unless requested |
 | `max_tlp` | none | Include only reports labelled at or below this level, e.g. `GREEN` before sharing with a community |
 | `defang` | `false` | Defang values, report titles and evidence: `hxxps://evil[.]example/a[.]php`, `evil[.]example`, `192[.]0[.]2[.]8`, `2001[:]db8[:][:]1`, plus e-mail domains, CIDR ranges and file-like names in text (see the guide, §7) |
@@ -214,7 +224,7 @@ Query parameters (all optional; values are **case-sensitive**):
 | `q` | none | Inbox search text (literal, folded like the inbox). At most 200 characters: longer text is rejected with `422`, whereas `GET /api/documents` shortens it |
 | `status` | any | The **report's** triage status: `new` / `reviewing` / `reviewed`. Not the mention review state |
 | `verdict` (repeatable) | all | Only indicators with this verdict: `unknown` `benign` `suspicious` `malicious` |
-| `exclude_flag` (repeatable) | none | Leave out indicators with this warning flag: `non-routable` `documentation` `reserved-name` `common-benign` |
+| `exclude_flag` (repeatable) | none | Leave out indicators with this warning flag: `non-routable` `documentation` `reserved-name` `common-benign` `personal-data` |
 | `tlp` | any | Only reports with **exactly** this label (compare `max_tlp`) |
 | `include_superseded` | `false` | Also include superseded revisions of synced items |
 
@@ -225,7 +235,9 @@ encode it for you.
 Example (using the client above):
 
 ```python
-r = c.get('/api/iocs/export', params=[('kind', 'ip'), ('kind', 'domain'), ('max_tlp', 'GREEN'), ('defang', 'true')])
+r = c.get(
+    '/api/iocs/export', params=[('kind', 'ip'), ('kind', 'domain'), ('max_tlp', 'GREEN'), ('defang', 'true')]
+)
 export = r.json()  # export['tlp'], export['counts'], export['iocs']
 ```
 
@@ -253,12 +265,12 @@ Each IOC:
 | `kev` | CISA KEV context for CVEs (`date_added`, `due_date`, `required_action`, `vendor`, `product`, `imported_at`) or `null` |
 | `verdict` | The analyst's verdict: `unknown` (none, or its own label is above the export's TLP limit), `benign`, `suspicious` or `malicious`. Review says a value was copied correctly; the verdict says what it means |
 | `verdict_valid_until` | When the verdict expires, or `null` |
-| `flags` | Warning flags: why the value is unsafe to block (`non-routable`, `documentation`, `reserved-name`, `common-benign`); `[]` for most |
+| `flags` | Warning flags include `non-routable`, `documentation`, `reserved-name`, `common-benign`, and `personal-data` (every e-mail address) |
 | `sources` | Included reports that mention it, oldest first (see below) |
 
 Each source: `document_id`, `title`, `source_name`, `source_url`, `tlp`, `status` (the report's **triage**
 status), `created_at`, `is_current` (`false` only for superseded revisions), `extractor_version` (e.g.
-`regex-v2`; `regex-v1` for reports ingested before 0.2.0), `mentions` (included mentions in that report) and
+`regex-v4` for the extractor that recognizes e-mail addresses), `mentions` (included mentions in that report) and
 `evidence`. `evidence` is the text around the first included mention, up to 90 characters either side, cut at
 arbitrary positions; `null` with `evidence=false`.
 
@@ -285,8 +297,12 @@ these hold:
   domain, whatever its verdict;
 - the verdict's own TLP label is within your limit.
 
+E-mail addresses and network ranges are available through `/api/iocs/export` with `kind=email` or `kind=cidr`. The blocklist excludes both kinds.
+
 `format=txt` (default): one value per line, sorted, never defanged. `format=csv`: `value,kind,decided_at,
-expires_at,tlp` with a header row. Audited as `ioc.blocklist`; shares the `ioc-export` budget.
+expires_at,tlp` with a header row; a cell that would start with `=`, `+`, `-`, `@`, a tab or a carriage return
+gets a leading `'` so spreadsheets never run it as a formula (code review N1). Audited as `ioc.blocklist`; shares
+the `ioc-export` budget.
 
 ## Entities
 
@@ -316,7 +332,7 @@ Summaries and pivots count **current** reports you can see.
 
 ## Industry threats and threat guides
 
-Industry threat profiles and actor threat guides ([ADR 0024](adr/0024-threat-guides.md),
+Industry threat profiles and actor threat guides ([ADR 0025](adr/0025-threat-guides.md),
 [THREAT_GUIDES.md](THREAT_GUIDES.md)). `{ref}` is an ATT&CK group ID from the bundled threat library (`G0016`)
 or the ID of an actor you created. Library groups are public (TLP:CLEAR); an actor you created, its links, your
 industry decisions, rules and hunts carry their own labels and are hidden from callers whose limit is lower.
@@ -361,6 +377,7 @@ which is not attribution.
 | `GET /api/jobs?limit=20` | Recent background jobs (scheduled syncs, alert deliveries, automatic CVE lookups), newest first: `[{id, kind, key, status, attempts, run_after, started_at, finished_at, message, actor, created_at}]`. `status`: `queued`, `running`, `succeeded` or `failed`. A failed sync is tried again after 5, then 10 minutes, then marked `failed`. `limit` 1-100. Finished jobs are kept 30 days. |
 | `POST /api/sources/sync-all` | `{"results": [{key, name, status, message}]}`: every source in use, in registry order, one at a time. `status` is `success` or `error`; a failing source does not stop the others and is recorded as an error run. Always `200` once it has run; `409` another sync running. |
 | `POST /api/enrichment/{provider}/{cve}` | Provider JSON (`epss`, `nvd`), cached. Only the CVE number is sent. `422` invalid input or unknown CVE (checked first, so it uses no lookup window), `429` with `Retry-After` when the provider's window is taken: one request every 6.5 s at NVD (0.7 s with `INSIGHT_NVD_API_KEY`) and every 1 s at EPSS, shared with every other caller and with automatic lookups, so the wait may come from Insight itself. `502` provider failure, `403` for TLP-limited keys (a lookup can name a CVE from any report to a provider). |
+| `GET /api/cves?days=30&limit=50` | The prioritised CVE view ([ADR 0024](adr/0024-prioritised-cves.md)): the CVEs that current reports received in the last `days` days (1-365) mention, most urgent first, from the reports the caller may see (TLP limit; the demo and rejected mentions left out). `{days, since, total, truncated, cves: [cve]}`; `limit` 1-500 rows. A row is `{cve, tier, label, reason, details: [line], reports, sources, first_seen, last_seen, report: {id, title}, kev: {date_added, due_date, ransomware, name, document_id} \| null, cvss: {score, source, csaf}, nvd, epss}`. `tier`: 1 used in ransomware (CISA KEV), 2 known exploited (KEV), 3 likely to be attacked soon (EPSS 10% or more), 4 critical (CVSS 9 or more), 5 high (CVSS 7 or more), 6 no strong signal; within a tier, higher EPSS, higher CVSS, more reports, most recently seen. `details` are plain-English lines; `nvd`/`epss` as in the scores route. `truncated`: more than 20,000 mentions, older ones left out |
 | `GET /api/cves/{cve}/scores` | The cached scores, read without contacting anyone ([ADR 0023](adr/0023-automatic-cve-lookups.md)): `{cve, nvd, epss, nvd_checked_at, epss_checked_at}`. `nvd` is `{score, severity, version, vector, status, published, description, cwes}` or `null` (not looked up, or NVD has no record); `score` is the CVSS base score from the newest version NVD has (4.0, 3.1, 3.0, then 2), `null` when NVD has not scored it (`status` says why, such as `Awaiting Analysis` or `Rejected`). `epss` is `{probability, percentile, date}` (both 0-1; probability of exploitation attempts in the next 30 days) or `null`. A `*_checked_at` time with a `null` score means the provider was asked and has none. `404` unless a current report the caller may see mentions the CVE, so TLP-limited keys can use it for their own reports. |
 
 Sync and enrichment are the only routes that cause outbound network traffic. A schedule makes the same syncs happen by
@@ -374,17 +391,71 @@ itself, each CVE that a current TLP:CLEAR or GREEN report mentions and that has 
 seen only in AMBER or RED reports are never looked up by themselves. The answers fill
 `GET /api/cves/{cve}/scores`. This product uses the NVD API but is not endorsed or certified by the NVD.
 
+## Executive brief
+
+### `GET /api/brief?days=7`
+
+Returns the same deterministic brief used by the landing page. Requires a browser session or API key;
+read-only keys are accepted. Uses the normal `read` rate budget. `days` is an integer from 1 to 30,
+default 7; invalid values return `422`. It reads stored data and makes no source or AI request.
+
+| Field | JSON type | Meaning |
+| --- | --- | --- |
+| `days` | integer | Requested reporting window in days. |
+| `since` | string | Window start, as an ISO-8601 UTC timestamp. |
+| `as_of` | string | Window end, as an ISO-8601 UTC timestamp. This is the brief's reference time, not a source's last successful sync. |
+| `report_count` | integer | Current, visible, non-demo reports included in this brief after its date filters. |
+| `source_count` | integer | Distinct source identities among those reports: connector key, or case/space-normalized source name for other reports. Not a count of independent confirmations or all configured connectors. |
+| `recent_reports` | integer | Included reports received during the last 24 hours relative to `as_of`. This is a receipt count, not a count of attacks or newly published vulnerabilities. |
+| `summary` | array of strings | Plain-English executive summary. The existing field is retained; its wording can change. |
+| `highlights` | array of objects | Prioritized explanations with `{title, text, action, evidence}`. The first three values are strings; `evidence` is an array of brief items described below. `action` is a conditional next step, not an instruction executed by Insight. |
+| `coverage` | array of strings | Notes explaining the data covered, count limits, excluded invalid/future dates and stored source-check freshness. Connector error details are omitted. |
+| `sections` | array of objects | Existing detail sections: `{title, items, empty}`. `title` and `empty` are strings; `items` is an array of brief items. Use `empty` when a section has no items. |
+
+The added fields are always present and are not nullable. Empty collections are `[]`; counts may be zero.
+Existing clients can continue using `summary` and `sections` and ignore the additions.
+
+A **brief item** is `{text, document_id, entity, search}`. `text` is a string; the remaining values are strings
+or `null`. A `document_id` opens a visible report; `entity` opens the indicator's evidence; `search` searches
+the collected reports. The workspace checks them in that order. The item is evidence/navigation metadata,
+not a claim that an extracted indicator is malicious.
+
+The five detail sections remain:
+
+| Section | Selection |
+| --- | --- |
+| **Exploited now** | CVEs added to the stored CISA KEV catalogue in the window, then older KEV CVEs mentioned by included reports from other sources; those CISA knows to be used in ransomware campaigns first, marked `· used in ransomware`. KEV records establish known exploitation; this label does not measure attacks happening now. |
+| **Most severe** | CVSS base scores of 9 or higher, highest first, one item per CVE: from included CISA advisories, and NIST NVD's cached score of any CVE an included report mentions (marked `(NIST NVD)`; NVD's own score is shown beside an advisory's when they differ; rejected CVEs never count). A high score does not itself establish exploitation. |
+| **Your watch terms** | Literal matches for configured terms in included reports. A match does not establish that the operator uses an affected product. |
+| **Seen in several sources** | Indicators mentioned in included reports with at least two distinct source identities. Repetition does not establish independent corroboration or rising attack volume. |
+| **Most-mentioned vendors** | Vendor names from included advisory metadata and recent KEV additions. |
+
+Each detail section and each highlight's evidence list contains at most five items. Report-derived counts,
+text and links use only current reports the caller may see, including authorized pasted reports as well as connector reports. The synthetic
+demo is excluded. The query examines at most the latest 2,000 eligible received reports; counts describe
+that bounded selection, not the entire database. Coverage notes disclose a truncated selection. Stored KEV
+catalogue facts are public and can contribute even when there is no visible report to link or `report_count`
+is zero.
+
+The reporting window preserves publication-date filtering: a KEV report uses CISA's date added; a CISA
+advisory uses its first release date, rather than the date of a later revision; reports without a known
+publisher date use their receipt date. An old advisory first downloaded today does not become a newly
+published advisory. Invalid or future dates are excluded. The separate 24-hour count uses received timestamps
+for the current report version within the included set, so a received report can be an update. No
+comparison against a previous period is made in the brief itself (the threat landscape, `GET /api/landscape`,
+makes one), so repeated coverage must not be interpreted as an increase in attacks. Full behavior and interpretation: [Executive brief](EXECUTIVE_BRIEF.md).
+
 ## Workspace
 
 | Route | Result |
 | --- | --- |
 | `GET /api/stats` | `{documents, entities, unreviewed, observations_unreviewed}` (current revisions only) |
-| `GET /api/brief?days=7` | The intel brief shown on the landing page, built from the data (no AI): `{days, since, summary: [sentence], sections: [{title, items: [{text, document_id, entity, search}], empty}]}`. `days` 1-30 (default 7). `summary` is the executive summary, most important first. Sections: *Exploited now* (CVEs added to CISA KEV in the window, then KEV CVEs that new reports from other sources mention), *Most severe* (CVSS 9 or higher in new CISA advisories), *Your watch terms*, *Seen in several sources* (indicators in new reports from two or more sources), *Most-mentioned vendors*. An item opens `document_id`, looks up the indicator `entity`, or searches reports for `search`. "New" means published in the window: KEV entries by the day CISA added them, CISA advisories by their first release, other reports by the day Insight received them; the synthetic demo is left out. Built only from reports the caller may see (TLP limit). |
+| `GET /api/brief?days=7` | Executive summary, report/source counts, last-24-hour receipt count, linked highlights, coverage notes and existing detail sections. See the [executive brief contract](#executive-brief). |
 | `GET /api/landscape?days=7` | The threat landscape that opens the workspace ([ADR 0020](adr/0020-threat-landscape.md)), built from the data (no AI). `days` 1-30 (default 7); the period is compared with the 4 periods before it. `{days, since, compared_since, compared_periods, tlp, reports, sources, summary: [sentence], caveats: [sentence], threats: [threat], quieter: [threat], tactics: [tactic], brief}`. A threat is `{key, name, change: {label, current, usual}, sources, what, impact, check, reports: [{text, document_id}], words, techniques}`; `label` is `rising`, `new`, `steady`, `quieter` or `no-history` (nothing before the period to compare with); `usual` is reports per period before, `null` without history. A tactic is `{shortname, name, plain, change, techniques: [[id, name, reports]]}`. `brief` is the intel brief below for the same period. `tlp` is the most restrictive label of the reports counted: share no wider. Built only from reports the caller may see (TLP limit) |
 | `GET /api/landscape/briefing?days=7` | The same as a Markdown briefing (`text/markdown`, attachment `insight-threat-landscape-7d.md`), marked with its TLP on the first and last lines; text from reports is escaped. Audited as `landscape.briefing` |
 | `GET /api/audit` | Latest 200 audit events: `{action, object_id, detail, actor, created_at}`. Not available to TLP-limited keys |
-| `GET /api/watch-terms` | `[{id, term}]` |
-| `POST /api/demo` | `{"created": n}`; loads the synthetic demo, idempotent |
+| `GET /api/watch-terms` | `[{id, term}]`. Not available to TLP-limited keys: terms often name clients or internal systems |
+| `POST /api/demo` | `{"created": n}`; loads the synthetic demo, idempotent. **Browser session only** (API keys get `403`: scripts must not add practice data to a real dataset); reports above `INSIGHT_MAX_TLP` are left out |
 | `GET /health` | `{"status": "ok", "version": "…"}`, no authentication required |
 
 Audit `actor`: `operator` (browser session or workspace), `api-key:<key ID>`, `cli`, `connector:<source key>`,

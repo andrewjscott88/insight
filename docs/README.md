@@ -8,7 +8,7 @@
 | Understand the design (including the API's auth, rate-limit and TLP pipeline) | [ARCHITECTURE](ARCHITECTURE.md), [decision records](adr/README.md) |
 | Script against it (API key, `curl` for every call, SIEM recipes) | [API_GUIDE](API_GUIDE.md), then [API](API.md) for every field |
 | Export indicators (IOCs) to share, block or hunt | [IOC_EXPORT](IOC_EXPORT.md), [schema](schemas/insight-ioc-v1.schema.json), [example](examples/insight-iocs-example.json) |
-| See which groups target an industry, export a threat guide, plan a hunt | [THREAT_GUIDES](THREAT_GUIDES.md), [ADR 0024](adr/0024-threat-guides.md) |
+| See which groups target an industry, export a threat guide, plan a hunt | [THREAT_GUIDES](THREAT_GUIDES.md), [ADR 0025](adr/0025-threat-guides.md) |
 | Know what indicators it extracts and how well | [EXTRACTION](EXTRACTION.md) |
 | Judge its security posture | [SECURITY](SECURITY.md), [reporting a vulnerability](../SECURITY.md) |
 | Contribute | [CONTRIBUTING](../CONTRIBUTING.md), [TESTING](TESTING.md) |

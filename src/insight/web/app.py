@@ -31,6 +31,7 @@ from .auth import (
     session_checker,
 )
 from .boundary import BoundaryMiddleware
+from .routes.cves import _register_cve_routes
 from .routes.documents import _register_document_routes
 from .routes.entities import _register_entity_routes
 from .routes.exports import _register_export_routes
@@ -55,6 +56,10 @@ def _init_state(app: FastAPI, settings: Settings, sessions: SessionFactory) -> N
     app.state.session_binding = services.session_binding(
         settings.session_secret, settings.password, settings.mfa
     )
+    if settings.dev_no_auth:
+        # Keep open-access sessions separate. Turning the mode off must never turn an anonymous visitor's
+        # existing cookie into a password-authenticated session, even with the same database and secret.
+        app.state.session_binding = 'dev-no-auth:' + app.state.session_binding
     app.state.failures = []
     app.state.login_lock = asyncio.Lock()
     app.state.sync_lock = asyncio.Lock()
@@ -87,6 +92,10 @@ def _install_middleware(app: FastAPI, settings: Settings) -> None:
 
 def _log_deployment_warnings(settings: Settings, sessions: SessionFactory) -> None:
     """Start-up notes on settings that are valid but probably not what a public deployment wants."""
+    if settings.dev_no_auth:
+        log.warning(
+            'INSIGHT_DEV_NO_AUTH=on: anyone who can reach this workspace can view and change its data'
+        )
     if settings.trusted_proxies:
         log.info('Trusting X-Forwarded-For/-Proto from: %s', ', '.join(settings.trusted_proxies))
         if not settings.secure_cookies:
@@ -98,7 +107,7 @@ def _log_deployment_warnings(settings: Settings, sessions: SessionFactory) -> No
         log.error(MFA_UNPAIRED_LOG)
     elif settings.mfa:
         log.info('MFA is on: sign-in needs the password and an authenticator-app code')
-    elif settings.trusted_proxies:
+    elif settings.trusted_proxies and not settings.dev_no_auth:
         log.info(
             'MFA is off (INSIGHT_MFA=off): sign-in needs the password only. '
             'To require an authenticator-app code: make mfa-enable'
@@ -134,9 +143,10 @@ def create_app(settings: Settings | None = None, *, with_ui: bool = True) -> Fas
         stop = asyncio.Event()
         runner = None
         if settings.run_jobs:
-            from ..jobs import run_forever  # Deferred: keeps `import insight.main` light for tools and tests.
+            from ..jobs import JobLocks, run_forever  # Deferred: keeps `import insight.main` light.
 
-            runner = asyncio.create_task(run_forever(sessions, application.state.sync_lock, stop))
+            locks = JobLocks(sync=application.state.sync_lock)  # Manual syncs share the sync lane (L5).
+            runner = asyncio.create_task(run_forever(sessions, locks, stop))
         try:
             yield
         finally:
@@ -170,6 +180,7 @@ def create_app(settings: Settings | None = None, *, with_ui: bool = True) -> Fas
     for register in (
         _register_workspace_routes,
         _register_landscape_routes,
+        _register_cve_routes,
         _register_document_routes,
         _register_triage_routes,
         _register_export_routes,

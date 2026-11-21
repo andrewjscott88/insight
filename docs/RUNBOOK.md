@@ -25,6 +25,7 @@ The Makefile wraps these (`make help`); the commands it runs are the ones in the
 | Version | `make version` · `make health` | `docker compose exec insight insight --version` · `curl -s http://127.0.0.1:8080/health` |
 | API key | `make api-key-create NAME=siem` · `make api-key-status` · `-rotate` · `-revoke` | `docker compose exec insight insight api-key …` |
 | Sign-in MFA (off by default) | `make mfa-enable` · `make mfa-disable` · `make mfa-status` · `make mfa-reset` | §4, "Sign-in second factor" |
+| Alert destinations | Watch terms tab: *Alerts* | `insight notify list`, `add`, `enable`, `disable` or `remove` ([alerts guide](ALERTS.md#manage-destinations-on-the-host)) |
 | Scheduled syncs (off by default) | Sources tab: *Start at* and *Sync by itself* | `docker compose exec insight insight schedule all --every 24h --at 00:00` · `insight schedule` lists them (§8) |
 | Default colour theme (System by default) | `make theme THEME=dark` · `make up THEME=light` | Set `INSIGHT_THEME` in `.env`, then `docker compose up -d` (§4, "Colour theme") |
 | Full threat-group library (optional, on request) | `make threat-library-sync`, then `make restart` | `docker compose run --rm insight insight threat-library-sync` (§8, "Threat library") |
@@ -49,7 +50,7 @@ Browser ──HTTP (127.0.0.1:8080)──► uvicorn (1 worker)
 | NiceGUI storage | `/data/.nicegui` |
 | Volume | `<project>_insight-data` (`docker volume ls`) |
 | Port | `127.0.0.1:8080` only |
-| Sessions | In the database (8 hours): a restart or upgrade keeps you signed in; a new password or MFA setting signs everyone out. **Sign out everywhere** on the sign-out page ends every session. Rate limits stay in memory, so run exactly **one** worker. |
+| Sessions | In the database (8 hours): a restart or upgrade keeps you signed in; a new password, MFA setting or temporary-access mode invalidates existing sessions. **Sign out everywhere** on the sign-out page ends every session. Rate limits stay in memory, so run exactly **one** worker. |
 | Outbound network | Only when an operator presses **Sync now** or approves a CVE lookup |
 
 ## 2. Configuration
@@ -66,17 +67,21 @@ Set in `.env` (Compose reads it) or the process environment. Real environment va
 | `INSIGHT_SECURE_COOKIES` | no | `0` | Set `1` only behind HTTPS |
 | `INSIGHT_TRUSTED_PROXIES` | no | none | Reverse proxy address(es), IPs or CIDRs (`172.18.0.1`, `10.0.0.0/24`). See "Reverse proxy" below. `*` and malformed entries stop start-up. |
 | `INSIGHT_MFA` | no | `off` | `on` requires an authenticator-app code at sign-in (`make mfa-enable` pairs the app and sets it). Anything other than on/off stops start-up. |
+| `INSIGHT_DEV_NO_AUTH` | no | `off` | Temporary password-free operator access. Only `on` enables it; blank or `off` disables it. Invalid values or enabling it with MFA stop start-up. Anyone who can reach the site can enter and use its operator tools. See "Temporary password-free access" in §4. |
 | `INSIGHT_MAX_TLP` | no | `AMBER+STRICT` | Most restrictive label stored. Reports at or raised to a higher label (i.e. TLP:RED) are refused on upload. `RED` allows everything. |
 | `INSIGHT_RUN_JOBS` | no | `on` | Run scheduled syncs in this process ([ADR 0018](adr/0018-opt-in-scheduled-syncs.md)). Nothing is scheduled until you choose a schedule (§8). Set `off` in every process but one if you run several. Anything other than on/off stops start-up. |
 | `INSIGHT_THEME` | no | `system` | Colour theme for browsers that have not picked one: `system` (follow each device's light/dark setting), `light` or `dark`. Each browser can override it with the Light/Dark/System buttons in the workspace header (`make theme THEME=dark` sets it). Anything else stops start-up. |
 | `INSIGHT_PUBLIC_URL` | no | (none) | The address people open Insight at; alerts link to `/?report=<id>` ([docs/ALERTS.md](ALERTS.md)) |
 | `INSIGHT_SMTP_HOST`, `INSIGHT_SMTP_PORT`, `INSIGHT_SMTP_SECURITY`, `INSIGHT_SMTP_USERNAME`, `INSIGHT_SMTP_PASSWORD`, `INSIGHT_SMTP_FROM` | for e-mail alerts | port 587, `starttls` | The mail server for e-mail alerts. `SECURITY` is `starttls`, `tls` (port 465) or `none` (only for a relay on this host). Treat the password like `INSIGHT_PASSWORD` |
 | `INSIGHT_ALERT_PRIVATE_TARGETS` | no | `off` | `on` lets webhooks reach private networks (a chat or automation server on your LAN); link-local addresses stay blocked ([ADR 0022](adr/0022-alerts.md)) |
+| `INSIGHT_ABUSECH_AUTH_KEY` | no | (none) | Account key for the optional URLhaus, ThreatFox and MalwareBazaar Community APIs. Sent in the `Auth-Key` header to the enabled publisher API. |
+| `INSIGHT_NVD_API_KEY` | no | (none) | A free NIST NVD API key: CVE lookups at NVD every 0.7 s instead of every 6.5 s ([ADR 0023](adr/0023-automatic-cve-lookups.md)). Sent only in NVD's `apiKey` header, never logged |
 | `NICEGUI_STORAGE_PATH` | no | `/data/.nicegui` in the image | Must be writable |
+| `INSIGHT_OTX_API_KEY` | no | (none) | The operator's OTX subscription key. Set it on the host and switch on the AlienVault OTX source. |
 
 Never commit `.env`: a pre-commit hook and CI block it. Treat the file like the password it contains.
 
-Invalid values for `INSIGHT_TRUSTED_PROXIES`, `INSIGHT_MAX_TLP`, `INSIGHT_MFA`, `INSIGHT_RUN_JOBS`, `INSIGHT_THEME` or the alert settings stop start-up with a message naming the
+Invalid values for `INSIGHT_TRUSTED_PROXIES`, `INSIGHT_MAX_TLP`, `INSIGHT_MFA`, `INSIGHT_DEV_NO_AUTH`, `INSIGHT_RUN_JOBS`, `INSIGHT_THEME` or the alert settings stop start-up with a message naming the
 variable, rather than running with a setting that silently does nothing.
 
 ### Reverse proxy (public deployment)
@@ -144,6 +149,46 @@ Rotate at least every 90 days, when anyone who knew them leaves, and **immediate
 
 Everyone is signed out, and cookies issued with the old secret stop working.
 
+### Temporary password-free access
+
+`INSIGHT_DEV_NO_AUTH=on` deliberately lets anyone who can reach the site obtain the full browser operator
+session without a password. On a public domain, that means public access to stored reports, exports and
+editing tools. It is not a read-only public feed or a per-user account system. The setting is **off by
+default** and the workspace displays a notice while it is enabled.
+
+To enable it temporarily:
+
+1. Keep the existing `INSIGHT_PASSWORD` and `INSIGHT_SESSION_SECRET`; both remain required and must still
+   meet their length requirements. Do not remove them from the environment.
+2. Set `INSIGHT_DEV_NO_AUTH=on` in the deployment's environment. `INSIGHT_MFA` must be `off`: combining MFA
+   and password-free access is rejected at start-up. Record any previous MFA setting for restoration.
+3. Recreate the container with the changed environment: `docker compose up -d --no-deps insight`. A plain
+   `docker compose restart` does not apply changed Compose environment values. For local Python, restart
+   `insight serve` with the new environment.
+4. From a fresh browser, open the site and confirm it enters the workspace without a password. A visit to
+   `/login` creates a normal expiring session and redirects to `/`; it no longer returns a password form.
+
+The cookie, CSRF checks, same-origin checks, API-key rules and HTTPS/proxy settings remain in effect.
+An API request without a valid session or key still returns `401`, but anyone can obtain a session through
+`/login` while this mode is on. API-key TLP limits do not restrict the full operator session. Signing out,
+including **Sign out everywhere**, ends existing sessions but cannot keep visitors out while the mode is
+enabled: they can visit `/login` again. Password-form smoke scripts are for the normal protected mode;
+verify the open mode's redirect, session, CSRF and report access explicitly.
+
+To restore password protection:
+
+1. Set `INSIGHT_DEV_NO_AUTH=off` (or remove it) and restore the previous MFA setting, if any. Keep the
+   configured password and signing secret.
+2. Run `docker compose up -d --no-deps insight` again, or restart the local Python process with the changed
+   environment. The authentication-mode change invalidates sessions issued by the password-free mode.
+3. Confirm a fresh browser sees the password form, an old password-free session cannot read `/api/stats`,
+   and a request without any session or key returns `401`. Sign in with the retained password and, when
+   enabled, the authenticator code; then run the normal smoke check.
+
+Restoring sign-in stops future unauthenticated entry. It does not undo report changes or recall information
+that visitors viewed or exported during the open period. The [security record](SECURITY.md#temporary-public-operator-access)
+describes this tradeoff and the controls that remain.
+
 ### The API key
 `insight api-key status` shows the key ID, access, expiry and last use (in Docker: `docker compose exec insight
 insight api-key status`). Rotate before the expiry date with `insight api-key rotate`, then paste the new key
@@ -202,9 +247,10 @@ the GUI meets is [ADR 0017](adr/0017-readability-standard.md).
 `cli`, `connector:<source>` or `system`. Events from before schema revision `0005` have an empty actor.
 
 ### Sign-in throttling (expected behaviour)
-Each failed sign-in waits about 1 s, and sign-ins are checked one at a time. More than 30 failures in one
-minute returns HTTP 429 for the rest of that minute. A legitimate operator can always sign in again after the
-window; there is no lockout.
+Each failed sign-in waits about 1 s before it is answered. After 30 failures in one minute, wrong passwords
+get HTTP 429 for the rest of that minute (still after the delay), and the log says `Sign-in refused`. The right
+password always signs in, even during a flood of bad guesses ([ADR 0002](adr/0002-login-delay-not-lockout.md)):
+there is no lockout.
 
 ## 5. Backup and restore
 
@@ -315,9 +361,37 @@ daily sync stays on its hour. Changing **Start at** moves the schedules that are
 is tried again after 5, then 10 minutes, and each attempt appears in *Recent sync activity*. `GET /api/jobs`
 lists recent jobs.
 
-Every sync, by hand or by schedule, first asks the publisher whether the feed has changed (`If-None-Match`,
-`If-Modified-Since`) and compares the bytes with last time. An unchanged feed records `Unchanged since the last
+Public GET feeds use the publisher's cache validators (`If-None-Match`, `If-Modified-Since`). These feeds and the abuse.ch feeds compare the
+response bytes with the last successful import. An unchanged feed records `Unchanged since the last
 sync.` and nothing else. After an upgrade, every source is read once in full.
+
+**abuse.ch indicator feeds.** Get an abuse.ch Auth-Key from [the account portal](https://auth.abuse.ch/),
+set `INSIGHT_ABUSECH_AUTH_KEY` in the server environment and recreate the container. In **Sources → Indicator
+feeds**, switch on the feeds you use and choose **Sync now**. Each sync makes one request for recent metadata.
+URLhaus asks for 100 recent URL records, ThreatFox asks for the last day of indicators, and MalwareBazaar
+asks for the last hour of file metadata. Insight reads up to 100 entries per sync. Short feed windows can
+leave gaps when an instance is offline. The source record ID or SHA-256 connects subsequent revisions.
+Reported network indicators are stored in defanged form. Publisher record links are for manual reference.
+
+Each feed starts off. The imported public indicator records are marked TLP:CLEAR, with publisher text and
+evidence withheld from exports. Check your abuse.ch access and sharing terms before enabling a schedule or
+redistributing data. Community access has fair-use limits, and commercial use may require a subscription.
+[URLhaus API](https://urlhaus-api.abuse.ch/) · [ThreatFox API](https://threatfox.abuse.ch/api/) ·
+[MalwareBazaar API](https://bazaar.abuse.ch/api/) · [abuse.ch terms](https://abuse.ch/terms-of-use/)
+
+**AlienVault Open Threat Exchange (OTX).** Set `INSIGHT_OTX_API_KEY` in the host environment (or Compose
+`.env`), restart Insight, then turn on **AlienVault Open Threat Exchange (OTX)** in Sources. **Sync now**
+requests the first 25 subscribed pulses. Insight imports only explicitly public pulses marked TLP:CLEAR
+or its former name, WHITE. Recent sync activity gives the numbers imported and skipped. A missing key,
+refused request or malformed response records an error. A valid empty page is a successful sync.
+
+Insight keeps each eligible pulse's ID, title, source link and supported indicator values from its first
+100 indicator entries. It leaves descriptions and reference articles at OTX. A pulse keeps the same ID
+across syncs, and changes to its imported content create a report revision. Unsubscribing or a subsequent
+change to private visibility leaves the previously imported public snapshot in the workspace. Source reuse
+is metadata-only. Review the terms for your intended use, including the non-commercial use condition for
+free access. [OTX DirectConnect and keys](https://otx.alienvault.com/api) ·
+[OTX end-user agreement](https://www.levelblue.com/legal/otx-eula-terms)
 
 **CVE lookups** (FIRST EPSS and NIST NVD) send only the CVE number. People start one with *Look up this CVE*
 after agreeing to the request. **Automatic lookups** ([ADR 0023](adr/0023-automatic-cve-lookups.md)) are off
@@ -344,11 +418,13 @@ pauses for an hour, then tries again by itself.
 | `Unchanged since the last sync.` (success) | The publisher's feed has not changed since the last successful sync | Nothing to do; nothing was re-imported. |
 | `ValueError: The CSAF index lists no advisories` / `None of the N newest CSAF advisories could be read` | CISA moved or changed its CSAF repository | Nothing was imported. Report it; the nightly live tests should also flag it. |
 | `OSError` / `ConnectError` | No network or DNS | Check host egress (an egress firewall is recommended) |
+| `TimeoutError: The download took longer than 120 seconds` | The publisher answered too slowly (every download has an overall limit, review L6) | Retry later; nothing was imported |
 | Lookup `429` / *Wait N more second(s)* | The provider's window is taken, possibly by Insight's own automatic lookups | Wait the seconds shown |
 | Lookup `502 … non-JSON` | Provider outage or HTML error page | Retry later |
 | Lookup job `NVD answered HTTP 403/404 (check INSIGHT_NVD_API_KEY)` | NVD refused the key (mistyped, revoked or expired) | Fix or remove `INSIGHT_NVD_API_KEY` and restart; jobs resume within an hour |
 | Lookup job `NVD answered HTTP 403` (no key hint) | NVD's rate limit without a key, often another tool on the same address | It retries by itself; a key avoids it |
 | Lookup job `… request failed: ConnectError` | No network or DNS | Check host egress; allow `services.nvd.nist.gov` and `api.first.org` |
+| Lookup job `Looked up N CVEs …; M could not be answered` / Sources tab *could not answer for M CVE(s)* | NVD refused those CVEs (for example a CVE number a report got wrong) | Nothing to do: each is tried again after 1 hour, then 2, 4 … up to 7 days, without holding up the rest |
 
 **CISA Security Advisories** (`cisa-csaf`) reads CISA's machine-readable CSAF 2.0 files from its GitHub
 repository (`raw.githubusercontent.com/cisagov/CSAF`): the `changes.csv` index of the OT (industrial control
@@ -392,7 +468,7 @@ uses the same host).
 | Industry threats still says `bundled copy` after a sync | The process was not restarted, or the file is invalid (logged as `insight.threat_library` warning) | `make restart`; if it persists, delete `/data/threat-library.json` and sync again |
 
 To go back to the bundled edition, delete `/data/threat-library.json` and restart. Moving to a newer ATT&CK or
-MISP release is a code change in an Insight release (`scripts/update_actors.py`, ADR 0024), never a setting.
+MISP release is a code change in an Insight release (`scripts/update_actors.py`, ADR 0025), never a setting.
 
 ## 9. Data handling
 
@@ -524,10 +600,11 @@ verify the signature (§6).
 - Extraction is deterministic regex plus validation (about 98% precision and recall on the labelled corpus).
   Known gaps:
   - a hash split evenly into two valid lengths stays two hashes;
-  - e-mail addresses, CIDR ranges and ATT&CK technique IDs are not extracted;
+  - CIDR ranges must start at a network boundary;
   - IPv6 zone IDs are dropped.
   See [EXTRACTION.md](EXTRACTION.md).
-- Documents ingested before 0.2.0 keep their `regex-v1` observations.
+- Stored reports keep their original observations. New reports and revisions use `regex-v5`, which also recognizes bracketed web schemes and word-form e-mail separators.
+  Look for the personal-data warning when reviewing an address or choosing indicators to share.
 - Feed summaries are capped at 500 characters (flagged as truncated).
 - IOC export:
   - at most 100,000 mentions per export (export in parts);

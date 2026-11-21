@@ -1,4 +1,4 @@
-"""Industry threat profiles and actor threat guides (TIP 2.10, ADR 0024), with the minimum of TIP 2.5 and 2.7.
+"""Industry threat profiles and actor threat guides (TIP 2.10, ADR 0025), with the minimum of TIP 2.5 and 2.7.
 
 * ``threat_actors``: actors the analyst created (never inferred), optionally linked to an ATT&CK group.
 * ``actor_documents``: reports the analyst linked to a group or actor.
@@ -9,8 +9,8 @@
 
 The ATT&CK groups themselves are not in the database: they come from the bundled or synced threat library.
 
-Revision ID: 0012
-Revises: 0011
+Revision ID: 0014
+Revises: 0013
 Create Date: 2026-11-21
 """
 
@@ -21,8 +21,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = '0012'
-down_revision: str | None = '0011'
+revision: str = '0014'
+down_revision: str | None = '0013'
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

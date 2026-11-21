@@ -1,4 +1,4 @@
-"""The industry threats tab (TIP 2.10, ADR 0024): pick an industry, see the ten groups that target it and why.
+"""The industry threats tab (TIP 2.10, ADR 0025): pick an industry, see the ten groups that target it and why.
 
 A group is listed only when a cited source says it targets the industry; each entry shows that evidence and
 the reasons for its place. Opening a group shows its threat guide (``threat_guide.py``). Nothing here is
