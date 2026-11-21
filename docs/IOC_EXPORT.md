@@ -33,7 +33,7 @@ Field-by-field reference: [API.md](API.md#ioc-export). Machine-readable schema:
 
 | Term | Meaning |
 | --- | --- |
-| **Indicator / IOC** | A CVE, URL, domain, IP address, or MD5/SHA1/SHA256/SHA512 hash found in a report. CVEs are vulnerabilities rather than IOCs in the strict sense; they are included so you can export them too. |
+| **Indicator / IOC** | A CVE, URL, domain, IP address, CIDR network range, or MD5/SHA1/SHA256/SHA512 hash found in a report. CVEs are vulnerabilities rather than IOCs in the strict sense; they are included so you can export them too. |
 | **Report** | A document in the inbox (pasted or synced). Indicators are extracted from the report **body**, not its title. |
 | **Mention** | One occurrence of an indicator in one report. An indicator mentioned three times in one report has three mentions. |
 | **Review status** | An analyst's verdict on **one mention**: `unreviewed`, `accepted` (the extraction is accurate) or `rejected` (wrong or not useful). Set with **Accept / Reject / Reset** in the report reader. |
@@ -78,7 +78,7 @@ insight export-iocs share.json --max-tlp GREEN --review-status accepted --defang
 ```
 
 ```text
-Exported 21 IOCs (35 mentions) from 1 report to iocs.json (TLP:AMBER). Handle the file according to that label.
+Exported 23 IOCs (37 mentions) from 1 report to iocs.json (TLP:AMBER). Handle the file according to that label.
 ```
 
 - **Database:** the command reads the same database as the server: `INSIGHT_DATABASE_URL`, or
@@ -102,7 +102,7 @@ All options. Option values are case-insensitive on the command line:
 
 | Option | Values | Default |
 | --- | --- | --- |
-| `--kind KIND` (repeatable) | `cve` `url` `domain` `ip` `md5` `sha1` `sha256` `sha512` | all |
+| `--kind KIND` (repeatable) | `cve` `url` `domain` `ip` `cidr` `md5` `sha1` `sha256` `sha512` | all |
 | `--review-status REVIEW` (repeatable) | `unreviewed` `accepted` `rejected`: the review state of each **mention** | `unreviewed` and `accepted` |
 | `--max-tlp LABEL` | `CLEAR` `GREEN` `AMBER` `AMBER+STRICT` `RED`: include reports at or below this label | no limit |
 | `--defang` | flag: defang values, titles and evidence | off |
@@ -263,10 +263,10 @@ Then one entry per indicator, sorted by type and then value. An excerpt:
   "flags": ["reserved-name"],
   "sources": [
     { "title": "Training scenario: edge appliance activity", "tlp": "CLEAR", "status": "reviewed",
-      "extractor_version": "regex-v2", "mentions": 1,
+      "extractor_version": "regex-v3", "mentions": 1,
       "evidence": "raining data, not real intelligence. An analyst observed 192.0.2.44 connecting to https://relay.example.org/beacon?case=Alpha. The bulletin mentions CVE-2024-3400 as a research reference, not evide" },
     { "title": "Training scenario: shared infrastructure pivot", "tlp": "GREEN", "status": "new",
-      "extractor_version": "regex-v2", "mentions": 1,
+      "extractor_version": "regex-v3", "mentions": 1,
       "evidence": "This is synthetic training data. The host relay.example.org and 192.0.2.44 appear in a second lab report. Their co-occurrence is a lead, not proof of" }
   ]
 }
@@ -292,7 +292,7 @@ How to read it:
   It is cut at fixed character positions, so it can start or end mid-word ("raining data…"). It can also contain
   other indicators and any other text that happened to be nearby. It is `null` when the export was made without
   evidence.
-- **`extractor_version`** names the extractor that produced the report's observations (`regex-v2` today).
+- **`extractor_version`** names the extractor that produced the report's observations (`regex-v3` adds CIDR ranges).
   Reports ingested before 0.2.0 say `regex-v1`, and their values can differ slightly in form.
 - **`first_ingested_at` / `last_ingested_at`** are when the oldest and newest source reports were **added to
   Insight**. They are not publication dates, and not dates the indicator was seen in the wild.
@@ -302,6 +302,8 @@ How to read it:
   (`GET /api/entities/{id}`, `GET /api/documents/{id}`), or export that report again with `--document`.
 - **Values are canonical:** defanged input is refanged, host names are lower-case, international names use
   punycode (`xn--…`), and IPv4-mapped IPv6 addresses become IPv4.
+  A network range has kind `cidr` and keeps its prefix length, for example `203.0.113.0/24`.
+  Use `--kind cidr` to export ranges. The blocklist excludes whole ranges.
 
 ## 6. TLP and sharing
 
@@ -420,7 +422,7 @@ mappings. Convert from an export **without** defanging:
 
 | Insight `kind` | STIX 2.1 |
 | --- | --- |
-| `ip` | `ipv4-addr` or `ipv6-addr` (a `:` in the value means IPv6) |
+| `ip`, `cidr` | `ipv4-addr` or `ipv6-addr` (a `:` in the value means IPv6) |
 | `domain` | `domain-name` |
 | `url` | `url` |
 | `md5`, `sha1`, `sha256`, `sha512` | `file` with `hashes` keys `MD5`, `SHA-1`, `SHA-256`, `SHA-512` |
@@ -444,7 +446,7 @@ mappings. Convert from an export **without** defanging:
 | ``Export failed: No database at …`` | The CLI is pointed at a database file that does not exist | Check `INSIGHT_DATABASE_URL` / `INSIGHT_DATA_DIR` and the directory you run it from |
 | ``Export failed: The database schema is not current; run `insight migrate` first.`` | The database is from an older release | Back up, then run `insight migrate` |
 | An indicator you expected is missing | It was rejected, it appears only in a superseded revision or in a title, its report is above `max_tlp`, or the extractor does not recognise it | Check those filters, and see the known gaps in [EXTRACTION.md](EXTRACTION.md) |
-| The same indicator appears twice in slightly different forms | Entries from the pre-0.2.0 extractor alongside current ones (compare `extractor_version`) | Expected in old workspaces; the `regex-v2` form is canonical |
+| The same indicator appears twice in slightly different forms | Entries from the pre-0.2.0 extractor alongside current ones (compare `extractor_version`) | Expected in old workspaces; use the `extractor_version` to identify how a value was recorded |
 
 ## 10. Format versioning
 

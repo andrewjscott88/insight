@@ -15,6 +15,7 @@ from nicegui import ui
 from pydantic import ValidationError
 
 from .. import services
+from ..extraction import EVIDENCE_CONTEXT
 from ..schemas import DOCUMENT_STATUSES, NoteInput
 from .enrichment import open_enrichment_dialog
 from .messages import tell
@@ -131,7 +132,17 @@ def _render_observation(
             ui.badge(obs['kind']).props('outline')
             ui.label(obs['value']).classes('font-mono break-value flex-1 min-w-0')
         flag_badges(obs['kind'], obs['value'])
-        ui.label(obs['evidence']).classes('evidence text-sm w-full')
+        if obs['kind'] == 'cidr':
+            # The excerpt starts at most EVIDENCE_CONTEXT characters before the exact source span.
+            start = min(obs['start_offset'], EVIDENCE_CONTEXT)
+            end = start + obs['end_offset'] - obs['start_offset']
+            evidence = obs['evidence']
+            with ui.element('div').classes('evidence text-sm w-full'):
+                ui.label(evidence[:start]).tag = 'span'
+                ui.label(evidence[start:end]).tag = 'mark'
+                ui.label(evidence[end:]).tag = 'span'
+        else:
+            ui.label(obs['evidence']).classes('evidence text-sm w-full')
         ui.label(
             f'Position {obs["start_offset"]}–{obs["end_offset"]} in the text · {obs["review_status"]}'
         ).classes('muted text-sm')

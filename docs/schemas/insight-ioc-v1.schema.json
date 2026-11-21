@@ -67,7 +67,7 @@
       "description": "Traffic Light Protocol 2.0 label, least to most restrictive."
     },
     "kind": {
-      "enum": ["cve", "url", "sha512", "sha256", "sha1", "md5", "ip", "domain"]
+      "enum": ["cve", "url", "sha512", "sha256", "sha1", "md5", "ip", "domain", "cidr"]
     },
     "review_status": {
       "enum": ["unreviewed", "accepted", "rejected"],

@@ -11,6 +11,13 @@ fields are additive. TLP-limited API keys may now read cached CVE scores (`GET /
 CVEs in reports they can see; starting a lookup stays refused to them. The new password-free access
 (`INSIGHT_DEV_NO_AUTH`) is off unless you set it to `on`.
 
+### Network ranges in reports
+
+- Insight now recognizes IPv4 and IPv6 network ranges (CIDR). Analysts can review a whole range,
+  find other reports that mention it, and include it in indicator exports. The original spelling stays in
+  the evidence. New reports and revisions use `regex-v3`. Previously stored observations keep their
+  original extraction version and review decisions.
+
 ### Fixed: field labels no longer overlap their examples
 - An empty field showed its label and its example on top of each other (for example "Watch term" over
   "e.g. Palo Alto, VPN, identity"). The example now appears only once the label has moved up, as the

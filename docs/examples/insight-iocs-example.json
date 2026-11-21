@@ -19,7 +19,8 @@
       "sha1",
       "md5",
       "ip",
-      "domain"
+      "domain",
+      "cidr"
     ],
     "review_statuses": [
       "unreviewed",
@@ -73,7 +74,7 @@
           "status": "new",
           "created_at": "2026-01-15T09:10:00+00:00",
           "is_current": true,
-          "extractor_version": "regex-v2",
+          "extractor_version": "regex-v3",
           "mentions": 1,
           "evidence": "A256: a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3. The text includes CVE-2023-34362 as background reading. A hash appearing in a report does not establish that the file is m"
         }
@@ -103,7 +104,7 @@
           "status": "reviewed",
           "created_at": "2026-01-15T09:00:00+00:00",
           "is_current": true,
-          "extractor_version": "regex-v2",
+          "extractor_version": "regex-v3",
           "mentions": 1,
           "evidence": "2.0.2.44 connecting to https://relay.example.org/beacon?case=Alpha. The bulletin mentions CVE-2024-3400 as a research reference, not evidence that the lab appliance was exploited. Validate the "
         }
@@ -136,7 +137,7 @@
           "status": "reviewed",
           "created_at": "2026-01-15T09:00:00+00:00",
           "is_current": true,
-          "extractor_version": "regex-v2",
+          "extractor_version": "regex-v3",
           "mentions": 1,
           "evidence": "raining data, not real intelligence. An analyst observed 192.0.2.44 connecting to https://relay.example.org/beacon?case=Alpha. The bulletin mentions CVE-2024-3400 as a research reference, not evide"
         },
@@ -149,7 +150,7 @@
           "status": "new",
           "created_at": "2026-01-15T09:05:00+00:00",
           "is_current": true,
-          "extractor_version": "regex-v2",
+          "extractor_version": "regex-v3",
           "mentions": 1,
           "evidence": "This is synthetic training data. The host relay.example.org and 192.0.2.44 appear in a second lab report. Their co-occurrence is a lead, not proof of"
         }
@@ -182,7 +183,7 @@
           "status": "reviewed",
           "created_at": "2026-01-15T09:00:00+00:00",
           "is_current": true,
-          "extractor_version": "regex-v2",
+          "extractor_version": "regex-v3",
           "mentions": 1,
           "evidence": "This is synthetic training data, not real intelligence. An analyst observed 192.0.2.44 connecting to https://relay.example.org/beacon?case=Alpha. The bulletin mentions CVE-2024"
         },
@@ -195,7 +196,7 @@
           "status": "new",
           "created_at": "2026-01-15T09:05:00+00:00",
           "is_current": true,
-          "extractor_version": "regex-v2",
+          "extractor_version": "regex-v3",
           "mentions": 1,
           "evidence": "This is synthetic training data. The host relay.example.org and 192.0.2.44 appear in a second lab report. Their co-occurrence is a lead, not proof of attribution. A"
         }
@@ -225,7 +226,7 @@
           "status": "new",
           "created_at": "2026-01-15T09:10:00+00:00",
           "is_current": true,
-          "extractor_version": "regex-v2",
+          "extractor_version": "regex-v3",
           "mentions": 1,
           "evidence": "This is synthetic training data. Sample SHA256: a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3. The text includes CVE-2023-34362 as background reading. A hash appearing in a report doe"
         }
@@ -257,7 +258,7 @@
           "status": "reviewed",
           "created_at": "2026-01-15T09:00:00+00:00",
           "is_current": true,
-          "extractor_version": "regex-v2",
+          "extractor_version": "regex-v3",
           "mentions": 1,
           "evidence": "thetic training data, not real intelligence. An analyst observed 192.0.2.44 connecting to https://relay.example.org/beacon?case=Alpha. The bulletin mentions CVE-2024-3400 as a research reference, not evidence that the lab a"
         }

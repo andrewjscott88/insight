@@ -539,10 +539,10 @@ verify the signature (§6).
 - Extraction is deterministic regex plus validation (about 98% precision and recall on the labelled corpus).
   Known gaps:
   - a hash split evenly into two valid lengths stays two hashes;
-  - e-mail addresses, CIDR ranges and ATT&CK technique IDs are not extracted;
+  - e-mail addresses are skipped, and CIDR ranges must start at a network boundary;
   - IPv6 zone IDs are dropped.
   See [EXTRACTION.md](EXTRACTION.md).
-- Documents ingested before 0.2.0 keep their `regex-v1` observations.
+- Stored reports keep their original observations. Network ranges are extracted on new reports and revisions with `regex-v3`.
 - Feed summaries are capped at 500 characters (flagged as truncated).
 - IOC export:
   - at most 100,000 mentions per export (export in parts);

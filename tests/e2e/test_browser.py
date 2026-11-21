@@ -182,7 +182,7 @@ def test_full_length_notional_report(context: Any) -> None:
     page.get_by_label('Source content').fill(text)
     page.get_by_role('button', name='Ingest document').click()
     expect(page.locator('.document-reader h2', has_text=title)).to_be_visible()
-    expect(page.get_by_text('Extracted observations (35)')).to_be_visible()
+    expect(page.get_by_text('Extracted observations (37)')).to_be_visible()
     assert page.locator('script[src*="cdn-update"]').count() == 0
     assert not [url for url in requests if 'example.com' in url or 'example.net' in url]
 
@@ -203,7 +203,7 @@ def test_second_notional_report_tlp_and_javascript_offsets(context: Any) -> None
     page.get_by_role('button', name='Ingest document').click()
     expect(page.locator('.document-reader h2', has_text=title)).to_be_visible()
     expect(page.get_by_text('Handling label raised from TLP:AMBER to TLP:RED')).to_be_visible()
-    expect(page.get_by_text('Extracted observations (52)')).to_be_visible()
+    expect(page.get_by_text('Extracted observations (54)')).to_be_visible()
     doc_id = page.locator('a', has_text='Download this report as JSON').get_attribute('href').split('/')[3]
     # Array.from() iterates code points (Python semantics); String.slice() uses UTF-16 code units.
     check = page.evaluate(

@@ -63,7 +63,8 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
 - [ ] **TIP 1.5 abuse.ch connectors:** URLhaus, ThreatFox and MalwareBazaar (indicators and metadata only, never
       samples; keys from the environment).
 - [ ] **TIP 1.6 AlienVault OTX pulses** with the operator's own key.
-- [ ] **Review D2 E-mail and CIDR indicator kinds,** with e-mail addresses flagged as personal data.
+- [x] **Review D2 CIDR indicator kind:** IPv4 and IPv6 network ranges in report review, search and IOC export.
+- [ ] **Review D2 E-mail indicator kind,** with e-mail addresses flagged as personal data.
 - [ ] [#9](https://github.com/andrewjscott88/insight/issues/9) **TIP 1.7 Extraction quality (M1),** ongoing: a
       larger labelled corpus, the defanged-indicator gaps in [docs/EXTRACTION.md](docs/EXTRACTION.md), a
       ratcheted benchmark.
