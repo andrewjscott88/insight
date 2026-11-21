@@ -45,9 +45,9 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
 - [x] **Review B2 Throttles into one place** ([ADR 0023](docs/adr/0023-automatic-cve-lookups.md)): one throttle
       per provider in `insight.lookups`, shared by the API, the workspace and the automatic lookups. (The sync
       lock already lived in one place.)
-- [ ] **TIP 1.1 Complete KEV fields:** ~~known ransomware use, vulnerability name, notes and CWEs~~ (done with TIP
-      1.3, [ADR 0024](docs/adr/0024-prioritised-cves.md)); still to do: a documented inbox policy for older KEV
-      entries.
+- [x] **TIP 1.1 Complete KEV fields:** known ransomware use, vulnerability name, notes and CWEs (with TIP
+      1.3, [ADR 0024](docs/adr/0024-prioritised-cves.md)), and a documented inbox policy for older entries
+      ([RUNBOOK section 8](docs/RUNBOOK.md#8-sources-enrichment-and-their-failures)).
 - [x] **TIP 1.2 Automatic NVD and EPSS lookups** ([ADR 0023](docs/adr/0023-automatic-cve-lookups.md)): off until
       switched on per provider; CVEs from TLP:CLEAR and GREEN reports, newest first, through the job queue;
       optional `INSIGHT_NVD_API_KEY`. With review C2: a parsed score per CVE in the reader, the dialog and

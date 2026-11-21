@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Changed: the KEV inbox policy (TIP 1.1)
+
+- After the first sync, every CVE that CISA adds to KEV becomes an inbox report, even when more than 100
+  arrived between syncs or the entry carries an older date (up to 500 per sync). The first sync still makes
+  reports for only the newest 100 entries. Older entries stay catalog-only and still mark their CVEs in the
+  reader, the brief and the Prioritised CVEs tab. The policy is written down in RUNBOOK section 8.
+
 ## 0.7.0 - 2026-11-21
 
 ### STIX 2.1 export
