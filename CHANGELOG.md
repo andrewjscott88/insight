@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Local PDF advisories
+
+- Import text from a local PDF into the normal report review workflow using the workspace, CLI or API.
+  The provenance panel and report JSON include the original file’s SHA-256, size and page count.
+  Migration `0016` adds the attachment metadata table. [Usage and limits](docs/API.md#post-apidocumentspdf)
+
 ### Detection rule files
 
 - Attach YARA or Sigma rules to reports, actors, techniques, CVEs and malware families. Download the original

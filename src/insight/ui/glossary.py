@@ -21,8 +21,9 @@ GLOSSARY: Final[tuple[tuple[str, str], ...]] = (
     ),
     (
         'Ingest',
-        'To add a report to Insight. You paste its text and Insight keeps a copy.',
+        'To add a report to Insight. You can paste its text or import a file.',
     ),
+    ('PDF', 'Portable Document Format. A file that keeps the layout of a page.'),
     (
         'Indicator',
         'A clue that can point to an attack, such as a web address, an IP address or a file fingerprint.',

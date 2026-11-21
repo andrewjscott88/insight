@@ -215,6 +215,7 @@ def _register_threat_routes(app: FastAPI, sessions: SessionFactory, require_auth
                         'title': d.title,
                         'tlp': d.tlp,
                         'note': link.note,
+                        'link_tlp': link.tlp,
                         'linked_at': link.created_at,
                     }
                     for d, link in linked
@@ -226,8 +227,10 @@ def _register_threat_routes(app: FastAPI, sessions: SessionFactory, require_auth
         """Link a report to the group (your decision, never inferred). Audited as ``actor.link``."""
         try:
             with acting(sessions, request) as db:
-                row = services.link_report(db, ref, payload, max_tlp=reader_limit(request))
+                row = services.link_report(db, ref, payload, max_tlp=write_limit(app, request))
                 return {'ref': row.group_ref, 'document_id': row.document_id, 'note': row.note}
+        except services.TlpNotPermitted as exc:
+            raise HTTPException(403, str(exc)) from exc
         except LookupError as exc:
             raise HTTPException(404, str(exc)) from exc
 
