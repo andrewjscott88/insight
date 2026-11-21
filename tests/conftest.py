@@ -55,6 +55,15 @@ hypothesis_settings.load_profile(os.environ.get('HYPOTHESIS_PROFILE', 'default')
 
 
 @pytest.fixture(autouse=True)
+def _fresh_lookup_throttles() -> None:
+    """Each test starts with every provider's lookup window open (the throttles are process-wide, B2)."""
+    from insight.lookups import THROTTLES
+
+    for throttle in THROTTLES.values():
+        throttle.reset()
+
+
+@pytest.fixture(autouse=True)
 def _isolated_insight_logger(monkeypatch: pytest.MonkeyPatch) -> None:
     """Restore the process-wide ``insight`` logger after every test, wherever the test is.
 

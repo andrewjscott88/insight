@@ -1,20 +1,45 @@
-"""Explicit, consent-gated CVE enrichment (FIRST EPSS / NIST NVD)."""
+"""Explicit, consent-gated CVE lookups (FIRST EPSS / NIST NVD), with readable scores (review C2).
+
+The lookup goes through ``insight.lookups.request_lookup``, so it shares one throttle per provider with the
+API and the automatic lookups (review B2).
+"""
 
 from __future__ import annotations
 
 import json
-import time
-from typing import Final
 
 from nicegui import ui
 
 from .. import services
-from ..connectors import enrich_cve
+from ..cve_scores import EPSS_CAVEAT, CveScores, describe_epss, describe_nvd
+from ..lookups import LookupThrottled, request_lookup
 from .messages import problem_area
 from .typography import heading
 from .workspace import Workspace
 
-ENRICHMENT_INTERVAL_SECONDS: Final = 6.5
+
+def render_scores(found: CveScores) -> None:
+    """What NVD and EPSS say about one CVE, in plain words."""
+    if found.nvd is not None:
+        ui.label(describe_nvd(found.nvd)).classes('prose')
+        if found.nvd.description:
+            ui.label(found.nvd.description).classes('muted text-sm prose')
+        if found.nvd.cwes:
+            ui.label('Weakness types: ' + ', '.join(found.nvd.cwes)).classes('muted text-sm')
+    elif found.nvd_checked_at:
+        ui.label('NIST NVD has no record of this CVE yet.').classes('muted text-sm')
+    if found.epss is not None:
+        ui.label(describe_epss(found.epss)).classes('prose')
+        ui.label(EPSS_CAVEAT).classes('muted text-sm prose')
+    elif found.epss_checked_at:
+        ui.label('FIRST has no EPSS score for this CVE yet.').classes('muted text-sm')
+    checked = ', '.join(
+        f'{name} {at[:10]}'
+        for name, at in (('NVD', found.nvd_checked_at), ('EPSS', found.epss_checked_at))
+        if at
+    )
+    if checked:
+        ui.label(f'Checked: {checked}').classes('muted text-sm')
 
 
 def open_enrichment_dialog(ws: Workspace, cve: str) -> None:
@@ -39,40 +64,42 @@ def open_enrichment_dialog(ws: Workspace, cve: str) -> None:
         )
         consent = ui.checkbox(f'I approve sending {cve} to the selected provider.')
         provider.on_value_change(lambda _: consent.set_value(False))
-        result = ui.column().classes('w-full')
-        with ws.read() as db:
-            cached = [(r.provider, r.fetched_at, r.payload) for r in services.cached_enrichments(db, cve)]
-        with result:
-            for name, fetched_at, payload in cached:
-                with ui.expansion(f'Cached {name.upper()} · {fetched_at[:16]}').classes('w-full'):
-                    ui.label(payload).classes('source-body text-sm')
+        result = ui.column().classes('w-full gap-1')
+
+        def show() -> None:
+            with ws.read() as db:
+                found = services.cve_scores(db, [cve]).get(cve)
+                cached = [(r.provider, r.fetched_at, r.payload) for r in services.cached_enrichments(db, cve)]
+            result.clear()
+            with result:
+                if found is not None and found.checked:
+                    render_scores(found)
+                for name, fetched_at, payload in cached:
+                    with ui.expansion(f'What {name.upper()} sent · {fetched_at[:16]}').classes('w-full'):
+                        ui.label(json.dumps(json.loads(payload), indent=2)).classes(
+                            'source-body w-full text-sm font-mono'
+                        )
 
         async def lookup() -> None:
             if not ws.authorized() or not consent.value:
                 return
             problem.set_text('')
-            if time.monotonic() - ws.app.state.last_lookup < ENRICHMENT_INTERVAL_SECONDS:
-                problem.set_text('Please wait a few seconds between lookups (at least 6.5 seconds).')
-                return
-            ws.app.state.last_lookup = time.monotonic()
             selected_provider = str(provider.value)
             consent.set_value(False)
             fetch.disable()
             try:
-                payload = await enrich_cve(ws.sessions, cve, selected_provider)
+                await request_lookup(ws.sessions, cve, selected_provider)
                 if ws.authorized():
-                    result.clear()
-                    with result:
-                        heading('Provider response (just now)', 3)
-                        ui.label(json.dumps(payload, indent=2)).classes(
-                            'source-body w-full text-sm font-mono'
-                        )
+                    show()
+            except LookupThrottled as exc:
+                problem.set_text(str(exc))
             except Exception as exc:  # Surface any failure to the analyst.
                 if ws.authorized():
                     problem.set_text(f'The lookup did not work. Lookup failed: {exc}')
             finally:
                 fetch.set_enabled(bool(consent.value))
 
+        show()
         problem = problem_area()
         with ui.row():
             ui.button('Close', on_click=dialog.close).props('flat')

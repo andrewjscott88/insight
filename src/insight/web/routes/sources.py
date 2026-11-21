@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import time
+from dataclasses import asdict
 from datetime import UTC, datetime
 from typing import Annotated, Any, Final
 
@@ -13,19 +13,19 @@ from ...connectors import (
     ProviderError,
     SourceSwitchedOff,
     SourceSyncError,
-    enrich_cve,
     sync_all,
     sync_source,
-    validate_enrichment,
 )
+from ...lookups import NVD_INTERVAL, LookupThrottled, request_lookup
 from ...models import SessionFactory
 from ...schemas import (
     ScheduleInput,
 )
 from ...source_registry import SOURCES, in_use
-from ..auth import AuthDependency, acting
+from ..auth import AuthDependency, acting, reader_limit
 
-ENRICHMENT_INTERVAL_SECONDS: Final = 6.5
+#: The NVD window without an API key (kept for scripts that read it; ``insight.lookups`` owns the throttles).
+ENRICHMENT_INTERVAL_SECONDS: Final = NVD_INTERVAL
 
 
 def _register_source_routes(app: FastAPI, sessions: SessionFactory, require_auth: AuthDependency) -> None:
@@ -141,19 +141,26 @@ def _register_enrichment_route(app: FastAPI, sessions: SessionFactory, require_a
 
     @app.post('/api/enrichment/{provider}/{cve}', dependencies=[Depends(require_auth)])
     async def enrich(provider: str, cve: str) -> dict[str, Any]:
+        """Look ``cve`` up now. Invalid input and CVEs no report mentions are refused before they use the
+        provider's throttle window, which the workspace and automatic lookups share (review B2)."""
         try:
-            # Reject bad input and CVEs no report mentions before they consume the throttle window.
-            await validate_enrichment(sessions, cve, provider)
+            return await request_lookup(sessions, cve, provider)
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
-        if time.monotonic() - app.state.last_lookup < ENRICHMENT_INTERVAL_SECONDS:
-            raise HTTPException(429, 'Wait at least 6.5 seconds between enrichment requests')
-        app.state.last_lookup = time.monotonic()
-        try:
-            return await enrich_cve(sessions, cve, provider)
-        except ValueError as exc:
-            raise HTTPException(422, str(exc)) from exc
+        except LookupThrottled as exc:
+            raise HTTPException(429, str(exc), headers={'Retry-After': str(max(1, round(exc.wait)))}) from exc
         except ProviderError as exc:
             raise HTTPException(502, str(exc)) from exc
         except Exception as exc:
             raise HTTPException(502, 'Provider request failed; retry later') from exc
+
+    @app.get('/api/enrichment/{cve}', dependencies=[Depends(require_auth)])
+    def cached_scores(request: Request, cve: str) -> dict[str, Any]:
+        """The cached NVD and EPSS scores of ``cve`` (never contacts a provider). ``404`` unless a report the
+        caller may see mentions it."""
+        try:
+            with sessions() as db:
+                found = services.cve_score_view(db, cve, max_tlp=reader_limit(request))
+        except LookupError as exc:
+            raise HTTPException(404, 'No report you can see mentions this CVE') from exc
+        return asdict(found)

@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from insight import connectors
+from insight.lookups import THROTTLES
 from insight.models import Document, KEVRecord
 
 KEV = json.dumps(
@@ -154,11 +155,15 @@ def test_enrichment_success_and_throttle(
     app: FastAPI, authed: TestClient, monkeypatch: pytest.MonkeyPatch, with_cve: str
 ) -> None:
     monkeypatch.setattr(connectors, 'download', fake_download(b'{"data": []}'))
-    response = authed.post(f'/api/enrichment/epss/{with_cve}')
+    response = authed.post(f'/api/enrichment/nvd/{with_cve}')
     assert (response.status_code, response.json()) == (200, {'data': []})
     throttled = authed.post(f'/api/enrichment/nvd/{with_cve}')
     assert throttled.status_code == 429
-    app.state.last_lookup = 0.0
+    assert throttled.headers['retry-after'] in {'6', '7'}
+    assert 'before the next lookup at NIST NVD' in throttled.json()['detail']
+    # Each provider has its own window: EPSS answers straight away.
+    assert authed.post(f'/api/enrichment/epss/{with_cve}').status_code == 200
+    THROTTLES['nvd'].reset()
     assert authed.post(f'/api/enrichment/nvd/{with_cve}').status_code == 200
 
 
@@ -170,7 +175,7 @@ def test_invalid_requests_are_422_and_do_not_consume_the_throttle(
 ) -> None:
     # Regression: invalid input used to reset the 6.5 s window and returned 429 on a valid retry.
     assert authed.post(f'/api/enrichment/{provider}/{cve}').status_code == 422
-    assert app.state.last_lookup == 0.0
+    assert all(t.wait_time() == 0 for t in THROTTLES.values())
 
 
 def test_unknown_cve_is_422_and_does_not_consume_the_throttle(
@@ -181,7 +186,7 @@ def test_unknown_cve_is_422_and_does_not_consume_the_throttle(
     response = authed.post('/api/enrichment/epss/CVE-2024-99999')
     assert response.status_code == 422
     assert 'Import a report' in response.json()['detail']
-    assert app.state.last_lookup == 0.0
+    assert all(t.wait_time() == 0 for t in THROTTLES.values())
     monkeypatch.setattr(connectors, 'download', fake_download(b'{"data": []}'))
     assert authed.post(f'/api/enrichment/epss/{with_cve}').status_code == 200
 

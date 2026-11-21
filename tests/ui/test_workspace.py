@@ -318,7 +318,8 @@ async def test_enrichment_dialog_requires_consent(
     assert not fetch.elements.pop().enabled  # disabled until the analyst consents
     user.find(kind=ui.checkbox).click()
     user.find(kind=ui.button, content='Fetch from provider').click()
-    await user.should_see('Provider response')
+    await user.should_see('EPSS 97% chance of exploitation attempts within 30 days (FIRST)')
+    await user.should_see('What EPSS sent')
     assert calls == [{'cve': 'CVE-2024-3400'}]
 
 

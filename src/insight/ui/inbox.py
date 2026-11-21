@@ -7,6 +7,7 @@ from typing import Any
 from nicegui import ui
 
 from .. import services
+from ..cve_scores import summary
 from ..demo import seed
 from ..schemas import DOCUMENT_STATUSES, TLP_LEVELS
 from .messages import tell
@@ -102,6 +103,8 @@ def build_inbox(ws: Workspace) -> None:
             if data:
                 data['verdicts'] = load_verdicts(db, (o['entity_id'] for o in data['observations']))
                 data['techniques'] = services.document_techniques(db, data['id'])
+                cves = [o['value'] for o in data['observations'] if o['kind'] == 'cve']
+                data['cve_scores'] = {c: summary(s) for c, s in services.cve_scores(db, cves).items()}
         if data:
             render_report(ws, data, actions)
         else:
