@@ -11,7 +11,7 @@ from typing import Any
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
-from ..extraction import Mention, extract
+from ..extraction import EXTRACTOR_VERSION, Mention, extract
 from ..models import (
     Document,
     Entity,
@@ -35,6 +35,14 @@ class SourceRef:
 
     source_key: str
     external_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class StructuredObservations:
+    """Validated values and evidence spans supplied by a structured-format parser."""
+
+    version: str
+    mentions: list[Mention]
 
 
 def fingerprint(item: DocumentInput) -> str:
@@ -88,12 +96,15 @@ def _create_document(
     item: DocumentInput,
     fp: str,
     ref: SourceRef | None,
-    mentions: list[Mention],
+    observations: StructuredObservations,
     *,
     truncated: bool = False,
+    document_id: str | None = None,
 ) -> Document:
     doc = Document(
         **item.model_dump(),
+        id=document_id or uid(),
+        extractor_version=observations.version,
         fingerprint=fp,
         content_hash=hashlib.sha256(item.body.encode()).hexdigest(),
         source_key=ref.source_key if ref else None,
@@ -102,6 +113,7 @@ def _create_document(
         truncated=truncated,
     )
     db.add(doc)
+    mentions = observations.mentions
     entities = _resolve_entities(db, {(m.kind, m.value) for m in mentions})
     db.add_all(
         Observation(
@@ -124,6 +136,8 @@ def ingest(
     ref: SourceRef | None = None,
     truncated: bool = False,
     max_tlp: str | None = None,
+    structured: StructuredObservations | None = None,
+    initial_document_id: str | None = None,
 ) -> tuple[Document, bool]:
     """Store ``item`` with its extracted observations. Returns ``(document, created)``.
 
@@ -141,6 +155,9 @@ def ingest(
     ``max_tlp`` (manual submissions: ``INSIGHT_MAX_TLP``) refuses the report with :class:`TlpNotPermitted`
     when its label *after* raising is more restrictive, so a marking in the text cannot slip past the limit.
     Nothing is stored and no exact duplicate is returned.
+
+    A structured importer can supply its validated, typed observations and the initial source document ID.
+    Later revisions get new IDs as usual. Evidence offsets must refer to the supplied document body.
     """
     submitted_tlp = item.tlp
     item = apply_tlp_policy(item)
@@ -151,7 +168,10 @@ def ingest(
     if ref is None:
         if existing is not None:
             return existing, False
-        doc = _create_document(db, item, fp, None, extract(item.body), truncated=truncated)
+        observations = structured or StructuredObservations(EXTRACTOR_VERSION, extract(item.body))
+        doc = _create_document(
+            db, item, fp, None, observations, truncated=truncated, document_id=initial_document_id
+        )
         _audit_tlp_raise(db, doc, submitted_tlp)
         db.flush()
         record_report_techniques(db, doc)
@@ -178,12 +198,20 @@ def ingest(
         db.flush()
         return existing, False
 
-    mentions = extract(item.body)  # May raise ValueError: do it before changing any existing revision.
+    observations = structured or StructuredObservations(EXTRACTOR_VERSION, extract(item.body))
     if current is not None:
         # Flush the demotion first so the partial unique index never sees two current revisions.
         current.is_current = False
         db.flush()
-    doc = _create_document(db, item, fp, ref, mentions, truncated=truncated)
+    doc = _create_document(
+        db,
+        item,
+        fp,
+        ref,
+        observations,
+        truncated=truncated,
+        document_id=initial_document_id if current is None else None,
+    )
     _audit_tlp_raise(db, doc, submitted_tlp)
     if current is not None:
         doc.supersedes_id = current.id
