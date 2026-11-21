@@ -52,7 +52,7 @@ def build_landscape(ws: Workspace) -> None:
             ui.label(
                 f'{count_of(threat.change.current, "report")} from {count_of(threat.sources, "source")}'
                 + (f', {usual}' if usual else '')
-            ).classes('muted text-sm')
+            ).classes('muted text-sm prose')
             ui.label(threat.what).classes('prose')
             ui.label('Why it matters: ' + threat.impact).classes('prose')
             ui.label('What to check: ' + threat.check).classes('prose')
@@ -72,7 +72,7 @@ def build_landscape(ws: Workspace) -> None:
                 + f' · {LABELS[tactic.change.label]}'
             ).classes('prose')
             ui.label(' · '.join(f'{t} {name} ({n})' for t, name, n in tactic.techniques)).classes(
-                'muted text-sm break-value'
+                'muted text-sm prose break-value'
             )
 
     def section(part: BriefSection) -> None:
