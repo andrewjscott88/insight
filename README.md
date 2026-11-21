@@ -167,7 +167,7 @@ Open http://127.0.0.1:8080. Default local data lives in `./data/insight.db`. Use
 | `insight export-iocs FILE` | Write a JSON IOC export (never overwrites; owner-only file). Options and recipes: [docs/IOC_EXPORT.md](docs/IOC_EXPORT.md#2-quick-start) |
 | `insight attack-backfill` | Tag ATT&CK technique IDs in reports stored before 0.7.0 (safe to rerun) |
 | `insight industries` · `insight threat-profile INDUSTRY` | The industries, and the top ten groups for one with their evidence ([docs/THREAT_GUIDES.md](docs/THREAT_GUIDES.md#command-line)) |
-| `insight threat-guide REF FILE` | Write a group's threat guide (`--format md\|json\|navigator\|sweep-csv\|sweep-json`, `--max-tlp`; never overwrites; owner-only file) |
+| `insight threat-guide REF FILE` | Write a group's threat guide (`--format md\|json\|navigator\|sweep-csv\|sweep-json`, `--max-tlp`, `--include-named` to sweep reports that only name the group; never overwrites; owner-only file) |
 | `insight rule-add FILE --kind sigma --link G0016` | Store a YARA or Sigma rule (text only, never run) and link it to groups or techniques |
 | `insight threat-library-sync` | Fetch the full pinned threat-group library (MITRE ATT&CK and MISP galaxy; checked by SHA-256) |
 | `insight mfa setup` | Pair an authenticator app for sign-in codes (shows a secret, then confirms one code). Also `status`, `reset`. MFA itself is **off by default** and switched with `INSIGHT_MFA=on`; with Docker, `make mfa-enable` / `make mfa-disable` do both steps |

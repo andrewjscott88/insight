@@ -60,8 +60,12 @@ def _sweep(guide: ThreatGuide) -> None:
     sweep = guide.data.sweep
     heading(f'Indicators to search for ({len(sweep)})', 4)
     ui.label(
-        'Accepted indicators from the reports above. Search your logs for them. They show where to look, '
-        'not who did it.'
+        'Accepted indicators from the reports you linked to this group. Search your logs for them. They show '
+        'where to look, not who did it. Reports that only name the group are left out; the second sweep list '
+        'download includes them.'
+        if guide.data.sweep_linked_only
+        else 'Accepted indicators from the reports above, including reports that only name the group. Search '
+        'your logs for them. They show where to look, not who did it.'
     ).classes('muted prose')
     for entry in sweep[:SHOWN_SWEEP]:
         ui.label(f'{entry.kind} · {entry.value} · seen {entry.last_seen[:10]}').classes(

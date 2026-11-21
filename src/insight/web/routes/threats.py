@@ -25,7 +25,13 @@ from ..auth import AuthDependency, acting, reader_limit
 Top = Annotated[int, Query(ge=1, le=10, description='How many groups to list (at most 10)')]
 Days = Annotated[int, Query(ge=1, le=3650, description='Count reports naming each group in the last N days')]
 ExportTlp = Annotated[TLP | None, Query(description='Leave out anything above this label')]
-LinkedOnly = Annotated[bool, Query(description='Only reports linked to the group, not ones that name it')]
+LinkedOnly = Annotated[
+    bool,
+    Query(
+        description='Sweep list indicators only from reports linked to the group (default). '
+        'false also takes them from reports that only name it; such reports are listed either way'
+    ),
+]
 
 
 def write_limit(app: FastAPI, request: Request) -> str | None:
@@ -274,7 +280,7 @@ def _register_threat_routes(app: FastAPI, sessions: SessionFactory, require_auth
         ref: str,
         format: Literal['json', 'md'] = 'json',
         max_tlp: ExportTlp = None,
-        linked_only: LinkedOnly = False,
+        linked_only: LinkedOnly = True,
     ) -> Response:
         """The threat guide as JSON or Markdown, marked with its TLP label. Audited as ``actor.guide``."""
         built = build_guide(request, ref, max_tlp, linked_only, f'guide.{format}')
@@ -298,7 +304,7 @@ def _register_threat_routes(app: FastAPI, sessions: SessionFactory, require_auth
         ref: str,
         format: Literal['json', 'csv'] = 'json',
         max_tlp: ExportTlp = None,
-        linked_only: LinkedOnly = False,
+        linked_only: LinkedOnly = True,
     ) -> Response:
         """The indicator sweep list as JSON or CSV (to search for, not attribution). Audited."""
         built = build_guide(request, ref, max_tlp, linked_only, f'sweep.{format}')

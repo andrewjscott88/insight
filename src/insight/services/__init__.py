@@ -162,6 +162,7 @@ from .techniques import (
     record_report_techniques,
     tag_technique,
     technique_documents,
+    technique_labels,
     technique_summary,
     untag_technique,
 )
@@ -375,6 +376,7 @@ __all__ = [
     'sweep_list',
     'tag_technique',
     'technique_documents',
+    'technique_labels',
     'technique_summary',
     'time_of_day',
     'tlp_permitted',

@@ -57,6 +57,11 @@ async def test_a_guide_opens_with_its_hunt_plan_and_records_a_hunt(
     await user.should_see('Threat guide: APT29')
     await user.should_see('Who it targets')
     await user.should_see('Download the guide (Markdown)')
+    await user.should_see('Download the sweep list with reports that only name it (CSV)')
+    await user.should_see('Reports that only name the group are left out')
+    dialogs = user.find(kind=ui.dialog).elements
+    guides = [d for d in dialogs if d.props.get('aria-label') == 'Threat guide: APT29']
+    assert len(guides) == 1  # review L1: the label is a prop value, not formatted into a props string
     await user.should_see('Indicators to search for (0)')
     user.find(kind=ui.button, content='Start a hunt').click()
     await user.should_see('Name of the hunt')

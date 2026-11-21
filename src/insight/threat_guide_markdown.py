@@ -146,8 +146,13 @@ def _hunt(guide: ThreatGuide) -> list[str]:
     if len(guide.hypotheses) > MAX_HYPOTHESES:
         out.append(f'- And {len(guide.hypotheses) - MAX_HYPOTHESES} more in the JSON export.')
     out += ['', '### Indicator sweep list', '']
+    scope = (
+        'reports an analyst linked to the group (reports that only name it are left out)'
+        if data.sweep_linked_only
+        else 'the reports above, including reports that only name the group'
+    )
     out.append(
-        f'{len(data.sweep)} accepted indicator(s) from the reports above, to search for in your logs. '
+        f'{len(data.sweep)} accepted indicator(s) from {scope}, to search for in your logs. '
         'Not attribution: a report naming a group can name other things too.'
     )
     out.append('')

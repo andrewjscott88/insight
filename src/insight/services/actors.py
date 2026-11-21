@@ -211,7 +211,9 @@ def record_industry_claim(
         )
     )
     if row is not None and max_tlp is not None and not tlp_permitted(row.tlp, max_tlp):
-        raise TlpNotPermitted(f'This caller is limited to TLP:{max_tlp}; it cannot replace this mapping.')
+        # Like a hidden hunt or rule: a decision above the caller's limit looks missing, so a limited key
+        # cannot learn from the answer that one exists.
+        raise LookupError('Industry mapping not found')
     if row is None:
         row = IndustryClaim(group_ref=subject.ref, industry=payload.industry)
         db.add(row)

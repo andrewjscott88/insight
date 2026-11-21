@@ -200,6 +200,12 @@ def build_parser() -> argparse.ArgumentParser:
         help='threat-guide: md json navigator sweep-csv sweep-json',
     )
     threats.add_argument(
+        '--include-named',
+        action='store_true',
+        help='threat-guide: the sweep list also takes indicators from reports that only name the group '
+        '(default: only reports linked to it)',
+    )
+    threats.add_argument(
         '--days', type=int, default=90, help='threat-profile: count reports from the last N days'
     )
     threats.add_argument(
@@ -794,7 +800,10 @@ def _threat_command(args: argparse.Namespace) -> int:
     max_tlp = args.max_tlp.upper() if args.max_tlp else None
     usage = {
         'threat-profile': 'insight threat-profile INDUSTRY [--max-tlp LABEL] [--days N]',
-        'threat-guide': 'insight threat-guide REF DEST [--format md|json|navigator|sweep-csv|sweep-json]',
+        'threat-guide': (
+            'insight threat-guide REF DEST [--format md|json|navigator|sweep-csv|sweep-json] '
+            '[--include-named]'
+        ),
         'rule-add': 'insight rule-add FILE --kind yara|sigma [--name N] [--link REF] [--tlp LABEL]',
     }
     if args.command in usage and (
@@ -810,7 +819,11 @@ def _threat_command(args: argparse.Namespace) -> int:
         elif args.command == 'threat-profile':
             print(cli_threats.threat_profile(args.destination, max_tlp, args.days))
         elif args.command == 'threat-guide':
-            print(cli_threats.threat_guide(args.destination, Path(args.target), args.format, max_tlp))
+            print(
+                cli_threats.threat_guide(
+                    args.destination, Path(args.target), args.format, max_tlp, args.include_named
+                )
+            )
         else:
             kind = (args.kind or [''])[0].lower()
             tlp = args.tlp.upper() if args.tlp else 'AMBER'

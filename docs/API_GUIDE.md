@@ -378,13 +378,16 @@ curl -sS -X DELETE "$INSIGHT_URL/api/actors/G0016/documents/$DOC_ID" -H "Authori
 curl -sS -X POST "$INSIGHT_URL/api/actors/G0016/industries" -H "Authorization: Bearer $INSIGHT_API_KEY" \
   -H 'Content-Type: application/json' \
   -d '{"industry": "energy", "citation_url": "https://example.org/report", "tlp": "CLEAR"}'
-# The guide as JSON or Markdown; at most GREEN (for sharing), only reports you linked
+# The guide as JSON or Markdown; at most GREEN (for sharing)
 curl -sS "$INSIGHT_URL/api/actors/G0016/guide" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq '.hunt.hypotheses[0]'
-curl -sS -OJ "$INSIGHT_URL/api/actors/G0016/guide?format=md&max_tlp=GREEN&linked_only=true" \
+curl -sS -OJ "$INSIGHT_URL/api/actors/G0016/guide?format=md&max_tlp=GREEN" \
   -H "Authorization: Bearer $INSIGHT_API_KEY"
 # ATT&CK Navigator layer, and the indicator sweep list (things to search for, not proof of the group)
 curl -sS -OJ "$INSIGHT_URL/api/actors/G0016/navigator" -H "Authorization: Bearer $INSIGHT_API_KEY"
 curl -sS -OJ "$INSIGHT_URL/api/actors/G0016/sweep?format=csv" -H "Authorization: Bearer $INSIGHT_API_KEY"
+# By default only reports you linked feed the sweep list; opt in to reports that only name the group
+curl -sS -OJ "$INSIGHT_URL/api/actors/G0016/sweep?format=csv&linked_only=false" \
+  -H "Authorization: Bearer $INSIGHT_API_KEY"
 # Hunts: start one, record a check for one hypothesis, close it
 curl -sS "$INSIGHT_URL/api/actors/G0016/hunts" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq
 HUNT_ID=$(curl -sS -X POST "$INSIGHT_URL/api/actors/G0016/hunts" -H "Authorization: Bearer $INSIGHT_API_KEY" \

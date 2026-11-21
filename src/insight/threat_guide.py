@@ -236,6 +236,13 @@ def sweep_rows(entries: tuple[SweepEntry, ...]) -> list[dict[str, Any]]:
     ]
 
 
+def sweep_scope(linked_only: bool) -> str:
+    """Which reports a sweep list's indicators come from, in one sentence."""
+    if linked_only:
+        return 'Indicators from reports an analyst linked to this group.'
+    return 'Indicators from reports linked to this group and from reports that only name it.'
+
+
 def sweep_json(guide: ThreatGuide) -> dict[str, Any]:
     data = guide.data
     return {
@@ -243,7 +250,8 @@ def sweep_json(guide: ThreatGuide) -> dict[str, Any]:
         'group': {'ref': data.subject.ref, 'name': data.subject.name},
         'generated': data.generated,
         'tlp': guide.tlp,
-        'note': 'Indicators from reports linked to or naming this group, to search for. Not attribution.',
+        'note': sweep_scope(data.sweep_linked_only) + ' To search for. Not attribution.',
+        'linked_only': data.sweep_linked_only,
         'truncated': data.sweep_truncated,
         'indicators': sweep_rows(data.sweep),
     }
@@ -252,7 +260,8 @@ def sweep_json(guide: ThreatGuide) -> dict[str, Any]:
 def sweep_csv(guide: ThreatGuide) -> str:
     """The sweep list as CSV: a ``# TLP:`` comment line first, then a header row."""
     out = io.StringIO()
-    out.write(f'# TLP:{guide.tlp} - indicators to search for, not attribution. {guide.name}\n')
+    scope = 'linked reports only' if guide.data.sweep_linked_only else 'linked reports and reports naming it'
+    out.write(f'# TLP:{guide.tlp} - indicators to search for, not attribution ({scope}). {guide.name}\n')
     writer = csv.DictWriter(out, fieldnames=SWEEP_COLUMNS, lineterminator='\n')
     writer.writeheader()
     for row in sweep_rows(guide.data.sweep):

@@ -8,7 +8,7 @@ techniques they removed stay removed, even if the new text still names them. Eve
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import Any, Final
 
@@ -223,6 +223,26 @@ def technique_summary(
     )
     counts = [TechniqueCount(t, n, last) for t, n, last in db.execute(stmt)]
     return sorted(counts, key=lambda c: (-c.reports, c.technique_id))
+
+
+def technique_labels(
+    db: Session, technique_ids: Iterable[str], *, max_tlp: str | None = None, since: str | None = None
+) -> set[str]:
+    """The TLP labels of the current reports the reader may see that are tagged with any of these techniques.
+
+    A count of such reports (``technique_summary``) is derived from them, so whatever shows the count carries
+    their labels.
+    """
+    wanted = sorted(set(technique_ids))
+    if not wanted:
+        return set()
+    stmt = (
+        select(Document.tlp)
+        .join(DocumentTechnique, DocumentTechnique.document_id == Document.id)
+        .where(DocumentTechnique.technique_id.in_(wanted), *_tagged_current(max_tlp, since))
+        .distinct()
+    )
+    return set(db.scalars(stmt))
 
 
 def technique_documents(

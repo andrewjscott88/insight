@@ -292,7 +292,7 @@ def test_the_guide_brings_catalog_data_reports_hunt_and_sweep_together(db: Sessi
     values = {e.value: e for e in data.sweep}
     assert '203.0.113.7' not in values  # documentation address: flagged, left out
     assert values['evil-c2.biz'].via == 'linked'
-    assert values['login-microsoftonline.click'].via == 'named'
+    assert 'login-microsoftonline.click' not in values  # its report only names the group: not by default
     assert data.report_techniques == {'T1059.001': 1}
     first = guide.hypotheses[0]
     assert first.technique_id == 'T1059.001'  # in the analyst's recent reports
@@ -329,11 +329,85 @@ def test_a_limited_reader_gets_a_guide_without_what_they_may_not_see(db: Session
     assert catalog_only.tlp == 'CLEAR'
 
 
-def test_linked_only_sweeps_leave_out_reports_that_only_name_the_group(db: Session) -> None:
+def test_reports_that_only_name_the_group_join_the_sweep_list_only_when_asked(db: Session) -> None:
     _guide_fixture(db)
-    data = services.guide_data(db, 'G0016', now=NOW, linked_only=True)
-    assert {r.via for r in data.reports} == {'linked'}
-    assert 'login-microsoftonline.click' not in {e.value for e in data.sweep}
+    default = services.guide_data(db, 'G0016', now=NOW)
+    assert {r.via for r in default.reports} == {'linked', 'named'}  # still listed under "Your reports"
+    assert default.sweep_linked_only
+    assert {e.via for e in default.sweep} == {'linked'}
+    assert 'login-microsoftonline.click' not in {e.value for e in default.sweep}
+    guide = compose(default, library())
+    assert sweep_json(guide)['linked_only'] is True
+    assert 'reports that only name it are left out' in to_markdown(guide)
+    assert '(linked reports only)' in sweep_csv(guide).split('\n', 1)[0]
+    wider = services.guide_data(db, 'G0016', now=NOW, linked_only=False)
+    assert not wider.sweep_linked_only
+    values = {e.value: e for e in wider.sweep}
+    assert values['login-microsoftonline.click'].via == 'named'
+    assert sweep_json(compose(wider, library()))['linked_only'] is False
+    assert 'including reports that only name the group' in to_markdown(compose(wider, library()))
+
+
+def _is_within(label: str, banner: str) -> bool:
+    from insight.schemas import most_restrictive
+
+    return most_restrictive(label, banner) == banner
+
+
+def test_regression_a_stricter_verdict_raises_the_guide_and_export_labels(db: Session) -> None:
+    """Review M1: a CLEAR report with an AMBER verdict on its indicator must not give a TLP:CLEAR guide."""
+    services.set_actor(db, 'operator')
+    doc = report(db, 'Public advisory', 'Infrastructure: staging-host.biz.', tlp='CLEAR')
+    accept_all(db, doc)
+    services.link_report(db, 'G0016', ActorLinkInput(document_id=doc.id, note='Advisory'))
+    services.assess_entity(
+        db,
+        _entity_id(db, 'staging-host.biz'),
+        AssessmentInput(verdict='malicious', reason='Seen in our AMBER case', tlp='AMBER'),
+    )
+    data = services.guide_data(db, 'G0016', now=NOW)
+    (row,) = data.sweep
+    assert (row.value, row.verdict, row.tlp) == ('staging-host.biz', 'malicious', 'AMBER')
+    assert data.tlp == 'AMBER'
+    assert all(_is_within(e.tlp, data.tlp) for e in data.sweep)
+    guide = compose(data, library())
+    assert guide.tlp == 'AMBER'
+    assert guide_json(guide)['tlp'] == 'AMBER'
+    assert sweep_json(guide)['tlp'] == 'AMBER'
+    assert sweep_csv(guide).startswith('# TLP:AMBER')
+    assert to_markdown(guide).startswith('**TLP:AMBER**')
+    assert {'name': 'TLP', 'value': 'TLP:AMBER'} in navigator_layer(guide)['metadata']
+    # Shared at GREEN, the AMBER verdict is left out; the indicator stays with its CLEAR report's label.
+    shared = services.guide_data(db, 'G0016', now=NOW, max_tlp='GREEN')
+    (row,) = shared.sweep
+    assert (row.verdict, row.tlp) == ('unknown', 'CLEAR')
+    assert shared.tlp == 'CLEAR'
+    assert 'malicious' not in sweep_csv(compose(shared, library()))
+    assert all(_is_within(e.tlp, shared.tlp) for e in shared.sweep)
+
+
+def test_regression_counts_from_other_reports_raise_the_guide_label(db: Session) -> None:
+    """Review M1 (other items): the hypotheses' recent-report counts carry those reports' labels."""
+    services.set_actor(db, 'operator')
+    report(db, 'Internal case', 'The intruder ran T1059.001 on a server.', tlp='AMBER')
+    data = services.guide_data(db, 'G0016', now=NOW)
+    assert data.reports == ()
+    assert data.trending == {'T1059.001': 1}
+    assert data.tlp == 'AMBER'
+    assert compose(data, library()).hypotheses[0].technique_id == 'T1059.001'
+    shared = services.guide_data(db, 'G0016', now=NOW, max_tlp='GREEN')
+    assert shared.trending == {}
+    assert shared.tlp == 'CLEAR'
+
+
+def test_regression_a_hidden_industry_decision_looks_missing(db: Session) -> None:
+    """Review L2: replacing a mapping above the caller's limit answers "not found", not "not permitted"."""
+    services.set_actor(db, 'operator')
+    secret = IndustryClaimInput(industry='government', decision='removed', reason='Ours', tlp='AMBER')
+    services.record_industry_claim(db, 'G0016', secret)
+    green = IndustryClaimInput(industry='government', decision='removed', reason='Mine', tlp='GREEN')
+    with pytest.raises(LookupError, match='Industry mapping not found'):
+        services.record_industry_claim(db, 'G0016', green, max_tlp='GREEN')
 
 
 def test_benign_and_expired_verdicts_leave_the_sweep_list(db: Session) -> None:

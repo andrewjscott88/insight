@@ -84,8 +84,13 @@ def _create(destination: Path) -> int:
         raise ValueError(f'cannot create {destination}: {exc.strerror or exc}') from exc
 
 
-def threat_guide(ref: str, destination: Path, fmt: str = 'md', max_tlp: str | None = None) -> str:
-    """Write a group's threat guide (or its Navigator layer or sweep list) to ``destination``. Audited."""
+def threat_guide(
+    ref: str, destination: Path, fmt: str = 'md', max_tlp: str | None = None, include_named: bool = False
+) -> str:
+    """Write a group's threat guide (or its Navigator layer or sweep list) to ``destination``. Audited.
+
+    The sweep list takes indicators only from reports linked to the group unless ``include_named``.
+    """
     from . import services
     from .cli import _current_database
     from .threat_guide import compose, guide_json, navigator_layer, sweep_csv, sweep_json
@@ -98,10 +103,17 @@ def threat_guide(ref: str, destination: Path, fmt: str = 'md', max_tlp: str | No
         with sessions.begin() as db:
             services.set_actor(db, 'cli')
             try:
-                data = services.guide_data(db, ref, max_tlp=max_tlp, now=datetime.now(UTC))
+                data = services.guide_data(
+                    db, ref, max_tlp=max_tlp, now=datetime.now(UTC), linked_only=not include_named
+                )
             except LookupError as exc:
                 raise ValueError(f'{exc}: {ref}') from exc
-            detail = {'what': f'cli.{fmt}', 'tlp': data.tlp, 'max_tlp': max_tlp, 'linked_only': False}
+            detail = {
+                'what': f'cli.{fmt}',
+                'tlp': data.tlp,
+                'max_tlp': max_tlp,
+                'linked_only': not include_named,
+            }
             services.audit(db, 'actor.guide', data.subject.ref, json.dumps(detail, sort_keys=True))
         guide = compose(data, library())
     writers = {

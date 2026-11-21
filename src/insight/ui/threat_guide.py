@@ -39,12 +39,14 @@ def open_guide_dialog(ws: Workspace, ref: str, on_changed: Callable[[], Any]) ->
         return
     title = f'Threat guide: {guide.name}'
     with (
-        ui.dialog().props(f'maximized aria-label="{title}"') as dialog,
+        ui.dialog().props('maximized') as dialog,
         ui.card().classes('panel dialog-card w-full p-4 sm:p-6 gap-3'),
     ):
         with ui.row().classes('w-full items-center justify-between'):
             heading(title, 2)
             ui.button('Close', on_click=dialog.close).props('flat no-caps')
+        # A prop value, never formatted into a props string: a quote in an actor's name cannot escape it.
+        dialog.props['aria-label'] = title
 
         @ui.refreshable
         def body() -> None:
@@ -84,6 +86,10 @@ def _render(ws: Workspace, guide: ThreatGuide, refresh: Callable[[], Any]) -> No
         new_tab_link('Download the guide (JSON)', f'{base}/guide')
         new_tab_link('Download a layer for ATT&CK Navigator', f'{base}/navigator')
         new_tab_link('Download the sweep list (CSV)', f'{base}/sweep?format=csv')
+        new_tab_link(
+            'Download the sweep list with reports that only name it (CSV)',
+            f'{base}/sweep?format=csv&linked_only=false',
+        )
     _targets(ws, guide, refresh)
     _techniques(guide)
     _reports(ws, guide)

@@ -21,8 +21,9 @@ CVEs in reports they can see; starting a lookup stays refused to them.
   your linked reports and reports that name the group, sources and the TLP label. Download as Markdown or JSON
   (`insight-threat-guide-1`), optionally at a lower TLP (`max_tlp`), audited as `actor.guide`.
 - **Threat hunting**: one starting hypothesis per technique from ATT&CK detection strategies and data components,
-  with log sources; an indicator sweep list (JSON or CSV) from linked and naming reports, without private,
-  benign or expired indicators; YARA and Sigma rules stored as text (never run) and linked to groups,
+  with log sources; an indicator sweep list (JSON or CSV) from the reports you **linked** to the group, without
+  private, benign or expired indicators (reports that only *name* the group are listed in the guide but feed
+  the sweep list only on request: `linked_only=false`, `--include-named`, or the second download in the UI); YARA and Sigma rules stored as text (never run) and linked to groups,
   techniques or reports; and hunt records of what was checked, when, and the result.
 - **Actors and report links (TIP 2.5 minimum)**: track your own actor, optionally the same as an ATT&CK group;
   link reports to a group from the reader (**Threat groups**); add an industry with a citation or remove one
@@ -37,9 +38,14 @@ CVEs in reports they can see; starting a lookup stays refused to them.
   hunts (`/api/actors/{ref}/hunts`, `/api/hunts/{hunt_id}`) and rules (`/api/rules`). All follow the caller's TLP
   limit; labelled writes also follow `INSIGHT_MAX_TLP`.
 - CLI: `insight industries`, `insight threat-profile INDUSTRY`, `insight threat-guide REF FILE`
-  (`--format md|json|navigator|sweep-csv|sweep-json`, `--max-tlp`), `insight rule-add FILE` and
+  (`--format md|json|navigator|sweep-csv|sweep-json`, `--max-tlp`, `--include-named`), `insight rule-add FILE` and
   `insight threat-library-sync`.
 - Deleting a report also removes its group and rule links, and industry decisions that cited only that report.
+- Review fixes before release: a guide's label (banner, JSON `tlp`, CSV `# TLP:` line, Navigator metadata) is
+  now at least as restrictive as every sweep row (a verdict's label can be stricter than its report's) and as the
+  reports behind its "recent reports" counts; the sweep list defaults to linked reports only; replacing an
+  industry decision above a key's TLP limit answers `404` like other hidden items; the guide dialog's
+  `aria-label` is no longer formatted into a props string.
 
 ### Added: automatic CVE lookups at NIST NVD and FIRST EPSS (TIP 1.2)
 - **Severity and attack likelihood beside every CVE** ([ADR 0023](docs/adr/0023-automatic-cve-lookups.md)): the

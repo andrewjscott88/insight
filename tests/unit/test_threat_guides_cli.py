@@ -76,6 +76,45 @@ def test_threat_guides_are_written_privately_and_never_overwritten(
     assert target.read_text() == text
 
 
+def test_the_cli_sweep_list_takes_named_reports_only_with_include_named(
+    data: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Review M2 and L4: linked reports only by default; ``--include-named`` opts in; the audit says which."""
+    from sqlalchemy import select
+
+    from insight import services
+    from insight.models import AuditEvent, Document, database
+
+    doc_id = _seed(data, 'Cozy Bear used login-microsoftonline.click.')
+    engine, sessions = database(f'sqlite:///{data / "insight.db"}', migrate=False)
+    try:
+        with sessions.begin() as db:
+            doc = db.get(Document, doc_id)
+            assert doc is not None
+            for obs in services.detail(db, doc)['observations']:
+                services.set_observation_status(db, obs['id'], 'accepted')
+    finally:
+        engine.dispose()
+    default = tmp_path / 'default.json'
+    assert cli.main(['threat-guide', 'G0016', str(default), '--format', 'sweep-json']) == 0
+    body = json.loads(default.read_text())
+    assert (body['linked_only'], body['indicators']) == (True, [])
+    wider = tmp_path / 'wider.json'
+    assert cli.main(['threat-guide', 'G0016', str(wider), '--format', 'sweep-json', '--include-named']) == 0
+    body = json.loads(wider.read_text())
+    assert body['linked_only'] is False
+    assert [(i['value'], i['via']) for i in body['indicators']] == [('login-microsoftonline.click', 'named')]
+    engine, sessions = database(f'sqlite:///{data / "insight.db"}', migrate=False)
+    try:
+        with sessions() as db:
+            stmt = select(AuditEvent.detail).where(AuditEvent.action == 'actor.guide')
+            details = [json.loads(d) for d in db.scalars(stmt.order_by(AuditEvent.created_at))]
+    finally:
+        engine.dispose()
+    assert [d['linked_only'] for d in details] == [True, False]
+    capsys.readouterr()
+
+
 def test_threat_guide_errors(data: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert cli.main(['threat-guide', 'G0016']) == 2
     assert 'usage: insight threat-guide REF DEST' in capsys.readouterr().err

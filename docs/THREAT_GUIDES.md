@@ -15,8 +15,8 @@ reports and your own decisions, and shows **where every statement comes from**. 
    sentence ATT&CK wrote, or the MISP galaxy sector label, with a link to the source.
 3. **Open guide** shows the threat guide. **Find any group by name** opens any group in the library;
    **Track your own actor** creates one that is not in ATT&CK (or your own name for one).
-4. In a report, **Threat groups** lets you link the report to a group. Only linked reports add techniques to a
-   guide; reports that merely *name* a group are listed separately as "names it".
+4. In a report, **Threat groups** lets you link the report to a group. Only linked reports add techniques and
+   indicators to a guide; reports that merely *name* a group are listed separately as "names it".
 
 ### The order of the top ten
 
@@ -77,10 +77,15 @@ ordered by techniques in your recent reports, then in reports you linked, then t
 
 ### Indicator sweep list
 
-Accepted IPs, domains, URLs and hashes from reports linked to the group and reports that name it (`linked_only`
-leaves the second kind out). Indicators flagged as private, reserved or documentation values, indicators with a
-`benign` verdict and verdicts past their `valid until` date are left out. Every row says which report it came
-from. It is a list of things to search for, not a list of things the group used.
+Accepted IPs, domains, URLs and hashes from reports **linked** to the group. Reports that only *name* the group
+are listed in the guide but add nothing to the sweep list unless you ask: `linked_only=false` in the API,
+`--include-named` on the command line, or **Download the sweep list with reports that only name it** in the
+guide. Rows from such reports say `via: named`. Every export records which choice was made (`linked_only` in the
+JSON and the audit event, the CSV's first line, a sentence in the Markdown).
+
+Indicators flagged as private, reserved or documentation values, indicators with a `benign` verdict and
+verdicts past their `valid until` date are left out. Every row says which report it came from. It is a list of
+things to search for, not a list of things the group used.
 
 ### Rules
 
@@ -95,7 +100,9 @@ the API or `insight rule-add FILE --kind sigma --link G0016 --link T1059.001`.
 * Actors, links, industry decisions, rules and hunts carry their own labels. A reader (API key, CLI
   `--max-tlp`) sees only what is within its limit, and a write is refused above the caller's or the instance
   limit (`INSIGHT_MAX_TLP`).
-* A guide is labelled with the most restrictive label of anything in it, at most the reader's limit. Exports may
+* A guide is labelled with the most restrictive label of anything in it, at most the reader's limit. That
+  includes every sweep row (a row takes the label of its reports *and* of the verdict on the indicator, which
+  can be stricter) and the reports behind a hypothesis's "in N of your reports" count. Exports may
   be made at a lower limit (`max_tlp=GREEN`) to share; anything above is left out, not redacted in place.
 * JSON exports carry `tlp`; Markdown has the label first and last; the Navigator layer has it in its name,
   description and metadata; CSV starts with a `# TLP:` line. Every export is audited as `actor.guide`.
@@ -127,6 +134,7 @@ insight industries                                   # the industries and how ma
 insight threat-profile healthcare --days 90          # the top ten, with evidence
 insight threat-guide G0016 apt29.md                  # also --format json|navigator|sweep-csv|sweep-json
 insight threat-guide G0016 apt29-green.md --max-tlp GREEN
+insight threat-guide G0016 apt29-sweep.csv --format sweep-csv --include-named   # also reports naming it
 insight rule-add encoded-powershell.yml --kind sigma --name 'Encoded PowerShell' --link G0016 --link T1059.001 \
   --licence DRL-1.1 --source-url https://github.com/SigmaHQ/sigma --tlp CLEAR
 insight threat-library-sync                          # make threat-library-sync with Docker

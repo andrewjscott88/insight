@@ -212,3 +212,36 @@ def test_a_hidden_hunt_or_rule_looks_missing(app: FastAPI, signed_in: TestClient
     headers = key(app, max_tlp='GREEN')
     assert client.get(f'/api/hunts/{hunt_id}', headers=headers).status_code == 404
     assert client.put(f'/api/hunts/{hunt_id}', json={'status': 'closed'}, headers=headers).status_code == 404
+
+
+def test_the_sweep_list_takes_named_reports_only_when_asked(app: FastAPI, signed_in: TestClient) -> None:
+    """Review M2: by default only reports linked to the group feed the sweep list."""
+    linked = ingest(app, 'IR case', 'C2 at evil-c2.biz.', accept=True)
+    named = ingest(app, 'Vendor blog', 'Cozy Bear used login-microsoftonline.click.', accept=True)
+    assert signed_in.post('/api/actors/G0016/documents', json={'document_id': linked}).status_code == 201
+    default = signed_in.get('/api/actors/G0016/sweep').json()
+    assert default['linked_only'] is True
+    assert [i['value'] for i in default['indicators']] == ['evil-c2.biz']
+    guide = signed_in.get('/api/actors/G0016/guide').json()
+    assert named in {r['id'] for r in guide['reports']}  # listed, but not swept
+    assert [i['value'] for i in guide['hunt']['sweep']['indicators']] == ['evil-c2.biz']
+    wider = signed_in.get('/api/actors/G0016/sweep', params={'linked_only': 'false'}).json()
+    assert wider['linked_only'] is False
+    assert {i['value']: i['via'] for i in wider['indicators']} == {
+        'evil-c2.biz': 'linked',
+        'login-microsoftonline.click': 'named',
+    }
+    details = [json.loads(d) for _, d in audited(app, 'actor.guide')]
+    assert [d['linked_only'] for d in details] == [True, True, False]
+
+
+def test_a_hidden_industry_decision_looks_missing(
+    app: FastAPI, signed_in: TestClient, client: TestClient
+) -> None:
+    """Review L2: a limited key gets 404, not 403, when an above-limit decision exists for the industry."""
+    secret = {'industry': 'government', 'decision': 'removed', 'reason': 'Ours', 'tlp': 'AMBER'}
+    assert signed_in.post('/api/actors/G0016/industries', json=secret).status_code == 200
+    mine = {**secret, 'tlp': 'GREEN'}
+    response = client.post('/api/actors/G0016/industries', json=mine, headers=key(app, max_tlp='GREEN'))
+    assert response.status_code == 404
+    assert response.json()['detail'] == 'Industry mapping not found'

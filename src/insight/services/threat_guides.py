@@ -3,8 +3,10 @@
 :func:`guide_data` gathers, for one group and one reader, everything in the guide that comes from this
 instance; :mod:`insight.threat_guide` turns it and the threat library into the guide and its exports.
 
-The **indicator sweep list** holds accepted indicators from reports the analyst *linked* to the group and,
-unless ``linked_only``, from reports that *name* it. It is a list of things to search for in your own logs,
+The **indicator sweep list** holds accepted indicators from reports the analyst *linked* to the group. Only
+when asked (``linked_only=False``) does it also take them from reports that merely *name* the group; those
+reports are always listed in the guide, but by default their indicators stay out of the sweep list (ADR 0024).
+It is a list of things to search for in your own logs,
 not a statement that the group used them: Insight never attributes from co-occurrence. Indicators with a
 warning flag, a ``benign`` verdict or a verdict whose own ``valid_until`` has passed are left out. The
 blocklist's default lifetimes are not applied (a sweep looks back), so each entry carries when it was seen.
@@ -28,7 +30,7 @@ from .assessments import visible_assessments
 from .common import stamp
 from .hunts import hunt_checks, hunts_for
 from .rules import LinkedRule, rules_for_group
-from .techniques import TAGGED, technique_summary
+from .techniques import TAGGED, technique_labels, technique_summary
 from .threat_profiles import PROFILE_DAYS, Mention, find_mentions
 from .tlp import _visible
 
@@ -84,10 +86,12 @@ class GuideData:
     generated: str
     max_tlp: str | None
     labels: tuple[str, ...] = field(default=())  # every TLP label of what went in
+    sweep_linked_only: bool = True  # False: the sweep list also has indicators from reports naming the group
 
     @property
     def tlp(self) -> str:
-        return most_restrictive('CLEAR', self.subject.tlp, *self.labels)
+        """The guide's label: at least as restrictive as everything in it, sweep rows included."""
+        return most_restrictive('CLEAR', self.subject.tlp, *self.labels, *(e.tlp for e in self.sweep))
 
 
 def _report_techniques(db: Session, document_ids: list[str]) -> dict[str, int]:
@@ -149,14 +153,13 @@ def sweep_list(
 
 
 def _reports(
-    db: Session, subject: GroupSubject, max_tlp: str | None, linked_only: bool
-) -> tuple[list[ReportRef], int]:
+    db: Session, subject: GroupSubject, max_tlp: str | None
+) -> tuple[list[ReportRef], list[Mention]]:
+    """Linked reports, then up to ``MAX_NAMED`` reports that only name the group; and every mention found."""
     linked = [
         ReportRef(d.id, d.title, d.tlp, d.created_at, d.source_name, 'linked', link.note)
         for d, link in linked_reports(db, subject.ref, max_tlp=max_tlp)
     ]
-    if linked_only:
-        return linked, 0
     seen = {r.document_id for r in linked}
     mentions: list[Mention] = find_mentions(db, {subject.ref: subject.names}, max_tlp=max_tlp)[0][subject.ref]
     named = [
@@ -164,29 +167,40 @@ def _reports(
         for m in mentions
         if m.document_id not in seen
     ]
-    return linked + named[:MAX_NAMED], len(mentions)
+    return linked + named[:MAX_NAMED], mentions
 
 
 def guide_data(
-    db: Session, ref: str, *, max_tlp: str | None = None, now: datetime, linked_only: bool = False
+    db: Session, ref: str, *, max_tlp: str | None = None, now: datetime, linked_only: bool = True
 ) -> GuideData:
-    """Everything from this instance that goes into ``ref``'s guide for this reader (``LookupError``)."""
+    """Everything from this instance that goes into ``ref``'s guide for this reader (``LookupError``).
+
+    The guide always lists reports that name the group; ``linked_only=False`` also puts their indicators in
+    the sweep list (an explicit opt-in: naming a group is not attributing anything to it).
+    """
     subject = resolve_group(db, ref, max_tlp=max_tlp)
     claims = analyst_claims(db, max_tlp=max_tlp, group_ref=subject.ref)
-    reports, named_total = _reports(db, subject, max_tlp, linked_only)
+    reports, mentions = _reports(db, subject, max_tlp)
     linked_ids = [r.document_id for r in reports if r.via == 'linked']
     report_techniques = _report_techniques(db, linked_ids)
+    techniques = {*report_techniques, *(subject.catalog.techniques if subject.catalog else ())}
+    since = stamp(now - timedelta(days=PROFILE_DAYS))
     trending = {
         c.technique_id: c.reports
-        for c in technique_summary(db, max_tlp=max_tlp, since=stamp(now - timedelta(days=PROFILE_DAYS)))
+        for c in technique_summary(db, max_tlp=max_tlp, since=since)
+        if c.technique_id in techniques
     }
-    sweep, truncated = sweep_list(db, reports, max_tlp=max_tlp, now=now)
-    techniques = {*report_techniques, *(subject.catalog.techniques if subject.catalog else ())}
+    swept = [r for r in reports if r.via == 'linked'] if linked_only else reports
+    sweep, truncated = sweep_list(db, swept, max_tlp=max_tlp, now=now)
     rules = rules_for_group(db, subject.ref, techniques, max_tlp=max_tlp)
     hunts = tuple(HuntView(h, hunt_checks(db, h.id)) for h in hunts_for(db, subject.ref, max_tlp=max_tlp))
+    # Every label of what the guide shows or counts: the banner is never less restrictive than its content.
     labels = (
         [c.tlp for c in claims]
         + [r.tlp for r in reports]
+        + [m.tlp for m in mentions]  # named_total counts them all, not only the MAX_NAMED listed
+        + sorted(technique_labels(db, trending, max_tlp=max_tlp, since=since))  # the "recent reports" counts
+        + [e.tlp for e in sweep]  # a verdict's label can be stricter than its reports'
         + [r.rule.tlp for r in rules]
         + [h.hunt.tlp for h in hunts]
     )
@@ -204,7 +218,7 @@ def guide_data(
         ),
         removed=tuple((c.industry, c.reason, c.tlp) for c in claims if c.decision == 'removed'),
         reports=tuple(reports),
-        named_total=named_total,
+        named_total=len(mentions),
         report_techniques=report_techniques,
         trending=trending,
         sweep=tuple(sweep),
@@ -214,4 +228,5 @@ def guide_data(
         generated=stamp(now),
         max_tlp=max_tlp,
         labels=tuple(labels),
+        sweep_linked_only=linked_only,
     )

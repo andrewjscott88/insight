@@ -52,10 +52,15 @@ and decisions, and say exactly where each statement comes from. Constraints:
 6. **Hunt material is labelled as a starting point.** Each technique gets a hypothesis built from ATT&CK's
    detection strategies and data components (falling back to the parent technique), with log sources, ranked
    by recent reports, then linked reports, then ATT&CK. The guide says these are starting hypotheses, not
-   detections. The indicator sweep list holds accepted indicators from linked and naming reports, without
-   private or documentation addresses, benign verdicts or expired verdicts. A hunt record keeps, per
+   detections. The indicator sweep list holds accepted indicators from reports an analyst **linked** to the
+   group, without private or documentation addresses, benign verdicts or expired verdicts. Reports that only
+   *name* the group add their indicators only on explicit request (`linked_only=false`, `--include-named`):
+   a sweep CSV is the artifact most likely to end up in a SIEM or blocklist, and a name-drop ("unlike APT29
+   ...") is not evidence about indicators. Exports record which choice was made. A hunt record keeps, per
    technique, what was checked, over which dates, and the result.
-7. **TLP on guides and exports.** A guide's label is the most restrictive label of anything in it. Every read
+7. **TLP on guides and exports.** A guide's label is the most restrictive label of anything in it, counted
+   items included: every sweep row (whose label also covers the indicator's verdict), every listed or counted
+   report, and the reports behind the hypotheses' recent-report counts. Every read
    takes the caller's limit; exports take an optional stricter `max_tlp`; labelled writes are capped by the
    instance limit too. JSON, Markdown, Navigator and CSV exports carry the label (Markdown first and last,
    CSV on its first line) and are audited (`actor.guide`). CLI files are created 0600 and never overwritten.
