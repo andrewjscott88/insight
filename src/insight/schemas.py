@@ -222,8 +222,8 @@ def _https_url(value: str) -> str:
     return value
 
 
-class ActorInput(BaseModel):
-    """``POST /api/actors``: an actor the analyst tracks (TIP 2.5). Never created by Insight itself."""
+class CampaignInput(BaseModel):
+    """A manually curated campaign."""
 
     model_config = ConfigDict(frozen=True, extra='forbid')
 
@@ -232,7 +232,6 @@ class ActorInput(BaseModel):
         Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)], ...
     ] = Field(default=(), max_length=MAX_ALIASES)
     description: str = Field(default='', max_length=5_000)
-    attack_group_id: str | None = Field(default=None, pattern=r'^[Gg]\d{4}$')
     tlp: TLP = DEFAULT_TLP
 
     @field_validator('name')
@@ -243,6 +242,25 @@ class ActorInput(BaseModel):
         return ' '.join(value.split())
 
 
+class ActorInput(CampaignInput):
+    """An analyst actor optionally matched by the analyst to one catalog group."""
+
+    attack_group_id: str | None = Field(default=None, pattern=r'^[Gg]\d{4}$')
+
+
+ThreatSubjectKind = Literal['actor', 'campaign']
+ThreatTargetKind = Literal['document', 'indicator', 'technique']
+
+
+class ThreatLinkInput(BaseModel):
+    """An explicit link to an existing report, indicator, or catalog technique."""
+
+    model_config = ConfigDict(frozen=True, extra='forbid')
+    target_kind: ThreatTargetKind
+    target_id: DocumentId
+    tlp: TLP = DEFAULT_TLP
+
+
 class ActorLinkInput(BaseModel):
     """``POST /api/actors/{id}/documents``: link a report to a group or actor (the analyst's decision)."""
 
@@ -250,6 +268,7 @@ class ActorLinkInput(BaseModel):
 
     document_id: DocumentId
     note: str = Field(default='', max_length=2_000)
+    tlp: TLP = 'CLEAR'
 
 
 class IndustryClaimInput(BaseModel):

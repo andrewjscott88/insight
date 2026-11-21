@@ -441,14 +441,22 @@ class ThreatLink(Base):
             name='one_threat_target',
         ),
         CheckConstraint('actor_id IS NULL OR document_id IS NULL', name='existing_actor_reports'),
-        UniqueConstraint('actor_id', 'entity_id'), UniqueConstraint('actor_id', 'technique_id'),
-        UniqueConstraint('campaign_id', 'document_id'), UniqueConstraint('campaign_id', 'entity_id'),
+        UniqueConstraint('actor_id', 'entity_id'),
+        UniqueConstraint('actor_id', 'technique_id'),
+        UniqueConstraint('campaign_id', 'document_id'),
+        UniqueConstraint('campaign_id', 'entity_id'),
         UniqueConstraint('campaign_id', 'technique_id'),
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
-    actor_id: Mapped[str | None] = mapped_column(ForeignKey('threat_actors.id', ondelete='CASCADE'), index=True)
-    campaign_id: Mapped[str | None] = mapped_column(ForeignKey('campaigns.id', ondelete='CASCADE'), index=True)
-    document_id: Mapped[str | None] = mapped_column(ForeignKey('documents.id', ondelete='CASCADE'), index=True)
+    actor_id: Mapped[str | None] = mapped_column(
+        ForeignKey('threat_actors.id', ondelete='CASCADE'), index=True
+    )
+    campaign_id: Mapped[str | None] = mapped_column(
+        ForeignKey('campaigns.id', ondelete='CASCADE'), index=True
+    )
+    document_id: Mapped[str | None] = mapped_column(
+        ForeignKey('documents.id', ondelete='CASCADE'), index=True
+    )
     entity_id: Mapped[str | None] = mapped_column(ForeignKey('entities.id', ondelete='CASCADE'), index=True)
     technique_id: Mapped[str | None] = mapped_column(String(16), index=True)
     tlp: Mapped[str] = mapped_column(String(20))
