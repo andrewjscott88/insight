@@ -17,7 +17,7 @@ from nicegui.testing.user import User
 from sqlalchemy import select
 
 from insight import connectors, services
-from insight.models import AuditEvent, Document, Note, Observation, WatchTerm
+from insight.models import AuditEvent, Document, Enrichment, Note, Observation, WatchTerm
 from insight.schemas import INDICATOR_KINDS, DocumentInput
 from insight.services import SourceRef, ingest
 
@@ -321,6 +321,21 @@ async def test_enrichment_dialog_requires_consent(
     await user.should_see('EPSS 97% chance of exploitation attempts within 30 days (FIRST)')
     await user.should_see('What EPSS sent')
     assert calls == [{'cve': 'CVE-2024-3400'}]
+
+
+async def test_reader_shows_cached_scores_beside_a_cve(user: User, ui_env: SimpleNamespace) -> None:
+    nvd = {'vulnerabilities': [{'cve': {'metrics': {'cvssMetricV31': [{'cvssData': {
+        'baseScore': 10.0, 'baseSeverity': 'CRITICAL'}}]}}}]}  # fmt: skip
+    epss = {'data': [{'cve': 'CVE-2024-3400', 'epss': '0.94', 'percentile': '0.999'}]}
+    with ui_env.app.state.session_factory.begin() as db:
+        for provider, payload in (('nvd', nvd), ('epss', epss)):
+            db.add(Enrichment(cve='CVE-2024-3400', provider=provider, payload=json.dumps(payload)))
+    await load_demo(user)
+    await open_document(user, 'Training scenario: edge appliance activity')
+    await user.should_see(
+        'CVSS 10.0 (Critical), NIST NVD · '
+        'EPSS 94% chance of exploitation attempts within 30 days, higher than 99% of CVEs (FIRST)'
+    )
 
 
 async def test_revoked_session_stops_callbacks(

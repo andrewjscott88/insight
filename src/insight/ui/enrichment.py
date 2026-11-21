@@ -11,7 +11,7 @@ import json
 from nicegui import ui
 
 from .. import services
-from ..cve_scores import EPSS_CAVEAT, CveScores, describe_epss, describe_nvd
+from ..cve_scores import EPSS_CAVEAT, NVD_NOTICE, CveScores, describe_epss, describe_nvd
 from ..lookups import LookupThrottled, request_lookup
 from .messages import problem_area
 from .typography import heading
@@ -26,6 +26,7 @@ def render_scores(found: CveScores) -> None:
             ui.label(found.nvd.description).classes('muted text-sm prose')
         if found.nvd.cwes:
             ui.label('Weakness types: ' + ', '.join(found.nvd.cwes)).classes('muted text-sm')
+        ui.label(NVD_NOTICE).classes('muted text-sm prose')
     elif found.nvd_checked_at:
         ui.label('NIST NVD has no record of this CVE yet.').classes('muted text-sm')
     if found.epss is not None:

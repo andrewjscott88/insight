@@ -154,7 +154,9 @@ def _register_enrichment_route(app: FastAPI, sessions: SessionFactory, require_a
         except Exception as exc:
             raise HTTPException(502, 'Provider request failed; retry later') from exc
 
-    @app.get('/api/enrichment/{cve}', dependencies=[Depends(require_auth)])
+    # Not under /api/enrichment/: TLP-limited keys may read scores of CVEs in reports they can see, but
+    # not start lookups (which would name CVEs from any report to a provider).
+    @app.get('/api/cves/{cve}/scores', dependencies=[Depends(require_auth)])
     def cached_scores(request: Request, cve: str) -> dict[str, Any]:
         """The cached NVD and EPSS scores of ``cve`` (never contacts a provider). ``404`` unless a report the
         caller may see mentions it."""

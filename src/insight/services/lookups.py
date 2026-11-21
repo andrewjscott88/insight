@@ -33,6 +33,7 @@ STALE_AFTER: Final[dict[str, timedelta]] = {'epss': timedelta(days=7), 'nvd': ti
 #: After a lookup job fails for good, wait this long before queueing that provider again.
 PAUSE_AFTER_FAILURE: Final = timedelta(hours=1)
 _SWITCH: Final = 'lookup:{}'
+_CHUNK: Final = 500
 
 
 def lookup_switches(db: Session) -> dict[str, bool]:
@@ -109,8 +110,10 @@ def cve_scores(db: Session, cves: Iterable[str]) -> dict[str, CveScores]:
     if not wanted:
         return {}
     cached: dict[str, list[tuple[str, str, str]]] = {}
-    for row in db.scalars(select(Enrichment).where(Enrichment.cve.in_(wanted))):
-        cached.setdefault(row.cve, []).append((row.provider, row.payload, row.fetched_at))
+    for start in range(0, len(wanted), _CHUNK):  # Stay well under database parameter limits.
+        chunk = wanted[start : start + _CHUNK]
+        for row in db.scalars(select(Enrichment).where(Enrichment.cve.in_(chunk))):
+            cached.setdefault(row.cve, []).append((row.provider, row.payload, row.fetched_at))
     return {cve: scores(cve, rows) for cve, rows in cached.items()}
 
 

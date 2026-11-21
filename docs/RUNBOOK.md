@@ -315,8 +315,20 @@ lists recent jobs.
 
 Every sync, by hand or by schedule, first asks the publisher whether the feed has changed (`If-None-Match`,
 `If-Modified-Since`) and compares the bytes with last time. An unchanged feed records `Unchanged since the last
-sync.` and nothing else. After an upgrade, every source is read once in full. Enrichment (EPSS/NVD) sends only the CVE identifier, after explicit consent, at
-most once every 6.5 s.
+sync.` and nothing else. After an upgrade, every source is read once in full.
+
+**CVE lookups** (FIRST EPSS and NIST NVD) send only the CVE number. People start one with *Look up this CVE*
+after agreeing to the request. **Automatic lookups** ([ADR 0023](adr/0023-automatic-cve-lookups.md)) are off
+until you switch a provider on under *Automatic CVE lookups* in the Sources tab (audited as `lookup.on` and
+`lookup.off`). Then the job runner looks up each CVE that a current TLP:CLEAR or GREEN report mentions and that
+has no recent answer (EPSS after 7 days, NVD after 30), newest reports first, as `lookup` jobs (in
+`GET /api/jobs` and the start-up log). CVEs seen only in AMBER or RED reports are never looked up by
+themselves. The Sources tab shows how many CVEs are waiting. One throttle per provider is shared by people,
+the API and the job runner: NVD gets one request every 6.5 s, EPSS one a second. Without a key NVD gets
+through about 550 CVEs an hour, so a first backlog of thousands takes a day; set `INSIGHT_NVD_API_KEY` (free,
+from NVD) for one request every 0.7 s, and restart. The key goes only in NVD's `apiKey` header and is never
+logged. A failed lookup job is tried again after 5, 10 and 20 minutes; after the last failure that provider
+pauses for an hour, then tries again by itself.
 
 | Message (run history / API 502) | Meaning | Action |
 | --- | --- | --- |
@@ -330,8 +342,11 @@ most once every 6.5 s.
 | `Unchanged since the last sync.` (success) | The publisher's feed has not changed since the last successful sync | Nothing to do; nothing was re-imported. |
 | `ValueError: The CSAF index lists no advisories` / `None of the N newest CSAF advisories could be read` | CISA moved or changed its CSAF repository | Nothing was imported. Report it; the nightly live tests should also flag it. |
 | `OSError` / `ConnectError` | No network or DNS | Check host egress (an egress firewall is recommended) |
-| Enrichment `429` | Less than 6.5 s since the last lookup | Wait |
-| Enrichment `502 … non-JSON` | Provider outage or HTML error page | Retry later |
+| Lookup `429` / *Wait N more second(s)* | The provider's window is taken, possibly by Insight's own automatic lookups | Wait the seconds shown |
+| Lookup `502 … non-JSON` | Provider outage or HTML error page | Retry later |
+| Lookup job `NVD answered HTTP 403/404 (check INSIGHT_NVD_API_KEY)` | NVD refused the key (mistyped, revoked or expired) | Fix or remove `INSIGHT_NVD_API_KEY` and restart; jobs resume within an hour |
+| Lookup job `NVD answered HTTP 403` (no key hint) | NVD's rate limit without a key, often another tool on the same address | It retries by itself; a key avoids it |
+| Lookup job `… request failed: ConnectError` | No network or DNS | Check host egress; allow `services.nvd.nist.gov` and `api.first.org` |
 
 **CISA Security Advisories** (`cisa-csaf`) reads CISA's machine-readable CSAF 2.0 files from its GitHub
 repository (`raw.githubusercontent.com/cisagov/CSAF`): the `changes.csv` index of the OT (industrial control

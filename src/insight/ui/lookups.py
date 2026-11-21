@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from nicegui import ui
 
 from .. import services
+from ..cve_scores import NVD_NOTICE
 from ..lookups import NAMES
 from .messages import tell
 from .typography import heading
@@ -51,6 +52,7 @@ def build_lookup_switches(ws: Workspace) -> None:
         'number. A CVE seen only in AMBER or RED reports is never looked up by itself, because a lookup '
         'shows the provider that someone is interested in it.'
     ).classes('muted prose')
+    ui.label(NVD_NOTICE).classes('muted text-sm prose')
     for provider, label in (
         ('nvd', 'Look up severity at NIST NVD by itself'),
         ('epss', 'Look up attack likelihood at FIRST EPSS by itself'),

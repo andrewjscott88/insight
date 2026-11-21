@@ -27,3 +27,4 @@ superseded ones are marked, never deleted.
 | [0020](0020-threat-landscape.md) | A threat landscape counted from the reports, compared with the weeks before | Accepted |
 | [0021](0021-threat-research-sources.md) | Threat-research sources, switched on by the operator, with per-publisher reuse rules | Accepted |
 | [0022](0022-alerts.md) | Alerts on watch-term matches and new KEV entries, sent by the job runner | Accepted |
+| [0023](0023-automatic-cve-lookups.md) | Automatic NVD and EPSS lookups, with one throttle per provider | Accepted |

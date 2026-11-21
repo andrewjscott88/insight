@@ -747,7 +747,10 @@ async def fetch_provider_json(provider: str, params: Mapping[str, str]) -> dict[
         else:  # Keeps the call the tests' fake downloads expect.
             raw = await download(PROVIDERS[provider], params)
     except httpx.HTTPStatusError as exc:
-        raise ProviderError(f'{provider.upper()} answered HTTP {exc.response.status_code}') from exc
+        code = exc.response.status_code
+        # NVD refuses a wrong key with a client error, so point at the setting (never at the key itself).
+        hint = ' (check INSIGHT_NVD_API_KEY)' if headers and code in (401, 403, 404) else ''
+        raise ProviderError(f'{provider.upper()} answered HTTP {code}{hint}') from exc
     except (httpx.HTTPError, OSError, ValueError) as exc:
         # Size-limit, redirect and DNS-policy violations are upstream problems too, not bad client input.
         raise ProviderError(f'{provider.upper()} request failed: {type(exc).__name__}') from exc

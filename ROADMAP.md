@@ -41,12 +41,15 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
 - [ ] **TIP 0.4 Pin connector connections to the checked DNS addresses,** closing the DNS-rebinding gap.
 - [ ] **TIP 0.5 `/health` without the version;** the version moves behind sign-in.
 - [ ] **TIP 0.6 Encrypt the TOTP secret at rest,** migrating existing rows.
-- [ ] **Review B2 Throttles and locks into services,** so the API, the workspace and the automatic enrichment
-      below share one implementation.
+- [x] **Review B2 Throttles into one place** ([ADR 0023](docs/adr/0023-automatic-cve-lookups.md)): one throttle
+      per provider in `insight.lookups`, shared by the API, the workspace and the automatic lookups. (The sync
+      lock already lived in one place.)
 - [ ] **TIP 1.1 Complete KEV fields:** known ransomware use, vulnerability name, notes and CWEs; a documented inbox
       policy for older KEV entries.
-- [ ] **TIP 1.2 Automatic NVD and EPSS enrichment** for newly seen CVEs: opt-in, throttled, through the job queue
-      (with review C2, a cached score per CVE).
+- [x] **TIP 1.2 Automatic NVD and EPSS lookups** ([ADR 0023](docs/adr/0023-automatic-cve-lookups.md)): off until
+      switched on per provider; CVEs from TLP:CLEAR and GREEN reports, newest first, through the job queue;
+      optional `INSIGHT_NVD_API_KEY`. With review C2: a parsed score per CVE in the reader, the dialog and
+      `GET /api/cves/{cve}/scores`.
 - [ ] **TIP 1.3 The brief and a prioritised CVE view use them:** ransomware-used KEV entries, NVD CVSS next to
       CSAF scores, EPSS with a plain-language caveat (review C2).
 

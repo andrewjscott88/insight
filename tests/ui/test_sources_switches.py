@@ -1,4 +1,4 @@
-"""The Sources tab: threat-research and news sources start switched off; switching one on is audited."""
+"""The Sources tab: optional sources and automatic CVE lookups start switched off; switching is audited."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from nicegui import ui
 from nicegui.testing.user import User
 from sqlalchemy import select
 
+from insight.cve_scores import NVD_NOTICE
 from insight.models import AuditEvent
 
 pytestmark = pytest.mark.ui
@@ -40,3 +41,25 @@ async def test_optional_sources_start_off_and_can_be_switched_on(user: User, ui_
         ('source.on', 'talos', 'operator'),
         ('source.off', 'cisa-kev', 'operator'),
     ]
+
+
+async def test_automatic_lookups_start_off_and_show_what_waits(user: User, ui_env: SimpleNamespace) -> None:
+    await user.should_see('Automatic CVE lookups')
+    await user.should_see(NVD_NOTICE)
+    nvd = user.find(kind=ui.switch, content='Look up severity at NIST NVD by itself').elements.pop()
+    epss = user.find(
+        kind=ui.switch, content='Look up attack likelihood at FIRST EPSS by itself'
+    ).elements.pop()
+    assert (nvd.value, epss.value) == (False, False)
+    nvd.set_value(True)
+    await user.should_see('Insight will look up CVEs at NIST NVD by itself. It sends only CVE numbers.')
+    await user.should_see('NIST NVD: all looked up')  # The workspace starts empty.
+    await user.should_not_see('FIRST EPSS: all looked up')
+    nvd.set_value(False)
+    await user.should_see('Automatic lookups at NIST NVD are off.')
+    with ui_env.app.state.session_factory() as db:
+        events = db.scalars(select(AuditEvent).where(AuditEvent.action.like('lookup.%'))).all()
+        assert [(e.action, e.object_id, e.actor) for e in events] == [
+            ('lookup.on', 'nvd', 'operator'),
+            ('lookup.off', 'nvd', 'operator'),
+        ]

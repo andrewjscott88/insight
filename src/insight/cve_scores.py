@@ -15,6 +15,8 @@ from typing import Any, Final
 #: Newest CVSS version first: NVD lists several for some CVEs.
 _METRICS: Final = ('cvssMetricV40', 'cvssMetricV31', 'cvssMetricV30', 'cvssMetricV2')
 _NO_CWE: Final = frozenset({'NVD-CWE-Other', 'NVD-CWE-noinfo'})
+#: NVD's terms ask services that use its API to show this notice (https://nvd.nist.gov/developers).
+NVD_NOTICE: Final = 'This product uses the NVD API but is not endorsed or certified by the NVD.'
 EPSS_CAVEAT: Final = (
     'EPSS estimates how likely attackers are to try to exploit a weakness in the next 30 days. It says '
     'nothing about whether you use the product.'
@@ -65,6 +67,11 @@ def _number(value: Any) -> float | None:
     return number if math.isfinite(number) else None
 
 
+def _dicts(value: Any) -> list[dict[str, Any]]:
+    """The objects in a JSON list; anything else is treated as an empty list."""
+    return [item for item in value if isinstance(item, dict)] if isinstance(value, list) else []
+
+
 def parse_nvd(payload: Any) -> NvdScore | None:
     """NVD's answer for one CVE (``/rest/json/cves/2.0?cveId=``); ``None`` if NVD does not know it."""
     try:
@@ -76,7 +83,7 @@ def parse_nvd(payload: Any) -> NvdScore | None:
     score, severity, version, vector = None, '', '', ''
     metrics: dict[str, Any] = cve['metrics'] if isinstance(cve.get('metrics'), dict) else {}
     for key in _METRICS:
-        entries = [e for e in metrics.get(key) or [] if isinstance(e, dict)]
+        entries = _dicts(metrics.get(key))
         if not entries:
             continue
         entry = next((e for e in entries if e.get('type') == 'Primary'), entries[0])
@@ -85,15 +92,15 @@ def parse_nvd(payload: Any) -> NvdScore | None:
         severity = str(data.get('baseSeverity') or entry.get('baseSeverity') or '').title()
         version, vector = str(data.get('version') or ''), str(data.get('vectorString') or '')
         break
-    descriptions = [d for d in cve.get('descriptions') or [] if isinstance(d, dict)]
-    english = next((str(d.get('value', '')) for d in descriptions if d.get('lang') == 'en'), '')
+    english = next(
+        (str(d.get('value', '')) for d in _dicts(cve.get('descriptions')) if d.get('lang') == 'en'), ''
+    )
     cwes = sorted(
         {
             str(d.get('value'))
-            for w in cve.get('weaknesses') or []
-            if isinstance(w, dict)
-            for d in w.get('description') or []
-            if isinstance(d, dict) and str(d.get('value', '')).startswith('CWE-')
+            for w in _dicts(cve.get('weaknesses'))
+            for d in _dicts(w.get('description'))
+            if str(d.get('value', '')).startswith('CWE-')
         }
         - _NO_CWE
     )
@@ -111,10 +118,7 @@ def parse_nvd(payload: Any) -> NvdScore | None:
 
 def parse_epss(payload: Any, cve: str) -> EpssScore | None:
     """FIRST's EPSS answer (``/data/v1/epss?cve=``); ``None`` when EPSS has no score for ``cve``."""
-    rows = payload.get('data') if isinstance(payload, dict) else None
-    if not isinstance(rows, list):
-        return None
-    rows = [r for r in rows if isinstance(r, dict)]
+    rows = _dicts(payload.get('data') if isinstance(payload, dict) else None)
     row = next((r for r in rows if r.get('cve') == cve), rows[0] if len(rows) == 1 else None)
     probability = _number(row.get('epss')) if row else None
     if row is None or probability is None or not 0 <= probability <= 1:
@@ -157,7 +161,7 @@ def percent(probability: float) -> str:
 def describe_nvd(nvd: NvdScore) -> str:
     """``CVSS 9.8 (Critical), NIST NVD`` or what NVD says instead."""
     if nvd.status == 'Rejected':
-        return 'NIST NVD: rejected, not a real weakness'
+        return 'NIST NVD: rejected (withdrawn or a duplicate)'
     if nvd.score is None:
         return f'NIST NVD: not scored yet ({nvd.status.lower() or "no score"})'
     severity = f' ({nvd.severity})' if nvd.severity else ''
@@ -166,7 +170,9 @@ def describe_nvd(nvd: NvdScore) -> str:
 
 def describe_epss(epss: EpssScore) -> str:
     """``EPSS 4.2% chance of exploitation attempts within 30 days, higher than 91% of CVEs (FIRST)``."""
-    rank = f', higher than {epss.percentile * 100:.0f}% of CVEs' if epss.percentile is not None else ''
+    # Rounded down and capped, so the 99.9th percentile never reads as "higher than 100%".
+    share = min(99, math.floor(epss.percentile * 100)) if epss.percentile is not None else 0
+    rank = f', higher than {share}% of CVEs' if share else ''
     return f'EPSS {percent(epss.probability)} chance of exploitation attempts within 30 days{rank} (FIRST)'
 
 

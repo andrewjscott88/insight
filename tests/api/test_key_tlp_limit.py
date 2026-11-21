@@ -6,6 +6,7 @@ key: the marker, the report's ID and its unique indicator must not appear in any
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import pytest
@@ -13,6 +14,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from insight import services
+from insight.models import Enrichment
 from insight.schemas import AssessmentInput, DocumentInput
 from insight.services import SourceRef
 
@@ -53,6 +55,9 @@ def world(app: FastAPI) -> dict[str, Any]:
         services.assess_entity(
             db, shared['entity_id'], AssessmentInput(verdict='malicious', reason=MARKER, tlp='AMBER')
         )
+        # A cached NVD answer for a CVE only the current AMBER revision mentions.
+        nvd = {'vulnerabilities': [{'cve': {'descriptions': [{'lang': 'en', 'value': MARKER}]}}]}
+        db.add(Enrichment(cve='CVE-2024-11111', provider='nvd', payload=json.dumps(nvd)))
         _, token = services.create_api_key(db, name='siem', access='read-write', max_tlp='GREEN')
     return {
         'green': green.id,
@@ -105,6 +110,7 @@ def test_nothing_hidden_leaks_through_any_read_route(client: TestClient, world: 
         f'/api/attack/techniques/{HIDDEN_TECHNIQUE}/documents',
         f'/api/documents/{world["green"]}/techniques',
         f'/api/documents/{world["amber"]}/techniques',
+        '/api/cves/CVE-2024-11111/scores',
     ]
     # Every GET route of the API is covered by the sweep.
     covered = {path.split('?')[0] for path in paths}
