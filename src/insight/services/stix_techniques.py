@@ -43,7 +43,9 @@ def _attack_pattern(technique: Technique, markings: tuple[str, ...], created: st
     return obj
 
 
-def _add_stix_techniques(db: Session, bundle: dict[str, Any], *, max_tlp: str | None) -> None:
+def _add_stix_techniques(
+    db: Session, bundle: dict[str, Any], *, max_tlp: str | None
+) -> dict[str, list[dict[str, Any]]]:
     """Link active catalog tags on already-selected reports, under each report's own markings.
 
     Read only the two keys needed for the links. In particular a tag's contextual evidence may contain
@@ -56,6 +58,7 @@ def _add_stix_techniques(db: Session, bundle: dict[str, Any], *, max_tlp: str | 
     }
     ids = sorted(reports)
     patterns: dict[tuple[str, tuple[str, ...]], str] = {}
+    by_technique: dict[str, list[dict[str, Any]]] = {}
     count = 0
     for start in range(0, len(ids), 500):  # stay under database parameter limits
         stmt = (
@@ -84,5 +87,7 @@ def _add_stix_techniques(db: Session, bundle: dict[str, Any], *, max_tlp: str | 
             if key not in patterns:
                 pattern = _attack_pattern(technique, markings, report['modified'])
                 bundle['objects'].append(pattern)
+                by_technique.setdefault(technique_id, []).append(pattern)
                 patterns[key] = pattern['id']
             report['object_refs'].append(patterns[key])
+    return by_technique

@@ -11,6 +11,7 @@ marking raises the label (the default limit would refuse it).
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -153,6 +154,37 @@ def test_import_stix_file_in_the_workspace(context: Any) -> None:
     picker.set_input_files(file)
     submit.click()
     expect(page.get_by_text('Imported 0 new reports. Already present: 1.')).to_be_visible()
+
+
+def test_import_pdf_advisory_in_the_workspace(context: Any) -> None:
+    page = context.new_page()
+    sign_in(page)
+    # Keep this run unique on a long-lived test instance without changing PDF stream lengths or offsets.
+    key = uuid.uuid4().hex[:8]
+    template = (Path(__file__).parents[1] / 'fixtures' / 'advisory.pdf').read_bytes()
+    data = template.replace(b'Synthetic advisory:', f'Synthetic {key}:'.encode())
+    upload = {'name': 'advisory.pdf', 'mimeType': 'application/pdf', 'buffer': data}
+    title = f'Partner & Müller <{key}>'
+    page.get_by_role('button', name='Ingest intelligence').click()
+    dialog = page.get_by_role('dialog', name='Ingest intelligence')
+    dialog.get_by_label('Document title').fill(title)
+    dialog.get_by_label('Source name').fill('Browser fixture')
+    dialog.get_by_label('Source URL (optional)').fill('https://example.org/report')
+    dialog.get_by_role('combobox').click()
+    page.get_by_role('option', name='GREEN', exact=True).click()
+    dialog.get_by_text('Import a PDF', exact=True).click()
+    picker = dialog.get_by_label('PDF advisory file')
+    picker.set_input_files(upload)
+    with page.expect_response(lambda response: response.url.endswith('/api/documents/pdf')) as response:
+        dialog.get_by_role('button', name='Import PDF', exact=True).click()
+    result = response.value.json()
+    assert response.value.ok, result
+    assert result['file_sha256'] == hashlib.sha256(data).hexdigest()
+    expect(page.get_by_text('PDF imported.', exact=True)).to_be_visible()
+    expect(page.locator('.document-reader h2', has_text=title)).to_be_visible()
+    doc = context.request.get(f'/api/documents/{result["document_id"]}').json()
+    assert (doc['title'], doc['source_name'], doc['tlp']) == (title, 'Browser fixture', 'GREEN')
+    assert any(obs['value'] == '192.0.2.17' for obs in doc['observations'])
 
 
 def test_analyst_workflow(context: Any) -> None:

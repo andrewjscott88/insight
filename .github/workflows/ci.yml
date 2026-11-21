@@ -205,6 +205,11 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.13'
+      - name: Verify sandboxed PDF extraction in the production container
+        run: |
+          docker exec -i insight python -c \
+            "import sys; from insight.pdf_import import parse_pdf; assert 'example.org' in parse_pdf(sys.stdin.buffer.read()).text" \
+            < tests/fixtures/advisory.pdf
       - name: Smoke test
         run: |
           pip install --require-hashes -r requirements.lock

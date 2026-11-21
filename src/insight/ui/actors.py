@@ -136,9 +136,10 @@ def open_industry_dialog(ws: Workspace, group_ref: str, on_saved: Callable[[], A
 
 def render_report_groups(ws: Workspace, doc_id: str, on_changed: Callable[[], Any]) -> None:
     """The reader's section: groups this report is linked to, and a way to link one."""
+    ceiling = ws.app.state.settings.max_tlp
     with ws.read() as db:
         try:
-            groups = services.report_groups(db, doc_id)
+            groups = services.report_groups(db, doc_id, max_tlp=ceiling)
         except LookupError:
             return
     heading(f'Threat groups ({len(groups)})', 3, 'subsection-title mt-4')
@@ -155,7 +156,7 @@ def render_report_groups(ws: Workspace, doc_id: str, on_changed: Callable[[], An
                 if not ws.authorized():
                     return
                 with ws.write() as db:
-                    services.unlink_report(db, ref, doc_id)
+                    services.unlink_report(db, ref, doc_id, max_tlp=ceiling)
                 on_changed()
 
             ui.button('Remove link', on_click=unlink).props('flat dense no-caps')
@@ -169,7 +170,9 @@ def render_report_groups(ws: Workspace, doc_id: str, on_changed: Callable[[], An
             return
         try:
             with ws.write() as db:
-                services.link_report(db, ref, ActorLinkInput(document_id=doc_id))
+                services.link_report(
+                    db, ref, ActorLinkInput(document_id=doc_id), max_tlp=ceiling, preserve_note=True
+                )
         except LookupError:
             tell('This item no longer exists.', 'warning')
             return
@@ -182,7 +185,11 @@ def render_report_groups(ws: Workspace, doc_id: str, on_changed: Callable[[], An
         if not text:
             return
         with ws.read() as db:
-            rows = [(a.id, a.name) for a in services.list_actors(db) if text.casefold() in a.name.casefold()]
+            rows = [
+                (a.id, a.name)
+                for a in services.list_actors(db, max_tlp=ceiling)
+                if text.casefold() in a.name.casefold()
+            ]
         rows += [(g.id, f'{g.id} · {g.name}') for g in library().search(text, limit=8)]
         with matches:
             for ref, shown in rows[:8]:

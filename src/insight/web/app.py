@@ -31,6 +31,7 @@ from .auth import (
     session_checker,
 )
 from .boundary import BoundaryMiddleware
+from .routes.campaigns import _register_campaign_routes
 from .routes.cves import _register_cve_routes
 from .routes.documents import _register_document_routes
 from .routes.entities import _register_entity_routes
@@ -146,7 +147,7 @@ def theme_context(settings: Settings) -> Callable[[Request], dict[str, Any]]:
 def create_app(settings: Settings | None = None, *, with_ui: bool = True) -> FastAPI:
     """Build the FastAPI application (and, unless ``with_ui=False``, mount the NiceGUI workspace)."""
     settings = settings or Settings.from_env()
-    engine, sessions = database(settings.database_url)
+    engine, sessions = database(settings.database_url, session_secret=settings.session_secret)
 
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
@@ -198,6 +199,7 @@ def create_app(settings: Settings | None = None, *, with_ui: bool = True) -> Fas
         _register_entity_routes,
         _register_technique_routes,
         _register_threat_routes,
+        _register_campaign_routes,
         _register_hunting_routes,
         _register_source_routes,
         _register_enrichment_route,

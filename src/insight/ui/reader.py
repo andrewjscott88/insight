@@ -21,6 +21,7 @@ from .actors import render_report_groups
 from .enrichment import open_enrichment_dialog
 from .messages import tell
 from .mobile import back_to_list_button
+from .rules import render_report_rules
 from .techniques import render_report_techniques
 from .theme import tlp_badge
 from .typography import heading, new_tab_link
@@ -85,6 +86,7 @@ def render_report(ws: Workspace, data: dict[str, Any], actions: ReaderActions) -
         )
     render_report_techniques(ws, data['id'], data.get('techniques', []), actions.refresh)
     render_report_groups(ws, data['id'], actions.refresh)
+    render_report_rules(ws, data['id'], data['tlp'], actions.refresh)
     with ui.row().classes('gap-x-6 gap-y-0'):
         new_tab_link('Download this report as JSON', f'/api/documents/{data["id"]}/export')
         new_tab_link("Export this report's IOCs", f'/api/iocs/export?document_id={data["id"]}')
@@ -96,6 +98,13 @@ def render_report(ws: Workspace, data: dict[str, Any], actions: ReaderActions) -
     _render_notes(ws, data, actions)
     with ui.expansion('Where this report came from').classes('w-full muted'):
         ui.label('Fingerprint (SHA-256): ' + data['content_hash']).classes('break-value font-mono text-sm')
+        if attachment := data.get('attachment'):
+            ui.label('Original PDF (SHA-256): ' + attachment['sha256']).classes(
+                'break-value font-mono text-sm'
+            )
+            ui.label(f'{attachment["page_count"]} page(s) · {attachment["size_bytes"]:,} bytes').classes(
+                'text-sm'
+            )
         ui.label('Extraction rules: ' + data['extractor_version']).classes('text-sm')
         if data['source_key']:
             ui.label(f'Source item: {data["source_key"]} / {data["external_id"]}').classes(

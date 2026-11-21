@@ -485,6 +485,9 @@ def test_backup_restore_drill(tmp_path: Path) -> None:
     assert 'Backup/restore drill passed' in result.stdout
 
 
+@pytest.mark.skipif(
+    sys.platform != 'linux', reason='The release fixture includes a real sandboxed PDF import'
+)
 def test_release_fixture_builder_produces_an_upgradeable_database(tmp_path: Path) -> None:
     path = tmp_path / 'fixture.sqlite3'
     make_release_fixture.build(path)
