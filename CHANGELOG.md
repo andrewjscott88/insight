@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+**Upgrading from 0.6.0:** migration `0009` (ATT&CK technique tags) runs at start-up, or with `make migrate`.
+Reports stored before the upgrade get their technique tags when you run `make attack-backfill` once (safe to run
+again). Every 0.6.0 API field is unchanged.
+
+### Added: MITRE ATT&CK® techniques on reports
+- **Tags from the report text.** A report is tagged with every Enterprise ATT&CK technique ID written in it
+  (`T1059`, `T1059.001`), with the words around it as evidence. Insight never guesses a technique from prose and
+  never infers an actor ([ADR 0019](docs/adr/0019-attack-techniques.md)).
+- **Analysts decide the rest.** The reader's new **ATT&CK techniques** section adds a technique by ID or name and
+  removes a wrong one. A new revision of a synced report keeps those decisions. Audited as `technique.tag` and
+  `technique.untag`.
+- **The ATT&CK techniques tab** groups the techniques in current reports by tactic, in matrix order, over the last
+  7, 30 or 90 days, 12 months or all time, with the number of reports for each; opening a technique lists its
+  reports. **Download a layer for ATT&CK Navigator** exports the same view as a Navigator layer (format 4.5),
+  scored by report count.
+- **API:** `GET /api/attack/techniques`, `/api/attack/summary`, `/api/attack/techniques/{id}/documents`,
+  `/api/attack/navigator` and `GET`/`POST`/`DELETE /api/documents/{id}/techniques`. Every read takes the API
+  key's TLP limit: a technique written only in an AMBER report does not exist for a GREEN-limited key.
+- **The catalog ships with Insight** (Enterprise ATT&CK 20.1, about 700 techniques and sub-techniques, revoked and
+  deprecated ones left out), so tagging works offline. `scripts/update_attack.py` regenerates it from MITRE's
+  `attack-stix-data`. Reproduced under MITRE's terms of use; see `NOTICE`.
+- `insight attack-backfill` / `make attack-backfill` tags reports stored before this release.
+
 ### Documentation: a roadmap toward a premium TIP; corrected session and schedule notes
 - `ROADMAP.md` now plans releases 0.7.0 to 1.0 and later from a detailed gap analysis against premium threat
   intelligence platforms, kept in `docs/ROADMAP-TIP.md`: security fixes first, then complete vulnerability

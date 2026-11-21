@@ -20,6 +20,12 @@ A single-operator threat-intelligence workbench, run locally or published behind
   reader or the entity explorer. **Warnings** mark values that must never be blocked (private, reserved and
   example addresses, reserved names, big vendor sites). `GET /api/iocs/blocklist` lists only unexpired malicious
   values with an accepted mention and no warning, for firewalls and SIEMs.
+- **MITRE ATT&CK® techniques** ([ADR 0019](docs/adr/0019-attack-techniques.md)). Reports are tagged with the
+  technique IDs written in them (`T1059.001`), checked against a bundled Enterprise ATT&CK catalog; analysts add
+  and remove the rest in the reader, and new revisions keep those decisions. The **ATT&CK techniques** tab groups
+  the techniques in your reports by tactic over a period you choose, opens the reports behind each one, and
+  downloads a layer for ATT&CK Navigator. Never guessed from prose; no attribution. `make attack-backfill` tags
+  reports stored before 0.7.0. API: `/api/attack/*` and `/api/documents/{id}/techniques`.
 - Organization watch terms highlight literal product, vendor or topic matches. These are transparent keyword matches, not calibrated risk scores.
 - Curated connectors: CISA KEV, CISA security advisories (CISA's machine-readable CSAF files), SANS ISC and UK
   NCSC feeds. **Sync now** per source, **Sync all sources** at the top of the workspace, and **opt-in
@@ -90,6 +96,7 @@ the reference. Common ones:
 | Run | `make up` · `make stop` · `make restart` · `make down` · `make logs` · `make ps` · `make health` |
 | Back up / restore | `make backup` (into `backups/`) · `make restore BACKUP=backups/backup-....db` (asks first) |
 | Delete a report (legal or retention reasons) | `make delete-report ID=... REASON='ticket 42'` (asks first; back up first) |
+| Tag ATT&CK techniques in reports stored before 0.7.0 | `make attack-backfill` (once after upgrading; safe to rerun) |
 | Export IOCs | `make export-iocs EXPORT_ARGS="--max-tlp GREEN --review-status accepted --defang --no-evidence"` (into `exports/`) |
 | API key | `make api-key-create NAME=siem [ACCESS=read-write] [MAX_TLP=GREEN]` · `make api-key-status` · `make api-key-rotate` · `make api-key-revoke` |
 | Sign-in MFA (off by default) | `make mfa-enable` · `make mfa-disable` · `make mfa-status` · `make mfa-reset` |
@@ -104,7 +111,7 @@ Data survives container rebuilds in `insight_insight-data` (the exact Compose pr
 
 ## Upgrading
 
-**Back up first** (see below). Then rebuild and start as usual (`docker compose up --build -d`). Insight applies database migrations automatically at start-up; `insight migrate` does the same explicitly and prints the before/after revision. Databases from 0.1.0 are recognised and upgraded in place. Reports that 0.1.0 duplicated because a publisher edited an item are linked as revisions, and nothing is deleted. Existing browser sessions do not survive a restart.
+**Back up first** (see below). Then rebuild and start as usual (`docker compose up --build -d`). Insight applies database migrations automatically at start-up; `insight migrate` does the same explicitly and prints the before/after revision. Databases from 0.1.0 are recognised and upgraded in place. Reports that 0.1.0 duplicated because a publisher edited an item are linked as revisions, and nothing is deleted. Since 0.6.0 sessions are stored in the database, so a restart keeps you signed in. After upgrading to 0.7.0, run `make attack-backfill` once to tag ATT&CK techniques in older reports.
 
 ## Local Python development
 
@@ -131,6 +138,7 @@ Open http://127.0.0.1:8080. Default local data lives in `./data/insight.db`. Use
 | `insight migrate` | Apply database migrations explicitly |
 | `insight backup FILE` | Consistent online SQLite backup, safe while running (never overwrites) |
 | `insight export-iocs FILE` | Write a JSON IOC export (never overwrites; owner-only file). Options and recipes: [docs/IOC_EXPORT.md](docs/IOC_EXPORT.md#2-quick-start) |
+| `insight attack-backfill` | Tag ATT&CK technique IDs in reports stored before 0.7.0 (safe to rerun) |
 | `insight mfa setup` | Pair an authenticator app for sign-in codes (shows a secret, then confirms one code). Also `status`, `reset`. MFA itself is **off by default** and switched with `INSIGHT_MFA=on`; with Docker, `make mfa-enable` / `make mfa-disable` do both steps |
 | `insight api-key create --name NAME` | Create the API key for scripts/SIEM (read-only unless `--access read-write`; `--max-tlp GREEN` hides more restrictive reports from it; shown once). Also `status`, `rotate`, `revoke`. See [docs/API.md](docs/API.md#api-key-scripts-and-siem) |
 | `insight --version` | Print the version |

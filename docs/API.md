@@ -296,6 +296,24 @@ expires_at,tlp` with a header row. Audited as `ioc.blocklist`; shares the `ioc-e
 | `GET /api/entities/{id}` | `offset` (0), `limit` (100, at most 200) | `{id, kind, value, flags, assessment, first_seen_at, last_seen_at, document_count, offset, documents: [summaries]}`, newest first, paginated. `assessment` is `null` or `{verdict, reason, tlp, valid_until, decided_at, actor}`; a TLP-limited key sees it only within its limit. `first_seen_at` / `last_seen_at`: when the oldest and newest report **you can see** that mentions it was added |
 | `POST /api/entities/{id}/assessment` | JSON `{verdict, reason, tlp, valid_until}`: `verdict` `unknown` (clears) / `benign` / `suspicious` / `malicious`; `reason` up to 2,000 characters; `tlp` (default `AMBER`) labels the reason; `valid_until` a date, today or later, or omitted | The recorded assessment, or `{"verdict": "unknown"}`. Audited as `entity.assess`. `404` if you cannot see the entity; `403` if a TLP-limited key would set, or replace, a verdict above its limit |
 
+## ATT&CK techniques
+
+MITRE ATT&CK® Enterprise techniques on reports ([ADR 0019](adr/0019-attack-techniques.md)). A report is tagged
+with every technique ID written in its text (`T1059`, `T1059.001`) that is in the bundled catalog (`source:
+report`); analysts add and remove techniques by hand (`source: analyst`). A new revision of a synced item keeps
+the analyst's additions and removals. Insight never guesses a technique from prose and never infers an actor.
+Summaries and pivots count **current** reports you can see.
+
+| Route | Parameters | Result |
+| --- | --- | --- |
+| `GET /api/attack/techniques` | `q` (ID prefix or name, up to 100 characters), `limit` (50, at most 200) | `{version, techniques: [{id, name, tactics, url}]}` from the bundled catalog, by ID |
+| `GET /api/attack/summary` | `days` (30; `0` for all time, at most 3650) | `{version, period, techniques: [{id, name, tactics, url, reports, last_seen_at}]}`, most reports first |
+| `GET /api/attack/techniques/{technique_id}/documents` | `days` (0), `offset` (0), `limit` (25, at most 200) | `{id, name, tactics, url, offset, documents: [summaries]}`, newest first; `404` for an ID not in the catalog |
+| `GET /api/attack/navigator` | `days` (30; `0` for all time) | An [ATT&CK Navigator](https://mitre-attack.github.io/attack-navigator/) layer (format 4.5) of the summary, each technique scored by its number of reports, as an attachment. Audited as `attack.navigator` |
+| `GET /api/documents/{id}/techniques` | - | `[{id, name, tactics, url, source, evidence, actor, created_at, in_catalog}]` by ID; `404` if you cannot see the report |
+| `POST /api/documents/{id}/techniques` | JSON `{technique_id}` (`T1486` or `T1059.001`) | The tag. Restores a removed one; a tag that already exists is returned unchanged. Audited as `technique.tag`. `422` for an ID not in the catalog, `404` if you cannot see the report |
+| `DELETE /api/documents/{id}/techniques/{technique_id}` | - | `{removed}`. Later revisions keep it removed. Audited as `technique.untag`. `404` if it is not tagged or you cannot see the report |
+
 ## Sources and enrichment
 
 | Route | Result |

@@ -180,7 +180,7 @@ def screens(page: Any) -> Iterator[str]:
         yield f'{dialog} dialog'
         page.get_by_role('dialog', name=dialog).get_by_role('button', name=close).click()
         expect(page.get_by_role('dialog', name=dialog)).to_have_count(0)
-    for tab in ('Entit', 'Watch', 'Sources'):
+    for tab in ('Entit', 'ATT&CK', 'Watch', 'Sources'):
         page.get_by_role('tab', name=tab).first.click()
         if tab == 'Entit':
             page.locator('.q-expansion-item').first.click()

@@ -19,6 +19,7 @@ from insight.services import SourceRef
 from .test_auth import PROTECTED
 
 MARKER = 'ZEBRA-MERIDIAN-7731'
+HIDDEN_TECHNIQUE = 'T1490'  # Inhibit System Recovery: written only in the AMBER report
 HIDDEN_IP = '198.51.100.77'
 SHARED_IP = '192.0.2.44'
 
@@ -32,9 +33,16 @@ def world(app: FastAPI) -> dict[str, Any]:
     """One GREEN and one AMBER report sharing an indicator, plus a synced item with a GREEN and an AMBER
     revision; and a GREEN-limited read-write key."""
     with app.state.session_factory.begin() as db:
-        green, _ = services.ingest(db, report('Public note', f'Scanning from {SHARED_IP}.', 'GREEN'))
+        green, _ = services.ingest(
+            db, report('Public note', f'Scanning from {SHARED_IP} (T1595.001).', 'GREEN')
+        )
         amber, _ = services.ingest(
-            db, report(f'{MARKER} briefing', f'{MARKER}: C2 at {HIDDEN_IP}, also {SHARED_IP}.', 'AMBER')
+            db,
+            report(
+                f'{MARKER} briefing',
+                f'{MARKER}: C2 at {HIDDEN_IP}, also {SHARED_IP}. {HIDDEN_TECHNIQUE}',
+                'AMBER',
+            ),
         )
         ref = SourceRef('partner-feed', 'item-1')
         old, _ = services.ingest(db, report('Item v1', 'CVE-2024-11111 first.', 'GREEN'), ref=ref)
@@ -89,6 +97,12 @@ def test_nothing_hidden_leaks_through_any_read_route(client: TestClient, world: 
         '/api/schedules',
         '/api/jobs',
         '/api/watch-terms',
+        '/api/attack/techniques',
+        '/api/attack/summary?days=0',
+        '/api/attack/navigator?days=0',
+        f'/api/attack/techniques/{HIDDEN_TECHNIQUE}/documents',
+        f'/api/documents/{world["green"]}/techniques',
+        f'/api/documents/{world["amber"]}/techniques',
     ]
     # Every GET route of the API is covered by the sweep.
     covered = {path.split('?')[0] for path in paths}
@@ -134,6 +148,20 @@ def test_ioc_exports_are_capped_at_the_key_limit(client: TestClient, world: dict
     assert export['filters']['max_tlp'] == 'GREEN'  # the stricter of the request and the key
     assert export['tlp'] == 'GREEN'
     assert {ioc['value'] for ioc in export['iocs']} == {SHARED_IP}
+
+
+def test_techniques_from_hidden_reports_stay_hidden(client: TestClient, world: dict[str, Any]) -> None:
+    summary = get(client, world, '/api/attack/summary', days=0).text
+    assert 'T1595.001' in summary  # written in the GREEN report: counted
+    for path in ('/api/attack/summary', '/api/attack/navigator'):
+        assert HIDDEN_TECHNIQUE not in get(client, world, path, days=0).text, path
+    pivot = get(client, world, f'/api/attack/techniques/{HIDDEN_TECHNIQUE}/documents').json()
+    assert pivot['documents'] == []
+    headers, amber = world['headers'], world['amber']
+    tag = {'technique_id': 'T1486'}
+    assert client.post(f'/api/documents/{amber}/techniques', json=tag, headers=headers).status_code == 404
+    path = f'/api/documents/{amber}/techniques/{HIDDEN_TECHNIQUE}'
+    assert client.delete(path, headers=headers).status_code == 404
 
 
 def test_writes_to_hidden_reports_look_like_missing_reports(

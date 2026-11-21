@@ -79,7 +79,7 @@ def build(path: Path) -> None:
             services.add_watch_term(db, 'GlobalProtect')
             db.add(SourceRun(source_key='cisa-kev', status='success', message='fixture'))
             db.add(Enrichment(cve='CVE-2024-3400', provider='epss', payload='{"data": []}'))
-            # Tables added in 0.5.0 and 0.6.0, so later migrations are tested against data in them.
+            # Tables added since 0.5.0, so later migrations are tested against data in them.
             beacon = db.scalar(select(Entity).where(Entity.value == '198.51.100.7'))
             if beacon is None:
                 raise RuntimeError('fixture report produced no beacon address')
@@ -94,6 +94,7 @@ def build(path: Path) -> None:
             )
             services.create_api_key(db, name='fixture', access='read', max_tlp='GREEN')
             services.start_operator_session(db, binding='fixture', at=when)  # its ID is thrown away
+            services.tag_technique(db, manual.id, 'T1071.001')  # 0.7.0: an analyst's ATT&CK tag
     finally:
         engine.dispose()
 

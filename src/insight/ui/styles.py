@@ -77,6 +77,9 @@ body.body--dark, body.body--light { background:var(--ins-bg);color:var(--ins-tex
    browser keeps focused elements above them (scroll-padding, W3C technique C43); they sit below dialogs. */
 html { scroll-padding-bottom:8rem; }
 @media(max-width:700px) { .workspace { padding:20px 14px; } }
+/* Tabs that do not fit wrap onto a second line instead of a sideways-scrolling strip, which keyboard users
+   cannot reach in Safari (axe scrollable-region-focusable) and which hides tabs from view. */
+.q-tabs__content.no-wrap { flex-wrap:wrap !important;overflow:visible !important; }
 @media(max-width:599.98px) {
   .workspace { padding:14px max(12px, env(safe-area-inset-right)) 28px max(12px, env(safe-area-inset-left)); }
   .page-title { font-size:1.5rem; }

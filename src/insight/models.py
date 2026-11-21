@@ -123,6 +123,25 @@ class Observation(Base):
     review_status: Mapped[str] = mapped_column(String(20), default='unreviewed')
 
 
+class DocumentTechnique(Base):
+    """A MITRE ATT&CK technique on one report revision (ADR 0019).
+
+    ``source`` is ``report`` (the ID is written in the text) or ``analyst`` (added by hand). ``status`` is
+    ``tagged`` or ``removed``: a removed row is kept, so a new revision of the item does not bring it back.
+    """
+
+    __tablename__ = 'document_techniques'
+    __table_args__ = (UniqueConstraint('document_id', 'technique_id'),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    document_id: Mapped[str] = mapped_column(ForeignKey('documents.id'), index=True)
+    technique_id: Mapped[str] = mapped_column(String(16), index=True)
+    source: Mapped[str] = mapped_column(String(10))
+    status: Mapped[str] = mapped_column(String(10), default='tagged')
+    evidence: Mapped[str] = mapped_column(Text, default='')
+    actor: Mapped[str] = mapped_column(String(80), default='system')
+    created_at: Mapped[str] = mapped_column(String(40), default=now)
+
+
 class Note(Base):
     __tablename__ = 'notes'
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)

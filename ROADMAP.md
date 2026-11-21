@@ -15,8 +15,13 @@ verified) and the README's "Scope and known limits".
 
 ## 0.7.0: hardened, with complete vulnerability intelligence
 
-Close the security findings first, then make the vulnerability workflow complete.
+Close the security findings first, then make the vulnerability workflow complete. Intelligence work comes first
+where the operator asked for it: ATT&CK techniques were brought forward from 0.9.0.
 
+- [x] **TIP 2.3 ATT&CK techniques** ([ADR 0019](docs/adr/0019-attack-techniques.md)): the bundled Enterprise
+      catalog, tags from technique IDs written in reports, analyst tags and removals kept across revisions, the
+      **ATT&CK techniques** tab with report pivots, a Navigator layer export and the API. Still to do: Mobile and
+      ICS catalogs.
 - [ ] **TIP 0.1 Verify every public deployment.** Anonymous `GET /` answers 303 to `/login`; `.env` sets secure
       cookies, allowed hosts and trusted proxies, preferably MFA. A smoke check for the public URL.
 - [x] **TIP 0.2 Fix stale session and scheduling documentation.** README and ARCHITECTURE now describe stored
@@ -55,8 +60,7 @@ Close the security findings first, then make the vulnerability workflow complete
 - [ ] [#12](https://github.com/andrewjscott88/insight/issues/12) **TIP 2.1 STIX 2.1 export (M5),** validated on
       every export, with a round-trip test.
 - [ ] **TIP 2.2 STIX 2.1 import** with TLP raising and the instance TLP limit.
-- [ ] **TIP 2.3 ATT&CK techniques:** the official catalog, manual tags and conservative suggestions from explicit
-      technique IDs only.
+- [x] **TIP 2.3 ATT&CK techniques:** done in 0.7.0 (above); STIX export carries them as `attack-pattern` objects.
 - [ ] **TIP 2.9 Suricata/Snort-oriented export** of the blocklist population.
 - [ ] **TIP 2.4 MISP export and import,** CLI first.
 

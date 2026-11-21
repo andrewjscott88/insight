@@ -82,6 +82,7 @@ def build_parser() -> argparse.ArgumentParser:
             'mfa',
             'schedule',
             'delete-report',
+            'attack-backfill',
         ],
         nargs='?',
         default='serve',
@@ -90,7 +91,8 @@ def build_parser() -> argparse.ArgumentParser:
             'export-iocs DEST: write a JSON IOC export | api-key ACTION: manage the API key | '
             'mfa ACTION: pair the sign-in authenticator app | '
             'schedule [SOURCE|all --every off|1h|6h|24h]: show or set scheduled syncs | '
-            'delete-report ID --reason TEXT: delete one report for legal or retention reasons'
+            'delete-report ID --reason TEXT: delete one report for legal or retention reasons | '
+            'attack-backfill: tag the ATT&CK techniques written in reports stored before 0.7.0'
         ),
     )
     parser.add_argument(
@@ -526,6 +528,20 @@ def mfa(action: str, read_code: Callable[[str], str] | None = None) -> str:
     raise ValueError('no matching code; no authenticator app was paired (nothing was saved)')
 
 
+def attack_backfill() -> str:
+    """Tag the ATT&CK technique IDs written in reports stored before technique tagging existed (0.7.0).
+
+    Safe to run again: reports that already have technique rows are left alone. Audited as
+    ``technique.backfill`` by ``cli``.
+    """
+    from . import services
+
+    with _current_database() as sessions, sessions.begin() as db:
+        services.set_actor(db, 'cli')
+        reports, added = services.backfill_techniques(db)
+    return f'Read {_plural(reports, "report")} without technique tags; added {_plural(added, "tag")}.'
+
+
 def delete_report(document_id: str, reason: str, confirm: Callable[[str], bool] | None = None) -> str:
     """Delete one report (``services.delete_document``), after ``confirm`` agrees to the summary it is shown.
 
@@ -700,6 +716,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         except ValueError as exc:
             print(f'Schedule: {exc}', file=sys.stderr)
             return 1
+        return 0
+    if args.command == 'attack-backfill':
+        print(attack_backfill())
         return 0
     if args.command == 'delete-report':
         if not args.destination or not args.reason:
