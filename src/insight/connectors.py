@@ -23,6 +23,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from . import __version__, egress
+from .abusech import parse_abusech
+from .feed_items import MAX_FEED_ITEMS as MAX_FEED_ITEMS
+from .feed_items import FeedItem as FeedItem
 from .models import Enrichment, Entity, KEVRecord, SessionFactory, SourceRun, now
 from .schemas import DocumentInput
 from .services import SourceRef, get_fetch_state, ingest, save_fetch_state, set_actor, source_switches
@@ -39,7 +42,6 @@ MAX_BYTES: Final = 8_000_000
 #: Seconds one whole download may take (code review L6). ``httpx.Timeout(25)`` only limits each wait for data,
 #: so a server sending a little every 24 s could otherwise stretch one sync out for hours.
 DOWNLOAD_DEADLINE: Final = 120.0
-MAX_FEED_ITEMS: Final = 100
 MAX_FEED_SUMMARY: Final = 500
 MAX_KEV_ROWS: Final = 20_000
 MAX_KEV_FIELD: Final = 10_000
@@ -167,11 +169,12 @@ async def download(
     transport: httpx.AsyncBaseTransport | None = None,
     validators: Validators | None = None,
     headers: Mapping[str, str] | None = None,
+    body: bytes | None = None,
 ) -> bytes:
     """Fetch ``url`` from the curated HTTPS registry with strict size and redirect limits.
 
     With ``validators``, the request is conditional: an unchanged resource raises :class:`NotModified`, and a
-    changed one updates ``validators`` from the response. ``headers`` adds request headers (an NVD API key).
+    changed one updates ``validators`` from the response. Keyed feeds can add headers and a fixed POST body.
     ``transport`` exists for offline testing; production code never passes it.
     """
     parts = urlsplit(url)
@@ -192,7 +195,7 @@ async def download(
     # Fixed application-owned hosts only, reached at the addresses just checked (review L1).
     try:
         async with asyncio.timeout(DOWNLOAD_DEADLINE):
-            return await _fetch(url, addresses, params, request_headers, validators, transport)
+            return await _fetch(url, addresses, params, request_headers, validators, transport, body)
     except TimeoutError as exc:  # The overall deadline (L6); a normal fetch failure, recorded like any other.
         raise TimeoutError(f'The download took longer than {DOWNLOAD_DEADLINE:g} seconds') from exc
 
@@ -204,6 +207,7 @@ async def _fetch(
     request_headers: dict[str, str],
     validators: Validators | None,
     transport: httpx.AsyncBaseTransport | None,
+    body: bytes | None,
 ) -> bytes:
     async with httpx.AsyncClient(
         timeout=httpx.Timeout(25), follow_redirects=False, trust_env=False, transport=transport
@@ -212,8 +216,9 @@ async def _fetch(
             target = egress.pin(url, address)
             try:
                 async with client.stream(
-                    'GET',
+                    'GET' if body is None else 'POST',
                     target.url,
+                    content=body,
                     params=params,
                     headers={**request_headers, **target.headers},
                     extensions=target.extensions,
@@ -263,16 +268,6 @@ def _atom_link(item: Any) -> str:
         if el.get('rel', 'alternate') == 'alternate':
             return str(el.get('href', ''))
     return ''
-
-
-@dataclass(frozen=True, slots=True)
-class FeedItem:
-    """A parsed feed entry and its stable identity at the publisher (``None`` if it has none)."""
-
-    document: DocumentInput
-    external_id: str | None
-    #: The publisher's summary was longer than :data:`MAX_FEED_SUMMARY` and was cut.
-    truncated: bool = False
 
 
 def parse_feed(payload: bytes, source: Source) -> list[FeedItem]:
@@ -620,7 +615,13 @@ def _load_validators(session_factory: SessionFactory, url: str) -> tuple[Validat
         return Validators(state.etag, state.last_modified), state.payload_sha256
 
 
-async def fetch_if_changed(session_factory: SessionFactory, url: str) -> Fetched | None:
+async def fetch_if_changed(
+    session_factory: SessionFactory,
+    url: str,
+    *,
+    headers: Mapping[str, str] | None = None,
+    body: bytes | None = None,
+) -> Fetched | None:
     """Download ``url`` unless it is unchanged since it was last stored: ``None`` then.
 
     Unchanged means a ``304`` to a conditional request, or the same bytes as last time (for servers that
@@ -629,7 +630,9 @@ async def fetch_if_changed(session_factory: SessionFactory, url: str) -> Fetched
     stored = await asyncio.to_thread(_load_validators, session_factory, url)
     validators = Validators(stored[0].etag, stored[0].last_modified) if stored else Validators()
     try:
-        payload = await download(url, validators=validators)
+        payload = await download(
+            url, headers=headers, body=body, validators=validators if body is None else None
+        )
     except NotModified:
         return None
     digest = hashlib.sha256(payload).hexdigest()
@@ -655,7 +658,7 @@ def _store_source(session_factory: SessionFactory, source: Source, fetched: Fetc
                 f'Updated {count} KEV records; {added} new reports from the latest {KEV_INBOX_LIMIT} entries.'
             )
         else:
-            docs = parse_feed(payload, source)
+            docs = parse_abusech(payload, source) if source.kind == 'abusech' else parse_feed(payload, source)
             message = f'Read {len(docs)} feed items; {_ingest_items(db, source, docs)} new reports.'
         db.add(SourceRun(source_key=source.key, status='success', message=message))
     return message
@@ -708,6 +711,28 @@ def sources_in_use(session_factory: SessionFactory) -> list[Source]:
     return [s for s in SOURCES.values() if in_use(s, current)]
 
 
+def abusech_request(source: Source) -> tuple[dict[str, str], bytes | None]:
+    """One fixed, read-only metadata query per source. The key is sent only as an HTTP header."""
+    if source.kind != 'abusech':
+        raise ValueError('Expected an abuse.ch source')
+    key = os.environ.get('INSIGHT_ABUSECH_AUTH_KEY', '')
+    if not key:
+        raise ValueError('Set INSIGHT_ABUSECH_AUTH_KEY to use this source')
+    if len(key) > 512 or not re.fullmatch(r'[!-~]+', key):
+        raise ValueError('INSIGHT_ABUSECH_AUTH_KEY must be a single printable token')
+    headers = {'Auth-Key': key}
+    if source.key == 'urlhaus':
+        return headers, None
+    if source.key == 'threatfox':
+        return {**headers, 'Content-Type': 'application/json'}, b'{"query":"get_iocs","days":1}'
+    if source.key == 'malwarebazaar':
+        return {
+            **headers,
+            'Content-Type': 'application/x-www-form-urlencoded',
+        }, b'query=get_recent&selector=time'
+    raise ValueError('Unknown abuse.ch source')
+
+
 async def sync_source(session_factory: SessionFactory, key: str) -> str:
     """Download, validate and store one curated source. Every attempt is recorded as a ``SourceRun``.
 
@@ -729,7 +754,18 @@ async def sync_source(session_factory: SessionFactory, key: str) -> str:
                 return await asyncio.to_thread(_record_unchanged, session_factory, source)
             items, skipped = await fetch_csaf(source, {f.url: f.payload for f in changed})
             return await asyncio.to_thread(_store_csaf, session_factory, source, items, skipped, changed)
-        fetched = await fetch_if_changed(session_factory, source.url)
+        if source.kind == 'abusech':
+            headers, body = abusech_request(source)
+            try:
+                fetched = await fetch_if_changed(
+                    session_factory, source.fetch_urls[0], headers=headers, body=body
+                )
+            except httpx.HTTPStatusError as exc:
+                raise ValueError(f'{source.name} answered HTTP {exc.response.status_code}') from None
+            except httpx.RequestError as exc:
+                raise ValueError(f'{source.name} request failed ({type(exc).__name__})') from None
+        else:
+            fetched = await fetch_if_changed(session_factory, source.url)
         if fetched is None:
             return await asyncio.to_thread(_record_unchanged, session_factory, source)
         return await asyncio.to_thread(_store_source, session_factory, source, fetched)
