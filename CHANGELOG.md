@@ -8,6 +8,11 @@
   The provenance panel and report JSON include the original file’s SHA-256, size and page count.
   Migration `0016` adds the attachment metadata table. [Usage and limits](docs/API.md#post-apidocumentspdf)
 
+### Detection rule files
+
+- Attach YARA or Sigma rules to reports, actors, techniques, CVEs and malware families. Download the original
+  text with its SHA-256, licence, source and sharing label. [Rule files](docs/THREAT_GUIDES.md#rules)
+
 ### STIX 2.1 export
 
 - Export indicators, CVEs and report provenance with TLP 2.0 markings from the workspace, the CLI

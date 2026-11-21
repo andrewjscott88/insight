@@ -99,9 +99,9 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
       reports, linked Sigma/YARA rules, and a hunt record. Needs a bundled threat-group library (ATT&CK groups
       plus sourced industry data); builds on TIP 2.3, 2.5 and 2.7.
       *Done (unreleased):* [docs/THREAT_GUIDES.md](docs/THREAT_GUIDES.md), [ADR 0025](docs/adr/0025-threat-guides.md).
-- [ ] **TIP 2.7 YARA and Sigma rules as linked artifacts** (carried and exported, never executed).
-      *Partly done (unreleased, with TIP 2.10):* rules stored as text, linked to groups, techniques and reports,
-      exported in threat guides, deleted with an audit event; linking to CVEs and STIX export remain.
+- [x] **TIP 2.7 YARA and Sigma rules as linked artifacts** (carried and exported, never executed).
+      *Done (unreleased):* attach rules to reports, actors, techniques, CVEs and malware families. Download
+      the rule and its handling manifest together. [Rule files](docs/THREAT_GUIDES.md#rules)
 - [ ] **TIP 2.6 Optional GreyNoise enrichment** for IP addresses (operator key; never a verdict by itself).
 - [x] [#13](https://github.com/andrewjscott88/insight/issues/13) **TIP 2.8 PDF report ingestion,** keeping the
       file's hash as evidence.

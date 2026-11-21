@@ -431,11 +431,12 @@ which is not attribution.
 | `GET /api/hunts/{hunt_id}` | - | One hunt, as above; `404` if unknown or above your limit |
 | `PUT /api/hunts/{hunt_id}` | JSON `{status, summary}` (`open` or `closed`) | The hunt. Audited as `hunt.update` |
 | `PUT /api/hunts/{hunt_id}/checks/{technique_id}` | JSON `{result, data_checked, period_start, period_end, notes}`; `result` is `not-checked`, `nothing-found`, `suspicious` or `confirmed`; dates `YYYY-MM-DD` | `{hunt, technique, result}`. One row per technique, replaced by the next save. Audited as `hunt.check`. `422` for a closed hunt, a technique not in the catalog or an end before the start |
-| `GET /api/rules` | `kind` (`yara` or `sigma`) | `[{id, kind, name, source_url, licence, sha256, tlp, created_at, created_by, linked_to: [{kind, id}], body}]` you can see |
+| `GET /api/rules` | Optional `kind` (`yara` or `sigma`), optional `target_kind` and `target_id` together | `[{id, kind, name, source_url, licence, sha256, tlp, created_at, created_by, linked_to: [{kind, id}], body}]` you can see |
 | `POST /api/rules` | JSON `{kind, name, body, source_url, licence, tlp}`; `body` up to 100,000 characters | The rule (`201`). Rules are stored as text and **never compiled or run**; a basic shape check (YARA `rule name { … condition: … }`, Sigma `title:` and `detection:`) catches pasting mistakes. `422` for a bad shape or the same text twice. Audited as `rule.add` |
 | `GET /api/rules/{rule_id}` | - | One rule; `404` if unknown or above your limit |
+| `GET /api/rules/{rule_id}/export` | - | ZIP attachment with the rule file and a JSON manifest containing its source, licence, TLP and SHA-256. Returns `404` above the instance or key limit. Audited as `rule.export` |
 | `DELETE /api/rules/{rule_id}` | - | `{deleted}`, with its links. Audited as `rule.delete` |
-| `POST /api/rules/{rule_id}/links` | JSON `{target_kind, target_id}`: `group` (a `{ref}`), `technique` (`T1059.001`) or `document` (a report ID) | `{rule, kind, id}`. Audited as `rule.link`. `404` if you cannot see the target |
+| `POST /api/rules/{rule_id}/links` | JSON `{target_kind, target_id}`: `group` (a `{ref}`), `technique` (`T1059.001`), `document` (a report ID), `cve` (a CVE ID) or `malware` (a family label) | `{rule, kind, id}`. Audited as `rule.link`. `404` if you cannot see the target |
 | `DELETE /api/rules/{rule_id}/links` | Same body | `{unlinked}`. Audited as `rule.unlink` |
 
 ## Sources and enrichment

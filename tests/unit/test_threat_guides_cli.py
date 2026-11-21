@@ -137,11 +137,15 @@ def test_rule_add_stores_and_links_a_rule(
         'G0016',
         '--link',
         'T1059.001',
+        '--link',
+        'cve:CVE-2024-1234',
+        '--link',
+        'malware:Example Family',
         '--tlp',
         'green',
     ]
     assert cli.main(argv) == 0
-    assert 'linked to 2 target(s)' in capsys.readouterr().out
+    assert 'linked to 4 target(s)' in capsys.readouterr().out
     assert cli.main(argv) == 1
     assert 'already stored' in capsys.readouterr().err
     other = tmp_path / 'bad.yar'

@@ -455,6 +455,7 @@ curl -sS -X DELETE "$INSIGHT_URL/api/rules/$RULE_ID/links" -H "Authorization: Be
   -H 'Content-Type: application/json' -d '{"target_kind": "technique", "target_id": "T1059.001"}'
 curl -sS "$INSIGHT_URL/api/rules?kind=sigma" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq '.[] | {id, name, linked_to}'
 curl -sS "$INSIGHT_URL/api/rules/$RULE_ID" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq -r .body
+curl -fsS "$INSIGHT_URL/api/rules/$RULE_ID/export" -H "Authorization: Bearer $INSIGHT_API_KEY" -o rule.zip
 curl -sS -X DELETE "$INSIGHT_URL/api/rules/$RULE_ID" -H "Authorization: Bearer $INSIGHT_API_KEY"
 ```
 

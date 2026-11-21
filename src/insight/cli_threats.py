@@ -159,23 +159,25 @@ def rule_add(
                 'source_url': source_url,
             }
         )
-        targets = [
-            RuleLinkInput(target_kind='technique' if t.upper().startswith('T') else 'group', target_id=t)
-            for t in links
-        ]
+        targets = []
+        for value in links:
+            prefix, separator, target_id = value.partition(':')
+            if not separator:
+                target_id = value
+                prefix = 'technique' if value.upper().startswith('T') else 'group'
+            targets.append(RuleLinkInput.model_validate({'target_kind': prefix, 'target_id': target_id}))
     except ValidationError as exc:
         raise ValueError(validation_message(exc)) from exc
     with _current_database() as sessions, sessions.begin() as db:
         services.set_actor(db, 'cli')
         try:
-            rule = services.add_rule(
-                db, payload, max_tlp=parse_max_tlp(os.environ.get('INSIGHT_MAX_TLP', ''))
-            )
+            limit = parse_max_tlp(os.environ.get('INSIGHT_MAX_TLP', ''))
+            rule = services.add_rule(db, payload, max_tlp=limit)
         except services.TlpNotPermitted as exc:
             raise ValueError(str(exc)) from exc
         for target in targets:
             try:
-                services.link_rule(db, rule.id, target)
+                services.link_rule(db, rule.id, target, max_tlp=limit)
             except LookupError as exc:
                 raise ValueError(f'{target.target_id}: {exc}') from exc
         rule_id = rule.id

@@ -247,6 +247,99 @@ def test_a_hidden_industry_decision_looks_missing(
     assert response.json()['detail'] == 'Industry mapping not found'
 
 
+@pytest.mark.parametrize(
+    ('kind', 'filename', 'body'),
+    [('sigma', 'rule.yml', SIGMA), ('yara', 'rule.yar', 'rule example { condition: false }\n')],
+    ids=['sigma', 'yara'],
+)
+def test_download_rule_preserves_hash_and_handling_without_report_links(
+    app: FastAPI, signed_in: TestClient, kind: str, filename: str, body: str
+) -> None:
+    import hashlib
+    import io
+    from zipfile import ZipFile
+
+    private_report = ingest(app, 'Private fixture', 'Reporter notes.', 'AMBER')
+    payload = {
+        'kind': kind,
+        'name': 'case/fixture',
+        'body': body.replace('\n', '\r\n'),
+        'tlp': 'GREEN',
+        'licence': 'CC0-1.0',
+        'source_url': 'https://example.org/fixture',
+    }
+    rule = signed_in.post('/api/rules', json=payload).json()
+    url = f'/api/rules/{rule["id"]}'
+    assert signed_in.post(
+        url + '/links', json={'target_kind': 'document', 'target_id': private_report}
+    ).is_success
+    hidden = signed_in.post('/api/rules', json={**payload, 'body': body + '\n', 'tlp': 'AMBER'}).json()
+    read = key(app, access='read', max_tlp='GREEN')
+    assert signed_in.get(f'/api/rules/{hidden["id"]}/export', headers=read).status_code == 404
+    assert audited(app, 'rule.export') == []
+    downloaded = signed_in.get(url + '/export', headers=read)
+    assert downloaded.status_code == 200
+    assert downloaded.headers['content-type'] == 'application/zip'
+    assert (
+        downloaded.headers['content-disposition'] == f'attachment; filename="insight-rule-{rule["id"]}.zip"'
+    )
+    with ZipFile(io.BytesIO(downloaded.content)) as archive:
+        assert set(archive.namelist()) == {filename, 'manifest.json'}
+        data = archive.read(filename)
+        assert data == body.encode()
+        manifest = json.loads(archive.read('manifest.json'))
+        assert manifest == {
+            'id': rule['id'],
+            'kind': kind,
+            'name': 'case/fixture',
+            'file': filename,
+            'sha256': hashlib.sha256(data).hexdigest(),
+            'tlp': 'GREEN',
+            'licence': 'CC0-1.0',
+            'source_url': 'https://example.org/fixture',
+        }
+        assert rule['sha256'] == manifest['sha256']
+    assert [action for action, _ in audited(app, 'rule.export')] == ['rule.export']
+
+
+def test_analyst_links_and_finds_rules_by_family_cve_or_visible_report(
+    app: FastAPI, signed_in: TestClient
+) -> None:
+    doc = ingest(app, 'Case report', 'Analyst summary.', 'AMBER')
+    rule = signed_in.post(
+        '/api/rules', json={'kind': 'sigma', 'name': 'Example', 'body': SIGMA, 'tlp': 'GREEN'}
+    ).json()
+    links = f'/api/rules/{rule["id"]}/links'
+    for kind, raw, expected in [
+        ('cve', 'cve-2024-1234', 'CVE-2024-1234'),
+        ('malware', 'Example  Family', 'example family'),
+        ('document', doc, doc),
+    ]:
+        payload = {'target_kind': kind, 'target_id': raw}
+        for _ in range(2):
+            assert signed_in.post(links, json=payload).json()['id'] == expected
+        found = signed_in.get('/api/rules', params=payload).json()
+        assert [r['id'] for r in found] == [rule['id']]
+    assert len(audited(app, 'rule.link')) == 3
+    assert signed_in.get('/api/rules', params={'target_kind': 'cve'}).status_code == 422
+    for kind, invalid in [('cve', 'CVE-foo'), ('malware', '../file')]:
+        assert signed_in.post(links, json={'target_kind': kind, 'target_id': invalid}).status_code == 422
+    read = key(app, access='read', max_tlp='GREEN')
+    assert (
+        signed_in.get(
+            '/api/rules', params={'target_kind': 'document', 'target_id': doc}, headers=read
+        ).status_code
+        == 404
+    )
+    assert signed_in.post('/api/actors/G0016/documents', json={'document_id': doc}).is_success
+    guide = signed_in.get('/api/actors/G0016/guide').json()
+    assert [r['id'] for r in guide['hunt']['rules']] == [rule['id']]
+    assert signed_in.get('/api/actors/G0016/guide', headers=read).json()['hunt']['rules'] == []
+    family = {'target_kind': 'malware', 'target_id': 'example family'}
+    assert signed_in.request('DELETE', links, json=family).is_success
+    assert signed_in.get('/api/rules', params=family).json() == []
+
+
 def test_rule_links_and_guide_labels_follow_eligible_targets(
     app: FastAPI, signed_in: TestClient, client: TestClient
 ) -> None:

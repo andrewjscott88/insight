@@ -315,6 +315,8 @@ opt-in schedules and the job runner, and `ROADMAP.md` marks #10 done.
 
 ### 2.7 Link YARA and Sigma as artifacts
 
+- **Status (unreleased):** Built, including individual rule downloads with a handling manifest. [Using rule files](THREAT_GUIDES.md#rules)
+
 - **What to build:** Attach rule text (YARA or Sigma) to a report, CVE, actor, or malware-family label. Do **not** build a detection engine.
 - **Why / which TIP capability:** Detection content. CrowdStrike documents YARA rule download; MISP exports Suricata/Snort/Zeek; Google TI describes YARA hunting. Insight should *carry* rules, not execute them.
 - **Implementation notes:** Table `detection_rules` (id, kind=`yara|sigma`, name, body, source_url, content_hash, tlp, created_at) and `detection_rule_links`. Service + UI in the reader. Optional import from a local file. Hash and display; syntax-check if a library is already acceptable to pin. Include rules in STIX as `file` + `note` or a documented custom object, or export sidecar files. CLI `insight rule-add`.
