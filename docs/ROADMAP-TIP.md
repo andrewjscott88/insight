@@ -434,6 +434,22 @@ opt-in schedules and the job runner, and `ROADMAP.md` marks #10 done.
   and **exports a threat guide**: its names and aliases, the industries and regions it targets, how it operates
   (ATT&CK techniques by tactic, with a Navigator layer), its tools and malware, its activity in the analyst's own
   reports, what to check and defend first (ATT&CK mitigations and detections), and the sources for every claim.
+- **Threat hunt section (requested 2026-11-21):** the guide must be usable to **start a hunt**, not only to read:
+  - **Hunt hypotheses** per technique the group uses, worded as "If GROUP is active here, expect TECHNIQUE: look
+    in DATA SOURCE for BEHAVIOUR", built from ATT&CK's data sources, detection notes and data components, highest
+    priority first (techniques also trending in the analyst's reports, then the group's most-used ones).
+  - **Where to look:** the log and telemetry sources each hypothesis needs (process creation, authentication,
+    DNS, proxy, e-mail, cloud audit), so the hunter can check coverage before starting.
+  - **Indicator sweep list:** the group's indicators from the analyst's own reports (accepted, not expired, not on
+    a warning list, within the export's TLP limit), downloadable in the IOC export formats (CSV, JSON) for a
+    retro-hunt in the SIEM or EDR, each with its first and last seen dates and source report.
+  - **Detection content:** Sigma and YARA rules the analyst linked to the group or its techniques (TIP 2.7), and
+    references to public rule sets, carried as text and never run by Insight.
+  - **A hunt record:** a checklist per hypothesis (data checked, time range, result: nothing found, suspicious,
+    confirmed) that the analyst can fill in and keep with the guide, so hunts are repeatable and their outcome
+    feeds back as notes or verdicts.
+  - Hunt text follows the same rules: facts from cited catalogs and the analyst's data, no AI-written queries;
+    ready-made SIEM queries only from sources whose licences allow it.
 - **Why / which TIP capability:** Threat profiling for priority intelligence requirements. Premium platforms lead
   with "who targets my sector"; analysts use it to brief leadership and to choose which defences to test first.
 - **It needs a threat library:** a bundled, regenerable catalog of threat groups, like the ATT&CK catalog
@@ -466,7 +482,9 @@ opt-in schedules and the job runner, and `ROADMAP.md` marks #10 done.
   industry and its count in the analyst's reports; a group not named for that industry is never listed; a guide
   exports with aliases, industries, techniques by tactic and a Navigator layer, tools, mitigations, the analyst's
   reports that name the group, sources, and a TLP marking; TLP limits apply to the report counts and titles in it;
-  wording passes the plain-language checks.
+  wording passes the plain-language checks; the hunt section lists hypotheses with their data sources for every
+  technique in the guide, an indicator sweep list that honours TLP and warning lists, linked rules, and a hunt
+  record the analyst can save.
 
 ---
 
@@ -522,7 +540,7 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
 - [ ] **2.7** YARA/Sigma rules as linked artifacts (not an engine)
 - [ ] **2.8** PDF advisory ingest with file hash (`ROADMAP` #13)
 - [ ] **2.9** Suricata/Snort-oriented export of accepted network IOCs
-- [ ] **2.10** Industry threat profiles (top ten groups per industry, with evidence) and exportable actor threat guides; needs a bundled threat-group library
+- [ ] **2.10** Industry threat profiles (top ten groups per industry, with evidence) and exportable actor threat guides with a threat hunt section (hypotheses, data sources, indicator sweep list, linked rules, hunt record); needs a bundled threat-group library
 
 ### Phase 3 — Advanced (8)
 
