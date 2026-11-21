@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 
 import sqlalchemy as sa
 from alembic import context, op
@@ -49,7 +49,11 @@ def _convert(convert: Callable[[str, str], str], *, encrypt: bool) -> None:
 
     # There is normally one enrollment. Convert all existing rows successfully before any data or DDL
     # changes, so a missing key or failed authentication can be retried with the original database intact.
-    rows = conn.execute(sa.select(_MFA.c.id, _MFA.c.secret)).all()
+    # SQLAlchemy's debug output includes fetched rows, and its DBAPI errors can include bound values.
+    # Use the same transactional connection directly for the two statements that handle credentials.
+    with closing(conn.connection.cursor()) as cursor:
+        cursor.execute('SELECT id, secret FROM operator_mfa')
+        rows = cursor.fetchall()
     converted: list[tuple[str, str]] = []
     if rows:
         secret = context.config.attributes.get('session_secret')
@@ -58,7 +62,7 @@ def _convert(convert: Callable[[str, str], str], *, encrypt: bool) -> None:
         if not secret:
             raise ValueError('Set INSIGHT_SESSION_SECRET to migrate enrolled authenticator credentials.')
         try:
-            converted = [(row.id, convert(row.secret, secret)) for row in rows]
+            converted = [(row_id, convert(value, secret)) for row_id, value in rows]
         except ValueError:
             if encrypt:
                 raise ValueError(
@@ -79,8 +83,21 @@ def _convert(convert: Callable[[str, str], str], *, encrypt: bool) -> None:
     with _erase_replaced_cells(conn, encrypt=encrypt and bool(rows)):
         if encrypt:
             resize()
-        for row_id, value in converted:
-            conn.execute(_MFA.update().where(_MFA.c.id == row_id).values(secret=value))
+        # sqlite3 and psycopg have different DB-API parameter styles. Both bind the values separately.
+        write = (
+            'UPDATE operator_mfa SET secret = ? WHERE id = ?'
+            if conn.dialect.name == 'sqlite'
+            else 'UPDATE operator_mfa SET secret = %s WHERE id = %s'
+        )
+        try:
+            with closing(conn.connection.cursor()) as cursor:
+                for row_id, value in converted:
+                    cursor.execute(write, (value, row_id))
+        except conn.dialect.loaded_dbapi.Error:
+            # Database diagnostics (including PostgreSQL trigger errors) can contain the entire failing row.
+            raise ValueError(
+                'Cannot write the migrated authenticator credential. Transaction rolled back.'
+            ) from None
         if not encrypt:
             resize()
 

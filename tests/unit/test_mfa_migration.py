@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 import sqlite3
+import traceback
 from collections.abc import Iterator
 from contextlib import closing
 from pathlib import Path
@@ -103,15 +105,17 @@ def test_failed_database_write_rolls_back_schema_and_seed(legacy_engine: Engine)
     _pair(legacy_engine)
 
     def interrupt(_conn: Any, _cursor: Any, statement: str, _params: Any, _context: Any, _many: bool) -> None:
-        if statement.startswith('UPDATE operator_mfa SET secret=') and 'operator_mfa.id =' in statement:
+        if statement.startswith('ALTER TABLE') and (
+            'RENAME TO operator_mfa' in statement or 'ALTER COLUMN secret TYPE TEXT' in statement
+        ):
             raise RuntimeError('simulated storage failure')
 
-    event.listen(legacy_engine, 'before_cursor_execute', interrupt)
+    event.listen(legacy_engine, 'after_cursor_execute', interrupt)
     try:
         with pytest.raises(RuntimeError, match='simulated storage failure'):
             migrations.upgrade(legacy_engine, session_secret=KEY)
     finally:
-        event.remove(legacy_engine, 'before_cursor_execute', interrupt)
+        event.remove(legacy_engine, 'after_cursor_execute', interrupt)
     assert migrations.current_revision(legacy_engine) == '0016'
     assert _secret_type(legacy_engine) == 'VARCHAR(64)'
     assert _stored(legacy_engine) == ('operator', SEED, STAMP, 987654)
@@ -141,3 +145,39 @@ def test_normal_migrated_sqlite_binary_backup_excludes_legacy_seed(tmp_path: Pat
         source.backup(target)
         assert SEED not in '\n'.join(target.iterdump())
     assert SEED.encode() not in backup.read_bytes()
+
+
+def test_database_failure_and_verbose_sql_logs_redact_the_plaintext(
+    legacy_engine: Engine, caplog: pytest.LogCaptureFixture
+) -> None:
+    _pair(legacy_engine)
+    with caplog.at_level(logging.DEBUG, logger='sqlalchemy.engine'):
+        migrations.upgrade(legacy_engine, session_secret=KEY)
+    assert SEED not in caplog.text
+    before = _stored(legacy_engine)
+    assert before[1] != SEED
+    with legacy_engine.begin() as conn:
+        if legacy_engine.dialect.name == 'sqlite':
+            conn.exec_driver_sql(
+                'CREATE TRIGGER refuse_seed BEFORE UPDATE ON operator_mfa '
+                "BEGIN SELECT RAISE(ABORT, 'Synthetic update failure'); END"
+            )
+        else:
+            conn.exec_driver_sql(
+                """CREATE FUNCTION refuse_seed() RETURNS trigger LANGUAGE plpgsql AS $$
+                BEGIN RAISE EXCEPTION USING MESSAGE = 'Synthetic update failure: ' || NEW.secret; END; $$"""
+            )
+            conn.exec_driver_sql(
+                'CREATE TRIGGER refuse_seed BEFORE UPDATE ON operator_mfa FOR EACH ROW '
+                'EXECUTE FUNCTION refuse_seed()'
+            )
+    caplog.clear()
+    with (
+        caplog.at_level(logging.DEBUG, logger='sqlalchemy.engine'),
+        pytest.raises(ValueError, match='Cannot write') as err,
+    ):
+        migrations.downgrade(legacy_engine, '0016', session_secret=KEY)
+    diagnostic = caplog.text + ''.join(traceback.format_exception(err.value))
+    assert all(value not in diagnostic for value in (SEED, before[1], KEY))
+    assert migrations.current_revision(legacy_engine) == '0017'
+    assert _stored(legacy_engine) == before
