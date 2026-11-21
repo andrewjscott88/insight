@@ -185,7 +185,7 @@ The summary plus:
 
 | Field | Meaning |
 | --- | --- |
-| `id`, `entity_id`, `kind`, `value` | Kinds: `cve url domain ip cidr md5 sha1 sha256 sha512`. A `cidr` value includes its network prefix length. |
+| `id`, `entity_id`, `kind`, `value` | Kinds: `cve url domain ip cidr email md5 sha1 sha256 sha512`. A `cidr` value includes its network prefix length. An `email` value preserves the mailbox case and uses a lower-case domain. |
 | `evidence` | Source text around the mention |
 | `start_offset`, `end_offset` | Code-point offsets into `body` (Python indexing) |
 | `start_offset_utf16`, `end_offset_utf16` | The same span for JavaScript (`body.slice(start, end)`) |
@@ -215,7 +215,7 @@ Query parameters (all optional; values are **case-sensitive**):
 
 | Parameter | Default | Meaning |
 | --- | --- | --- |
-| `kind` (repeatable) | all | `cve` `url` `domain` `ip` `cidr` `md5` `sha1` `sha256` `sha512` |
+| `kind` (repeatable) | all | `cve` `url` `domain` `ip` `cidr` `email` `md5` `sha1` `sha256` `sha512` |
 | `review_status` (repeatable) | `unreviewed`, `accepted` | Review state of each **mention** (`unreviewed` / `accepted` / `rejected`); rejected mentions are left out unless requested |
 | `max_tlp` | none | Include only reports labelled at or below this level, e.g. `GREEN` before sharing with a community |
 | `defang` | `false` | Defang values, report titles and evidence: `hxxps://evil[.]example/a[.]php`, `evil[.]example`, `192[.]0[.]2[.]8`, `2001[:]db8[:][:]1`, plus e-mail domains, CIDR ranges and file-like names in text (see the guide, §7) |
@@ -224,7 +224,7 @@ Query parameters (all optional; values are **case-sensitive**):
 | `q` | none | Inbox search text (literal, folded like the inbox). At most 200 characters: longer text is rejected with `422`, whereas `GET /api/documents` shortens it |
 | `status` | any | The **report's** triage status: `new` / `reviewing` / `reviewed`. Not the mention review state |
 | `verdict` (repeatable) | all | Only indicators with this verdict: `unknown` `benign` `suspicious` `malicious` |
-| `exclude_flag` (repeatable) | none | Leave out indicators with this warning flag: `non-routable` `documentation` `reserved-name` `common-benign` |
+| `exclude_flag` (repeatable) | none | Leave out indicators with this warning flag: `non-routable` `documentation` `reserved-name` `common-benign` `personal-data` |
 | `tlp` | any | Only reports with **exactly** this label (compare `max_tlp`) |
 | `include_superseded` | `false` | Also include superseded revisions of synced items |
 
@@ -265,12 +265,12 @@ Each IOC:
 | `kev` | CISA KEV context for CVEs (`date_added`, `due_date`, `required_action`, `vendor`, `product`, `imported_at`) or `null` |
 | `verdict` | The analyst's verdict: `unknown` (none, or its own label is above the export's TLP limit), `benign`, `suspicious` or `malicious`. Review says a value was copied correctly; the verdict says what it means |
 | `verdict_valid_until` | When the verdict expires, or `null` |
-| `flags` | Warning flags: why the value is unsafe to block (`non-routable`, `documentation`, `reserved-name`, `common-benign`); `[]` for most |
+| `flags` | Warning flags include `non-routable`, `documentation`, `reserved-name`, `common-benign`, and `personal-data` (every e-mail address) |
 | `sources` | Included reports that mention it, oldest first (see below) |
 
 Each source: `document_id`, `title`, `source_name`, `source_url`, `tlp`, `status` (the report's **triage**
 status), `created_at`, `is_current` (`false` only for superseded revisions), `extractor_version` (e.g.
-`regex-v3` for the extractor that recognizes CIDR ranges), `mentions` (included mentions in that report) and
+`regex-v4` for the extractor that recognizes e-mail addresses), `mentions` (included mentions in that report) and
 `evidence`. `evidence` is the text around the first included mention, up to 90 characters either side, cut at
 arbitrary positions; `null` with `evidence=false`.
 
@@ -297,7 +297,7 @@ these hold:
   domain, whatever its verdict;
 - the verdict's own TLP label is within your limit.
 
-Network ranges can be reviewed and exported with `GET /api/iocs/export?kind=cidr`. The blocklist excludes whole ranges.
+E-mail addresses and network ranges are available through `/api/iocs/export` with `kind=email` or `kind=cidr`. The blocklist excludes both kinds.
 
 `format=txt` (default): one value per line, sorted, never defanged. `format=csv`: `value,kind,decided_at,
 expires_at,tlp` with a header row; a cell that would start with `=`, `+`, `-`, `@`, a tab or a carriage return

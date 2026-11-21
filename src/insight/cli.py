@@ -111,7 +111,7 @@ def build_parser() -> argparse.ArgumentParser:
         '--kind',
         action='append',
         metavar='KIND',
-        help='indicator type: cve url domain ip cidr md5 sha1 sha256 sha512 (repeatable; default: all)',
+        help='indicator type: cve url domain ip cidr email md5 sha1 sha256 sha512 (repeatable; default: all)',
     )
     export.add_argument(
         '--review-status',

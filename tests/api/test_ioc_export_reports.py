@@ -95,7 +95,7 @@ def test_exports_exactly_the_ground_truth_with_policy_labels(
 ) -> None:
     full = export(authed)
     assert keys(full) == truth(GLASS) | truth(SALT)
-    assert (full['counts']['iocs'], full['counts']['documents'], full['counts']['mentions']) == (65, 2, 91)
+    assert (full['counts']['iocs'], full['counts']['documents'], full['counts']['mentions']) == (67, 2, 93)
     assert full['tlp'] == 'RED'  # SALT MERIDIAN's TLP:RED marking raised it; the file inherits it
     labels = {(frozenset(s['document_id'] for s in ioc['sources']), ioc['tlp']) for ioc in full['iocs']}
     assert labels == {

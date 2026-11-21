@@ -117,5 +117,10 @@ def test_hashes_and_cves_carry_no_flags(kind: str) -> None:
 
 
 def test_flags_come_in_a_fixed_order() -> None:
-    assert FLAGS == ('non-routable', 'documentation', 'reserved-name', 'common-benign')
+    assert FLAGS == ('non-routable', 'documentation', 'reserved-name', 'common-benign', 'personal-data')
     assert flags('domain', 'mail.corp') == ('reserved-name',)
+
+
+@pytest.mark.parametrize('value', ['someone@example.org', 'incoming+reports@security.example'])
+def test_every_email_address_is_marked_as_personal_data(value: str) -> None:
+    assert flags('email', value) == ('personal-data',)

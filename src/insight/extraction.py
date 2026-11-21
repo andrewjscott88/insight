@@ -22,9 +22,9 @@ from importlib import resources
 from typing import Final, Literal
 from urllib.parse import urlsplit, urlunsplit
 
-Kind = Literal['cve', 'url', 'sha512', 'sha256', 'sha1', 'md5', 'ip', 'domain', 'cidr']
+Kind = Literal['cve', 'url', 'sha512', 'sha256', 'sha1', 'md5', 'ip', 'domain', 'cidr', 'email']
 
-EXTRACTOR_VERSION: Final = 'regex-v3'
+EXTRACTOR_VERSION: Final = 'regex-v4'
 MAX_MENTIONS: Final = 2000
 EVIDENCE_CONTEXT: Final = 90
 
@@ -101,6 +101,16 @@ _DOMAIN = re.compile(rf'(?<![\w@.\-])(?:{_LABEL}\.)+{_TLD}(?![\w-]|\.[a-z0-9])(?
 _DOMAIN_FULL = re.compile(rf'(?:{_LABEL}\.)+{_TLD}', _ASCII_I)
 _WORDISH = r'\w\u0300-\u036f\u200b-\u200d\u2060\ufeff\u00ad'
 _IDN = re.compile(rf'(?<![{_WORDISH}@.\-])(?:[{_WORDISH}-]+\.)+[{_WORDISH}-]{{2,63}}(?![{_WORDISH}-])')
+# Accept common unquoted mailboxes; the wider left boundary prevents taking the tail of an unsupported one.
+_EMAIL = re.compile(
+    rf"(?<![{_WORDISH}.!#$%&'*+/=?^`{{|}}~@\\-])(?<!\[@\])(?P<local>[A-Za-z0-9_.'%+-]{{1,65}})"
+    rf'(?:@|\[@\])(?P<host>[{_WORDISH}-]+(?:\.[{_WORDISH}-]+)+)(?![{_WORDISH}@-]|\[@\]|\.+[{_WORDISH}-])'
+)
+_EMAIL_LOCAL = re.compile(r"[A-Za-z0-9_%+-]+(?:[.'][A-Za-z0-9_%+-]+)*")
+# Scan URI tokens and bare mailboxes in one pass: userinfo, query strings and paths are not recipients.
+_URI_OR_EMAIL = re.compile(
+    r'(?P<uri>\b(?:(?P<mailto>(?i:mailto:))|[A-Za-z][A-Za-z0-9+.\-]{0,31}://)[^\s<>"`|]+)|' + _EMAIL.pattern
+)
 _IPV4_SHAPE = re.compile(r'\d{1,3}(?:\.\d{1,3}){3}', re.ASCII)
 _VERSION_CONTEXT = re.compile(
     r'(?:\b(?:version|ver|firmware|fw|build|release|agent|patch|section|chapter|step)\.?'
@@ -201,6 +211,19 @@ def _canonical_domain(value: str) -> str:
     return ascii_name
 
 
+def _canonical_email(value: str) -> str:
+    match = _EMAIL.fullmatch(refang(value))
+    if not match:
+        raise ValueError('Invalid e-mail address')
+    local, host = match.group('local', 'host')
+    if len(local) > 64 or not _EMAIL_LOCAL.fullmatch(local) or '_' in host:
+        raise ValueError('Invalid e-mail address')
+    address = f'{local}@{_canonical_domain(host)}'
+    if len(address) > 254:
+        raise ValueError('E-mail address is too long')
+    return address
+
+
 def _canonical_url(value: str) -> str:
     parts = urlsplit(_strip_zero_width(refang(value)))
     if parts.scheme.lower() not in ('http', 'https') or not parts.hostname:
@@ -261,6 +284,8 @@ def canonical(kind: str, value: str) -> str:
         return _canonical_url(value)
     if kind == 'domain':
         return _canonical_domain(value)
+    if kind == 'email':
+        return _canonical_email(value)
     if kind in HASH_KINDS.values():
         return _canonical_hash(kind, value)
     raise ValueError(f'Unknown kind: {kind}')
@@ -375,6 +400,30 @@ def _add_urls(mentions: _Mentions) -> list[Span]:
     return url_spans
 
 
+def _add_emails(mentions: _Mentions) -> None:
+    """Record a whole mailbox once, then mask it so later passes cannot extract any of its parts."""
+    if '@' not in mentions.work:
+        return
+
+    def record(match: re.Match[str]) -> str:
+        start, end = match.span()
+        if match.group('mailto'):
+            start = match.end('mailto')
+            recipient = mentions.work[start:end].partition('?')[0].rstrip(".,;:!')}]")
+            if recipient:
+                mentions.add('email', start, start + len(recipient))
+        elif match.group('uri'):
+            return match.group()  # Leave HTTP(S) URLs for the URL pass.
+        else:
+            if mentions.work[start] == "'" and mentions.work[end : end + 1] == "'":
+                start += 1  # Prose quotes are outside the evidence span.
+            mentions.add('email', start, end)
+        # Mask even malformed mailbox tokens so later passes cannot misread a part as a different indicator.
+        return '\0' * len(match.group())
+
+    mentions.work = _URI_OR_EMAIL.sub(record, mentions.work)
+
+
 def _add_domains(mentions: _Mentions, url_spans: list[Span]) -> None:
     """ASCII and international domain names outside URLs, skipping fragments and file-like names."""
     work = mentions.work
@@ -442,9 +491,10 @@ def extract(text: str) -> list[Mention]:
     """Extract observable mentions with exact offsets into ``text``, sorted by position.
 
     Raises ``ValueError`` if the text yields more than :data:`MAX_MENTIONS` mentions. The passes run in a
-    fixed order (URLs first, so the domains and IPs inside them are attributed correctly).
+    fixed order (mailboxes first to protect their components, then URLs before standalone names).
     """
     mentions = _Mentions(text)
+    _add_emails(mentions)
     url_spans = _add_urls(mentions)
     _add_domains(mentions, url_spans)
     _add_ips(mentions, url_spans)

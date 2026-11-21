@@ -152,22 +152,30 @@ async def test_ioc_export_dialog_opens_with_its_options(user: User) -> None:
     await user.should_see('Defang values')
 
 
-async def test_review_and_find_a_network_range_across_reports(user: User, ui_env: SimpleNamespace) -> None:
-    source_range = '203[.]0[.]113[.]0/24'
-    network = '203.0.113.0/24'
-    add_report(ui_env, 'First advisory', 'Lab', f'{"Context " * 14}<b>Range</b> {source_range}.')
-    add_report(ui_env, 'Second advisory', 'Partner', f'The same range is {network}.')
+@pytest.mark.parametrize(
+    ('kind', 'kind_label', 'raw', 'value', 'warning'),
+    [
+        ('cidr', 'Network range (CIDR)', '203[.]0[.]113[.]0/24', '203.0.113.0/24', 'Example address'),
+        ('email', 'E-mail address', 'team+lab@EXAMPLE[.]ORG', 'team+lab@example.org', 'Personal data'),
+    ],
+)
+async def test_review_find_and_export_an_indicator_across_reports(
+    user: User, ui_env: SimpleNamespace, kind: str, kind_label: str, raw: str, value: str, warning: str
+) -> None:
+    add_report(ui_env, 'First advisory', 'Lab', f'{"Context " * 14}<b>Evidence</b> {raw}.')
+    add_report(ui_env, 'Second advisory', 'Partner', f'The same value is {value}.')
     await user.open('/')
     await open_document(user, 'First advisory')
     with user.scope(marker='document-detail'):
-        await user.should_see(kind=ui.label, content=network)
+        await user.should_see(kind=ui.label, content=value)
+        await user.should_see(kind=ui.label, content=warning)
         marked = [label for label in user.find(kind=ui.label).elements if label.tag == 'mark']
-        assert [label.text for label in marked] == [source_range]
+        assert [label.text for label in marked] == [raw]
         user.find(kind=ui.button, content='Accept').click()
         await user.should_see('· accepted')
 
-    user.find('Search entity values').type(network)
-    name = f'CIDR · {network} · 2 source(s)'
+    user.find('Search entity values').type(value)
+    name = f'{kind.upper()} · {value} · 2 source(s)'
     await user.should_see(kind=ui.expansion, content=name)
     user.find(kind=ui.expansion, content=name).elements.pop().open()
     await user.should_see(kind=ui.button, content='First advisory · TLP:CLEAR')
@@ -177,9 +185,10 @@ async def test_review_and_find_a_network_range_across_reports(user: User, ui_env
     await user.should_see('Indicator types')
     kinds = user.find(kind=ui.select, content='Indicator types').elements.pop()
     assert isinstance(kinds.options, dict)
-    assert kinds.options['cidr'] == 'Network range (CIDR)'
-    kinds.set_value(['cidr'])
+    assert kinds.options[kind] == kind_label
+    kinds.set_value([kind])
     await user.should_see('Will export 1 indicator from 2 reports (2 mentions).')
+    await user.should_see('Check for personal data before sharing.')
 
 
 async def test_ioc_export_dialog_requires_an_indicator_type(user: User) -> None:
@@ -451,7 +460,7 @@ async def test_full_length_report_through_the_ingest_dialog(user: User, ui_env: 
     user.find('Source content').type(text)
     user.find('Ingest document').click()
     await user.should_see('Document ingested.')
-    await user.should_see('Extracted observations (37)')
+    await user.should_see('Extracted observations (38)')
     await user.should_see('CVE-2024-3400')
     with ui_env.app.state.session_factory() as db:
         stored = db.scalar(select(Document))

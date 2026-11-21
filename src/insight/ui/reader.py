@@ -87,6 +87,10 @@ def render_report(ws: Workspace, data: dict[str, Any], actions: ReaderActions) -
         new_tab_link('Download this report as JSON', f'/api/documents/{data["id"]}/export')
         new_tab_link("Export this report's IOCs", f'/api/iocs/export?document_id={data["id"]}')
     ui.label('Exports keep the TLP label. They do not give permission to share.').classes('muted prose')
+    if any(obs['kind'] == 'email' for obs in data['observations']):
+        ui.label('This report includes e-mail addresses. Check who may receive them before sharing.').classes(
+            'text-warn prose'
+        )
     _render_notes(ws, data, actions)
     with ui.expansion('Where this report came from').classes('w-full muted'):
         ui.label('Fingerprint (SHA-256): ' + data['content_hash']).classes('break-value font-mono text-sm')
@@ -132,7 +136,7 @@ def _render_observation(
             ui.badge(obs['kind']).props('outline')
             ui.label(obs['value']).classes('font-mono break-value flex-1 min-w-0')
         flag_badges(obs['kind'], obs['value'])
-        if obs['kind'] == 'cidr':
+        if obs['kind'] in ('cidr', 'email'):
             # The excerpt starts at most EVIDENCE_CONTEXT characters before the exact source span.
             start = min(obs['start_offset'], EVIDENCE_CONTEXT)
             end = start + obs['end_offset'] - obs['start_offset']

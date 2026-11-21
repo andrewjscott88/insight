@@ -34,6 +34,7 @@ KIND_LABELS: Final = {
     'domain': 'Domain',
     'ip': 'IP address',
     'cidr': 'Network range (CIDR)',
+    'email': 'E-mail address',
     'md5': 'MD5',
     'sha1': 'SHA-1',
     'sha256': 'SHA-256',
@@ -163,6 +164,10 @@ def open_ioc_export_dialog(ws: Workspace) -> None:
             'Untick this before you share the file.',
             value=True,
         )
+        ui.label(
+            'Check for personal data before sharing. You can leave e-mail out of the list of types. '
+            'Addresses may still appear in titles and quotes from reports.'
+        ).classes('text-warn text-sm prose')
         ui.label(
             'The file gets the strictest TLP label of the reports in it. Exports keep TLP labels. '
             'They do not give permission to share. The file is not in the STIX format.'

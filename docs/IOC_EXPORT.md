@@ -33,7 +33,7 @@ Field-by-field reference: [API.md](API.md#ioc-export). Machine-readable schema:
 
 | Term | Meaning |
 | --- | --- |
-| **Indicator / IOC** | A CVE, URL, domain, IP address, CIDR network range, or MD5/SHA1/SHA256/SHA512 hash found in a report. CVEs are vulnerabilities rather than IOCs in the strict sense; they are included so you can export them too. |
+| **Indicator / IOC** | A CVE, URL, domain, IP address, CIDR network range, e-mail address, or MD5/SHA1/SHA256/SHA512 hash found in a report. CVEs are vulnerabilities rather than IOCs in the strict sense; they are included so you can export them too. |
 | **Report** | A document in the inbox (pasted or synced). Indicators are extracted from the report **body**, not its title. |
 | **Mention** | One occurrence of an indicator in one report. An indicator mentioned three times in one report has three mentions. |
 | **Review status** | An analyst's verdict on **one mention**: `unreviewed`, `accepted` (the extraction is accurate) or `rejected` (wrong or not useful). Set with **Accept / Reject / Reset** in the report reader. |
@@ -78,7 +78,7 @@ insight export-iocs share.json --max-tlp GREEN --review-status accepted --defang
 ```
 
 ```text
-Exported 23 IOCs (37 mentions) from 1 report to iocs.json (TLP:AMBER). Handle the file according to that label.
+Exported 24 IOCs (38 mentions) from 1 report to iocs.json (TLP:AMBER). Handle the file according to that label.
 ```
 
 - **Database:** the command reads the same database as the server: `INSIGHT_DATABASE_URL`, or
@@ -102,7 +102,7 @@ All options. Option values are case-insensitive on the command line:
 
 | Option | Values | Default |
 | --- | --- | --- |
-| `--kind KIND` (repeatable) | `cve` `url` `domain` `ip` `cidr` `md5` `sha1` `sha256` `sha512` | all |
+| `--kind KIND` (repeatable) | `cve` `url` `domain` `ip` `cidr` `email` `md5` `sha1` `sha256` `sha512` | all |
 | `--review-status REVIEW` (repeatable) | `unreviewed` `accepted` `rejected`: the review state of each **mention** | `unreviewed` and `accepted` |
 | `--max-tlp LABEL` | `CLEAR` `GREEN` `AMBER` `AMBER+STRICT` `RED`: include reports at or below this label | no limit |
 | `--defang` | flag: defang values, titles and evidence | off |
@@ -263,10 +263,10 @@ Then one entry per indicator, sorted by type and then value. An excerpt:
   "flags": ["reserved-name"],
   "sources": [
     { "title": "Training scenario: edge appliance activity", "tlp": "CLEAR", "status": "reviewed",
-      "extractor_version": "regex-v3", "mentions": 1,
+      "extractor_version": "regex-v4", "mentions": 1,
       "evidence": "raining data, not real intelligence. An analyst observed 192.0.2.44 connecting to https://relay.example.org/beacon?case=Alpha. The bulletin mentions CVE-2024-3400 as a research reference, not evide" },
     { "title": "Training scenario: shared infrastructure pivot", "tlp": "GREEN", "status": "new",
-      "extractor_version": "regex-v3", "mentions": 1,
+      "extractor_version": "regex-v4", "mentions": 1,
       "evidence": "This is synthetic training data. The host relay.example.org and 192.0.2.44 appear in a second lab report. Their co-occurrence is a lead, not proof of" }
   ]
 }
@@ -280,7 +280,7 @@ How to read it:
 - **`flags`** say why a value is unsafe to block, whatever its verdict: `non-routable` (private, loopback,
   shared or reserved addresses), `documentation` (example ranges such as 192.0.2.0/24), `reserved-name`
   (`.local`, `.test`, `example.org`, as here) and `common-benign` (a short list of vendor domains such as
-  `microsoft.com`). Flags are computed from the value, never stored.
+  `microsoft.com`). E-mail addresses carry `personal-data`. Flags are computed from the value.
 
 - **`tlp: GREEN`** is the most restrictive label among *this indicator's* sources (CLEAR and GREEN). It is
   lower than the file's AMBER+STRICT, because no AMBER+STRICT report mentions this domain.
@@ -292,7 +292,7 @@ How to read it:
   It is cut at fixed character positions, so it can start or end mid-word ("raining data…"). It can also contain
   other indicators and any other text that happened to be nearby. It is `null` when the export was made without
   evidence.
-- **`extractor_version`** names the extractor that produced the report's observations (`regex-v3` adds CIDR ranges).
+- **`extractor_version`** names the extractor that produced the report's observations (`regex-v4` adds e-mail addresses).
   Reports ingested before 0.2.0 say `regex-v1`, and their values can differ slightly in form.
 - **`first_ingested_at` / `last_ingested_at`** are when the oldest and newest source reports were **added to
   Insight**. They are not publication dates, and not dates the indicator was seen in the wild.
@@ -303,7 +303,7 @@ How to read it:
 - **Values are canonical:** defanged input is refanged, host names are lower-case, international names use
   punycode (`xn--…`), and IPv4-mapped IPv6 addresses become IPv4.
   A network range has kind `cidr` and keeps its prefix length, for example `203.0.113.0/24`.
-  Use `--kind cidr` to export ranges. The blocklist excludes whole ranges.
+  Use `--kind cidr` to export ranges or `--kind email` to export e-mail addresses. The blocklist excludes both kinds.
 
 ## 6. TLP and sharing
 
@@ -325,6 +325,9 @@ How to read it:
   host 10.20.30.40 (victim network…". Rejecting a mention removes it from the indicator list, not from other
   mentions' context. Untick **Include evidence excerpts** (`--no-evidence`, `evidence=false`) for anything that
   leaves your team; titles and provenance stay.
+- **E-mail addresses.** Add `exclude_flag=personal-data` to an API export to omit the flagged indicator entries.
+  Addresses can also appear in a report title, evidence excerpt, or source metadata. Use `evidence=false`
+  to omit excerpts and check the remaining text before sharing. Defanged addresses still identify the mailbox.
 - **If you split a file,** each part takes the most restrictive label of the entries it contains. Each entry's own
   `tlp` is safe to use for that part.
 - **Traceability.** Every export is written to the audit log as `ioc.export`. The event's `object_id` is the
@@ -424,6 +427,7 @@ mappings. Convert from an export **without** defanging:
 | --- | --- |
 | `ip`, `cidr` | `ipv4-addr` or `ipv6-addr` (a `:` in the value means IPv6) |
 | `domain` | `domain-name` |
+| `email` | `email-addr` |
 | `url` | `url` |
 | `md5`, `sha1`, `sha256`, `sha512` | `file` with `hashes` keys `MD5`, `SHA-1`, `SHA-256`, `SHA-512` |
 | `cve` | `vulnerability` (with an external reference to the CVE), not an indicator |

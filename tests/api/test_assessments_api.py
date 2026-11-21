@@ -171,6 +171,25 @@ def test_blocklist_kind_must_be_blockable(signed_in: TestClient) -> None:
     assert signed_in.get('/api/iocs/blocklist', params={'kind': 'ip', 'format': 'xml'}).status_code == 422
 
 
+def test_email_export_marks_personal_data_and_can_exclude_it(app: FastAPI, signed_in: TestClient) -> None:
+    address = 'intake@security.example.org'
+    report = ingest(app, f'Contact {address} about CVE-2024-12345.')
+    email = report['values'][address]
+    accept(app, email['observation'])
+    assert assess(signed_in, email['entity'], verdict='malicious').status_code == 200
+    response = signed_in.get('/api/iocs/export', params={'kind': 'email', 'defang': 'true'})
+    assert response.status_code == 200
+    (ioc,) = response.json()['iocs']
+    assert ioc['value'] == 'intake@security[.]example[.]org'
+    assert 'personal-data' in ioc['flags']
+    filtered = signed_in.get(
+        '/api/iocs/export', params={'exclude_flag': 'personal-data', 'evidence': 'false'}
+    )
+    assert filtered.status_code == 200
+    assert [(i['kind'], i['value']) for i in filtered.json()['iocs']] == [('cve', 'CVE-2024-12345')]
+    assert signed_in.get('/api/iocs/blocklist', params={'kind': 'email'}).status_code == 422
+
+
 def test_blocklists_share_the_ioc_export_rate_budget() -> None:
     assert rate_limit_policy('GET', '/api/iocs/blocklist') is IOC_EXPORT
 

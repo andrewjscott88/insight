@@ -284,15 +284,17 @@ rm -f insight-iocs-*.json
 
 | Parameter | Values (case-sensitive) | Default |
 | --- | --- | --- |
-| `kind` | `cve` `url` `domain` `ip` `cidr` `md5` `sha1` `sha256` `sha512` | all |
+| `kind` | `cve` `url` `domain` `ip` `cidr` `email` `md5` `sha1` `sha256` `sha512` | all |
 | `review_status` | `unreviewed` `accepted` `rejected` | `unreviewed`, `accepted` |
 | `max_tlp` | a TLP label: only reports at or below it | none (a TLP-limited key: its limit) |
 | `defang` | `true` / `false` | `false` |
 | `evidence` | `true` / `false` (`false`: no report text around mentions) | `true` |
 | `document_id` | report IDs | all reports |
 | `verdict` | `unknown` `benign` `suspicious` `malicious` | all |
-| `exclude_flag` | `non-routable` `documentation` `reserved-name` `common-benign` | none |
+| `exclude_flag` | `non-routable` `documentation` `reserved-name` `common-benign` `personal-data` | none |
 | `q`, `status`, `tlp`, `include_superseded` | as for `GET /api/documents` | |
+
+Use `exclude_flag=personal-data` to omit e-mail indicator entries. Other entries can still carry addresses in report titles or evidence.
 
 An invalid value is a `422` naming it (`kind 'IP': Input should be 'cve', ...`); more than 100,000 matching
 mentions is a `422` too (narrow the filters).
