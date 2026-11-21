@@ -36,7 +36,7 @@ git tag -s vX.Y.Z && git push origin vX.Y.Z
 `release.yml` runs, in one workflow run:
 
 1. **Pre-release checks**: version, changelog, validation report, upgrade fixture, strict pins (a minute).
-2. **Milestone gate**: Tier 1 on Python 3.11 to 3.14 and PostgreSQL, extraction benchmark, performance budget
+2. **Milestone gate**: Tier 1 on Python 3.11 to 3.15 and PostgreSQL, extraction benchmark, performance budget
    on both databases, backup drill, browser E2E with axe, signed-in OWASP ZAP, licences and SBOM (about 15
    minutes). Its reports are artifacts of this run.
 3. **Approval**: publishing waits in the `release` environment until a required reviewer approves.

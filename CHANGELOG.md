@@ -25,6 +25,9 @@ CVEs in reports they can see; starting a lookup stays refused to them. The new p
   (1 hour, doubling up to 7 days) while the rest of the batch goes on; the job fails only when every CVE in it
   failed or the provider itself is unavailable. Migration `0012` adds `lookup_failures`
   ([ADR 0023](docs/adr/0023-automatic-cve-lookups.md)).
+- **M3, the image's Python was not fully tested:** the container ships Python 3.15 (a Dependabot bump), but
+  pull requests ran the full suite on 3.11 and 3.14 only. 3.15 is now in the test matrix and the package
+  classifiers. Add `Tests (Python 3.15, SQLite)` to the required checks on `main` (docs/CI_CD.md).
 
 ### Changed: a clearer executive brief (from #39)
 - Keep the **Insight** name and symbol; use **Cyber Threat Intelligence Feed** as the tagline and remove

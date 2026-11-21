@@ -39,19 +39,21 @@ Docker. Milestone-gate pieces: `make benchmark`, `make drill`, `make test-e2e`; 
 | Job | What it proves |
 | --- | --- |
 | `quality` | ruff, format, mypy --strict over `src`, `tests`, `scripts`; `pip check`; **lock files match pyproject** (the 0.1.0 root cause); forbidden files; workflow schema; **zizmor** workflow security audit; pinning report |
-| `test` (3.11 and 3.14; all four in the milestone gate) | Full suite on SQLite: unit, API, NiceGUI simulation, migrations, architecture rules, extraction-quality and query-count regressions; **coverage ≥ 90%** |
+| `test` (3.11, 3.14 and 3.15, the image's version; all five in the milestone gate) | Full suite on SQLite: unit, API, NiceGUI simulation, migrations, architecture rules, extraction-quality and query-count regressions; **coverage ≥ 90%** |
 | `test-postgres` | The same suite against PostgreSQL 16 (throwaway database per test) |
 | `security` | `pip-audit` on the runtime lock (OSV); gitleaks over the full git history |
 | `package` | Wheel built exactly like the image; clean install from the runtime lock; `insight migrate` upgrades the oldest release fixture; runtime **licence policy** |
 | `container` | `docker build`; **Trivy** (CRITICAL/HIGH, fixed only); run with `--read-only --cap-drop ALL`; `scripts/smoke.py` (health, headers, auth, forged CSRF, demo, render) |
 
 Make these **required status checks** on `main`: `Lint, types, locks, workflow security`,
-`Tests (Python 3.11, SQLite)`, `Tests (Python 3.14, SQLite)`, `Tests (Python 3.13, PostgreSQL 16)`, `Dependency audit and secret scan`,
+`Tests (Python 3.11, SQLite)`, `Tests (Python 3.14, SQLite)`, `Tests (Python 3.15, SQLite)` (the image's version),
+`Tests (Python 3.13, PostgreSQL 16)`, `Dependency audit and secret scan`,
 `Wheel build, clean install, licences` and `Container build, scan, read-only smoke test`.
 
 ## Tier 2 - nightly (advisory)
 
-Pull requests test the oldest and newest supported Python; the versions in between run here every night, and in
+Pull requests test the oldest supported Python, 3.14 and the image's 3.15; the versions in between run here every
+night, and in
 the milestone gate. The two slow jobs run weekly, on Sunday (review G1). **Run workflow** on *Nightly* runs
 everything at once.
 
@@ -59,7 +61,7 @@ everything at once.
 | --- | --- | --- |
 | Live contract tests (`tests/live`, `INSIGHT_LIVE_TESTS=1`) | Daily | The only network-enabled tests. Real CISA/SANS/NCSC feeds and EPSS/NVD must still download, parse and validate. Catches moved URLs and format changes early. |
 | Property tests, 5,000 examples (`HYPOTHESIS_PROFILE=nightly`) | Daily | Deeper search for extraction edge cases |
-| Tests on Python 3.12 and 3.13 | Daily | Pull requests test 3.11 and 3.14 only |
+| Tests on Python 3.12 and 3.13 | Daily | Pull requests test 3.11, 3.14 and 3.15 only |
 | Mutation testing (mutmut on extraction, connectors, services) | Weekly | Finds assertions that are missing. Every run so far has found real gaps (0.2.0: the wrapped-hash join, URL-host boundaries, fragment checks), which are now tested. Fails below the ratchet in `nightly.yml` (`MUTATION_SCORE_MIN`). Raise it as the score improves; never lower it. |
 | Newest allowed dependencies | Weekly | Early warning of breaking upgrades within the declared ranges |
 | Trivy re-scan of the latest released image | Daily | New CVEs in already shipped images |

@@ -1,6 +1,6 @@
 # Test suite design
 
-About 630 offline tests run in about two minutes per Python version (3.11–3.14), on SQLite and on PostgreSQL 16.
+About 630 offline tests run in about two minutes per Python version (3.11–3.15), on SQLite and on PostgreSQL 16.
 Branch coverage is about 95% overall and 98–100% for every backend module; CI requires at least 90%. Separate
 suites cover real browsers (`tests/e2e`) and real publishers (`tests/live`). The pipeline's own scripts are
 tested too.
