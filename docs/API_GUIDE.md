@@ -404,6 +404,20 @@ ACTOR_ID=$(curl -sS -X POST "$INSIGHT_URL/api/actors" -H "Authorization: Bearer 
   -H 'Content-Type: application/json' -d '{"name": "Copper Fox", "aliases": ["CF-1"], "tlp": "AMBER"}' | jq -r .ref)
 # One group: names, industry claims with sources, your decisions, linked reports
 curl -sS "$INSIGHT_URL/api/actors/G0016" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq
+# Track a campaign and record an explicit technique link at a chosen label
+CAMPAIGN_ID=$(curl -fsS -X POST "$INSIGHT_URL/api/campaigns" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d '{"name":"Example series","tlp":"GREEN"}' | jq -r .id)
+curl -fsS "$INSIGHT_URL/api/campaigns" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq
+curl -fsS "$INSIGHT_URL/api/campaigns/$CAMPAIGN_ID" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq
+curl -fsS -X POST "$INSIGHT_URL/api/campaigns/$CAMPAIGN_ID/links" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d '{"target_kind":"technique","target_id":"T1059.001","tlp":"GREEN"}'
+curl -fsS "$INSIGHT_URL/api/campaigns/$CAMPAIGN_ID/links" -H "Authorization: Bearer $INSIGHT_API_KEY"
+curl -fsS -X DELETE "$INSIGHT_URL/api/campaigns/$CAMPAIGN_ID/links/technique/T1059.001" -H "Authorization: Bearer $INSIGHT_API_KEY"
+# The same link operations accept a local actor UUID
+curl -fsS -X POST "$INSIGHT_URL/api/actors/$ACTOR_ID/links" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d '{"target_kind":"technique","target_id":"T1059.001","tlp":"GREEN"}'
+curl -fsS "$INSIGHT_URL/api/actors/$ACTOR_ID/links" -H "Authorization: Bearer $INSIGHT_API_KEY"
+curl -fsS -X DELETE "$INSIGHT_URL/api/actors/$ACTOR_ID/links/technique/T1059.001" -H "Authorization: Bearer $INSIGHT_API_KEY"
 # Link a report to the group (your decision; Insight never infers it), and remove the link
 curl -sS -X POST "$INSIGHT_URL/api/actors/G0016/documents" -H "Authorization: Bearer $INSIGHT_API_KEY" \
   -H 'Content-Type: application/json' -d "{\"document_id\": \"$DOC_ID\", \"note\": \"Same loader\"}"
