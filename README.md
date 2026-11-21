@@ -28,6 +28,13 @@ A single-operator threat-intelligence workbench, run locally or published behind
   reports stored before 0.7.0. STIX exports link each included report to its current catalog-backed tags,
   with the report's sharing label and a link to the technique on MITRE's site.
   API: `/api/attack/*` and `/api/documents/{id}/techniques`.
+- **Industry threats and threat guides** ([docs/THREAT_GUIDES.md](docs/THREAT_GUIDES.md),
+  [ADR 0025](docs/adr/0025-threat-guides.md)): pick an industry and see up to ten threat groups that a cited
+  source (MITRE ATT&CK or the MISP galaxy) says target it, each with the quoted evidence. Open one for a threat
+  guide: aliases, targets, ATT&CK techniques and a Navigator layer, tools, mitigations, your reports that name it,
+  sources and the TLP label, plus a hunt plan (starting hypotheses with log sources), an indicator sweep list,
+  linked YARA and Sigma rules (never run) and hunt records. Works offline from a bundled, pinned library;
+  `make threat-library-sync` fetches a fuller copy. A group is never inferred from indicators or co-occurrence.
 - **Alerts** ([docs/ALERTS.md](docs/ALERTS.md)): when a new report mentions a watch term, or CISA adds a KEV
   entry, Insight tells a chat channel (Slack, Mattermost, Google Chat), your own tool (signed JSON webhook) or
   an e-mail address, within about 15 seconds of the sync. Each alert fires once; report titles go only up to
@@ -181,6 +188,10 @@ Open http://127.0.0.1:8080. Default local data lives in `./data/insight.db`. Use
 | `insight export-iocs FILE` | Write a JSON IOC export (never overwrites; owner-only file). Options and recipes: [docs/IOC_EXPORT.md](docs/IOC_EXPORT.md#2-quick-start) |
 | `insight misp-export FILE` / `insight misp-import FILE` | Exchange a single MISP event as JSON or with a configured MISP instance. [MISP guide](docs/MISP.md) |
 | `insight attack-backfill` | Tag ATT&CK technique IDs in reports stored before 0.7.0 (safe to rerun) |
+| `insight industries` · `insight threat-profile INDUSTRY` | The industries, and the top ten groups for one with their evidence ([docs/THREAT_GUIDES.md](docs/THREAT_GUIDES.md#command-line)) |
+| `insight threat-guide REF FILE` | Write a group's threat guide (`--format md\|json\|navigator\|sweep-csv\|sweep-json`, `--max-tlp`, `--include-named` to sweep reports that only name the group; never overwrites; owner-only file) |
+| `insight rule-add FILE --kind sigma --link G0016` | Store a YARA or Sigma rule (text only, never run) and link it to groups or techniques |
+| `insight threat-library-sync` | Fetch the full pinned threat-group library (MITRE ATT&CK and MISP galaxy; checked by SHA-256) |
 | `insight mfa setup` | Pair an authenticator app for sign-in codes (shows a secret, then confirms one code). Also `status`, `reset`. MFA itself is **off by default** and switched with `INSIGHT_MFA=on`; with Docker, `make mfa-enable` / `make mfa-disable` do both steps |
 | `insight api-key create --name NAME` | Create the API key for scripts/SIEM (read-only unless `--access read-write`; `--max-tlp GREEN` hides more restrictive reports from it; shown once). Also `status`, `rotate`, `revoke`. See [docs/API.md](docs/API.md#api-key-scripts-and-siem) |
 | `insight --version` | Print the version |
@@ -261,7 +272,7 @@ docker compose cp insight:/data/backup-$(date +%Y%m%d).db ./
 - Rate limits live in server memory: one worker, and a restart resets them. Sessions are stored in the database and survive restarts. The API is unversioned (breaking changes are listed in the CHANGELOG's upgrade notes).
 - No full-text relevance ranking engine, case management or graph visualization yet. Source syncs can run on opt-in schedules (off by default).
 - Local PDF import extracts text in a bounded Linux worker. Arbitrary URL fetching, arbitrary feed entry, STIX/TAXII/MISP synchronization and automatic full-article storage remain outside the collection workflow.
-- No actor/malware attribution, ML or LLM inference. Extraction is deterministic and can still miss or mis-read unusual formats (see the known gaps in [docs/EXTRACTION.md](docs/EXTRACTION.md); the labelled benchmark `python scripts/benchmark_extraction.py` measures quality). Manual review is essential. URL extraction trims sentence punctuation and unbalanced closing brackets, so verify against the source evidence.
+- No actor/malware attribution, ML or LLM inference (threat guides show what cited catalogs say about a group and which of your reports name it or you linked, never an inferred attribution). Extraction is deterministic and can still miss or mis-read unusual formats (see the known gaps in [docs/EXTRACTION.md](docs/EXTRACTION.md); the labelled benchmark `python scripts/benchmark_extraction.py` measures quality). Manual review is essential. URL extraction trims sentence punctuation and unbalanced closing brackets, so verify against the source evidence.
 - Matching is literal; watch terms are not an asset inventory. Source-language dates are not authoritative ingestion dates.
 - The inbox shows up to 200 rows; entity pivots load 25 documents at a time. The API paginates documents and entity pivots. Suitable for a pilot, not large-scale intelligence ingestion.
 - KEV updates store all supplied records but add inbox documents for only the latest 100 entries. Old KEV rows are retained with import timestamps, not silently deleted; absence from a later import is not evidence of current KEV membership.

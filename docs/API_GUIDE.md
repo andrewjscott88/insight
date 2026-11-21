@@ -394,6 +394,70 @@ curl -sS -X POST "$INSIGHT_URL/api/documents/$DOC_ID/techniques" -H "Authorizati
 curl -sS -X DELETE "$INSIGHT_URL/api/documents/$DOC_ID/techniques/T1059.001" -H "Authorization: Bearer $INSIGHT_API_KEY"
 ```
 
+### Industry threats and threat guides
+
+Pick an industry, see the top groups a cited source names for it, then export a group's threat guide, its ATT&CK
+Navigator layer and its indicator sweep list. `G0016` is an ATT&CK group ID from the bundled library; an actor
+you created has a UUID instead. Writes need a read-write key. See [THREAT_GUIDES.md](THREAT_GUIDES.md).
+
+```sh
+# Industries, and how many groups a cited source names for each
+curl -sS "$INSIGHT_URL/api/industries" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  | jq -r '.industries[] | "\(.groups)\t\(.key)\t\(.name)"'
+# The top ten for healthcare, with the evidence for each (reports naming them counted over 90 days)
+curl -sS "$INSIGHT_URL/api/industries/healthcare/actors?days=90" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  | jq '.actors[] | {rank, name, reports_naming_it, evidence: [.evidence[] | {source, url}]}'
+# Find a group by name, alias or ID; list the actors you created
+curl -sS "$INSIGHT_URL/api/actors?q=cozy" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq '.groups[] | {ref, name}'
+# Track your own actor (optionally the same as an ATT&CK group)
+ACTOR_ID=$(curl -sS -X POST "$INSIGHT_URL/api/actors" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d '{"name": "Copper Fox", "aliases": ["CF-1"], "tlp": "AMBER"}' | jq -r .ref)
+# One group: names, industry claims with sources, your decisions, linked reports
+curl -sS "$INSIGHT_URL/api/actors/G0016" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq
+# Link a report to the group (your decision; Insight never infers it), and remove the link
+curl -sS -X POST "$INSIGHT_URL/api/actors/G0016/documents" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d "{\"document_id\": \"$DOC_ID\", \"note\": \"Same loader\"}"
+curl -sS -X DELETE "$INSIGHT_URL/api/actors/G0016/documents/$DOC_ID" -H "Authorization: Bearer $INSIGHT_API_KEY"
+# Add an industry with a citation, or remove a library claim with a reason
+curl -sS -X POST "$INSIGHT_URL/api/actors/G0016/industries" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"industry": "energy", "citation_url": "https://example.org/report", "tlp": "CLEAR"}'
+# The guide as JSON or Markdown; at most GREEN (for sharing)
+curl -sS "$INSIGHT_URL/api/actors/G0016/guide" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq '.hunt.hypotheses[0]'
+curl -sS -OJ "$INSIGHT_URL/api/actors/G0016/guide?format=md&max_tlp=GREEN" \
+  -H "Authorization: Bearer $INSIGHT_API_KEY"
+# ATT&CK Navigator layer, and the indicator sweep list (things to search for, not proof of the group)
+curl -sS -OJ "$INSIGHT_URL/api/actors/G0016/navigator" -H "Authorization: Bearer $INSIGHT_API_KEY"
+curl -sS -OJ "$INSIGHT_URL/api/actors/G0016/sweep?format=csv" -H "Authorization: Bearer $INSIGHT_API_KEY"
+# By default only reports you linked feed the sweep list; opt in to reports that only name the group
+curl -sS -OJ "$INSIGHT_URL/api/actors/G0016/sweep?format=csv&linked_only=false" \
+  -H "Authorization: Bearer $INSIGHT_API_KEY"
+# Hunts: start one, record a check for one hypothesis, close it
+curl -sS "$INSIGHT_URL/api/actors/G0016/hunts" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq
+HUNT_ID=$(curl -sS -X POST "$INSIGHT_URL/api/actors/G0016/hunts" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d '{"title": "APT29 hunt, Q4", "tlp": "AMBER"}' | jq -r .id)
+curl -sS -X PUT "$INSIGHT_URL/api/hunts/$HUNT_ID/checks/T1059.001" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d '{"result": "nothing-found", "data_checked": "EDR process events",
+  "period_start": "2026-10-01", "period_end": "2026-11-20"}'
+curl -sS -X PUT "$INSIGHT_URL/api/hunts/$HUNT_ID" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d '{"status": "closed", "summary": "Nothing found in 7 weeks."}'
+curl -sS "$INSIGHT_URL/api/hunts/$HUNT_ID" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq '.checks'
+# Rules: store a Sigma or YARA rule as text (never run), link it to a group or technique, list, read, delete
+RULE_ID=$(curl -sS -X POST "$INSIGHT_URL/api/rules" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' --data-binary @- <<'JSON' | jq -r .id
+{"kind": "sigma", "name": "Encoded PowerShell", "licence": "DRL-1.1", "tlp": "CLEAR",
+ "body": "title: Encoded PowerShell\nlogsource:\n  product: windows\ndetection:\n  sel:\n    CommandLine|contains: ' -enc '\n  condition: sel\n"}
+JSON
+)
+curl -sS -X POST "$INSIGHT_URL/api/rules/$RULE_ID/links" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d '{"target_kind": "technique", "target_id": "T1059.001"}'
+curl -sS -X DELETE "$INSIGHT_URL/api/rules/$RULE_ID/links" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d '{"target_kind": "technique", "target_id": "T1059.001"}'
+curl -sS "$INSIGHT_URL/api/rules?kind=sigma" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq '.[] | {id, name, linked_to}'
+curl -sS "$INSIGHT_URL/api/rules/$RULE_ID" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq -r .body
+curl -sS -X DELETE "$INSIGHT_URL/api/rules/$RULE_ID" -H "Authorization: Bearer $INSIGHT_API_KEY"
+```
+
 ### Sources and enrichment (outbound internet)
 
 These are the only routes that make Insight contact other servers. Sync imports a curated public feed; enrichment

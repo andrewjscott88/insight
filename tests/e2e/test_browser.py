@@ -300,3 +300,20 @@ def test_second_notional_report_tlp_and_javascript_offsets(context: Any) -> None
     )
     assert check['bad'] == 0
     assert check['naive'] > 0  # the code-point offsets really are wrong for JavaScript after the emoji
+
+
+def test_industry_threats_open_a_threat_guide(context: Any) -> None:
+    """TIP 2.10: pick an industry, see the top ten with evidence, open a group's guide and its hunt plan."""
+    page = context.new_page()
+    sign_in(page)
+    page.get_by_role('tab', name='Industry threats').click()
+    expect(page.get_by_role('heading', name='Industry threats')).to_be_visible()
+    expect(page.get_by_text(re.compile(r'These are the top \d+\.'))).to_be_visible()
+    page.get_by_text('Find any group by name').click()
+    page.get_by_label('Group name or ID, such as APT29 or G0016').fill('G0016')
+    page.get_by_role('button', name='G0016 · APT29').click()
+    expect(page.get_by_role('heading', name='Threat guide: APT29')).to_be_visible()
+    expect(page.get_by_role('heading', name='Hunt plan')).to_be_visible()
+    guide = page.evaluate("async () => (await fetch('/api/actors/G0016/guide')).json()")
+    assert guide['format'] == 'insight-threat-guide-1'
+    assert guide['hunt']['hypotheses']

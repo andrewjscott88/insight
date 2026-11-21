@@ -23,8 +23,15 @@ The narrower first release trades the research report's React, RabbitMQ/Celery, 
   imports nothing from its siblings), `audit`, `common` (text folding, LIKE patterns, timestamps),
   `documents` (ingest, fingerprints, revisions), `search` (search, summaries, the reader view, stats),
   `entities` (pivots), `triage` (review, notes, watch terms), `brief` (the intel brief's facts), `exports`
-  (IOC export queries), `sources` (source runs, enrichment cache, fetch state), `jobs` (queue and schedules)
-  and `access` (API keys, MFA).
+  (IOC export queries), `sources` (source runs, enrichment cache, fetch state), `jobs` (queue and schedules),
+  `access` (API keys, MFA), and for threat guides ([ADR 0025](adr/0025-threat-guides.md)) `actors` (actors,
+  report links, industry decisions), `threat_profiles` (an industry's top ten), `threat_guides` (a guide's
+  facts and the sweep list), `rules` (YARA and Sigma as text) and `hunts` (hunt records).
+- `industries.py`: the fixed industry list and the reviewed words that map catalog labels and ATT&CK prose to it.
+  `threat_library_build.py` builds the threat-group library from ATT&CK and the MISP galaxy (pure);
+  `threat_library.py` loads the bundled `data/actors.json` or the synced full edition; `threat_library_sync.py`
+  fetches the pinned releases (`insight threat-library-sync`). `threat_guide.py` and `threat_guide_markdown.py`
+  compose a guide and its exports (JSON, Markdown, Navigator layer, sweep CSV/JSON). Pure functions, no SQL.
 - `ioc_export.py`: the cross-report IOC export format (`insight-ioc-v1`): grouping, TLP labelling and defanging. Pure functions, no SQL.
 - `connectors.py`: curated feed/KEV/CSAF/NVD/EPSS integration, one source at a time or all in turn (`sync_all`).
   Conditional fetching (`ETag` / `Last-Modified`, then a payload hash) skips unchanged feeds.
@@ -34,12 +41,12 @@ The narrower first release trades the research report's React, RabbitMQ/Celery, 
 - `brief.py`: the intel brief's wording (headline and sections) from facts that `services.brief_data` gathers.
   Pure functions, no SQL, no AI.
 - `apikeys.py`: API key format, generation and hashing (pure functions). `totp.py`: RFC 6238 codes for the sign-in second factor (pure, standard library only). `ratelimit.py`: in-process per-caller token buckets and the API's policies ([ADR 0012](adr/0012-single-api-key-and-rate-limits.md)).
-- `web/`: the JSON API and the security boundary. `app.py` holds `create_app`, which only composes: state, middleware, then one `_register_*` function per route group. `boundary.py` is the ASGI boundary (body-size limit, authentication gate, CSRF, rate limits, security headers); `auth.py` holds callers, sessions, API-key checks and sign-in; `routes/` has one module per area (`pages`, `documents`, `triage`, `exports`, `entities`, `sources`, `workspace`). Shared pieces (`session_checker`, `auth_dependency`, `start_session`, `get_document_or_404`, `ioc_export_query`) are module-level so they can be tested alone (`tests/api/test_app_factory.py`). `main.py` remains as a compatibility module: `insight.main:create_app` still works.
-- `ui/`: NiceGUI workspace, one module per panel (`inbox`, `entities`, `watch_terms`, `sources`, `enrichment`, `ingest`, `ioc_export`, `stats`, `brief`, `schedules`), plus `workspace.py` (typed per-tab state and cross-panel hooks), `page.py` (layout), `reader.py` (the report reader), `theme.py` (light and dark colour tokens), `styles.py` (the style sheet: type scale, reading width, focus outline, phone rules), `typography.py` (real headings, new-tab links), `messages.py` (messages that stay until dismissed), `glossary.py` ("What the words mean"), `appearance.py` (the Light/Dark/System and "Larger text" buttons) and `mobile.py` (phone inbox navigation). Readability rules: [ADR 0017](adr/0017-readability-standard.md).
+- `web/`: the JSON API and the security boundary. `app.py` holds `create_app`, which only composes: state, middleware, then one `_register_*` function per route group. `boundary.py` is the ASGI boundary (body-size limit, authentication gate, CSRF, rate limits, security headers); `auth.py` holds callers, sessions, API-key checks and sign-in; `routes/` has one module per area (`pages`, `documents`, `triage`, `exports`, `entities`, `sources`, `workspace`, `threats`, `hunting`, and others). Shared pieces (`session_checker`, `auth_dependency`, `start_session`, `get_document_or_404`, `ioc_export_query`) are module-level so they can be tested alone (`tests/api/test_app_factory.py`). `main.py` remains as a compatibility module: `insight.main:create_app` still works.
+- `ui/`: NiceGUI workspace, one module per panel (`inbox`, `entities`, `watch_terms`, `sources`, `enrichment`, `ingest`, `ioc_export`, `stats`, `brief`, `schedules`; for threat guides `threats`, `threat_guide`, `hunts`, `rules`, `actors`), plus `workspace.py` (typed per-tab state and cross-panel hooks), `page.py` (layout), `reader.py` (the report reader), `theme.py` (light and dark colour tokens), `styles.py` (the style sheet: type scale, reading width, focus outline, phone rules), `typography.py` (real headings, new-tab links), `messages.py` (messages that stay until dismissed), `glossary.py` ("What the words mean"), `appearance.py` (the Light/Dark/System and "Larger text" buttons) and `mobile.py` (phone inbox navigation). Readability rules: [ADR 0017](adr/0017-readability-standard.md).
 - `appearance.py`: the theme vocabulary shared by the configuration, the sign-in pages and the workspace (`INSIGHT_THEME`, the per-device `insight_theme` cookie). See [ADR 0016](adr/0016-colour-themes-and-per-device-choice.md).
 - `templates/`, `static/app.css`: the sign-in and sign-out pages, in the same themes.
 - `demo.py`: synthetic reserved-namespace examples.
-- `cli.py`: `init`, `serve`, `migrate`, `backup`, `export-iocs`, `api-key`, `mfa`.
+- `cli.py`: `init`, `serve`, `migrate`, `backup`, `export-iocs`, `api-key`, `mfa`, and more; `cli_threats.py` holds `threat-library-sync`, `industries`, `threat-profile`, `threat-guide` and `rule-add`.
 - `Makefile` (repository): shortcuts for Docker operations, keys, MFA, tests and CI gates (`make help`).
 - `scripts/` (repository only): CI/CD gates, benchmarks and release tooling. See `docs/CI_CD.md`.
 

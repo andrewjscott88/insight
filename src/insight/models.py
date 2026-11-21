@@ -13,6 +13,7 @@ from uuid import uuid4
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Engine,
     ForeignKey,
     Index,
@@ -388,6 +389,162 @@ class LookupFailure(Base):
     message: Mapped[str] = mapped_column(String(200), default='')
     failed_at: Mapped[str] = mapped_column(String(40), default=now)
     retry_at: Mapped[str] = mapped_column(String(40), index=True)
+
+
+class ThreatActor(Base):
+    """A threat actor the analyst created (TIP 2.5, minimum for TIP 2.10; ADR 0025).
+
+    Insight never creates one by itself, and never from shared indicators. ``attack_group_id`` optionally
+    says which MITRE ATT&CK group (``G0016``) the analyst considers the same actor: the guide then shows that
+    group's catalog data, labelled as coming from ATT&CK. ``aliases`` is one name per line.
+    """
+
+    __tablename__ = 'threat_actors'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    name: Mapped[str] = mapped_column(String(120))
+    aliases: Mapped[str] = mapped_column(Text, default='')
+    description: Mapped[str] = mapped_column(Text, default='')
+    attack_group_id: Mapped[str | None] = mapped_column(String(10), default=None)
+    tlp: Mapped[str] = mapped_column(String(20), default='AMBER')
+    created_at: Mapped[str] = mapped_column(String(40), default=now)
+    updated_at: Mapped[str] = mapped_column(String(40), default=now)
+    actor: Mapped[str] = mapped_column(String(80), default='')
+
+
+class ActorDocument(Base):
+    """A report the analyst linked to a group (``group_ref``: an ATT&CK ID such as ``G0016``, or a
+    :class:`ThreatActor` ID). An explicit analyst decision, never inferred."""
+
+    __tablename__ = 'actor_documents'
+    __table_args__ = (UniqueConstraint('group_ref', 'document_id'),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    group_ref: Mapped[str] = mapped_column(String(36), index=True)
+    document_id: Mapped[str] = mapped_column(ForeignKey('documents.id'), index=True)
+    tlp: Mapped[str] = mapped_column(String(20), default='CLEAR', server_default='CLEAR')
+    note: Mapped[str] = mapped_column(Text, default='')
+    created_at: Mapped[str] = mapped_column(String(40), default=now)
+    actor: Mapped[str] = mapped_column(String(80), default='')
+
+
+class Campaign(Base):
+    """A campaign an analyst explicitly tracks."""
+
+    __tablename__ = 'campaigns'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    name: Mapped[str] = mapped_column(String(120))
+    aliases: Mapped[str] = mapped_column(Text, default='')
+    description: Mapped[str] = mapped_column(Text, default='')
+    tlp: Mapped[str] = mapped_column(String(20), default='AMBER')
+    created_at: Mapped[str] = mapped_column(String(40), default=now)
+    actor: Mapped[str] = mapped_column(String(80), default='')
+
+
+class ThreatLink(Base):
+    """One explicit link. Actor/report links stay in actor_documents for existing guides."""
+
+    __tablename__ = 'threat_links'
+    __table_args__ = (
+        CheckConstraint('(actor_id IS NULL) <> (campaign_id IS NULL)', name='one_threat_subject'),
+        CheckConstraint(
+            '(CASE WHEN document_id IS NULL THEN 0 ELSE 1 END + '
+            'CASE WHEN entity_id IS NULL THEN 0 ELSE 1 END + '
+            'CASE WHEN technique_id IS NULL THEN 0 ELSE 1 END) = 1',
+            name='one_threat_target',
+        ),
+        CheckConstraint('actor_id IS NULL OR document_id IS NULL', name='existing_actor_reports'),
+        UniqueConstraint('actor_id', 'entity_id'), UniqueConstraint('actor_id', 'technique_id'),
+        UniqueConstraint('campaign_id', 'document_id'), UniqueConstraint('campaign_id', 'entity_id'),
+        UniqueConstraint('campaign_id', 'technique_id'),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    actor_id: Mapped[str | None] = mapped_column(ForeignKey('threat_actors.id', ondelete='CASCADE'), index=True)
+    campaign_id: Mapped[str | None] = mapped_column(ForeignKey('campaigns.id', ondelete='CASCADE'), index=True)
+    document_id: Mapped[str | None] = mapped_column(ForeignKey('documents.id', ondelete='CASCADE'), index=True)
+    entity_id: Mapped[str | None] = mapped_column(ForeignKey('entities.id', ondelete='CASCADE'), index=True)
+    technique_id: Mapped[str | None] = mapped_column(String(16), index=True)
+    tlp: Mapped[str] = mapped_column(String(20))
+    created_at: Mapped[str] = mapped_column(String(40), default=now)
+    actor: Mapped[str] = mapped_column(String(80), default='')
+
+
+class IndustryClaim(Base):
+    """The analyst's own industry mapping for a group: ``added`` with a citation, or ``removed`` (a catalog
+    claim the analyst disagrees with, with the reason). Labelled TLP because the reason may quote a report."""
+
+    __tablename__ = 'industry_claims'
+    __table_args__ = (UniqueConstraint('group_ref', 'industry'),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    group_ref: Mapped[str] = mapped_column(String(36), index=True)
+    industry: Mapped[str] = mapped_column(String(40))
+    decision: Mapped[str] = mapped_column(String(10))  # added | removed
+    citation_url: Mapped[str] = mapped_column(Text, default='')
+    document_id: Mapped[str | None] = mapped_column(ForeignKey('documents.id'), default=None)
+    reason: Mapped[str] = mapped_column(Text, default='')
+    tlp: Mapped[str] = mapped_column(String(20), default='AMBER')
+    created_at: Mapped[str] = mapped_column(String(40), default=now)
+    actor: Mapped[str] = mapped_column(String(80), default='')
+
+
+class DetectionRule(Base):
+    """A YARA or Sigma rule carried as text (TIP 2.7, minimum for TIP 2.10). Insight never runs it."""
+
+    __tablename__ = 'detection_rules'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    kind: Mapped[str] = mapped_column(String(10))  # yara | sigma
+    name: Mapped[str] = mapped_column(String(200))
+    body: Mapped[str] = mapped_column(Text)
+    source_url: Mapped[str] = mapped_column(Text, default='')
+    licence: Mapped[str] = mapped_column(String(120), default='')
+    content_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    tlp: Mapped[str] = mapped_column(String(20), default='AMBER')
+    created_at: Mapped[str] = mapped_column(String(40), default=now)
+    actor: Mapped[str] = mapped_column(String(80), default='')
+
+
+class RuleLink(Base):
+    """What a rule is for: a ``group``, an ATT&CK ``technique`` or a report (``document``)."""
+
+    __tablename__ = 'rule_links'
+    __table_args__ = (UniqueConstraint('rule_id', 'target_kind', 'target_id'),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    rule_id: Mapped[str] = mapped_column(ForeignKey('detection_rules.id'), index=True)
+    target_kind: Mapped[str] = mapped_column(String(12))
+    target_id: Mapped[str] = mapped_column(String(36), index=True)
+    created_at: Mapped[str] = mapped_column(String(40), default=now)
+    actor: Mapped[str] = mapped_column(String(80), default='')
+
+
+class Hunt(Base):
+    """A threat hunt started from a group's threat guide (TIP 2.10): the record that makes it repeatable."""
+
+    __tablename__ = 'hunts'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    group_ref: Mapped[str] = mapped_column(String(36), index=True)
+    title: Mapped[str] = mapped_column(String(200))
+    status: Mapped[str] = mapped_column(String(10), default='open')  # open | closed
+    summary: Mapped[str] = mapped_column(Text, default='')
+    tlp: Mapped[str] = mapped_column(String(20), default='AMBER')
+    created_at: Mapped[str] = mapped_column(String(40), default=now)
+    updated_at: Mapped[str] = mapped_column(String(40), default=now)
+    actor: Mapped[str] = mapped_column(String(80), default='')
+
+
+class HuntCheck(Base):
+    """One hypothesis of a hunt (one ATT&CK technique): what was checked, when, and the result."""
+
+    __tablename__ = 'hunt_checks'
+    __table_args__ = (UniqueConstraint('hunt_id', 'technique_id'),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    hunt_id: Mapped[str] = mapped_column(ForeignKey('hunts.id'), index=True)
+    technique_id: Mapped[str] = mapped_column(String(16))
+    #: ``not-checked``, ``nothing-found``, ``suspicious`` or ``confirmed``.
+    result: Mapped[str] = mapped_column(String(20), default='not-checked')
+    data_checked: Mapped[str] = mapped_column(Text, default='')
+    period_start: Mapped[str] = mapped_column(String(40), default='')
+    period_end: Mapped[str] = mapped_column(String(40), default='')
+    notes: Mapped[str] = mapped_column(Text, default='')
+    updated_at: Mapped[str] = mapped_column(String(40), default=now)
+    actor: Mapped[str] = mapped_column(String(80), default='')
 
 
 class FetchState(Base):
