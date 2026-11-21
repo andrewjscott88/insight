@@ -157,7 +157,15 @@ def _reports(
 ) -> tuple[list[ReportRef], list[Mention]]:
     """Linked reports, then up to ``MAX_NAMED`` reports that only name the group; and every mention found."""
     linked = [
-        ReportRef(d.id, d.title, d.tlp, d.created_at, d.source_name, 'linked', link.note)
+        ReportRef(
+            d.id,
+            d.title,
+            most_restrictive(d.tlp, link.tlp, subject.tlp),
+            d.created_at,
+            d.source_name,
+            'linked',
+            link.note,
+        )
         for d, link in linked_reports(db, subject.ref, max_tlp=max_tlp)
     ]
     seen = {r.document_id for r in linked}
@@ -196,13 +204,13 @@ def guide_data(
     hunts = tuple(HuntView(h, hunt_checks(db, h.id)) for h in hunts_for(db, subject.ref, max_tlp=max_tlp))
     # Every label of what the guide shows or counts: the banner is never less restrictive than its content.
     labels = (
-        [c.tlp for c in claims]
+        [c.effective_tlp for c in claims]
         + [r.tlp for r in reports]
         + [m.tlp for m in mentions]  # named_total counts them all, not only the MAX_NAMED listed
         + sorted(technique_labels(db, trending, max_tlp=max_tlp, since=since))  # the "recent reports" counts
         + [e.tlp for e in sweep]  # a verdict's label can be stricter than its reports'
-        + [r.rule.tlp for r in rules]
-        + [h.hunt.tlp for h in hunts]
+        + [r.tlp for r in rules]
+        + [h.hunt.effective_tlp for h in hunts]
     )
     return GuideData(
         subject=subject,
@@ -211,12 +219,12 @@ def guide_data(
                 c.industry,
                 c.citation_url or (f'/?report={c.document_id}' if c.document_id else ''),
                 c.reason,
-                c.tlp,
+                c.effective_tlp,
             )
             for c in claims
             if c.decision == 'added'
         ),
-        removed=tuple((c.industry, c.reason, c.tlp) for c in claims if c.decision == 'removed'),
+        removed=tuple((c.industry, c.reason, c.effective_tlp) for c in claims if c.decision == 'removed'),
         reports=tuple(reports),
         named_total=len(mentions),
         report_techniques=report_techniques,

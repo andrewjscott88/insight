@@ -87,7 +87,7 @@ def _hunts(ws: Workspace, guide: ThreatGuide, refresh: Callable[[], Any]) -> Non
     for view in guide.data.hunts:
         hunt = view.hunt
         with ui.expansion(f'{hunt.title} · {hunt.status} · started {hunt.created_at[:10]}').classes('w-full'):
-            tlp_badge(hunt.tlp)
+            tlp_badge(hunt.effective_tlp)
             for tid in dict.fromkeys([*view.checks, *techniques]):
                 _check_row(ws, hunt.id, tid, view.checks.get(tid), hunt.status == 'open', refresh)
             _close_row(ws, hunt.id, hunt.status, hunt.summary, refresh)

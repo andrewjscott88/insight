@@ -213,7 +213,7 @@ def _rule(entry: Any) -> dict[str, Any]:
         'source_url': rule.source_url,
         'licence': rule.licence,
         'sha256': rule.content_hash,
-        'tlp': rule.tlp,
+        'tlp': entry.tlp,
         'linked_to': [{'kind': k, 'id': i} for k, i in entry.links],
         'body': rule.body,
     }
@@ -357,7 +357,7 @@ def guide_json(guide: ThreatGuide) -> dict[str, Any]:
                     'title': h.hunt.title,
                     'status': h.hunt.status,
                     'summary': h.hunt.summary,
-                    'tlp': h.hunt.tlp,
+                    'tlp': h.hunt.effective_tlp,
                     'started': h.hunt.created_at,
                     'updated': h.hunt.updated_at,
                     'checks': {

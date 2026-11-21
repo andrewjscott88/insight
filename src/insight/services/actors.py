@@ -14,12 +14,12 @@ import re
 from dataclasses import dataclass
 from typing import Final
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from ..industries import BY_KEY
 from ..models import ActorDocument, Document, IndustryClaim, ThreatActor, now
-from ..schemas import ActorInput, ActorLinkInput, IndustryClaimInput
+from ..schemas import ActorInput, ActorLinkInput, IndustryClaimInput, most_restrictive, tlp_markings
 from ..threat_library import Group, library
 from .audit import DEFAULT_ACTOR, audit
 from .tlp import TlpNotPermitted, _visible, tlp_permitted, visible_levels
@@ -102,7 +102,10 @@ def create_actor(db: Session, payload: ActorInput, *, max_tlp: str | None = None
 
     ``ValueError`` for an ``attack_group_id`` that is not in the threat library.
     """
-    _check_label(payload.tlp, max_tlp, 'actors')
+    label = most_restrictive(
+        payload.tlp, *tlp_markings(' '.join((payload.name, *payload.aliases, payload.description)))
+    )
+    _check_label(label, max_tlp, 'actors')
     group_id = payload.attack_group_id.upper() if payload.attack_group_id else None
     if group_id is not None and library().group(group_id) is None:
         raise ValueError(f'{group_id} is not a group in the threat library')
@@ -112,7 +115,7 @@ def create_actor(db: Session, payload: ActorInput, *, max_tlp: str | None = None
         aliases='\n'.join(aliases),
         description=payload.description.strip(),
         attack_group_id=group_id,
-        tlp=payload.tlp,
+        tlp=label,
         actor=_who(db),
     )
     db.add(actor)
@@ -151,10 +154,19 @@ def link_report(
             ActorDocument.group_ref == subject.ref, ActorDocument.document_id == doc.id
         )
     )
+    label = most_restrictive(subject.tlp, doc.tlp, payload.tlp, *tlp_markings(payload.note))
+    _check_label(label, max_tlp, 'links')
     if row is None:
-        row = ActorDocument(group_ref=subject.ref, document_id=doc.id, actor=_who(db))
+        row = ActorDocument(group_ref=subject.ref, document_id=doc.id, actor=_who(db), tlp=label)
         db.add(row)
+    else:
+        if row.tlp not in visible_levels(max_tlp):
+            raise LookupError('Report link unavailable')
+        label = most_restrictive(label, row.tlp)
+        if row.note == payload.note.strip() and row.tlp == label:
+            return row
     row.note = payload.note.strip()
+    row.tlp = label
     db.flush()
     audit(db, 'actor.link', subject.ref, doc.id)
     return row
@@ -169,7 +181,7 @@ def unlink_report(db: Session, ref: str, document_id: str, *, max_tlp: str | Non
             ActorDocument.group_ref == subject.ref, ActorDocument.document_id == document_id
         )
     )
-    if row is None:
+    if row is None or row.tlp not in visible_levels(max_tlp):
         raise LookupError('That report is not linked to this group')
     db.delete(row)
     audit(db, 'actor.unlink', subject.ref, document_id)
@@ -179,10 +191,13 @@ def linked_reports(
     db: Session, ref: str, *, max_tlp: str | None = None
 ) -> list[tuple[Document, ActorDocument]]:
     """Reports the analyst linked to ``ref`` that the reader may see, newest first."""
+    resolve_group(db, ref, max_tlp=max_tlp)
     stmt = (
         select(Document, ActorDocument)
         .join(ActorDocument, ActorDocument.document_id == Document.id)
-        .where(ActorDocument.group_ref == ref, *_visible(max_tlp))
+        .where(
+            ActorDocument.group_ref == ref, ActorDocument.tlp.in_(visible_levels(max_tlp)), *_visible(max_tlp)
+        )
         .order_by(Document.created_at.desc(), Document.id)
         .limit(MAX_LINKED_REPORTS)
     )
@@ -203,14 +218,13 @@ def record_industry_claim(
         raise ValueError(problem)
     _check_label(payload.tlp, max_tlp, 'industry mappings')
     subject = resolve_group(db, ref, max_tlp=max_tlp)
-    if payload.document_id:
-        _visible_report(db, payload.document_id, max_tlp)
+    doc = _visible_report(db, payload.document_id, max_tlp) if payload.document_id else None
     row = db.scalar(
         select(IndustryClaim).where(
             IndustryClaim.group_ref == subject.ref, IndustryClaim.industry == payload.industry
         )
     )
-    if row is not None and max_tlp is not None and not tlp_permitted(row.tlp, max_tlp):
+    if row is not None and max_tlp is not None and not tlp_permitted(row.effective_tlp, max_tlp):
         # Like a hidden hunt or rule: a decision above the caller's limit looks missing, so a limited key
         # cannot learn from the answer that one exists.
         raise LookupError('Industry mapping not found')
@@ -221,11 +235,11 @@ def record_industry_claim(
     row.citation_url = payload.citation_url
     row.document_id = payload.document_id
     row.reason = payload.reason.strip()
-    row.tlp = payload.tlp
+    row.tlp = most_restrictive(payload.tlp, subject.tlp, doc.tlp if doc else 'CLEAR')
     row.created_at = now()
     row.actor = _who(db)
     db.flush()
-    audit(db, 'actor.industry', subject.ref, f'{payload.decision} {payload.industry} (TLP:{payload.tlp})')
+    audit(db, 'actor.industry', subject.ref, f'{payload.decision} {payload.industry} (TLP:{row.tlp})')
     return row
 
 
@@ -235,7 +249,12 @@ def analyst_claims(
     """The analyst's industry decisions the reader may see, optionally for one group or industry."""
     stmt = select(IndustryClaim).order_by(IndustryClaim.group_ref, IndustryClaim.industry)
     if max_tlp is not None:
-        stmt = stmt.where(IndustryClaim.tlp.in_(visible_levels(max_tlp)))
+        levels = visible_levels(max_tlp)
+        stmt = stmt.where(
+            IndustryClaim.tlp.in_(levels),
+            or_(IndustryClaim.subject_tlp.is_(None), IndustryClaim.subject_tlp.in_(levels)),
+            or_(IndustryClaim.source_tlp.is_(None), IndustryClaim.source_tlp.in_(levels)),
+        )
     if group_ref is not None:
         stmt = stmt.where(IndustryClaim.group_ref == group_ref)
     if industry is not None:
@@ -246,7 +265,11 @@ def analyst_claims(
 def report_groups(db: Session, document_id: str, *, max_tlp: str | None = None) -> list[GroupSubject]:
     """Groups and actors the analyst linked this report to, that the reader may see, by name."""
     _visible_report(db, document_id, max_tlp)
-    refs = db.scalars(select(ActorDocument.group_ref).where(ActorDocument.document_id == document_id))
+    refs = db.scalars(
+        select(ActorDocument.group_ref).where(
+            ActorDocument.document_id == document_id, ActorDocument.tlp.in_(visible_levels(max_tlp))
+        )
+    )
     found = []
     for ref in refs:
         try:

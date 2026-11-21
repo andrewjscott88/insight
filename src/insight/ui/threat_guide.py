@@ -26,7 +26,7 @@ from .workspace import Workspace
 def load_guide(ws: Workspace, ref: str) -> ThreatGuide | None:
     with ws.read() as db:
         try:
-            data = services.guide_data(db, ref, now=datetime.now(UTC))
+            data = services.guide_data(db, ref, max_tlp=ws.app.state.settings.max_tlp, now=datetime.now(UTC))
         except LookupError:
             return None
     return compose(data, library())

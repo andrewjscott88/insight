@@ -4,8 +4,8 @@ Revision ID: 0015
 Revises: 0014
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = '0015'
 down_revision = '0014'
@@ -44,8 +44,10 @@ def upgrade() -> None:
             name='one_threat_target',
         ),
         sa.CheckConstraint('actor_id IS NULL OR document_id IS NULL', name='existing_actor_reports'),
-        sa.UniqueConstraint('actor_id', 'entity_id'), sa.UniqueConstraint('actor_id', 'technique_id'),
-        sa.UniqueConstraint('campaign_id', 'document_id'), sa.UniqueConstraint('campaign_id', 'entity_id'),
+        sa.UniqueConstraint('actor_id', 'entity_id'),
+        sa.UniqueConstraint('actor_id', 'technique_id'),
+        sa.UniqueConstraint('campaign_id', 'document_id'),
+        sa.UniqueConstraint('campaign_id', 'entity_id'),
         sa.UniqueConstraint('campaign_id', 'technique_id'),
     )
     for col in ('actor_id', 'campaign_id', 'document_id', 'entity_id', 'technique_id'):

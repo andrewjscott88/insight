@@ -32,7 +32,7 @@ def render_rules(ws: Workspace, guide: ThreatGuide, refresh: Callable[[], Any]) 
     for linked in rules:
         rule = linked.rule
         with ui.expansion(f'{rule.name} · {KINDS.get(rule.kind, rule.kind)}').classes('w-full break-value'):
-            tlp_badge(rule.tlp)
+            tlp_badge(linked.tlp)
             ui.label(
                 f'Licence: {rule.licence or "not given"} · fingerprint {rule.content_hash[:16]}'
             ).classes('muted text-sm break-value')
