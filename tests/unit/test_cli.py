@@ -144,7 +144,7 @@ def test_migrate_hides_database_passwords(
 
     monkeypatch.setattr('insight.models.database', lambda *a, **k: (FakeEngine(), None))
     monkeypatch.setattr('insight.migrations.current_revision', lambda _e: '0002')
-    monkeypatch.setattr('insight.migrations.upgrade', lambda _e: None)
+    monkeypatch.setattr('insight.migrations.upgrade', lambda _e, **_kwargs: None)
     monkeypatch.setattr(os, 'environ', {'INSIGHT_DATABASE_URL': 'postgresql://insight:hunter2@db/insight'})
     assert cli.main(['migrate']) == 0
     out = capsys.readouterr().out
@@ -438,10 +438,24 @@ def test_mfa_reset(
     assert cli.main(['mfa', 'setup']) == 0
     capsys.readouterr()
     os.environ['INSIGHT_MFA'] = switch
+    monkeypatch.setenv('INSIGHT_SESSION_SECRET', 'new host secret after key rotation for tests')
     assert cli.main(['mfa', 'reset']) == 0
     out = capsys.readouterr().out
     assert 'Authenticator app forgotten' in out
     assert message in out
+
+
+def test_mfa_setup_without_a_host_secret_leaves_the_instance_unpaired(
+    sqlite_env: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    prompts = answer_codes(monkeypatch)
+    assert cli.main(['mfa', 'setup']) == 1
+    captured = capsys.readouterr()
+    assert 'INSIGHT_SESSION_SECRET' in captured.err
+    assert 'otpauth://' not in captured.out
+    assert prompts == []
+    assert cli.main(['mfa', 'status']) == 0
+    assert 'No authenticator app is paired' in capsys.readouterr().out
 
 
 def test_mfa_setup_saves_nothing_without_a_matching_code(
