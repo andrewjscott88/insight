@@ -8,16 +8,21 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from typing import Final
 
+from .cve_scores import CSAF_SCORE_LINE
 from .demo import REPORTS as DEMO_REPORTS
 from .services import KEV_SOURCE, BriefData, BriefDocument, BriefKev
 
 SECTION_ITEMS: Final = 5
 #: CVSS base score from which a weakness counts as critical (the CVSS v3 and v4 "Critical" band).
 CRITICAL: Final = 9.0
+#: EPSS probability from which the brief calls a weakness likely to be attacked soon (TIP 1.3): 10% within
+#: 30 days is in roughly the top 2% of scored CVEs.
+LIKELY: Final = 0.1
+#: Where a severity score comes from.
+CISA_ADVISORY: Final = 'CISA advisory'
+NIST_NVD: Final = 'NIST NVD'
 #: Lines that ``connectors.parse_csaf`` writes (``tests/unit/test_brief.py`` checks the contract).
-SCORE_LINE: Final = re.compile(
-    r'^- (CVE-\d{4}-\d{4,}), CVSS (?:2\.0|3(?:\.\d)?|4\.0) base score (\d{1,2}(?:\.\d+)?):', re.M
-)
+SCORE_LINE: Final = CSAF_SCORE_LINE
 VENDOR_LINE: Final = re.compile(r'^Vendors: (.+)$', re.M)
 RELEASE_LINE: Final = re.compile(
     r'^Released (\d{4}-\d{2}-\d{2})(?:; current version .* \((\d{4}-\d{2}-\d{2})\))?\.$', re.M
@@ -94,8 +99,12 @@ class _Facts:
     kev_added: list[BriefKev]
     #: ``(kev, reports, newest report id, source names)`` for KEV CVEs that fresh non-KEV reports mention.
     kev_mentioned: list[tuple[BriefKev, int, str, list[str]]]
-    #: ``(score, cve, title, report id)``, highest first.
-    severe: list[tuple[float, str, str, str]]
+    #: ``(score, cve, title, report id, origin)``, highest first; origin is :data:`CISA_ADVISORY` (the score
+    #: in a new CISA advisory) or :data:`NIST_NVD` (NVD's cached score of a CVE a new report mentions).
+    severe: list[tuple[float, str, str, str, str]]
+    #: ``(EPSS probability, cve, title, report id)`` of the CVEs in new reports with EPSS of :data:`LIKELY` or
+    #: more, highest first.
+    likely: list[tuple[float, str, str, str]]
     #: ``(kind, value, sources, reports)``.
     shared: list[tuple[str, str, int, int]]
     vendors: list[tuple[str, int]]
@@ -161,18 +170,32 @@ def _facts(data: BriefData, as_of: datetime) -> _Facts:
     ]
     shared.sort(key=lambda s: (-s[2], -s[3], s[0], s[1]))
 
-    best: dict[str, tuple[float, str, str, str]] = {}
+    best: dict[str, tuple[float, str, str, str, str]] = {}
     spellings: dict[str, Counter[str]] = defaultdict(Counter)
     for doc in fresh:
         for cve, score in SCORE_LINE.findall(doc.body):
             if CRITICAL <= (rated := float(score)) <= 10 and rated > best.get(cve, (0.0,))[0]:
-                best[cve] = (rated, cve, doc.title, doc.id)
+                best[cve] = (rated, cve, doc.title, doc.id, CISA_ADVISORY)
         for line in VENDOR_LINE.findall(doc.body):
             for name in {' '.join(v.split()) for v in line.split(',')} - {''}:
                 spellings[name.casefold()][name] += 1
     for kev in kev_added:
         if name := ' '.join(kev.vendor.split()):
             spellings[name.casefold()][name] += 1
+    # NVD's score of a CVE that a new report mentions (TIP 1.3): it joins, or beats, a CISA advisory's.
+    newest_mention: dict[str, BriefDocument] = {}
+    for (kind, value), ids in seen_in.items():
+        if kind == 'cve':
+            newest_mention[value] = max((by_id[i] for i in ids), key=lambda d: (d.created_at, d.id))
+    likely = []
+    for cve, doc in newest_mention.items():
+        found = data.scores.get(cve)
+        nvd = found.nvd.score if found and found.nvd and found.nvd.status != 'Rejected' else None
+        if nvd is not None and CRITICAL <= nvd <= 10 and nvd > best.get(cve, (0.0,))[0]:
+            best[cve] = (nvd, cve, doc.title, doc.id, NIST_NVD)
+        if found and found.epss and found.epss.probability >= LIKELY:
+            likely.append((found.epss.probability, cve, doc.title, doc.id))
+    likely.sort(key=lambda entry: (-entry[0], entry[1]))
     # One vendor per case-insensitive name, shown in its most common spelling ("Ltda" and "LTDA" are one).
     vendors = [(names.most_common(1)[0][0], sum(names.values())) for names in spellings.values()]
     vendors.sort(key=lambda v: (-v[1], v[0].casefold()))
@@ -190,6 +213,7 @@ def _facts(data: BriefData, as_of: datetime) -> _Facts:
         kev_added=kev_added,
         kev_mentioned=kev_mentioned,
         severe=sorted(best.values(), key=lambda s: (-s[0], s[1])),
+        likely=likely,
         shared=shared,
         vendors=vendors,
         watch=watch,

@@ -118,6 +118,10 @@ def _kev_view(kev: KEVRecord | None) -> dict[str, str] | None:
         'vendor': kev.vendor,
         'product': kev.product,
         'imported_at': kev.imported_at,
+        'vulnerability_name': kev.vulnerability_name,
+        'ransomware_use': kev.ransomware_use,
+        'notes': kev.notes,
+        'cwes': kev.cwes,
     }
 
 

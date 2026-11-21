@@ -140,6 +140,10 @@ def _render_observation(
                 'On the CISA list of Known Exploited Vulnerabilities (KEV) · '
                 f'added {kev["date_added"]} · fix by {kev["due_date"]}'
             ).classes('text-warn text-sm prose')
+            if kev.get('ransomware_use') == 'Known':
+                ui.label('CISA knows of ransomware campaigns that use it.').classes('text-warn text-sm prose')
+            if kev.get('vulnerability_name'):
+                ui.label(kev['vulnerability_name']).classes('text-sm prose break-value')
             ui.label(kev['required_action']).classes('muted text-sm prose')
         if obs['kind'] == 'cve':
             if scores := cve_scores.get(obs['value']):

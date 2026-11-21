@@ -9,16 +9,22 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from dataclasses import dataclass
 from typing import Any, Final
 
+#: CVSS base scores in the lines ``connectors.parse_csaf`` writes for CISA advisories
+#: (``tests/unit/test_brief.py`` checks the contract).
+CSAF_SCORE_LINE: Final = re.compile(
+    r'^- (CVE-\d{4}-\d{4,}), CVSS (?:2\.0|3(?:\.\d)?|4\.0) base score (\d{1,2}(?:\.\d+)?):', re.M
+)
 #: Newest CVSS version first: NVD lists several for some CVEs.
 _METRICS: Final = ('cvssMetricV40', 'cvssMetricV31', 'cvssMetricV30', 'cvssMetricV2')
 _NO_CWE: Final = frozenset({'NVD-CWE-Other', 'NVD-CWE-noinfo'})
 #: NVD's terms ask services that use its API to show this notice (https://nvd.nist.gov/developers).
 NVD_NOTICE: Final = 'This product uses the NVD API but is not endorsed or certified by the NVD.'
 EPSS_CAVEAT: Final = (
-    'EPSS estimates how likely attackers are to try to exploit a weakness in the next 30 days. It says '
+    'EPSS estimates how likely attackers are to try to use a weakness in the next 30 days. It says '
     'nothing about whether you use the product.'
 )
 

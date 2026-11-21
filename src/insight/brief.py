@@ -6,8 +6,8 @@ from datetime import UTC, datetime, timedelta
 from typing import Final
 
 from .brief_facts import DEMO as DEMO
+from .brief_facts import NIST_NVD, _day, _Facts, _facts, _product, _source, _time
 from .brief_facts import SECTION_ITEMS as SECTION_ITEMS
-from .brief_facts import _day, _Facts, _facts, _product, _source, _time
 from .brief_facts import count_of as count_of
 from .brief_facts import is_demo as is_demo
 from .brief_facts import name_list as name_list
@@ -46,6 +46,23 @@ def _deadline(added: list[BriefKev], today: str) -> list[str]:
     return []
 
 
+#: Marks a KEV line whose CVE CISA knows to be used in ransomware campaigns.
+RANSOMWARE: Final = ' · used in ransomware'
+
+
+def _ransomware(kev: BriefKev) -> str:
+    return RANSOMWARE if kev.ransomware else ''
+
+
+def _nvd_note(data: BriefData, cve: str, score: float, origin: str) -> str:
+    """Where the score comes from, and NVD's own score beside a CISA advisory's when they differ."""
+    if origin == NIST_NVD:
+        return ' (NIST NVD)'
+    found = data.scores.get(cve)
+    nvd = found.nvd.score if found and found.nvd else None
+    return f' · NIST NVD {nvd:g}' if nvd is not None and nvd != score else ''
+
+
 def _summary(facts: _Facts, days: int, today: str, kev_trend: str = '') -> tuple[str, ...]:
     period = f'the last {count_of(days, "day")}'
     if not facts.fresh and not facts.kev_added:
@@ -67,6 +84,9 @@ def _summary(facts: _Facts, days: int, today: str, kev_trend: str = '') -> tuple
         )
         if kev_trend:
             lines.append(kev_trend)
+        if ransomware := [k for k in added if k.ransomware]:
+            which = 'it' if len(added) == 1 else count_of(len(ransomware), 'of them', 'of them')
+            lines.append(f'CISA knows of ransomware campaigns that use {which}.')
         lines += _deadline(added, today)
     if mentioned := facts.kev_mentioned:
         verb = 'appears' if len(mentioned) == 1 else 'appear'
@@ -76,9 +96,12 @@ def _summary(facts: _Facts, days: int, today: str, kev_trend: str = '') -> tuple
             f'reports from {sources_named}.'
         )
     if facts.severe:
-        score, cve, title, _ = facts.severe[0]
-        product = title.split(' · ', 1)[-1]
-        lines.append(f'The highest listed base score is {score:g} out of 10 for {cve} in {product}.')
+        score, cve, title, _, origin = facts.severe[0]
+        if origin == NIST_NVD:
+            lines.append(f'The highest base score is {score:g} out of 10, for {cve} (NIST NVD).')
+        else:
+            product = title.split(' · ', 1)[-1]
+            lines.append(f'The highest listed base score is {score:g} out of 10 for {cve} in {product}.')
     if facts.watch is None:
         lines.append(
             'Add watch terms for the products you use, and this summary will say which reports concern you.'
@@ -115,15 +138,20 @@ def compose(
     facts = _facts(data, end)
     added = {k.cve for k in facts.kev_added}
     exploited = [
-        BriefItem(f'{k.cve} · {_product(k)} · added {k.date_added}', k.document_id or None)
+        BriefItem(f'{k.cve} · {_product(k)} · added {k.date_added}{_ransomware(k)}', k.document_id or None)
         for k in facts.kev_added
     ]
     exploited += [
-        BriefItem(f'{k.cve} · {_product(k)} · in {count_of(n, "new report")}', newest)
+        BriefItem(f'{k.cve} · {_product(k)} · in {count_of(n, "new report")}{_ransomware(k)}', newest)
         for k, n, newest, _ in facts.kev_mentioned
         if k.cve not in added
     ]
-    severe = [BriefItem(f'{cve} · CVSS {score:g} · {title}', doc) for score, cve, title, doc in facts.severe]
+    # Ransomware first, keeping the order within each group (TIP 1.3).
+    exploited.sort(key=lambda item: not item.text.endswith(RANSOMWARE))
+    severe = [
+        BriefItem(f'{cve} · CVSS {score:g}{_nvd_note(data, cve, score, origin)} · {title}', doc)
+        for score, cve, title, doc, origin in facts.severe
+    ]
     watch = [BriefItem(f'{term} · {count_of(n, "new report")}', search=term) for term, n in facts.watch or []]
     shared = [
         BriefItem(f'{value} · {count_of(n, "source")}, {count_of(reports, "report")}', entity=value)
@@ -140,7 +168,7 @@ def compose(
         BriefSection(
             'Most severe',
             tuple(severe[:SECTION_ITEMS]),
-            'No new CISA advisory has a weakness with a score of 9 or more (CVSS).',
+            'No weakness in the new reports scores 9 or more (CVSS, from CISA advisories or NIST NVD).',
         ),
         BriefSection(
             'Your watch terms',

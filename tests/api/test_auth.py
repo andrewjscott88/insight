@@ -71,6 +71,7 @@ PROTECTED = [
     ('PUT', '/api/schedules/cisa-kev'),
     ('POST', '/api/enrichment/epss/CVE-2024-12345'),
     ('GET', '/api/cves/CVE-2024-12345/scores'),
+    ('GET', '/api/cves'),
 ]
 
 
