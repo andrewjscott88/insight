@@ -226,6 +226,16 @@ curl -sS "$INSIGHT_URL/api/documents/$DOC_ID" -H "Authorization: Bearer $INSIGHT
 OBS_ID=$(curl -sS "$INSIGHT_URL/api/documents/$DOC_ID" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq -r '.observations[0].id')
 ```
 
+**Import a local PDF advisory** with a read-write key. For an advisory you have permission to retain,
+put its metadata in a header and send the original file bytes as the request body. The response includes the
+report ID and a SHA-256 digest you can compare with your local file.
+
+```sh
+META=$(python -c 'import base64,json; data={"title":"Example advisory","source_name":"Example publisher","tlp":"GREEN"}; print(base64.urlsafe_b64encode(json.dumps(data).encode()).rstrip(b"=").decode())')
+curl --fail-with-body -sS "$INSIGHT_URL/api/documents/pdf" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H "X-Insight-Document: $META" -H 'Content-Type: application/pdf' --data-binary @advisory.pdf
+```
+
 **Import a local STIX 2.1 bundle** with a read-write key. The response lists the report IDs and the
 number of new revisions. The same file can be imported from the workspace ingest dialog.
 

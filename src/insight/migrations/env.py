@@ -43,9 +43,11 @@ def run_migrations_online() -> None:
             _run(connection)
             violations = connection.exec_driver_sql('PRAGMA foreign_key_check').fetchall()
             if violations:
-                connection.rollback()
                 raise RuntimeError(f'Migration left foreign-key violations: {violations[:5]}')
             connection.commit()
+        except BaseException:
+            connection.rollback()  # SQLite ignores foreign_keys=ON inside an open transaction.
+            raise
         finally:
             connection.exec_driver_sql('PRAGMA foreign_keys=ON')
 

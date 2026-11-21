@@ -92,7 +92,9 @@ Useful for operators, unnecessary for anonymous clients. The Docker `HEALTHCHECK
 
 ### 2.6 TOTP secret stored in recoverable form (Low, documented)
 
-`OperatorMfa.secret` is a plaintext column (`src/insight/models.py:219-228`). `docs/SECURITY.md:15` already says the secret is stored in recoverable form because TOTP verification needs it, and that the database must be protected. A stolen backup plus the running `.env` is therefore enough to clone the authenticator. Encrypting the secret at rest is a realistic hardening step (Phase 0.6); it does not replace host and backup protection.
+The review found that a database copy contained the plaintext authenticator seed. Phase 0.6 addresses this
+in revision `0017`. Anyone holding both the encrypted database and the matching host secret can still
+recover the seed. [Security posture](SECURITY.md)
 
 ---
 
@@ -167,13 +169,10 @@ opt-in schedules and the job runner, and `ROADMAP.md` marks #10 done.
 
 ### 0.6 Encrypt the TOTP secret at rest
 
-- **What to build:** Encrypt `operator_mfa.secret` using a key derived from `INSIGHT_SESSION_SECRET` (or a dedicated `INSIGHT_MFA_KEY`).
-- **Why:** The column is recoverable plaintext (`src/insight/models.py:219-228`). A stolen database should not yield a cloneable authenticator without the host secret. This still is not an HSM; `docs/SECURITY.md:15` remains the honest residual.
-- **Implementation notes:** Add helpers next to `src/insight/totp.py` or in `src/insight/services/access.py` (`pair_mfa`, `verify_mfa_code`, `mfa_paired`). Use an authenticated encryption scheme already available or add a pinned library (for example the standard library `hmac` plus a well-known construction, or a hash-pinned `cryptography` Fernet/AES-GCM key derived via HKDF from the session secret). Migration `0009_encrypt_mfa_secret.py`: encrypt existing rows on upgrade, decrypt on downgrade only if you must keep downgrades reversible (`test_every_revision_is_reversible`). Changing `INSIGHT_SESSION_SECRET` already ends sessions via `session_binding`; document that it also requires a re-pair or a planned re-encrypt path. Update `docs/SECURITY.md` and `docs/adr/0015-totp-second-factor.md`.
-- **New tables or endpoints:** No new table. Possibly a `secret_kid` or version prefix on the existing column. No new HTTP routes; pairing stays CLI-only.
-- **Sources / libraries:** Existing `totp.py`; if needed, `cryptography` already in the supply-chain process (`python scripts/lock.py`, hash-pinned locks).
-- **Effort:** M
-- **Acceptance criteria:** A database dump of a paired instance does not contain the raw Base32 TOTP secret. `insight mfa setup` / verify / login still work. Tests in `tests/unit/test_totp.py` and `tests/api/test_mfa_login.py` cover encrypt, decrypt, wrong key, and migration of a legacy plaintext row.
+Revision `0017` encrypts existing authenticator seeds with AES-256-GCM. Insight derives the encryption key
+from `INSIGHT_SESSION_SECRET` using HKDF-SHA256, and the host CLI encrypts new pairings the same way.
+Migrated pairings retain their last accepted time step. The host CLI supports replacing a pairing when the
+session secret is deliberately changed. [Upgrade, backup and recovery](RUNBOOK.md#sign-in-second-factor-mfa)
 
 ---
 
@@ -524,7 +523,7 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
 - [ ] **0.3** Stronger startup warnings / optional `INSIGHT_REQUIRE_HARDENED` for internet-facing installs
 - [x] **0.4** Pin connector connections to DNS addresses already checked as public (code review L1)
 - [ ] **0.5** `/health` no longer returns the version; version is authenticated
-- [ ] **0.6** Encrypt TOTP secrets at rest; migrate legacy rows
+- [x] **0.6** Encrypt TOTP secrets at rest and migrate existing pairings
 
 ### Phase 1 — Quick wins (7)
 
@@ -545,7 +544,7 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
 - [x] **2.5** Manual actors and campaigns with TLP-marked report, indicator and technique links in STIX exports
 - [ ] **2.6** Optional GreyNoise community IP enrichment
 - [x] **2.7** YARA and Sigma rules with report, actor, technique, CVE and malware-family links and a downloadable rule file and manifest
-- [ ] **2.8** PDF advisory ingest with file hash (`ROADMAP` #13)
+- [x] **2.8** PDF advisory ingest with file hash (`ROADMAP` #13)
 - [x] **2.9** Suricata and Snort 3 alert rules for the IP and domain blocklists
 - [x] **2.10** Industry threat profiles (top ten groups per industry, with evidence) and exportable actor threat guides with a threat hunt section (hypotheses, data sources, indicator sweep list, linked rules, hunt record); needs a bundled threat-group library: done, ADR 0025, [THREAT_GUIDES.md](THREAT_GUIDES.md)
 
