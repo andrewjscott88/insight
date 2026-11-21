@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Authenticator pairing secrets encrypted at rest (review L2)
+
+- Migration `0017` encrypts existing MFA pairing secrets with a key derived from `INSIGHT_SESSION_SECRET`.
+  Keep that value in the migration and server environments to continue using the same authenticator.
+  Restoring an encrypted database requires the matching secret to keep its pairing. After deliberately rotating
+  the secret, pair the authenticator again using the host CLI. [Upgrade and recovery](docs/RUNBOOK.md#sign-in-second-factor-mfa)
+
 ### Local PDF advisories
 
 - Import text from a local PDF into the normal report review workflow using the workspace, CLI or API.
@@ -119,9 +126,6 @@ CVEs in reports they can see; starting a lookup stays refused to them. The new p
   again to connect, so a changing DNS answer could reach loopback, a private network or cloud metadata. They
   now connect to the checked address, keeping the host name for TLS and the `Host` header, and judge
   IPv4-mapped IPv6 addresses (`::ffff:127.0.0.1`) by the address they reach.
-- **L2, plain-text TOTP seed (not fixed yet):** encrypting the authenticator seed at rest needs the
-  `cryptography` package, which has to be added through the lock workflow first. Tracked by a strict
-  expected-failure test and documented in docs/SECURITY.md; protect backups like `.env` meanwhile.
 - **L3, watch terms for TLP-limited keys:** `GET /api/watch-terms` is now refused (`403`) to TLP-limited API
   keys, like the audit log: terms often name clients, internal hosts or sensitive projects.
 - **L4, the demo through an API key:** `POST /api/demo` is now for browser sessions only (keys get `403`), and

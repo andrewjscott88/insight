@@ -138,7 +138,7 @@ def theme_context(settings: Settings) -> Callable[[Request], dict[str, Any]]:
 def create_app(settings: Settings | None = None, *, with_ui: bool = True) -> FastAPI:
     """Build the FastAPI application (and, unless ``with_ui=False``, mount the NiceGUI workspace)."""
     settings = settings or Settings.from_env()
-    engine, sessions = database(settings.database_url)
+    engine, sessions = database(settings.database_url, session_secret=settings.session_secret)
 
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
