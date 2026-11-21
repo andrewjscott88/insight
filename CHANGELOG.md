@@ -37,6 +37,8 @@ CVEs in reports they can see; starting a lookup stays refused to them. The new p
   expected-failure test and documented in docs/SECURITY.md; protect backups like `.env` meanwhile.
 - **L3, watch terms for TLP-limited keys:** `GET /api/watch-terms` is now refused (`403`) to TLP-limited API
   keys, like the audit log: terms often name clients, internal hosts or sensitive projects.
+- **L4, the demo through an API key:** `POST /api/demo` is now for browser sessions only (keys get `403`), and
+  the demo leaves out reports above `INSIGHT_MAX_TLP` instead of storing its AMBER+STRICT report past the limit.
 
 ### Changed: a clearer executive brief (from #39)
 - Keep the **Insight** name and symbol; use **Cyber Threat Intelligence Feed** as the tagline and remove

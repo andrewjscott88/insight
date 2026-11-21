@@ -394,10 +394,10 @@ the 6.5 s window. TLP-limited keys cannot use enrichment (`403`).
 curl -sS "$INSIGHT_URL/api/stats" -H "Authorization: Bearer $INSIGHT_API_KEY"
 # The latest 200 audit events, with who acted: operator, api-key:<key id>, cli, connector:<source>, system
 curl -sS "$INSIGHT_URL/api/audit" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq '.[0:3]'
-# Organisation watch terms
+# Organisation watch terms (not for TLP-limited keys)
 curl -sS "$INSIGHT_URL/api/watch-terms" -H "Authorization: Bearer $INSIGHT_API_KEY"
-# Load the synthetic demo reports (idempotent; read-write key). Do not use on a production instance
-curl -sS -X POST "$INSIGHT_URL/api/demo" -H "Authorization: Bearer $INSIGHT_API_KEY"
+# Load the synthetic demo reports (idempotent; the cookie jar of §2.2). Do not use on a production instance
+curl -sS -b "$JAR" -X POST "$INSIGHT_URL/api/demo" -H "X-CSRF-Token: $CSRF"   # browser session only (API keys: 403)
 ```
 
 ## 5. Recipes

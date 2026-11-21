@@ -13,8 +13,9 @@ MAX_BODY_BYTES: Final = 2_000_000
 
 SAFE_METHODS: Final = frozenset({'GET', 'HEAD', 'OPTIONS'})
 
-#: Routes only a signed-in browser session may use (an API key has no CSRF token to fetch).
-SESSION_ONLY_ROUTES: Final = frozenset({'/api/session'})
+#: Routes only a signed-in browser session may use (an API key has no CSRF token to fetch). The demo loads
+#: synthetic reports: a script must not add practice data to a production dataset (code review L4).
+SESSION_ONLY_ROUTES: Final = frozenset({'/api/session', '/api/demo'})
 
 #: Settings only a signed-in browser session (or the host's CLI) may change: how often Insight goes online by
 #: itself is the operator's decision, not a script's.

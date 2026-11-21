@@ -23,7 +23,7 @@ from sqlalchemy import select
 
 from insight import __version__, main, services
 from insight.config import Settings
-from insight.models import AuditEvent, OperatorSession
+from insight.models import AuditEvent, Document, OperatorSession
 
 CSRF = re.compile(r'name="csrf_token"[^>]*value="([^"]+)"')
 
@@ -289,6 +289,20 @@ def test_regression_m1_a_flood_of_failures_cannot_lock_the_operator_out(
     good = {'csrf_token': csrf_token_from(operator.get('/login').text), 'password': 'longtestpassword'}
     response = operator.post('/login', data=good)
     assert (response.status_code, response.headers['location']) == (303, '/')
+
+
+def test_regression_l4_the_demo_stays_within_the_instance_tlp_limit(
+    settings: Settings, login: Callable[..., str]
+) -> None:
+    """Review L4: the demo's AMBER+STRICT report was stored even with INSIGHT_MAX_TLP=GREEN."""
+    app = main.create_app(dataclasses.replace(settings, max_tlp='GREEN'), with_ui=False)
+    with TestClient(app, follow_redirects=False) as client:
+        login(client)
+        csrf = client.get('/api/session').json()['csrf_token']
+        assert client.post('/api/demo', headers={'X-CSRF-Token': csrf}).json() == {'created': 2}
+        with app.state.session_factory() as db:
+            labels = set(db.scalars(select(Document.tlp)))
+    assert labels == {'CLEAR', 'GREEN'}
 
 
 def test_login_form_field_limit(client: TestClient, csrf_token_from: Callable[[str], str]) -> None:
