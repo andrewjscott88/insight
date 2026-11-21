@@ -102,6 +102,7 @@ PROTECTED = [
     ('GET', '/api/rules'),
     ('POST', '/api/rules'),
     ('GET', '/api/rules/x'),
+    ('GET', '/api/rules/x/export'),
     ('DELETE', '/api/rules/x'),
     ('POST', '/api/rules/x/links'),
     ('DELETE', '/api/rules/x/links'),

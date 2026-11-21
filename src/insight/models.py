@@ -514,7 +514,7 @@ class DetectionRule(Base):
 
 
 class RuleLink(Base):
-    """What a rule is for: a ``group``, an ATT&CK ``technique`` or a report (``document``)."""
+    """An explicit rule association with a group, technique, report, CVE or malware family."""
 
     __tablename__ = 'rule_links'
     __table_args__ = (UniqueConstraint('rule_id', 'target_kind', 'target_id'),)
