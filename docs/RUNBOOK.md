@@ -26,8 +26,8 @@ The Makefile wraps these (`make help`); the commands it runs are the ones in the
 | Version | `make version` | `docker compose exec insight insight --version` |
 | API key | `make api-key-create NAME=siem` · `make api-key-status` · `-rotate` · `-revoke` | `docker compose exec insight insight api-key …` |
 | Sign-in MFA (off by default) | `make mfa-enable` · `make mfa-disable` · `make mfa-status` · `make mfa-reset` | §4, "Sign-in second factor" |
-| Alert destinations | Watch terms tab: *Alerts* | `insight notify list`, `add`, `enable`, `disable` or `remove` ([alerts guide](ALERTS.md#manage-destinations-on-the-host)) |
-| Scheduled syncs (off by default) | Sources tab: *Start at* and *Sync by itself* | `docker compose exec insight insight schedule all --every 24h --at 00:00` · `insight schedule` lists them (§8) |
+| Alert destinations | Settings › Watch terms: *Alerts* | `insight notify list`, `add`, `enable`, `disable` or `remove` ([alerts guide](ALERTS.md#manage-destinations-on-the-host)) |
+| Scheduled syncs (off by default) | Settings › Sources: *Start at* and *Sync by itself* | `docker compose exec insight insight schedule all --every 24h --at 00:00` · `insight schedule` lists them (§8) |
 | Default colour theme (System by default) | `make theme THEME=dark` · `make up THEME=light` | Set `INSIGHT_THEME` in `.env`, then `docker compose up -d` (§4, "Colour theme") |
 | Full threat-group library (optional, on request) | `make threat-library-sync`, then `make restart` | `docker compose run --rm insight insight threat-library-sync` (§8, "Threat library") |
 
@@ -387,11 +387,11 @@ records a run (success or error) under *Recent sync activity*. **Sync all source
 others, and the message names it.
 
 **Schedules** ([ADR 0018](adr/0018-opt-in-scheduled-syncs.md)) make a source sync by itself: *Off* (default),
-*Every hour*, *Every 6 hours* or *Every day*, per source or for all at once, in the Sources tab (which also
+*Every hour*, *Every 6 hours* or *Every day*, per source or for all at once, in Settings › Sources (which also
 shows the next sync), or on the host with `insight schedule SOURCE|all --every off|1h|6h|24h` (`insight
 schedule` alone lists them). API keys may read schedules (`GET /api/schedules`) but not change them. A schedule
 you turn on syncs within a minute, then every interval, unless you choose a start time: **Start at** in the
-Sources tab, or `--at HH:MM` (for example `insight schedule all --every 24h --at 00:00` syncs everything daily
+Settings › Sources, or `--at HH:MM` (for example `insight schedule all --every 24h --at 00:00` syncs everything daily
 at midnight UTC, which is 7 pm in New York in winter). Times are UTC, and every next sync keeps the slot, so a
 daily sync stays on its hour. Changing **Start at** moves the schedules that are on. Scheduled syncs run inside `insight serve` while
 `INSIGHT_RUN_JOBS` is on (the default); the start-up log names every enabled schedule. A failed scheduled sync
@@ -411,7 +411,7 @@ entries become inbox reports:
   (newest first, up to 500 per sync), even if it carries an older date or more than 100 arrived in between.
   These are also the entries that trigger KEV alerts.
 - **Older entries stay catalog-only.** They still mark every CVE they cover: the reader's CISA KEV line, the
-  brief's *Exploited now* and *Used in ransomware attacks*, and the Prioritised CVEs tab all read
+  brief's *Exploited now* and *Used in ransomware attacks*, and Investigate › CVEs all read
   `kev_records`, not the reports.
 - Nothing is deleted when an entry falls out of the newest 100, and an entry missing from a later catalog is
   kept: absence is not evidence that CISA removed it. Reports already made are never re-made.
@@ -432,7 +432,7 @@ redistributing data. Community access has fair-use limits, and commercial use ma
 
 #### GreyNoise Community IP context
 
-Set `INSIGHT_GREYNOISE_KEY` on the host and restart Insight. In **Entity explorer**, expand a public IPv4 address, open **GreyNoise Community context**, and approve sending the address. The action requires an accepted observation in a current TLP:CLEAR report. When an address occurs at several labels, a separately accepted CLEAR mention qualifies it.
+Set `INSIGHT_GREYNOISE_KEY` on the host and restart Insight. In **Investigate › Indicators**, expand a public IPv4 address, open **GreyNoise Community context**, and approve sending the address. The action requires an accepted observation in a current TLP:CLEAR report. When an address occurs at several labels, a separately accepted CLEAR mention qualifies it.
 
 Insight queries the fixed GreyNoise HTTPS endpoint, sending the one IPv4 address and the account key. The dialog shows GreyNoise’s classification, whether it observed internet scanning, RIOT membership, the organisation, the provider’s last-seen date, and the time Insight fetched the result. An address outside the Community dataset gets a dated “no record” result. Earlier classifications remain available through the cache when the provider fails. Verdicts and blocklists are controlled by the analyst.
 
@@ -440,7 +440,7 @@ Successful results and “no record” responses are reused for 24 hours. The ma
 
 #### Shodan exposure context
 
-Optional and paid ([ADR 0031](adr/0031-shodan.md)). Set `INSIGHT_SHODAN_KEY` on the host and restart Insight. Without it, Insight makes no Shodan calls. In **Entity explorer**, expand a reviewed public IPv4 from a current TLP:CLEAR report, open **Shodan exposure context**, and approve sending the address. Insight never looks addresses up by itself.
+Optional and paid ([ADR 0031](adr/0031-shodan.md)). Set `INSIGHT_SHODAN_KEY` on the host and restart Insight. Without it, Insight makes no Shodan calls. In **Investigate › Indicators**, expand a reviewed public IPv4 from a current TLP:CLEAR report, open **Shodan exposure context**, and approve sending the address. Insight never looks addresses up by itself.
 
 The dialog shows the open ports Shodan saw, host names, organisation, network, ASN, country, operating system, tags, the CVEs Shodan links to the host (inferred from software versions, so not confirmed) and Shodan's last update. Insight keeps only these fields, never service banners. Answers, including "no record", are reused for 24 hours. All callers share one request per second. When Shodan refuses the key (401), or the plan, credits or access (402 or 403), the dialog says so and nothing is cached. A host lookup does not spend Shodan query credits, but what your plan allows is set by Shodan. See their plans and terms; data shown from Shodan must be attributed to it, and Insight does so. Allow egress to `api.shodan.io` if you use it. [Shodan API](https://developer.shodan.io/api) · [Plans](https://account.shodan.io/billing)
 
@@ -462,11 +462,11 @@ free access. [OTX DirectConnect and keys](https://otx.alienvault.com/api) ·
 
 **CVE lookups** (FIRST EPSS and NIST NVD) send only the CVE number. People start one with *Look up this CVE*
 after agreeing to the request. **Automatic lookups** ([ADR 0023](adr/0023-automatic-cve-lookups.md)) are off
-until you switch a provider on under *Automatic CVE lookups* in the Sources tab (audited as `lookup.on` and
+until you switch a provider on under *Automatic CVE lookups* in Settings › Sources (audited as `lookup.on` and
 `lookup.off`). Then the job runner looks up each CVE that a current TLP:CLEAR or GREEN report mentions and that
 has no recent answer (EPSS after 7 days, NVD after 30), newest reports first, as `lookup` jobs (in
 `GET /api/jobs` and the start-up log). CVEs seen only in AMBER or RED reports are never looked up by
-themselves. The Sources tab shows how many CVEs are waiting. One throttle per provider is shared by people,
+themselves. Settings › Sources shows how many CVEs are waiting. One throttle per provider is shared by people,
 the API and the job runner: NVD gets one request every 6.5 s, EPSS one a second. Without a key NVD gets
 through about 550 CVEs an hour, so a first backlog of thousands takes a day; set `INSIGHT_NVD_API_KEY` (free,
 from NVD) for one request every 0.7 s, and restart. The key goes only in NVD's `apiKey` header and is never
@@ -476,7 +476,7 @@ pauses for an hour, then tries again by itself.
 **VulnCheck KEV** ([ADR 0028](adr/0028-exploit-availability.md)) is a third lookup provider: whether
 exploitation in the wild has been reported, and links to public exploits on VulnCheck's site. It follows the
 same rules (switch, CLEAR/GREEN only, one request every 2 s, answers fresh for 7 days) and needs your own free
-VulnCheck community token in `INSIGHT_VULNCHECK_API_KEY`. Without the token the Sources tab says *waiting for
+VulnCheck community token in `INSIGHT_VULNCHECK_API_KEY`. Without the token Settings › Sources says *waiting for
 INSIGHT_VULNCHECK_API_KEY* and no job runs. Insight keeps only dates, counts and VulnCheck links, never
 descriptions, exploit code or repository addresses. VulnCheck's terms ask for prominent attribution, so every
 screen and API answer with its data names it. Reports also give **exploit signals**: a report that mentions a
@@ -502,7 +502,7 @@ exploit*. After upgrading to 0.9.0, run `make exploit-backfill` once to read old
 | Lookup job `NVD answered HTTP 403` (no key hint) | NVD's rate limit without a key, often another tool on the same address | It retries by itself; a key avoids it |
 | Lookup job `… request failed: ConnectError` | No network or DNS | Check host egress; allow `services.nvd.nist.gov`, `api.first.org` and, with VulnCheck on, `api.vulncheck.com` |
 | Lookup job `VULNCHECK answered HTTP 401/403/404 (check INSIGHT_VULNCHECK_API_KEY)` | VulnCheck refused the token | Fix the token and restart; jobs resume within an hour |
-| Lookup job `Looked up N CVEs …; M could not be answered` / Sources tab *could not answer for M CVE(s)* | NVD refused those CVEs (for example a CVE number a report got wrong) | Nothing to do: each is tried again after 1 hour, then 2, 4 … up to 7 days, without holding up the rest |
+| Lookup job `Looked up N CVEs …; M could not be answered` / Settings › Sources *could not answer for M CVE(s)* | NVD refused those CVEs (for example a CVE number a report got wrong) | Nothing to do: each is tried again after 1 hour, then 2, 4 … up to 7 days, without holding up the rest |
 
 **CISA Security Advisories** (`cisa-csaf`) reads CISA's machine-readable CSAF 2.0 files from its GitHub
 repository (`raw.githubusercontent.com/cisagov/CSAF`): the `changes.csv` index of the OT (industrial control

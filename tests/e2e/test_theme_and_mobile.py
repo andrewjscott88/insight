@@ -18,13 +18,15 @@ if not os.environ.get('INSIGHT_E2E_URL') or not os.environ.get('INSIGHT_E2E_PASS
     pytest.skip('set INSIGHT_E2E_URL and INSIGHT_E2E_PASSWORD to run browser tests', allow_module_level=True)
 
 # Shares test_browser's browser fixture and sign-in helpers.
-from .test_browser import BASE_URL, TIMEOUT, browser, expect, open_document, sign_in
+from .test_browser import BASE_URL, TIMEOUT, browser, expect, open_document, show, sign_in
 
 __all__ = ['browser']  # the fixture is used by name
 
 pytestmark = pytest.mark.e2e
 
 PAGE_BACKGROUND = {'light': 'rgb(246, 244, 250)', 'dark': 'rgb(5, 4, 7)'}
+SECTIONS = ('Today', 'Triage', 'Investigate', 'Cases', 'Share', 'Settings')
+INVESTIGATE = ('Indicators', 'CVEs', 'ATT&CK techniques', 'Threat groups')
 DEMO_TITLE = 'Training scenario: edge appliance activity'
 #: Playwright's descriptors for these phones (pinned: a second Playwright instance cannot run beside the
 #: shared browser fixture's). Viewport, touch and pixel ratio are what matter for layout.
@@ -108,6 +110,7 @@ READER_AT_TOP = """() => {
 
 
 def load_demo(page: Any) -> None:
+    show(page, 'Triage')
     page.get_by_role('button', name='Load demo').click()
     expect(page.get_by_text('Synthetic demo loaded').first).to_be_visible()
     expect(page.get_by_role('button', name=DEMO_TITLE).first).to_be_visible()
@@ -178,7 +181,7 @@ def test_rendered_text_is_readable(browser: Any, scheme: str) -> None:
     sign_in(page)
     load_demo(page)
     samples = {
-        'filled button': page.get_by_role('button', name='Ingest intelligence'),
+        'filled button': page.get_by_role('button', name='Add intelligence'),
         'outlined button': page.get_by_role('button', name='Export IOCs'),
         'muted label': page.get_by_text(re.compile(r'sources shown · newest first')),
         'TLP badge': page.get_by_text('TLP:GREEN', exact=True).first,
@@ -196,16 +199,16 @@ def test_regression_desktop_shows_every_tab_label(browser: Any) -> None:
     context = new_context(browser, viewport={'width': 1280, 'height': 900})
     page = context.new_page()
     sign_in(page)
-    for label in (
-        'Intelligence inbox',
-        'Entity explorer',
-        'ATT&CK techniques',
-        'Industry threats',
-        'Watch terms',
-        'Sources',
-    ):
-        expect(page.get_by_role('tab', name=label)).to_be_visible()
-    expect(page.get_by_text('Cyber Threat Intelligence Feed', exact=True)).to_be_visible()
+    for label in SECTIONS:
+        expect(page.locator('.side-tabs').get_by_role('tab', name=label, exact=True)).to_be_visible()
+    # The menu sits beside the content on a desktop, not above it.
+    nav = page.locator('nav.side-nav').bounding_box()
+    main = page.locator('.app-shell > .workspace').bounding_box()
+    assert nav['x'] + nav['width'] <= main['x'] + 1
+    show(page, 'Investigate')
+    for label in INVESTIGATE:
+        expect(page.locator('.evidence-tabs').get_by_role('tab', name=label, exact=True)).to_be_visible()
+    expect(page.get_by_text('Threat intelligence workbench', exact=True)).to_be_visible()
     expect(page.get_by_role('button', name='Back to list')).to_have_count(0)
     context.close()
 
@@ -217,7 +220,7 @@ def test_regression_a_field_example_never_covers_its_label(browser: Any, scheme:
     context = new_context(browser, viewport={'width': 390, 'height': 844}, color_scheme=scheme)
     page = context.new_page()
     sign_in(page)
-    page.get_by_role('tab', name='Watch').click()
+    show(page, 'Settings')
     field = page.get_by_label('Watch term', exact=True)
     expect(field).to_be_visible()
     hidden = 'e => getComputedStyle(e, "::placeholder").color'
@@ -256,13 +259,18 @@ def test_phone_workspace_fits_every_tab_and_dialog(phone: Any) -> None:
     sign_in(page)
     load_demo(page)
     assert overflow(page) <= 0
-    for short in ('Entities', 'ATT&CK', 'Threats', 'Watch', 'Sources', 'Inbox'):
-        tab = page.get_by_role('tab', name=short)
+    for section in (*SECTIONS[2:], *SECTIONS[:2]):
+        tab = page.locator('.side-tabs').get_by_role('tab', name=section, exact=True)
         expect(tab).to_be_visible()
         tab.click()
         expect(tab).to_have_attribute('aria-selected', 'true')
-        assert overflow(page) <= 0, f'{short} tab overflows'
-    for button, close in (('Ingest intelligence', 'Cancel'), ('Export IOCs', 'Cancel')):
+        assert overflow(page) <= 0, f'{section} overflows'
+    show(page, 'Investigate')
+    for label in INVESTIGATE:
+        show(page, 'Investigate', label)
+        assert overflow(page) <= 0, f'Investigate · {label} overflows'
+    show(page, 'Triage')
+    for button, close in (('Add intelligence', 'Cancel'), ('Export IOCs', 'Cancel')):
         page.get_by_role('button', name=button).click()
         dialog = page.locator('.q-dialog .dialog-card')
         expect(dialog).to_be_visible()
@@ -285,7 +293,7 @@ def test_phone_inputs_are_16px_and_buttons_are_easy_to_tap(phone: Any) -> None:
     assert sizes
     assert min(sizes) >= 16, 'iOS zooms into inputs below 16px'
     open_document(page, DEMO_TITLE)
-    for name in ('Load demo', 'Export IOCs', 'Ingest intelligence', 'Accept', 'Back to list', 'Light theme'):
+    for name in ('Load demo', 'Export IOCs', 'Add intelligence', 'Accept', 'Back to list', 'Light theme'):
         box = page.get_by_role('button', name=name).first.bounding_box()
         assert box['height'] >= 40, f'{name} is {box["height"]}px tall'
 
@@ -307,7 +315,7 @@ def test_phone_opening_a_report_from_the_entity_explorer_shows_it(phone: Any) ->
     page = phone.new_page()
     sign_in(page)
     load_demo(page)
-    page.get_by_role('tab', name='Entities').click()
+    show(page, 'Investigate', 'Indicators')
     page.get_by_text('IP · 192.0.2.44', exact=False).first.click()
     page.get_by_role('button', name=re.compile('^Training scenario: edge appliance activity · TLP')).click()
     expect(page.locator('.document-reader h2', has_text=DEMO_TITLE)).to_be_visible()

@@ -225,7 +225,7 @@ base64url-encoded UTF-8 JSON. Required strings are `title` and `source_name`. Op
 `source_url` and `tlp`, which defaults to AMBER. Header encoding keeps the metadata out of URLs and supports
 international text. Use HTTPS when accessing a remote instance. [Upload example](API_GUIDE.md#documents-reports)
 
-The workspace accepts the same fields under **Ingest intelligence**. On the server, run
+The workspace accepts the same fields under **Add intelligence**. On the server, run
 `insight import-pdf FILE --title "Advisory" --source-name "Publisher" --tlp GREEN`. The CLI defaults to the
 file’s name without its extension for the title and **Local PDF** for the publisher. Provide the publisher's
 label when submitting a document. Printed or scanned markings depend on the PDF’s available text. Detected

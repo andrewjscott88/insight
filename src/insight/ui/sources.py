@@ -137,12 +137,12 @@ def build_sync_all_button(ws: Workspace) -> ui.button:
             if failed:
                 tell(
                     f'{len(results) - len(failed)} of {len(results)} sources synced. Failed: '
-                    f'{", ".join(failed)}. The Sources tab shows why.',
+                    f'{", ".join(failed)}. The list below shows why.',
                     'warning',
                 )
             else:
                 tell(
-                    f'All {len(results)} sources synced. The Sources tab shows what each one added.',
+                    f'All {len(results)} sources synced. The list below shows what each one added.',
                     'success',
                 )
             ws.refresh_all()

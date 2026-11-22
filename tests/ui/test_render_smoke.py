@@ -35,7 +35,7 @@ with TestClient(app) as client:
         token = re.search(r'name="csrf_token" value="([^"]+)"', client.get("/login").text).group(1)
         response = client.post("/login", data={"csrf_token": token, "password": "correct-password"})
     assert response.status_code == 200, response.status_code
-    assert "Threat landscape" in response.text and "Cyber Threat Intelligence Feed" in response.text
+    assert "Threat landscape" in response.text and "Threat intelligence workbench" in response.text
     assert ("Temporary open access" in response.text) is open_access
     assert ("End session" in response.text) is open_access
     assert '<html lang="en-US"' in response.text, "regression: no page language (WCAG 3.1.1)"
@@ -46,7 +46,7 @@ with TestClient(app) as client:
     csrf = client.get("/api/session").json()["csrf_token"]
     assert client.post("/api/demo", headers={"X-CSRF-Token": csrf}).status_code == 200
     response = client.get("/")
-    assert "Training scenario" in response.text and "Sources" in response.text
+    assert "Training scenario" in response.text and "Settings" in response.text
 print("OK")
 """
 

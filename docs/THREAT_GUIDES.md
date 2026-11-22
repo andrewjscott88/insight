@@ -1,6 +1,6 @@
 # Industry threats and threat guides
 
-Insight's **Industry threats** tab answers two questions: *which groups target my industry?* and *what do I do
+Insight's **Investigate › Threat groups** tab answers two questions: *which groups target my industry?* and *what do I do
 about this group?* It is TIP roadmap item 2.10 ([ADR 0025](adr/0025-threat-guides.md)); it also brings the
 minimum of item 2.5 (actors you track) and item 2.7 (YARA and Sigma rules as linked artifacts).
 
@@ -9,7 +9,7 @@ reports and your own decisions, and shows **where every statement comes from**. 
 
 ## Using it
 
-1. Open **Industry threats** and pick an industry (15 fixed industries; `insight industries` lists them).
+1. Open **Investigate › Threat groups** and pick an industry (15 fixed industries; `insight industries` lists them).
 2. You see up to ten groups. For each: its names, how many of your reports name it in the last 90 days, its
    latest public activity, its number of ATT&CK techniques, and under **Why it is listed** the evidence: the
    sentence ATT&CK wrote, or the MISP galaxy sector label, with a link to the source.

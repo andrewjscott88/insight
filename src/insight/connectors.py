@@ -137,7 +137,7 @@ class SourceSwitchedOff(ConnectorError):
     """The source is switched off: Insight does not contact it (nothing is recorded)."""
 
     def __init__(self, source: Source) -> None:
-        super().__init__(f'{source.name} is switched off. Switch it on in the Sources tab first.')
+        super().__init__(f'{source.name} is switched off. Switch it on in Settings › Sources first.')
 
 
 ALLOWED_HOSTS: Final[frozenset[str]] = frozenset(

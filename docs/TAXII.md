@@ -51,6 +51,7 @@ With the OASIS Python client (`taxii2-client`):
 import requests
 from taxii2client.v21 import Server, as_pages
 
+
 class Bearer(requests.auth.AuthBase):
     def __init__(self, key: str) -> None:
         self.key = key
@@ -58,6 +59,7 @@ class Bearer(requests.auth.AuthBase):
     def __call__(self, request):
         request.headers['Authorization'] = f'Bearer {self.key}'
         return request
+
 
 server = Server('https://insight.example.org/taxii2/', auth=Bearer(KEY))
 collection = server.api_roots[0].collections[0]

@@ -514,7 +514,7 @@ def schedule(source: str | None, every: str | None, at: str | None = None) -> st
                 if source == 'all':  # every source in use; switched-off sources stay off
                     keys = [key for key in keys if in_use(SOURCES[key], switches)]
                 elif SCHEDULE_EVERY[every] and not in_use(SOURCES[source], switches):
-                    raise ValueError(f'{source} is switched off; switch it on in the Sources tab first')
+                    raise ValueError(f'{source} is switched off; switch it on in Settings › Sources first')
                 for key in keys:
                     services.set_schedule(db, key, SCHEDULE_EVERY[every], at=now, starts_at=starts_at)
         with sessions() as db:

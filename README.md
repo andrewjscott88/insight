@@ -23,7 +23,7 @@ A single-operator threat-intelligence workbench, run locally or published behind
   values with an accepted mention and no warning, for firewalls and SIEMs.
 - **MITRE ATT&CK® techniques** ([ADR 0019](docs/adr/0019-attack-techniques.md)). Reports are tagged with the
   technique IDs written in them (`T1059.001`), checked against a bundled Enterprise ATT&CK catalog; analysts add
-  and remove the rest in the reader, and new revisions keep those decisions. The **ATT&CK techniques** tab groups
+  and remove the rest in the reader, and new revisions keep those decisions. **Investigate › ATT&CK techniques** groups
   the techniques in your reports by tactic over a period you choose, opens the reports behind each one, and
   downloads a layer for ATT&CK Navigator. Never guessed from prose; no attribution. `make attack-backfill` tags
   reports stored before 0.7.0. STIX exports link each included report to its current catalog-backed tags,
@@ -39,7 +39,7 @@ A single-operator threat-intelligence workbench, run locally or published behind
 - **Alerts** ([docs/ALERTS.md](docs/ALERTS.md)): when a new report mentions a watch term, or CISA adds a KEV
   entry, Insight tells a chat channel (Slack, Mattermost, Google Chat), your own tool (signed JSON webhook) or
   an e-mail address, within about 15 seconds of the sync. Each alert fires once; report titles go only up to
-  each destination's TLP limit, and report text never leaves. Set up on the Watch terms tab.
+  each destination's TLP limit, and report text never leaves. Set up in Settings › Watch terms.
 - Organization watch terms highlight literal product, vendor or topic matches. These are transparent keyword matches, not calibrated risk scores.
 - **Threat-research sources, off until you switch them on** ([ADR 0021](docs/adr/0021-threat-research-sources.md)):
   Cisco Talos, Microsoft Threat Intelligence, The DFIR Report, ESET WeLiveSecurity, Kaspersky Securelist and
@@ -129,7 +129,7 @@ docker compose up --build -d
 
 4. Open **http://localhost:8080**. Sign in with `INSIGHT_PASSWORD` from `.env`.
 5. Click **Load demo**, inspect a report, review its extracted observations and follow an entity to related reports.
-6. In **Sources**, run only the sources you want. These buttons make outbound internet requests. NVD/EPSS lookups explicitly send the selected CVE identifier to that provider; source documents are not sent.
+6. In **Settings › Sources**, run only the sources you want. These buttons make outbound internet requests. NVD/EPSS lookups explicitly send the selected CVE identifier to that provider; source documents are not sent.
 
 The container runs as an unprivileged user with a read-only root filesystem and no Linux capabilities. The Docker port is bound to **127.0.0.1 only**. Never expose port 8080 itself to your LAN or the internet: to publish Insight, put it behind a TLS reverse proxy as described in [docs/RUNBOOK.md](docs/RUNBOOK.md) ("Reverse proxy") and read [docs/SECURITY.md](docs/SECURITY.md) first. It has one operator password (plus optional MFA). Sign-in sessions are stored in the database for 8 hours and survive a restart: a restart does **not** sign anyone out. To end sessions, use **Sign out everywhere** on the sign-out page, or change the password or MFA setting. Rate limits are in memory, so use one process/worker.
 
@@ -245,6 +245,11 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow, [docs/TESTI
 After changing dependencies in `pyproject.toml`, run `python scripts/lock.py` (requires [uv](https://docs.astral.sh/uv/)). CI fails if the locks and `pyproject.toml` disagree.
 
 ## Daily workflow
+
+The side menu follows the same day: **Today** (the brief, and counters that open the list behind them),
+**Triage** (new reports, the reader and review), **Investigate** (indicators, CVEs, ATT&CK techniques and threat
+groups), **Cases**, **Share** (IOC export, TAXII, API keys, MISP) and **Settings** (sources, lookups, watch terms
+and alerts). On a phone the menu sits above the content.
 
 1. **Collect:** paste authorized text or explicitly sync a curated feed.
 2. **Read:** search/filter the inbox and read evidence in context.

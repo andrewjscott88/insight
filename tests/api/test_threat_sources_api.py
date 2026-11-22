@@ -25,7 +25,8 @@ def test_sources_say_whether_they_are_in_use_and_what_may_leave(authed: TestClie
 def test_a_switched_off_source_cannot_be_synced_or_scheduled(authed: TestClient) -> None:
     response = authed.post('/api/sources/talos/sync')
     assert response.status_code == 409
-    assert response.json()['detail'] == 'Cisco Talos is switched off. Switch it on in the Sources tab first.'
+    detail = 'Cisco Talos is switched off. Switch it on in Settings › Sources first.'
+    assert response.json()['detail'] == detail
     assert authed.put('/api/schedules/talos', json={'interval_minutes': 60}).status_code == 409
     assert authed.put('/api/schedules/talos', json={'interval_minutes': 0}).status_code == 200
 

@@ -59,6 +59,13 @@ def sign_in(page: Any, password: str = PASSWORD) -> None:
     page.get_by_role('button', name='Open workspace').click()
 
 
+def show(page: Any, section: str, tab: str | None = None) -> None:
+    """Open a section of the side menu (Today, Triage...) and, in Investigate, one of its tabs."""
+    page.locator('.side-tabs').get_by_role('tab', name=section, exact=True).click()
+    if tab:
+        page.locator('.evidence-tabs').get_by_role('tab', name=tab, exact=True).click()
+
+
 def open_document(page: Any, title: str) -> None:
     """Click a list entry and wait until the detail pane shows *that* document.
 
@@ -105,6 +112,7 @@ def test_security_headers_reach_the_browser(context: Any) -> None:
 def test_demo_loads(context: Any) -> None:
     page = context.new_page()
     sign_in(page)
+    show(page, 'Triage')
     page.get_by_role('button', name='Load demo').click()
     expect(page.get_by_text('Synthetic demo loaded')).to_be_visible()
     expect(
@@ -140,8 +148,8 @@ def test_import_stix_file_in_the_workspace(context: Any) -> None:
     }
     bundle = {'type': 'bundle', 'id': f'bundle--{uuid.uuid4()}', 'objects': [indicator, report]}
     file = {'name': 'partner.json', 'mimeType': 'application/json', 'buffer': json.dumps(bundle).encode()}
-    page.get_by_role('button', name='Ingest intelligence').click()
-    dialog = page.get_by_role('dialog', name='Ingest intelligence')
+    page.get_by_role('button', name='Add intelligence').click()
+    dialog = page.get_by_role('dialog', name='Add intelligence')
     dialog.get_by_text('Import a STIX bundle', exact=True).click()
     submit = dialog.get_by_role('button', name='Import bundle')
     submit.click()
@@ -150,7 +158,7 @@ def test_import_stix_file_in_the_workspace(context: Any) -> None:
     picker.set_input_files(file)
     submit.click()
     expect(page.get_by_text('Imported 1 new report. Already present: 0.')).to_be_visible()
-    page.get_by_role('button', name='Ingest intelligence').click()
+    page.get_by_role('button', name='Add intelligence').click()
     picker.set_input_files(file)
     submit.click()
     expect(page.get_by_text('Imported 0 new reports. Already present: 1.')).to_be_visible()
@@ -165,8 +173,8 @@ def test_import_pdf_advisory_in_the_workspace(context: Any) -> None:
     data = template.replace(b'Synthetic advisory:', f'Synthetic {key}:'.encode())
     upload = {'name': 'advisory.pdf', 'mimeType': 'application/pdf', 'buffer': data}
     title = f'Partner & Müller <{key}>'
-    page.get_by_role('button', name='Ingest intelligence').click()
-    dialog = page.get_by_role('dialog', name='Ingest intelligence')
+    page.get_by_role('button', name='Add intelligence').click()
+    dialog = page.get_by_role('dialog', name='Add intelligence')
     dialog.get_by_label('Document title').fill(title)
     dialog.get_by_label('Source name').fill('Browser fixture')
     dialog.get_by_label('Source URL (optional)').fill('https://example.org/report')
@@ -197,7 +205,7 @@ def test_analyst_workflow(context: Any) -> None:
     page = context.new_page()
     sign_in(page)
     expect(page.get_by_role('heading', name='Threat landscape', exact=True)).to_be_visible()
-    page.get_by_role('button', name='Ingest intelligence').click()
+    page.get_by_role('button', name='Add intelligence').click()
     page.get_by_label('Document title').fill(title)
     page.get_by_label('Source name').fill('Browser test')
     page.get_by_label('Source content').fill('Exploitation of CVE-2024-3400 from 192.0.2.77 was observed.')
@@ -216,6 +224,7 @@ def test_analyst_workflow(context: Any) -> None:
 def test_search_filters_the_inbox(context: Any) -> None:
     page = context.new_page()
     sign_in(page)
+    show(page, 'Triage')
     page.get_by_role('button', name='Load demo').click()
     page.get_by_label('Search intelligence').fill('malware')
     expect(page.get_by_text(re.compile(r'^1 sources shown'))).to_be_visible()
@@ -231,6 +240,7 @@ def test_sign_out_revokes_other_tabs(context: Any) -> None:
     other.get_by_role('button', name='Sign out', exact=True).click()
     expect(other).to_have_url(re.compile(r'/login$'))
     # The first tab is still open; its next action must be refused and bounce to the sign-in page.
+    show(workspace, 'Triage')
     workspace.get_by_role('button', name='Load demo').click()
     expect(workspace).to_have_url(re.compile(r'/login'))
 
@@ -251,6 +261,7 @@ def test_sign_out_everywhere_reaches_another_browser(browser: Any, context: Any)
         expect(page).to_have_url(re.compile(r'/login$'))
     finally:
         other_device.close()
+    show(workspace, 'Triage')
     workspace.get_by_role('button', name='Load demo').click()
     expect(workspace).to_have_url(re.compile(r'/login'))
 
@@ -269,7 +280,7 @@ def test_full_length_notional_report(context: Any) -> None:
     requests: list[str] = []
     page.on('request', lambda request: requests.append(request.url))
     sign_in(page)
-    page.get_by_role('button', name='Ingest intelligence').click()
+    page.get_by_role('button', name='Add intelligence').click()
     page.get_by_label('Document title').fill(title)
     page.get_by_label('Source name').fill('Notional CTI Cell')
     page.get_by_label('Source content').fill(text)
@@ -290,7 +301,7 @@ def test_second_notional_report_tlp_and_javascript_offsets(context: Any) -> None
     title = f'SALT MERIDIAN {uuid.uuid4().hex[:8]}'
     page = context.new_page()
     sign_in(page)
-    page.get_by_role('button', name='Ingest intelligence').click()
+    page.get_by_role('button', name='Add intelligence').click()
     page.get_by_label('Document title').fill(title)
     page.get_by_label('Source name').fill('Notional CTI Cell')
     page.get_by_label('Source content').fill(text)
@@ -322,7 +333,7 @@ def test_industry_threats_open_a_threat_guide(context: Any) -> None:
     """TIP 2.10: pick an industry, see the top ten with evidence, open a group's guide and its hunt plan."""
     page = context.new_page()
     sign_in(page)
-    page.get_by_role('tab', name='Industry threats').click()
+    show(page, 'Investigate', 'Threat groups')
     expect(page.get_by_role('heading', name='Industry threats')).to_be_visible()
     expect(page.get_by_text(re.compile(r'These are the top \d+\.'))).to_be_visible()
     page.get_by_text('Find any group by name').click()

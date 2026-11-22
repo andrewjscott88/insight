@@ -51,7 +51,7 @@ export is recorded in the audit log.
 
 **All reports:**
 
-1. Click **Export IOCs** (top right, next to **＋ Ingest intelligence**).
+1. Click **Export IOCs** (top right, next to **＋ Add intelligence**).
 2. Choose what to include. The defaults are shown in brackets:
    - **Indicator types** [all];
    - **Observation review status** [`unreviewed` and `accepted`; rejected mentions are left out]. Accepted means
