@@ -85,7 +85,7 @@ def build_source_ratings(ws: Workspace) -> None:
             with (
                 ui.row().classes('w-full items-center gap-3 panel p-2').mark(f'source-rating-{s.source_name}')
             ):
-                ui.label(s.source_name).classes('font-semibold break-value min-w-40')
+                ui.label(s.source_name).classes('font-semibold break-value prose min-w-40')
                 grade = ui.select(grades, value=s.reliability, label='Reliability').props('outlined dense')
                 ageing = ui.select(AGEING, value=s.half_life_days or 0, label='Ageing').props(
                     'outlined dense'
