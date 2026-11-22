@@ -128,13 +128,21 @@ def test_nothing_hidden_leaks_through_any_read_route(client: TestClient, world: 
         '/api/rules',
         '/api/rules/x',
         '/api/rules/x/export',
+        '/taxii2/',
+        '/taxii2/insight/',
+        '/taxii2/insight/collections/',
+        '/taxii2/insight/collections/5b2f8a7e-4c1d-4e3a-9f6b-0d8c7a1e2f34/',
+        '/taxii2/insight/collections/5b2f8a7e-4c1d-4e3a-9f6b-0d8c7a1e2f34/objects/',
+        '/taxii2/insight/collections/5b2f8a7e-4c1d-4e3a-9f6b-0d8c7a1e2f34/manifest/',
+        f'/taxii2/insight/collections/5b2f8a7e-4c1d-4e3a-9f6b-0d8c7a1e2f34/objects/indicator--{world["hidden_entity"]}/',
+        f'/taxii2/insight/collections/5b2f8a7e-4c1d-4e3a-9f6b-0d8c7a1e2f34/objects/indicator--{world["hidden_entity"]}/versions/',
     ]
     # Every GET route of the API is covered by the sweep.
     covered = {path.split('?')[0] for path in paths}
     for method, route in PROTECTED:
         if method == 'GET' and route != '/api/session':
             template = route.replace('/x', '/{id}')
-            assert any(p.rstrip('/').count('/') == template.count('/') for p in covered), route
+            assert any(p.rstrip('/').count('/') == template.rstrip('/').count('/') for p in covered), route
     for path in paths:
         body = client.get(path, headers=world['headers']).text
         for secret in (MARKER, HIDDEN_IP, world['amber'], world['new'], world['hidden_entity']):

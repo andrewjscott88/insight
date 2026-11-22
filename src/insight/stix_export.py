@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import ipaddress
+from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Final
-from uuid import uuid4
+from uuid import UUID, uuid4, uuid5
 
 # OASIS CTI common objects, TLP 2.0 marking definitions (2022-10-01). Recipients can distinguish
 # AMBER+STRICT from AMBER. These identifiers and the extension payloads are fixed by the specification.
@@ -27,6 +29,27 @@ _PATHS: Final = {
     'sha256': "file:hashes.'SHA-256'",
     'sha512': "file:hashes.'SHA-512'",
 }
+
+
+#: Namespace for stable indicator and vulnerability IDs (TIP 3.1). Never change it: TAXII clients key on them.
+STABLE_NAMESPACE: Final = UUID('6f1c0c39-8f0e-4d8a-9a51-2b5c1f0d7e43')
+
+
+@dataclass(frozen=True)
+class StableVersions:
+    """Deterministic IDs and real change times, so a polled TAXII collection is stable (ADR 0026).
+
+    ``indicators`` maps ``(kind, value)`` and ``reports`` maps a report ID to the latest of its visible
+    mentions' arrival and review times. A one-off export keeps random IDs and the export time instead.
+    """
+
+    indicators: Mapping[tuple[str, str], str]
+    reports: Mapping[str, str]
+
+
+def stable_id(object_type: str, kind: str, value: str) -> str:
+    """The same indicator or CVE always gets the same STIX ID, whichever report or caller it comes from."""
+    return f'{object_type}--{uuid5(STABLE_NAMESPACE, f"{kind}:{value}")}'
 
 
 def stix_timestamp(value: str) -> str:
@@ -58,14 +81,14 @@ def _pattern(kind: str, value: str) -> str:
     return f"[{path} = '{literal}']"
 
 
-def _indicator(ioc: dict[str, Any], modified: str) -> dict[str, Any]:
+def _indicator(ioc: dict[str, Any], modified: str, *, stable: bool = False) -> dict[str, Any]:
     kind, value = ioc['kind'], ioc['value']
     created = stix_timestamp(ioc['first_ingested_at'])
     object_type = 'vulnerability' if kind == 'cve' else 'indicator'
     result: dict[str, Any] = {
         'type': object_type,
         'spec_version': '2.1',
-        'id': f'{object_type}--{uuid4()}',
+        'id': stable_id(object_type, kind, value) if stable else f'{object_type}--{uuid4()}',
         'name': value,
         'created': created,
         'modified': modified,
@@ -110,9 +133,16 @@ def _report(source: dict[str, Any], modified: str, metadata_only: bool) -> dict[
 
 
 def build_stix_bundle(
-    export: dict[str, Any], metadata_only_ids: set[str], *, entities: dict[str, dict[str, Any]] | None = None
+    export: dict[str, Any],
+    metadata_only_ids: set[str],
+    *,
+    entities: dict[str, dict[str, Any]] | None = None,
+    versions: StableVersions | None = None,
 ) -> dict[str, Any]:
-    """Use only selected reports/indicators and permitted excerpts. Report references retain membership."""
+    """Use only selected reports/indicators and permitted excerpts. Report references retain membership.
+
+    With ``versions`` (TAXII), IDs are stable and each object's ``modified`` is its own change time.
+    """
     bundle: dict[str, Any] = {'type': 'bundle', 'id': 'bundle--' + export['export_id']}
     if not export['iocs']:
         return bundle
@@ -122,7 +152,11 @@ def build_stix_bundle(
     objects = []
     labels: set[str] = set()
     for ioc in export['iocs']:
-        indicator = _indicator(ioc, modified)
+        if versions is None:
+            indicator = _indicator(ioc, modified)
+        else:
+            changed = stix_timestamp(versions.indicators[ioc['kind'], ioc['value']])
+            indicator = _indicator(ioc, changed, stable=True)
         if entities is not None:
             entities[ioc['entity_id']] = indicator
         objects.append(indicator)
@@ -130,7 +164,8 @@ def build_stix_bundle(
         for source in ioc['sources']:
             doc_id = source['document_id']
             if doc_id not in reports:
-                reports[doc_id] = _report(source, modified, doc_id in metadata_only_ids)
+                changed = modified if versions is None else stix_timestamp(versions.reports[doc_id])
+                reports[doc_id] = _report(source, changed, doc_id in metadata_only_ids)
             reports[doc_id]['object_refs'].append(indicator['id'])
             labels.add(source['tlp'])
             if source['evidence'] and doc_id not in metadata_only_ids:

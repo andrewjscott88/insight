@@ -109,6 +109,14 @@ PROTECTED = [
     ('DELETE', '/api/rules/x'),
     ('POST', '/api/rules/x/links'),
     ('DELETE', '/api/rules/x/links'),
+    ('GET', '/taxii2/'),
+    ('GET', '/taxii2/insight/'),
+    ('GET', '/taxii2/insight/collections/'),
+    ('GET', '/taxii2/insight/collections/5b2f8a7e-4c1d-4e3a-9f6b-0d8c7a1e2f34/'),
+    ('GET', '/taxii2/insight/collections/5b2f8a7e-4c1d-4e3a-9f6b-0d8c7a1e2f34/objects/'),
+    ('GET', '/taxii2/insight/collections/5b2f8a7e-4c1d-4e3a-9f6b-0d8c7a1e2f34/manifest/'),
+    ('GET', '/taxii2/insight/collections/5b2f8a7e-4c1d-4e3a-9f6b-0d8c7a1e2f34/objects/x/'),
+    ('GET', '/taxii2/insight/collections/5b2f8a7e-4c1d-4e3a-9f6b-0d8c7a1e2f34/objects/x/versions/'),
 ]
 
 

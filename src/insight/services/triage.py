@@ -13,6 +13,7 @@ from ..models import (
     Note,
     Observation,
     WatchTerm,
+    now,
 )
 from ..schemas import (
     DOCUMENT_STATUSES,
@@ -48,6 +49,8 @@ def set_observation_status(
     if obs is not None and get_document(db, obs.document_id, max_tlp=max_tlp) is None:
         obs = None
     if obs is not None:
+        if obs.review_status != status:
+            obs.reviewed_at = now()
         obs.review_status = status
         audit(db, 'observation.review', obs.id, status)
     return obs

@@ -178,6 +178,7 @@ from .sources import (
     source_switches,
 )
 from .stix_imports import import_stix
+from .taxii import taxii_collection_objects
 from .techniques import (
     TechniqueCount,
     TechniqueTag,
@@ -423,6 +424,7 @@ __all__ = [
     'summary',
     'sweep_list',
     'tag_technique',
+    'taxii_collection_objects',
     'technique_documents',
     'technique_labels',
     'technique_summary',

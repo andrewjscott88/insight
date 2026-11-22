@@ -22,7 +22,7 @@ from starlette.responses import Response
 from .. import apikeys, services
 from ..config import Settings
 from ..models import SessionFactory
-from ..ratelimit import AUTH_FAILURES, IOC_EXPORT, READ, WRITE, Policy, RateLimiter
+from ..ratelimit import AUTH_FAILURES, IOC_EXPORT, READ, TAXII, WRITE, Policy, RateLimiter
 from .boundary import (
     SAFE_METHODS,
     SESSION_ONLY_ROUTES,
@@ -127,6 +127,10 @@ def rate_limit_policy(method: str, path: str) -> Policy:
     """Which budget a request draws from. IOC exports are the expensive read and get their own."""
     if path in ('/api/iocs/export', '/api/iocs/stix', '/api/iocs/blocklist'):
         return IOC_EXPORT
+    if path.startswith('/taxii2/insight/collections/') and (
+        '/objects/' in path or path.endswith('/manifest/')
+    ):
+        return TAXII
     return READ if method in SAFE_METHODS else WRITE
 
 

@@ -77,7 +77,7 @@ def test_conversion_preserves_pairing_and_replay_step_and_refuses_wrong_keys(
 
     # An explicit key wins over the environment. Retrying reaches 0017 without losing any pairing metadata.
     monkeypatch.setenv('INSIGHT_SESSION_SECRET', OTHER_KEY)
-    migrations.upgrade(legacy_engine, session_secret=KEY)
+    migrations.upgrade(legacy_engine, '0017', session_secret=KEY)  # later revisions are not under test
     row_id, envelope, created, step = encrypted = _stored(legacy_engine)
     assert (row_id, created, step) == ('operator', STAMP, 987654)
     assert SEED not in envelope
@@ -152,7 +152,7 @@ def test_database_failure_and_verbose_sql_logs_redact_the_plaintext(
 ) -> None:
     _pair(legacy_engine)
     with caplog.at_level(logging.DEBUG, logger='sqlalchemy.engine'):
-        migrations.upgrade(legacy_engine, session_secret=KEY)
+        migrations.upgrade(legacy_engine, '0017', session_secret=KEY)
     assert SEED not in caplog.text
     before = _stored(legacy_engine)
     assert before[1] != SEED

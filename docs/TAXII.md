@@ -1,0 +1,94 @@
+# TAXII 2.1 server
+
+Insight serves its reviewed indicators over TAXII 2.1, so a SIEM or threat-intelligence platform can poll them
+on a schedule without a custom script ([ADR 0026](adr/0026-taxii-server.md)). The server is read-only: clients
+can list collections and read objects, but nothing can be written or created.
+
+## What a client gets
+
+One collection, **Reviewed indicators** (ID `5b2f8a7e-4c1d-4e3a-9f6b-0d8c7a1e2f34`):
+
+- every indicator and CVE an analyst **accepted**, as STIX 2.1 `indicator` and `vulnerability` objects;
+- the `report` objects that mention them, with publisher text only where the publisher allows it;
+- the TLP 2.0 marking definitions they use.
+
+The same rules as the STIX export apply ([IOC export](IOC_EXPORT.md)): the API key's TLP limit, current report
+revisions only, and the publishers' reuse rules. Unreviewed and rejected mentions are never served.
+
+ATT&CK techniques, actors and campaigns are not in the collection yet; download them with the STIX export.
+
+## Connect a client
+
+1. Create an API key for the client (`make api-key-create NAME=sentinel`, or `insight api-key create`). A
+   read-only key with the lowest TLP limit that works is best, for example `MAX_TLP=GREEN`. Insight has one
+   active key at a time, so the client shares it with any other script.
+2. Point the client at the discovery URL, `https://insight.example.org/taxii2/`, or straight at the API root,
+   `https://insight.example.org/taxii2/insight/`.
+3. Send the key as a Bearer token: `Authorization: Bearer <key>`. Insight does not accept a user name and
+   password, and a signed-in browser is refused.
+
+With `curl`:
+
+```bash
+KEY=...   # the API key
+BASE=https://insight.example.org/taxii2/insight
+curl -s -H "Authorization: Bearer $KEY" -H 'Accept: application/taxii+json;version=2.1' "$BASE/collections/"
+curl -s -H "Authorization: Bearer $KEY" -H 'Accept: application/taxii+json;version=2.1' \
+  "$BASE/collections/5b2f8a7e-4c1d-4e3a-9f6b-0d8c7a1e2f34/objects/?added_after=2026-11-01T00:00:00Z"
+```
+
+With the OASIS Python client (`taxii2-client`):
+
+```python
+import requests
+from taxii2client.v21 import Server, as_pages
+
+class Bearer(requests.auth.AuthBase):
+    def __init__(self, key: str) -> None:
+        self.key = key
+
+    def __call__(self, request):
+        request.headers['Authorization'] = f'Bearer {self.key}'
+        return request
+
+server = Server('https://insight.example.org/taxii2/', auth=Bearer(KEY))
+collection = server.api_roots[0].collections[0]
+for page in as_pages(collection.get_objects, per_request=1000, added_after='2026-11-01T00:00:00Z'):
+    for obj in page.get('objects', []):
+        ...
+```
+
+## Polling
+
+- **Ask only for changes.** Save the `X-TAXII-Date-Added-Last` header of the last page, and send it as
+  `added_after` next time. An indicator appears again when a new visible report mentions it, or when an analyst
+  accepts it, even in an old report.
+- **Follow `next`.** A page holds up to 1,000 objects (`limit`, default 1,000). While `more` is `true`, send the
+  page's `next` value unchanged.
+- **IDs are stable.** The same indicator always has the same STIX ID, whichever report or key it comes from,
+  so clients can update rather than duplicate.
+- **Removals are not sent.** If an indicator is later rejected, or its report is deleted, it simply stops
+  appearing. To drop such indicators, re-pull the whole collection now and then.
+- **Budget.** Collection reads draw on a `taxii` budget of 240 requests per hour per key. A client polling
+  every 15 minutes uses 4 to 8 of them.
+
+Filters: `added_after`, `match[id]`, `match[type]` (for example `indicator`), `match[version]` (`last`, `first`,
+`all` or a timestamp; Insight keeps one version of each object) and `match[spec_version]` (`2.1`). Also
+available: `manifest/`, `objects/{id}/` and `objects/{id}/versions/`.
+
+## Errors
+
+Errors use the TAXII error format, for example
+`{"title": "Invalid added_after", "description": "...", "http_status": "400"}`.
+
+| Status | Meaning |
+| --- | --- |
+| `401` | No API key, or a wrong, revoked or expired one |
+| `403` | A browser session instead of an API key |
+| `404` | Unknown collection, or an object that does not exist or is above the key's TLP limit |
+| `405` | A write (Insight's TAXII server is read-only) |
+| `406` | The client does not accept `application/taxii+json;version=2.1` |
+| `413` | More than 100,000 accepted mentions: the collection is too large to serve |
+| `429` | The `taxii` budget is used up; wait for `Retry-After` |
+
+Every read is audited as `taxii.read`, with the key that made it.

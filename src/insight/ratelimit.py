@@ -39,6 +39,8 @@ READ: Final = Policy('read', 300, 60)
 WRITE: Final = Policy('write', 60, 60)
 #: Cross-report IOC exports (up to 100,000 mentions each, built in memory), per caller.
 IOC_EXPORT: Final = Policy('ioc-export', 30, 3600)
+#: TAXII collection reads (each page is built from a full, validated snapshot), per API key (ADR 0026).
+TAXII: Final = Policy('taxii', 240, 3600)
 #: Requests with an invalid API key, per client address. Valid keys are never counted or refused by this.
 AUTH_FAILURES: Final = Policy('auth-failures', 10, 60)
 
