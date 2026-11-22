@@ -18,7 +18,10 @@ from fastapi.testclient import TestClient
 from insight import services
 from insight.models import Enrichment
 from insight.schemas import (
+    ActorCampaignInput,
+    ActorLinkInput,
     AssessmentInput,
+    CampaignInput,
     CaseInput,
     CaseItemInput,
     CriterionInput,
@@ -58,6 +61,13 @@ def world(app: FastAPI) -> dict[str, Any]:
                 f'{MARKER}: C2 at {HIDDEN_IP}, also {SHARED_IP}. {HIDDEN_TECHNIQUE}. A wiper followed.',
                 'AMBER',
             ),
+        )
+        # Actor activity must be planted here too: the central GREEN sweep exercises the real
+        # timeline/campaign routes against restricted report links and explicit campaign associations.
+        services.link_report(db, 'G0016', ActorLinkInput(document_id=amber.id, note=MARKER, tlp='AMBER'))
+        campaign = services.create_campaign(db, CampaignInput(name=f'{MARKER} campaign', tlp='AMBER'))
+        services.link_actor_campaign(
+            db, 'G0016', ActorCampaignInput(campaign_id=campaign.id, note=MARKER, tlp='AMBER')
         )
         ref = SourceRef('partner-feed', 'item-1')
         old, _ = services.ingest(db, report('Item v1', 'CVE-2024-11111 first.', 'GREEN'), ref=ref)
@@ -102,6 +112,7 @@ def world(app: FastAPI) -> dict[str, Any]:
         services.record_sighting(db, SightingInput(value=HIDDEN_IP, first_seen=seen, tlp='GREEN'))
         _, token = services.create_api_key(db, name='siem', access='read-write', max_tlp='GREEN')
     return {
+        'actor_campaign': campaign.id,
         'case': case.id,
         'hunt_package': hunt.id,
         'requirement': open_req.id,
@@ -215,8 +226,22 @@ def test_nothing_hidden_leaks_through_any_read_route(client: TestClient, world: 
             template = route.replace('/x', '/{id}')
             assert any(p.rstrip('/').count('/') == template.rstrip('/').count('/') for p in covered), route
     for path in paths:
-        body = client.get(path, headers=world['headers']).text
-        for secret in (MARKER, HIDDEN_IP, world['amber'], world['new'], world['hidden_entity']):
+        response = client.get(path, headers=world['headers'])
+        if path in {
+            '/api/actors/G0016/timeline',
+            '/api/actors/G0016/campaigns',
+            '/api/software/S0154/navigator',
+        }:
+            assert response.status_code == 200, response.text
+        body = response.text
+        for secret in (
+            MARKER,
+            HIDDEN_IP,
+            world['amber'],
+            world['new'],
+            world['hidden_entity'],
+            world['actor_campaign'],
+        ):
             # A value the caller itself sent (e.g. an IOC export echoing its filters) discloses nothing.
             if secret not in path:
                 assert secret not in body, f'{secret} leaked through {path}'
