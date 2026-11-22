@@ -137,12 +137,20 @@ ALLOWED_HOSTS: Final[frozenset[str]] = frozenset(
 )
 
 
-async def _public_addresses(hostname: str) -> list[egress.IPAddress]:
-    """The addresses of ``hostname``, all of them public, or ``ValueError`` (review L1: the request then goes
-    to one of these exact addresses, so a second DNS answer cannot redirect it)."""
+class NonPublicDestination(ValueError):
+    """A host resolves to an address this request may not reach."""
+
+
+async def _public_addresses(hostname: str, *, allow_private: bool = False) -> list[egress.IPAddress]:
+    """The addresses of ``hostname``, all of them public (or, with ``allow_private``, on a private network),
+    or :class:`NonPublicDestination` (review L1: the request then goes to one of these exact addresses, so a
+    second DNS answer cannot redirect it)."""
     addresses = await egress.resolve(hostname, 443)
-    if not addresses or not all(egress.is_public(a) for a in addresses):
-        raise ValueError('Source resolves to a non-public destination')
+    allowed = (
+        (lambda a: egress.is_public(a) or egress.is_private_network(a)) if allow_private else egress.is_public
+    )
+    if not addresses or not all(allowed(a) for a in addresses):
+        raise NonPublicDestination('Source resolves to a non-public destination')
     return addresses
 
 
@@ -186,12 +194,15 @@ async def download(
     body: bytes | None = None,
     max_bytes: int = MAX_BYTES,
     allowed_hosts: frozenset[str] = ALLOWED_HOSTS,
+    allow_private: bool = False,
 ) -> bytes:
     """Fetch from the curated registry or an explicitly configured host, with the same HTTPS egress policy.
 
     With ``validators``, the request is conditional: an unchanged resource raises :class:`NotModified`, and a
     changed one updates ``validators`` from the response. Keyed feeds can add headers and a fixed POST body.
     ``max_bytes`` raises the size limit for one pinned, hash-checked download (the threat library sync).
+    ``allow_private`` lets one explicitly configured host be on a private network (the operator's MISP
+    instance, opt-in); loopback, link-local, multicast and reserved addresses stay blocked.
     ``transport`` exists for offline testing; production code never passes it.
     """
     parts = urlsplit(url)
@@ -211,7 +222,7 @@ async def download(
     # Include DNS in the total deadline and connect only to addresses checked here (review L1).
     try:
         async with asyncio.timeout(DOWNLOAD_DEADLINE):
-            addresses = await _public_addresses(parts.hostname)
+            addresses = await _public_addresses(parts.hostname, allow_private=allow_private)
             return await _fetch(
                 url, addresses, params, request_headers, validators, transport, body, max_bytes
             )

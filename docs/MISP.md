@@ -41,6 +41,8 @@ MISP distribution and tags can both narrow handling on import. An unmarked event
 
 Set `INSIGHT_MISP_URL` to the trusted HTTPS instance URL on the CLI host, and keep `INSIGHT_MISP_KEY` in its environment or its private `.env`. A base path such as `https://misp.example.org/instance` is supported. The key is sent in the Authorization header. File exchange needs neither setting.
 
+By default the instance must resolve to public addresses, like every other outbound request. For a MISP instance on your own network (`10.x`, `172.16-31.x`, `192.168.x`, carrier-grade NAT or IPv6 unique local addresses), also set `INSIGHT_MISP_PRIVATE_NETWORK=on`. Loopback, link-local (cloud metadata), multicast and reserved addresses stay blocked even then, and the request still goes only to the addresses Insight checked, over HTTPS with the certificate checked against the host name. The setting affects only MISP transfers; source syncs and lookups stay public-only.
+
 ```sh
 insight misp-export --push --max-tlp GREEN
 insight misp-import --fetch 7440c54c-d11c-4bc7-b825-1ae6e5ee028f

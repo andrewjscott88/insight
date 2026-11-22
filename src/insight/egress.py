@@ -39,6 +39,13 @@ def is_public(address: IPAddress) -> bool:
     return real.is_global and not never_allowed(address)
 
 
+def is_private_network(address: IPAddress) -> bool:
+    """A private-network address an operator may opt in to (a MISP instance on the LAN): not public, and not
+    loopback or one of the :func:`never_allowed` addresses."""
+    real = effective(address)
+    return not real.is_global and not real.is_loopback and not never_allowed(address)
+
+
 async def resolve(hostname: str, port: int) -> list[IPAddress]:
     """Every address ``hostname`` resolves to, IPv4 first (containers often have no IPv6 route)."""
     infos = await asyncio.to_thread(socket.getaddrinfo, hostname, port, 0, socket.SOCK_STREAM)

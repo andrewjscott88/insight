@@ -64,6 +64,46 @@ def test_mapped_ipv4_addresses_are_judged_by_the_address_they_reach(
     assert (egress.is_public(parsed), egress.never_allowed(parsed)) == (public, never)
 
 
+@pytest.mark.parametrize(
+    ('address', 'private'),
+    [
+        ('10.0.0.1', True),
+        ('172.16.5.4', True),
+        ('192.168.1.1', True),
+        ('100.64.0.1', True),  # shared address space (carrier-grade NAT)
+        ('fd00::1', True),
+        ('::ffff:10.0.0.1', True),
+        ('127.0.0.1', False),
+        ('::1', False),
+        ('::ffff:127.0.0.1', False),
+        ('169.254.169.254', False),
+        ('fe80::1', False),
+        ('0.0.0.0', False),
+        ('8.8.8.8', False),  # public, not private
+    ],
+)
+def test_the_private_network_opt_in_never_covers_loopback_or_metadata(address: str, private: bool) -> None:
+    assert egress.is_private_network(ipaddress.ip_address(address)) is private
+
+
+async def test_downloads_stay_public_unless_one_call_opts_in(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def resolve(host: str, port: int) -> list[egress.IPAddress]:
+        return [ipaddress.ip_address('10.0.0.9')]
+
+    monkeypatch.setattr(egress, 'resolve', resolve)
+    seen: list[httpx.Request] = []
+    url = 'https://misp.internal.example/x'
+    with pytest.raises(connectors.NonPublicDestination, match='non-public destination'):
+        await connectors.download(
+            url, allowed_hosts=frozenset({'misp.internal.example'}), transport=recorder(seen)
+        )
+    assert seen == []
+    await connectors.download(
+        url, allowed_hosts=frozenset({'misp.internal.example'}), allow_private=True, transport=recorder(seen)
+    )
+    assert [r.url.host for r in seen] == ['10.0.0.9']
+
+
 def test_pin_keeps_the_host_name_for_tls_and_the_host_header() -> None:
     v4 = egress.pin('https://api.first.org/data/v1/epss?cve=X', ipaddress.ip_address(PUBLIC))
     assert v4 == egress.Pinned(

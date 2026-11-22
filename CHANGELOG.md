@@ -57,6 +57,13 @@
   put in the centre. `GET /api/graph` returns the nodes and edges. Only recorded links appear, within your TLP
   limit, capped and in a fixed order. [ADR 0027](docs/adr/0027-ranked-search-and-link-graph.md)
 
+### Added: MISP on your own network
+
+- `INSIGHT_MISP_PRIVATE_NETWORK=on` lets `insight misp-export --push` and `misp-import --fetch` reach a MISP
+  instance on a private network. It is off by default; loopback, link-local (cloud metadata), multicast and
+  reserved addresses stay blocked, and only MISP transfers are affected. A private address without the setting
+  now says which setting to use. [MISP.md](docs/MISP.md)
+
 ### Fixed
 
 - A PDF import now checks its details and parses the file before it opens a database session, in the API, the

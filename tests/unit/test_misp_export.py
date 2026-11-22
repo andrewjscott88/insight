@@ -217,9 +217,61 @@ async def test_pinned_read_create_and_refusal_paths(monkeypatch: pytest.MonkeyPa
         await exchange(event_uuid=EVENT_UUID, transport=transport)
     destinations.append(ipaddress.ip_address('127.0.0.1'))
     before = len(requests)
-    with pytest.raises(ValueError, match='connection'):
+    with pytest.raises(ValueError, match='INSIGHT_MISP_PRIVATE_NETWORK=on'):
         await exchange(event_uuid=EVENT_UUID, transport=transport)
     assert len(requests) == before
+
+
+@pytest.mark.parametrize(
+    ('setting', 'address', 'outcome'),
+    [
+        ('', '10.20.0.5', 'INSIGHT_MISP_PRIVATE_NETWORK=on'),  # off by default
+        ('off', '192.168.1.20', 'INSIGHT_MISP_PRIVATE_NETWORK=on'),
+        ('on', '10.20.0.5', None),
+        ('on', '192.168.1.20', None),
+        ('on', 'fd12:3456::20', None),
+        ('ON', '::ffff:10.20.0.5', None),  # judged by the IPv4 address it reaches
+        ('on', '127.0.0.1', 'never connects'),  # loopback stays blocked
+        ('on', '::ffff:127.0.0.1', 'never connects'),
+        ('on', '169.254.169.254', 'never connects'),  # cloud metadata
+        ('on', '224.0.0.1', 'never connects'),
+    ],
+)
+async def test_a_misp_instance_on_a_private_network_is_an_explicit_opt_in(
+    monkeypatch: pytest.MonkeyPatch, setting: str, address: str, outcome: str | None
+) -> None:
+    monkeypatch.setenv('INSIGHT_MISP_URL', 'https://misp.internal.example/')
+    monkeypatch.setenv('INSIGHT_MISP_KEY', 'fixture-secret')
+    monkeypatch.setenv('INSIGHT_MISP_PRIVATE_NETWORK', setting)
+
+    async def resolve(host: str, port: int) -> list[egress.IPAddress]:
+        return [ipaddress.ip_address(address)]
+
+    monkeypatch.setattr(egress, 'resolve', resolve)
+    sent: list[httpx.Request] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        sent.append(req)
+        assert req.headers['Host'] == 'misp.internal.example'
+        assert req.extensions['sni_hostname'] == 'misp.internal.example'
+        return httpx.Response(200, json={'Event': {'uuid': EVENT_UUID}})
+
+    transport = httpx.MockTransport(handler)
+    if outcome is None:
+        await exchange(event_uuid=EVENT_UUID, transport=transport)
+        assert len(sent) == 1
+    else:
+        with pytest.raises(ValueError, match=outcome):
+            await exchange(event_uuid=EVENT_UUID, transport=transport)
+        assert sent == []
+
+
+async def test_the_private_network_setting_must_be_on_or_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv('INSIGHT_MISP_URL', 'https://misp.internal.example/')
+    monkeypatch.setenv('INSIGHT_MISP_KEY', 'fixture-secret')
+    monkeypatch.setenv('INSIGHT_MISP_PRIVATE_NETWORK', 'yes')
+    with pytest.raises(ValueError, match='must be "on" or "off"'):
+        await exchange(event_uuid=EVENT_UUID)
 
 
 def test_remote_cli_checks_the_fetched_uuid_and_audits_a_confirmed_push(
