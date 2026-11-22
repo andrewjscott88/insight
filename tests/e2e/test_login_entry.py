@@ -1,11 +1,13 @@
 """Browser cookie policy against the real app, using reserved HTTPS hosts and no network services.
 
-Playwright routes both hosts locally. The ASGI client's cookie jar is cleared on every request, so only
-cookies actually sent by the browser reach the app. An ordinary HTTP client cannot reproduce SameSite.
+Chromium's Fetch interception routes both hosts locally, including each HTTP redirect hop. The ASGI
+client's cookie jar is cleared on every request, so only cookies actually sent by the browser reach the
+app. An ordinary HTTP client cannot reproduce SameSite.
 """
 
 from __future__ import annotations
 
+import base64
 import dataclasses
 import os
 from collections.abc import Iterator
@@ -41,8 +43,13 @@ def browser() -> Iterator[Any]:
 
 @contextmanager
 def app_context(
-    browser: Any, settings: Settings, *, open_access: bool = True, javascript: bool = True
-) -> Iterator[Any]:
+    browser: Any,
+    settings: Settings,
+    *,
+    open_access: bool = True,
+    javascript: bool = True,
+    reject_session: bool = False,
+) -> Iterator[tuple[Any, Any]]:
     settings = dataclasses.replace(
         settings, dev_no_auth=open_access, secure_cookies=True, allowed_hosts=('insight.example',)
     )
@@ -59,35 +66,60 @@ def app_context(
     context.set_default_timeout(10_000)
     with TestClient(app, base_url=WORKSPACE, follow_redirects=False) as client:
 
-        def handle(route: Any) -> None:
-            request = route.request
-            if request.url == ENTRY:
-                route.fulfill(
-                    status=200,
-                    content_type='text/html',
-                    body=(
+        def intercept(page: Any) -> None:
+            # context.route can miss a fulfilled redirect's next request in pinned Chromium versions.
+            # Fetch pauses every hop, preserving browser navigation and cookie policy without real DNS.
+            cdp = context.new_cdp_session(page)
+
+            def handle(event: dict[str, Any]) -> None:
+                request = event['request']
+                url = request['url']
+                if url == ENTRY:
+                    status = 200
+                    headers = [('content-type', 'text/html')]
+                    body = (
                         f'<a href="{WORKSPACE}/">Open workspace</a>'
                         f'<a href="{WORKSPACE}/login">Open sign in</a>'
-                    ),
+                    ).encode()
+                elif url == WORKSPACE + '/api/session' and reject_session:
+                    status, headers, body = 401, [('content-type', 'application/json')], b'{}'
+                elif urlsplit(url).netloc == 'insight.example':
+                    client.cookies.clear()
+                    response = client.request(
+                        request['method'],
+                        url,
+                        headers=request['headers'],
+                        content=request.get('postData'),
+                    )
+                    assert len(response.headers.get_list('set-cookie')) <= 1, 'Do not merge multiple cookies'
+                    status, headers, body = (
+                        response.status_code,
+                        list(response.headers.multi_items()),
+                        response.content,
+                    )
+                else:
+                    cdp.send(
+                        'Fetch.failRequest',
+                        {'requestId': event['requestId'], 'errorReason': 'BlockedByClient'},
+                    )
+                    return
+                cdp.send(
+                    'Fetch.fulfillRequest',
+                    {
+                        'requestId': event['requestId'],
+                        'responseCode': status,
+                        'responseHeaders': [{'name': name, 'value': value} for name, value in headers],
+                        'body': base64.b64encode(body).decode('ascii'),
+                    },
                 )
-            elif urlsplit(request.url).netloc == 'insight.example':
-                client.cookies.clear()
-                response = client.request(
-                    request.method,
-                    request.url,
-                    headers=request.all_headers(),
-                    content=request.post_data_buffer,
-                )
-                assert len(response.headers.get_list('set-cookie')) <= 1, 'Do not merge multiple cookies'
-                route.fulfill(
-                    status=response.status_code, headers=dict(response.headers), body=response.content
-                )
-            else:
-                route.abort()  # No real DNS, external pages or assets are needed by this test.
 
-        context.route('**/*', handle)
+            cdp.on('Fetch.requestPaused', handle)
+            cdp.send('Fetch.enable', {'patterns': [{'urlPattern': '*', 'requestStage': 'Request'}]})
+
+        page = context.new_page()
+        intercept(page)
         try:
-            yield context
+            yield context, page
         finally:
             context.close()
 
@@ -98,8 +130,7 @@ def test_external_entry_keeps_strict_cookies_and_reaches_the_workspace(
     browser: Any, settings: Settings, link: str, javascript: bool
 ) -> None:
     """Regression: external links withheld Strict cookies through an endless login redirect chain."""
-    with app_context(browser, settings, javascript=javascript) as context:
-        page = context.new_page()
+    with app_context(browser, settings, javascript=javascript) as (context, page):
         page.goto(ENTRY)
         page.get_by_role('link', name=link, exact=True).click()
         if not javascript:
@@ -114,10 +145,8 @@ def test_external_entry_keeps_strict_cookies_and_reaches_the_workspace(
 
 def test_cookie_rejection_stays_on_the_entry_page(browser: Any, settings: Settings) -> None:
     """Regression: unavailable session cookies caused repeated navigation instead of a usable entry page."""
-    with app_context(browser, settings) as context:
+    with app_context(browser, settings, reject_session=True) as (_, page):
         # Reject just the session probe, as a browser that cannot return its session cookie would see it.
-        context.route(WORKSPACE + '/api/session', lambda route: route.fulfill(status=401, body='{}'))
-        page = context.new_page()
         page.goto(WORKSPACE + '/login')
         expect(page.get_by_role('status')).to_have_text('Allow cookies for this site, then try again.')
         expect(page.get_by_role('link', name='Continue to workspace', exact=True)).to_be_visible()
@@ -127,14 +156,13 @@ def test_cookie_rejection_stays_on_the_entry_page(browser: Any, settings: Settin
 @pytest.mark.parametrize('theme', ['light', 'dark'])
 def test_entry_fits_a_small_phone_with_large_text(browser: Any, settings: Settings, theme: str) -> None:
     """Regression: the entry page and longer product descriptor must fit a phone at larger text sizes."""
-    with app_context(browser, settings, javascript=False) as context:
+    with app_context(browser, settings, javascript=False) as (context, page):
         context.add_cookies(
             [
                 {'name': 'insight_theme', 'value': theme, 'url': WORKSPACE},
                 {'name': 'insight_text', 'value': 'large', 'url': WORKSPACE},
             ]
         )
-        page = context.new_page()
         page.set_viewport_size({'width': 320, 'height': 700})
         page.goto(WORKSPACE + '/login')
         expect(page.get_by_text('Cyber Threat Intelligence Platform', exact=True)).to_be_visible()
@@ -149,8 +177,7 @@ def test_entry_fits_a_small_phone_with_large_text(browser: Any, settings: Settin
 
 def test_protected_mode_external_entry_still_requires_sign_in(browser: Any, settings: Settings) -> None:
     """Regression: external entry must end on a page without bypassing password checks or relaxing cookies."""
-    with app_context(browser, settings, open_access=False) as context:
-        page = context.new_page()
+    with app_context(browser, settings, open_access=False) as (_, page):
         page.goto(WORKSPACE + '/login')
         page.get_by_label('Workspace password').fill(settings.password)
         page.get_by_role('button', name='Open workspace', exact=False).click()
