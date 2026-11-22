@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Changed: darker colours
+
+- The dark theme is now near-black with a purple accent, blue links and red for errors; the light theme uses
+  the same purple accent. Every text colour still meets WCAG AAA (7:1) and APCA on every background, and the
+  sign-in page matches. Set `INSIGHT_THEME=dark` to make the dark theme the default for every browser.
+
 ## 0.9.0 - 2026-11-22
 
 ### Upgrade notes
