@@ -100,7 +100,8 @@ def test_startup_logs_the_trusted_proxies_and_warns_about_insecure_cookies(
     caplog.set_level(logging.INFO, logger='insight.auth')
     make_app(settings, '10.0.0.2', '172.18.0.0/16')
     assert 'Trusting X-Forwarded-For/-Proto from: 10.0.0.2, 172.18.0.0/16' in caplog.text
-    assert 'set INSIGHT_SECURE_COOKIES=1' in caplog.text
+    # One internet-facing warning names every gap, secure cookies included (TIP 0.3).
+    assert 'INSIGHT_SECURE_COOKIES is off' in caplog.text
     caplog.clear()
     create_app(
         dataclasses.replace(settings, trusted_proxies=('10.0.0.2',), secure_cookies=True), with_ui=False

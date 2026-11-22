@@ -171,6 +171,83 @@ def test_an_invalid_mfa_switch_fails_closed(value: str) -> None:
         Settings.from_env({**GOOD, 'INSIGHT_MFA': value})
 
 
+# ------------------------------------------------------------------- hardened public deployments (TIP 0.3)
+
+HARDENED = {**GOOD, 'INSIGHT_SECURE_COOKIES': '1', 'INSIGHT_MFA': 'on'}
+
+
+def test_loopback_defaults_are_unchanged() -> None:
+    settings = Settings.from_env(GOOD)
+    assert settings.require_hardened is False
+    assert settings.internet_facing() is False
+    assert settings.public_hosts() == []
+
+
+@pytest.mark.parametrize(
+    ('env', 'facing'),
+    [
+        ({'INSIGHT_ALLOWED_HOSTS': 'localhost,127.0.0.1,::1'}, False),
+        ({'INSIGHT_ALLOWED_HOSTS': 'insight.example.org'}, True),
+        ({'INSIGHT_ALLOWED_HOSTS': '*'}, True),
+        ({'INSIGHT_TRUSTED_PROXIES': '172.18.0.1'}, True),
+    ],
+)
+def test_internet_facing_means_a_public_host_name_or_a_proxy(env: dict[str, str], facing: bool) -> None:
+    assert Settings.from_env({**GOOD, **env}).internet_facing() is facing
+
+
+@pytest.mark.parametrize(
+    ('value', 'expected'),
+    [('on', True), (' 1 ', True), ('YES', True), ('true', True), ('off', False), ('0', False), ('', False)],
+)
+def test_require_hardened_switch(value: str, expected: bool) -> None:
+    assert Settings.from_env({**HARDENED, 'INSIGHT_REQUIRE_HARDENED': value}).require_hardened is expected
+
+
+@pytest.mark.parametrize('value', ['onn', 'enabled', '2', 'strict'])
+def test_an_invalid_require_hardened_switch_fails_closed(value: str) -> None:
+    """A typo must stop start-up, never silently drop the check."""
+    with pytest.raises(RuntimeError, match='INSIGHT_REQUIRE_HARDENED must be "on" or "off"'):
+        Settings.from_env({**HARDENED, 'INSIGHT_REQUIRE_HARDENED': value})
+
+
+@pytest.mark.parametrize(
+    ('missing', 'named'),
+    [
+        ({'INSIGHT_SECURE_COOKIES': '0'}, 'INSIGHT_SECURE_COOKIES is off'),
+        ({'INSIGHT_MFA': 'off'}, 'INSIGHT_MFA is off'),
+    ],
+)
+def test_require_hardened_refuses_to_start_without_secure_cookies_and_mfa(
+    missing: dict[str, str], named: str
+) -> None:
+    env = {**HARDENED, 'INSIGHT_REQUIRE_HARDENED': 'on', **missing}
+    with pytest.raises(
+        RuntimeError, match=f'INSIGHT_REQUIRE_HARDENED is on, so Insight will not start: {named}'
+    ):
+        Settings.from_env(env)
+
+
+def test_require_hardened_names_every_gap_and_refuses_password_free_access() -> None:
+    with pytest.raises(RuntimeError) as refused:
+        Settings(
+            database_url='sqlite://',
+            password='p' * 12,
+            session_secret='s' * 32,
+            dev_no_auth=True,
+            require_hardened=True,
+        )
+    message = str(refused.value)
+    for gap in ('INSIGHT_SECURE_COOKIES is off', 'INSIGHT_MFA is off', 'INSIGHT_DEV_NO_AUTH is on'):
+        assert gap in message
+
+
+def test_require_hardened_starts_with_secure_cookies_and_mfa() -> None:
+    settings = Settings.from_env({**HARDENED, 'INSIGHT_REQUIRE_HARDENED': 'on'})
+    assert settings.require_hardened is True
+    assert settings.hardening_gaps() == []
+
+
 # --------------------------------------------------------------------------- default colour theme
 
 
