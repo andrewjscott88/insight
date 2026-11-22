@@ -36,7 +36,9 @@ def test_software_only_rows_have_zero_score_and_leave_existing_scores_and_hypoth
         ),
     )
     test_lib = replace(lib, software={**lib.software, source.id: source})
-    test_data = replace(data, subject=replace(data.subject, catalog=replace(group, software=(source.id,))))
+    test_data = replace(
+        data, subject=replace(data.subject, catalog=replace(group, software=(*group.software, source.id)))
+    )
     after = compose(test_data, test_lib)
     old = {r['techniqueID']: r['score'] for r in navigator_layer(before)['techniques']}
     rows = {r['techniqueID']: r for r in navigator_layer(after)['techniques']}
