@@ -92,8 +92,7 @@ iocs = c.get('/api/iocs/export', params={'max_tlp': 'GREEN', 'review_status': 'a
 | --- | --- | --- |
 | Credential | `insight_session` cookie | `Authorization: Bearer <key>` |
 | CSRF token on writes | Required (`X-CSRF-Token`) | Not used |
-| Writes (`POST`) | Yes | Only with `--access read-write`; `--access read-rfi` may file requests for information (`POST /api/rfis`) and nothing else |
-| Writes (`POST`) | Yes | Only with `--access read-write` |
+| Writes (`POST`) | Yes | Only with `--access read-write`; `--access read-feedback` may send requests for information (`POST /api/rfis`) and sightings (`POST /api/sightings`) and nothing else |
 | `GET /api/session`, the workspace UI | Yes | No (`403`) |
 | Reports above a TLP limit | Sees all | With `--max-tlp`, invisible (see below) |
 
@@ -496,6 +495,20 @@ is audited on the package.
 | `POST /api/hunt-packages/{id}/retire` | - | The retired package (served as revoked). Audited as `hunt_package.retire` |
 | `GET /api/hunt-packages/{id}/stix` | - | The package as a validated STIX 2.1 bundle attachment, in any status (check a draft before publishing it): a `grouping` (context `suspicious-activity`, description the hypothesis), an `attack-pattern` per technique, an `indicator` or `vulnerability` per indicator, an `indicator` per rule (`pattern_type` `sigma`, `yara`, `suricata` or `snort`, the rule text as `pattern`), `indicates` relationships from rules to the package techniques they are linked to, and the TLP marking. The group and the reports are external references; report text is never included. `422` with nothing huntable in it. Audited as `hunt_package.export` |
 
+## Sightings
+
+[ADR 0035](adr/0035-sightings.md). A hunt tool saw a known indicator in its own data. Sightings are the
+strongest confidence signal: each place an indicator was seen counts as one completely reliable source in
+`confidence` (`kind: sighting`), ageing from when it was last seen. A sighting's `tlp` defaults to AMBER and
+rises with TLP markings in its text and with its hunt package's label. A caller sees a sighting only within its
+limit, and only for an indicator a report within its limit mentions.
+
+| Route | Input | Returns |
+| --- | --- | --- |
+| `POST /api/sightings` | `{value, kind?, first_seen, last_seen?, count?, where?, observer?, note?, external_ref?, hunt_package_id?, tlp?}`: `value` as Insight serves it (`kind` only if the value could be more than one kind); times in ISO 8601 (UTC if no zone), not in the future, `last_seen` (default `first_seen`) not before `first_seen`; `count` 1 or more (default 1); `where` and `observer` up to 120 characters | `201` and `{id, entity_id, hunt_package_id, first_seen, last_seen, count, where, observer, note, external_ref, tlp, created_at, created_by}`. `404` for an indicator Insight does not know or the caller cannot see, or a hidden hunt package; `403` for a label above the caller's limit. One of the two writes a `read-feedback` key may make. Audited as `sighting.add` on the indicator |
+| `GET /api/sightings` | `entity_id`, `hunt_package_id`, `limit` (1-500, default 200) | `{sightings: [{id, entity_id, kind, value, hunt_package_id, first_seen, last_seen, count, where, observer, note, external_ref, tlp, created_at, created_by}]}`, most recently seen first |
+| `DELETE /api/sightings/{id}` | - | `{deleted}`, for a sighting reported by mistake. Audited as `sighting.delete` on the indicator |
+
 ## Cases
 
 [ADR 0029](adr/0029-cases.md). A case's `tlp` is the strictest of its items, its text and its notes, and
@@ -530,7 +543,7 @@ your limit; `403`: a label above your limit; `409`: retired, or a PIR with IRs u
 | --- | --- | --- |
 | `GET /api/requirements` | `status` (`open`, `answered`, `retired` or `all`; default `open`), `kind` | `{requirements: [summary]}`, high priority first, then most recently changed (at most 200). A summary is `{id, kind, parent_id, question, stakeholder, priority, status, tlp, due_at, answered_at, created_at, updated_at, criteria_count, evidence_count, recent_matches, last_match_at, quiet}`: `recent_matches` counts reports in the last 30 days; `quiet` is true for an open requirement with criteria and no match in that time |
 | `POST /api/requirements` | `{kind, question, context?, stakeholder?, priority?, tlp?, parent_id?, due?, criteria?: [{kind, value}]}` (`priority` default `medium`, `tlp` default AMBER; `due` a date, today or later; at most 50 criteria) | `201` and the requirement `{id, kind, parent_id, question, context, stakeholder, priority, status, tlp, due_at, answer, answered_at, external_ref, created_at, updated_at, created_by}`. Audited as `requirement.create` |
-| `POST /api/rfis` | `{question, context?, requester?, priority?, tlp?, due?, external_ref?}` | `201` and the RFI as above (`requester` is its `stakeholder`). The only write a `read-rfi` key may make. Audited as `requirement.rfi` |
+| `POST /api/rfis` | `{question, context?, requester?, priority?, tlp?, due?, external_ref?}` | `201` and the RFI as above (`requester` is its `stakeholder`). One of the two writes a `read-feedback` key may make. Audited as `requirement.rfi` |
 | `GET /api/requirements/{id}` | - | The summary with `context, answer, external_ref, created_by`, `criteria: [{id, kind, value, name, tlp, added_at, added_by}]`, `evidence: [{id, document_id, title, note, tlp, added_at, added_by}]`, `children` (IRs, as summaries) and `matches: [{document_id, title, source_name, tlp, created_at, because}]` (newest 50; `because` lists the criteria each report meets, such as `cve: CVE-2024-3400`) |
 | `PATCH /api/requirements/{id}` | Any of `{question, context, stakeholder, priority, tlp, due}` | The requirement. A lower `tlp` stops at the strictest criterion, citation or marking. Audited as `requirement.update` |
 | `DELETE /api/requirements/{id}` | - | `{deleted}`; criteria and citations go with it, the reports stay. Audited as `requirement.delete` |

@@ -65,7 +65,7 @@ Send `Authorization: Bearer <key>` on every request. No cookie or CSRF token is 
 | Key setting | Effect |
 | --- | --- |
 | `ACCESS=read` (default) | `GET` routes only; any `POST` gets `403 "This API key is read-only"` |
-| `ACCESS=read-rfi` | Also file requests for information (`POST /api/rfis`), nothing else |
+| `ACCESS=read-feedback` | Also send requests for information (`POST /api/rfis`) and sightings (`POST /api/sightings`), nothing else |
 | `ACCESS=read-write` | Also ingest, triage, notes, demo, source sync and enrichment |
 | `MAX_TLP=GREEN` (optional) | Reports above GREEN are invisible to the key (they look like missing reports), exports are capped at GREEN, and the audit log, watch terms and starting CVE lookups are refused (cached scores of CVEs in reports the key can see stay readable) |
 | `EXPIRES=90` | Days until expiry (1-365, default 90). `make api-key-status` shows the date |
@@ -575,15 +575,37 @@ curl -fsS -X POST "$INSIGHT_URL/api/requirements/$REQ_ID/reopen" -H "Authorizati
 curl -fsS -X DELETE "$INSIGHT_URL/api/requirements/$REQ_ID" -H "Authorization: Bearer $INSIGHT_API_KEY"
 ```
 
-**A hunt or response tool asks a question.** Give the tool a key with `read-rfi` access
-(`insight api-key create --name hunt-tool --access read-rfi --max-tlp AMBER`). It can read, file a request for
-information and read the answer, and change nothing else. `external_ref` is the tool's own reference.
+**A hunt or response tool asks a question.** Give the tool a key with `read-feedback` access
+(`insight api-key create --name hunt-tool --access read-feedback --max-tlp AMBER`). It can read, file a
+request for information and read the answer, report sightings (below), and change nothing else.
+`external_ref` is the tool's own reference.
 
 ```bash
 RFI_ID=$(curl -fsS -X POST "$INSIGHT_URL/api/rfis" -H "Authorization: Bearer $INSIGHT_API_KEY" \
   -H 'Content-Type: application/json' -d '{"question": "Is 203.0.113.70 known C2?", "requester": "Hunt team",
   "priority": "high", "tlp": "AMBER", "external_ref": "hunt-42"}' | jq -r .id)
 curl -fsS "$INSIGHT_URL/api/requirements/$RFI_ID" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq '{status, answer, answered_at}'
+```
+
+### Sightings
+
+A hunt tool reports a known indicator it saw in its own data ([ADR 0035](adr/0035-sightings.md)). Each place
+it was seen counts as a completely reliable source in the indicator's confidence, ageing from when it was last
+seen. A key with `read-feedback` access may send sightings and nothing else.
+
+```bash
+# Seen 12 times in the east office, while running a hunt package
+SIGHTING_ID=$(curl -fsS -X POST "$INSIGHT_URL/api/sightings" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d "{\"value\": \"203.0.113.70\", \"first_seen\": \"2026-11-20T08:15:00Z\",
+  \"last_seen\": \"2026-11-21T17:40:00Z\", \"count\": 12, \"where\": \"East office proxy\", \"observer\": \"Shift\",
+  \"hunt_package_id\": \"$PKG_ID\", \"external_ref\": \"hunt-42\", \"tlp\": \"AMBER\"}" | jq -r .id)
+# Sightings of one indicator, and its confidence with them
+curl -fsS "$INSIGHT_URL/api/sightings?entity_id=$ENTITY_ID" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  | jq '.sightings[] | {value, where, count, last_seen}'
+curl -fsS "$INSIGHT_URL/api/entities/$ENTITY_ID/confidence" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  | jq '.sources[] | select(.kind == "sighting")'
+# Remove one reported by mistake (needs read-write access)
+curl -fsS -X DELETE "$INSIGHT_URL/api/sightings/$SIGHTING_ID" -H "Authorization: Bearer $INSIGHT_API_KEY"
 ```
 
 ### Confidence and source reliability

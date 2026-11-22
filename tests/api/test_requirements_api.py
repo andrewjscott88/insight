@@ -1,5 +1,5 @@
 """``/api/requirements`` and ``/api/rfis`` (TIP 4.1, ADR 0032): the HTTP contract, matching, TLP limits and
-the ``read-rfi`` key that may file a request for information and nothing else."""
+the ``read-feedback`` key that may file a request for information (or a sighting) and nothing else."""
 
 from __future__ import annotations
 
@@ -167,10 +167,10 @@ def test_a_tlp_limited_key_sees_and_counts_only_what_it_may(
     assert above.status_code in (403, 422)
 
 
-def test_a_read_rfi_key_files_requests_and_reads_answers_but_changes_nothing_else(
+def test_a_read_feedback_key_files_requests_and_reads_answers_but_changes_nothing_else(
     app: FastAPI, client: TestClient, authed: TestClient
 ) -> None:
-    hunt = key(app, 'read-rfi', 'AMBER')
+    hunt = key(app, 'read-feedback', 'AMBER')
     filed = client.post(
         '/api/rfis',
         headers=hunt,

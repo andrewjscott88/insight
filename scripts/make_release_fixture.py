@@ -47,6 +47,7 @@ from insight.schemas import (
     RfiInput,
     RuleInput,
     RuleLinkInput,
+    SightingInput,
     SourceRatingInput,
     ThreatLinkInput,
 )
@@ -202,6 +203,20 @@ def build(path: Path) -> None:
                 ),
             )
             services.publish_hunt_package(db, hunt_package.id)
+            # 1.0: a hunt tool saw the beacon while running that package (TIP 4.2)
+            services.record_sighting(
+                db,
+                SightingInput(
+                    value='198.51.100.7',
+                    first_seen=datetime(2026, 11, 1, 9, 30, tzinfo=UTC),
+                    last_seen=datetime(2026, 11, 2, 17, 0, tzinfo=UTC),
+                    count=12,
+                    where='Fixture lab',
+                    observer='Fixture hunt tool',
+                    hunt_package_id=hunt_package.id,
+                    tlp='AMBER',
+                ),
+            )
     finally:
         engine.dispose()
 

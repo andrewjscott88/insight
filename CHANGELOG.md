@@ -10,6 +10,17 @@
   starts at 6, cannot be judged). It runs at start-up.
 - Migration `0026` adds the `hunt_packages` and `hunt_package_items` tables. It runs at start-up and changes no
   existing data.
+- Migration `0027` adds the `sightings` table, and renames API keys with the unreleased `read-rfi` access to
+  `read-feedback`.
+
+### Added: sightings from hunt tools (TIP 4.2)
+
+- A hunt tool reports a known indicator it saw in its own data with `POST /api/sightings`: when, how often,
+  where, and which hunt package it was running ([ADR 0035](docs/adr/0035-sightings.md)). A key with
+  `read-feedback` access may send sightings and requests for information, and nothing else.
+- Sightings are the strongest confidence signal: each place an indicator was seen counts as a completely
+  reliable source, ageing from when it was last seen. The indicator explorer shows **Seen in your own data**.
+- `GET /api/sightings` and `DELETE /api/sightings/{id}`.
 
 ### Added: hunt packages over TAXII (TIP 4.3)
 
@@ -49,8 +60,9 @@
   many recent reports address it, and one with nothing in 30 days shows as **quiet**.
 - The reader lists the requirements a report addresses, with **Cite as evidence**. Requirements keep their
   cited reports and the current answer; answering an RFI marks it answered.
-- A new API key access level, **`read-rfi`**: read, plus filing requests for information with
-  `POST /api/rfis`, and nothing else. A hunt or response tool can ask a question and poll for the answer.
+- A new API key access level, **`read-feedback`**: read, plus filing requests for information with
+  `POST /api/rfis` and sightings with `POST /api/sightings`, and nothing else. A hunt or response tool can ask
+  a question and poll for the answer, and report what it saw.
 - `/api/requirements` routes, `GET /api/documents/{id}/requirements`, an **Open requests** counter on Today,
   and glossary entries for PIR and RFI.
 

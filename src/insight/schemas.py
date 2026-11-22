@@ -4,11 +4,19 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, Literal, get_args
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from .extraction import Kind
 from .flags import FLAGS, Flag
@@ -437,9 +445,47 @@ class RequirementInput(BaseModel):
         return _due(value)
 
 
+class SightingInput(BaseModel):
+    """``POST /api/sightings``: a hunt tool saw a known indicator in its own data (TIP 4.2, ADR 0035).
+    ``value`` is the indicator as Insight serves it; ``kind`` is needed only when a value could be more than
+    one kind. An API key with ``read-feedback`` access may send one. TLP markings in the text raise the
+    label."""
+
+    model_config = ConfigDict(frozen=True, extra='forbid')
+    value: str = Field(min_length=1, max_length=2048)
+    kind: Kind | None = None
+    first_seen: datetime
+    last_seen: datetime | None = None
+    count: int = Field(default=1, ge=1, le=1_000_000_000)
+    where: str = Field(default='', max_length=120)
+    observer: str = Field(default='', max_length=120)
+    note: str = Field(default='', max_length=2_000)
+    external_ref: str = Field(default='', max_length=200)
+    hunt_package_id: str | None = Field(default=None, min_length=1, max_length=36)
+    tlp: TLP = DEFAULT_TLP
+
+    @field_validator('first_seen', 'last_seen')
+    @classmethod
+    def utc_and_not_ahead(cls, value: datetime | None) -> datetime | None:
+        """A time without a zone is UTC; a time more than five minutes ahead is a clock or typing mistake."""
+        if value is None:
+            return None
+        stamp = value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+        if stamp > datetime.now(UTC) + timedelta(minutes=5):
+            raise ValueError('a sighting cannot be in the future')
+        return stamp.astimezone(UTC)
+
+    @model_validator(mode='after')
+    def in_order(self) -> SightingInput:
+        if self.last_seen is not None and self.last_seen < self.first_seen:
+            raise ValueError('last_seen cannot be before first_seen')
+        return self
+
+
 class RfiInput(BaseModel):
-    """``POST /api/rfis``: a request for information from another tool or person. An API key with ``read-rfi``
-    access may file one; it cannot change anything else. ``external_ref`` is the requester's own reference."""
+    """``POST /api/rfis``: a request for information from another tool or person. An API key with
+    ``read-feedback`` access may file one; it cannot change anything else. ``external_ref`` is the requester's
+    own reference."""
 
     model_config = ConfigDict(frozen=True, extra='forbid')
     question: str = Field(min_length=5, max_length=300)

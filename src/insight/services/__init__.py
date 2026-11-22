@@ -265,6 +265,7 @@ from .search import (
     summaries,
     summary,
 )
+from .sightings import MAX_SIGHTINGS, SightingView, delete_sighting, list_sightings, record_sighting
 from .sources import (
     cached_enrichments,
     fetch_cursor,
@@ -355,6 +356,7 @@ __all__ = [
     'MAX_QUERY_LENGTH',
     'MAX_REASON_LENGTH',
     'MAX_SERVED_HUNT_PACKAGES',
+    'MAX_SIGHTINGS',
     'MAX_WATCH_TERM_LENGTH',
     'PIVOT_PAGE_SIZE',
     'QUIET_DAYS',
@@ -409,6 +411,7 @@ __all__ = [
     'RequirementRetired',
     'RequirementSummary',
     'RequirementView',
+    'SightingView',
     'SourceContribution',
     'SourceRef',
     'SourceStats',
@@ -470,6 +473,7 @@ __all__ = [
     'delete_hunt_package',
     'delete_requirement',
     'delete_rule',
+    'delete_sighting',
     'delete_target',
     'deletion_preview',
     'detail',
@@ -535,6 +539,7 @@ __all__ = [
     'list_requirements',
     'list_rules',
     'list_schedules',
+    'list_sightings',
     'list_targets',
     'list_threat_links',
     'list_watch_terms',
@@ -563,6 +568,7 @@ __all__ = [
     'record_industry_claim',
     'record_lookup_failure',
     'record_report_techniques',
+    'record_sighting',
     'remove_case_item',
     'remove_criterion',
     'remove_evidence',

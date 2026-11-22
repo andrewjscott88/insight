@@ -8,6 +8,9 @@ TLP-limited reader's score uses only the reports it may see.
 
 Ageing halves a report's weight every ``half_life_days``: by indicator type (an IP address goes stale faster
 than a domain; a file hash or CVE does not age), or by the source's own setting.
+
+Sightings from hunt tools (ADR 0035) are the strongest signal: each place an indicator was seen counts as one
+completely reliable source, ageing from when it was last seen.
 """
 
 from __future__ import annotations
@@ -25,6 +28,7 @@ from ..models import Document, Entity, Observation, SourceRating, now
 from ..schemas import CredibilityInput, SourceRatingInput
 from .actors import _who
 from .audit import audit
+from .sightings import _sighting_places
 from .tlp import _visible
 
 RELIABILITY: Final = {
@@ -49,6 +53,8 @@ _CREDIBILITY_WEIGHT: Final = {1: 1.0, 2: 0.85, 3: 0.65, 4: 0.4, 5: 0.15, 6: 0.5}
 _REPORT_WEIGHT: Final = 0.6
 #: An unreviewed mention counts a little less than one an analyst accepted.
 _UNREVIEWED: Final = 0.8
+#: Seeing an indicator in your own data, recently, is worth more than any one report.
+_SIGHTING_WEIGHT: Final = 0.9
 #: Days for a report's weight to halve, by indicator type; ``None`` never ages.
 HALF_LIFE_DAYS: Final[dict[str, int | None]] = {
     'ip': 30, 'cidr': 30, 'url': 60, 'domain': 90, 'email': 180,
@@ -66,6 +72,8 @@ class SourceContribution:
     newest_at: str
     #: The source's share of support, 0-100, after credibility and ageing.
     weight: int
+    #: ``report`` (a source's reports) or ``sighting`` (where a hunt tool saw it; ``reports`` counts them).
+    kind: str = 'report'
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,17 +156,24 @@ def indicator_confidence(
         best[source] = max(best.get(source, 0.0), weight)
         reports.setdefault(source, set()).add(created_at)
         newest[source] = max(newest.get(source, ''), created_at)
-    support = 1.0 - math.prod(1.0 - w for w in best.values())
-    score = round(100 * support)
-    contributions = sorted(
-        (
+    found = [
+        SourceContribution(
+            s, ratings[s].reliability if s in ratings else 'F', len(reports[s]), newest[s], round(100 * w)
+        )
+        for s, w in best.items()
+    ]
+    weights = list(best.values())
+    for place, sightings, last_seen in _sighting_places(db, entity_id, max_tlp, _MAX_ROWS):
+        decay = 0.5 ** (_age_days(last_seen, at) / default_half_life) if default_half_life else 1.0
+        weights.append(_SIGHTING_WEIGHT * decay)
+        found.append(
             SourceContribution(
-                s, ratings[s].reliability if s in ratings else 'F', len(reports[s]), newest[s], round(100 * w)
+                f'Seen in {place}', 'A', sightings, last_seen, round(100 * weights[-1]), 'sighting'
             )
-            for s, w in best.items()
-        ),
-        key=lambda c: (-c.weight, c.source_name),
-    )
+        )
+    support = 1.0 - math.prod(1.0 - w for w in weights)
+    score = round(100 * support)
+    contributions = sorted(found, key=lambda c: (-c.weight, c.source_name))
     return Confidence(score, band(score), default_half_life, tuple(contributions))
 
 

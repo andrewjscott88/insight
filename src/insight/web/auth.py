@@ -207,8 +207,8 @@ def auth_dependency(
             caller = key_caller(request, token)
             if path in SESSION_ONLY_ROUTES:
                 raise HTTPException(403, 'Not available to API keys')
-            files_rfi = caller.access == 'read-rfi' and (method, path) == apikeys.RFI_INTAKE
-            if method not in SAFE_METHODS and caller.access != 'read-write' and not files_rfi:
+            feedback = caller.access == 'read-feedback' and (method, path) in apikeys.FEEDBACK_INTAKE
+            if method not in SAFE_METHODS and caller.access != 'read-write' and not feedback:
                 raise HTTPException(403, 'This API key is read-only')
             if method not in SAFE_METHODS and path.startswith(SESSION_ONLY_WRITE_PREFIXES):
                 raise HTTPException(

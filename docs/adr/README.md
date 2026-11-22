@@ -39,3 +39,4 @@ superseded ones are marked, never deleted.
 | [0032](0032-intelligence-requirements.md) | Intelligence requirements and requests for information | Accepted |
 | [0033](0033-confidence-and-source-reliability.md) | Confidence, source reliability and report credibility | Accepted |
 | [0034](0034-hunt-packages.md) | Hunt packages over TAXII | Accepted |
+| [0035](0035-sightings.md) | Sightings from hunt tools | Accepted |
