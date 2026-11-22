@@ -1,7 +1,50 @@
-# Validation report · 0.8.0
+# Validation report · 0.9.0
 
 What was verified for each release, what was not, and how. Update this file for every release (see
 [RELEASING.md](RELEASING.md)).
+
+## 0.9.0: exploit signals, cases, ranked search, more TAXII, PostgreSQL timestamps, Shodan
+
+Recorded while the work was done (pull requests #79, #81–#87, and the release pull request). As for earlier
+releases, the release workflow runs the whole milestone gate on the tagged commit before publishing can be
+approved; its reports are attached to that run, not repeated here.
+
+- **Tests:** every pull request merged since 0.8.0 passed Tier 1 on SQLite (Python 3.11 to 3.15) and PostgreSQL
+  16 before it merged. Each feature branch also passed the full milestone gate on its final commit, including
+  browser E2E with axe, the signed-in ZAP scan, the extraction benchmark and the performance budget on both
+  databases. CI and CodeQL are green on the `main` commit this release was prepared from. Before the last
+  merges, the full suite also ran locally against the stacked branches on SQLite and PostgreSQL 16, with the
+  same result on both.
+- **Schema:** migrations `0019` to `0023` (exploit signals, KEV change times, cases, PostgreSQL `timestamptz`,
+  feed cursors) are tested by CI against the 0.1.0, 0.2.0, 0.5.0, 0.6.0, 0.7.0 and 0.8.0 release databases.
+  `0022` runs only on PostgreSQL; its own test converts stored values, including empty ones, to `timestamptz`
+  and back again. The 0.9.0 upgrade fixture was created with the Release fixture workflow on the release
+  branch, so later versions must upgrade it too.
+- **Performance:** PostgreSQL now has its own, tighter budget (`benchmarks/performance-budget-postgres.json`:
+  1,000-document ingest within 20 s, search p95 80 ms, detail p95 25 ms). A before-and-after run of the
+  timestamp change showed only runner noise.
+- **STIX and TAXII:** the new TAXII objects (ATT&CK techniques, actors, campaigns and KEV vulnerabilities) pass
+  the real `stix2-validator` in CI. The validator rejected the first version of the KEV collection, a
+  CVE-shaped `external_id` on the `cisa-kev` reference, which was removed before merging.
+- **Security review:** each change was reviewed while it was built for TLP limits (cases, exploit context,
+  TAXII, the link map), outbound requests (VulnCheck and Shodan use the pinned-address download with no
+  redirects and no proxy from the environment; the MISP private-network setting never reaches loopback,
+  link-local or reserved addresses), stored third-party content (exploit metadata only, VulnCheck links only to
+  vulncheck.com, no Shodan banners) and secrets (the Shodan key travels in the URL, so Insight writes its own
+  errors and a log filter hides it). No security defect is known.
+- **Release metadata:** version, changelog section, this report and the upgrade fixture are checked by
+  `scripts/check_release.py` in the release run.
+
+**Not verified for 0.9.0 before tagging:** no benchmark, performance, ZAP or browser-E2E numbers for the
+tagged commit are recorded here; they come from the milestone gate in the release run. The security review
+above was done by the same assistant that wrote the code; read `require_auth`, the TLP helpers, the case label
+rules and the Shodan key handling yourself (review G2). VulnCheck, Shodan and OTX paging were tested with
+recorded answers, not real accounts: the nightly live check for VulnCheck runs only when a key is set (it
+failed without one, #88, fixed in this release), and Shodan has no live check. The TAXII server was not tested
+with `taxii2-client` or a real SIEM. Report-based exploit signals are found by fixed phrases near a CVE, so a
+mention can be credited to the wrong CVE when several sit close together outside one sentence. Censys is not
+supported. The two limits noted for 0.8.0 are fixed: a PDF import no longer holds a database session while it
+parses (#84), and MISP on a private network works with `INSIGHT_MISP_PRIVATE_NETWORK=on` (#85).
 
 ## 0.8.0: PDF import, actors and campaigns, YARA and Sigma rules, MFA encryption, hardened mode, TAXII 2.1
 

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.9.0 - 2026-11-22
+
 ### Upgrade notes
 
 - Migration `0019` adds the `exploit_signals` table at start-up. Run `make exploit-backfill` once to read
