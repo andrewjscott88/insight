@@ -19,7 +19,7 @@ DOCS: Final = 'https://github.com/andrewjscott88/insight/blob/main/docs'
 
 def _card(title: str, text: str) -> ui.column:
     with ui.column().classes('share-card gap-2 p-4 min-w-0') as card:
-        heading(title, 3)
+        heading(title, 2, 'subsection-title')  # under the section's h1 (axe: heading-order)
         ui.label(text).classes('prose')
     return card
 
