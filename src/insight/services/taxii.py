@@ -118,7 +118,8 @@ def _kev_vulnerability(record: KEVRecord) -> dict[str, Any]:
         'name': record.cve,
         'external_references': [
             {'source_name': 'cve', 'external_id': record.cve},
-            {'source_name': 'cisa-kev', 'external_id': record.cve, 'url': KEV_CATALOG_URL},
+            # No external_id: the STIX validator reads any CVE-shaped ID as a CVE reference named 'cve'.
+            {'source_name': 'cisa-kev', 'url': KEV_CATALOG_URL},
         ],
         'object_marking_refs': [TLP_MARKINGS['CLEAR']],
         'x_insight_kev': details,
