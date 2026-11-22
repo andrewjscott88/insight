@@ -40,3 +40,4 @@ superseded ones are marked, never deleted.
 | [0033](0033-confidence-and-source-reliability.md) | Confidence, source reliability and report credibility | Accepted |
 | [0034](0034-hunt-packages.md) | Hunt packages over TAXII | Accepted |
 | [0035](0035-sightings.md) | Sightings from hunt tools | Accepted |
+| [0038](0038-adversary-library.md) | Adversary library software and sourced MISP aliases (part 1; links/timelines planned) | Proposed |

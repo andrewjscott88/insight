@@ -19,7 +19,8 @@ https://attack.mitre.org/resources/legal-and-branding/terms-of-use/
 
 src/insight/data/actors.json (the bundled threat-group library for threat guides)
 also contains data from MITRE ATT&CK Enterprise 20.1 (groups, their descriptions,
-campaigns, techniques, software, mitigations and detection strategies), built with
+campaigns, techniques, every current malware and tool with its aliases and context,
+mitigations and detection strategies), built with
 scripts/update_actors.py from the pinned file
 https://raw.githubusercontent.com/mitre-attack/attack-stix-data/a8db2f52eb933c9c99060c123e088b3326d3a607/enterprise-attack/enterprise-attack-20.1.json
 under the same MITRE terms of use. `insight threat-library-sync` downloads the
@@ -29,9 +30,12 @@ This product includes data from the MISP galaxy threat-actor cluster
 (https://github.com/MISP/misp-galaxy, clusters/threat-actor.json version 359 at
 commit 6d78ff22dd1986ffd1a74bd720e635991a52e91a), dual-licensed under CC0-1.0 or
 BSD-2-Clause; Insight uses it under CC0-1.0. src/insight/data/actors.json quotes
-its sector labels (cfr-target-category, targeted-sector) and suspected victim
+its uniquely matched threat-actor synonyms, sector labels (cfr-target-category,
+targeted-sector) and suspected victim
 countries (cfr-suspected-victims, from the Council on Foreign Relations Cyber
 Operations Tracker as recorded in MISP), each with the MISP entry it came from.
+Imported aliases retain the matching ATT&CK name and the MISP entry identity;
+MISP similar links are not used to join groups.
 
 Insight uses the unmodified cpe 1.3.1 Python library via stix2-validator.
 Copyright (C) 2013 Alejandro Galindo García and Roberto Abdelkader Martínez

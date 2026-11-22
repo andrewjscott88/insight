@@ -547,6 +547,13 @@ Manual, approved-per-lookup, metadata-only pivots that land in the link map: RDA
 MITRE ATT&CK groups and software, and the MISP threat-actor galaxy for aliases, as malware and tool entities;
 an activity timeline per actor; ATT&CK Navigator layers per actor and for the landscape.
 
+**Part 1 done (unreleased):** the pure pinned library includes every current ATT&CK malware and tool with
+aliases, description, platforms, techniques and groups, and MISP synonyms from uniquely matched group
+entry names, with provenance. Both editions use format 2; format 1 remains readable. No DB change or
+automatic attribution ([ADR 0038](adr/0038-adversary-library.md), [guide](THREAT_GUIDES.md)).
+**Still open:** software API/workspace, explicit labelled analyst links and STIX output (part 2); actor
+timelines, software Navigator layers and actor-layer software context (part 3).
+
 ### 4.8 Read-only MCP endpoint
 
 Model Context Protocol access for AI agents, using API keys and their TLP ceilings. Insight itself still
@@ -630,7 +637,7 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
 - [ ] **4.4** Finished intelligence products (key judgements, estimative language, PDF/Markdown/STIX)
 - [ ] **4.5** Operator-defined RSS/Atom and TAXII sources
 - [ ] **4.6** Infrastructure pivots: RDAP, certificate transparency, ASN, passive DNS
-- [ ] **4.7** ATT&CK groups and software, MISP threat-actor galaxy, actor timelines, Navigator layers
+- [ ] **4.7** Adversary library imports: library software and sourced MISP aliases done (part 1); software API/links/workspace/STIX (part 2) and timelines/Navigator (part 3) remain
 - [ ] **4.8** Read-only MCP endpoint for AI agents
 
 **Total: 39 items.** Out of scope on purpose: cloning CrowdStrike/Mandiant/Recorded Future collection, building a malware sandbox, automated adversary attribution, and any always-on cloud AI.

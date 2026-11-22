@@ -2,16 +2,22 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from nicegui import ui
 from nicegui.testing.user import User
 from sqlalchemy import select
+from tests.unit.test_adversary_library import alias_cluster
+from tests.unit.test_threat_library import mini_bundle
 
+from insight import threat_library
 from insight.models import AuditEvent, DetectionRule, Hunt, HuntCheck, IndustryClaim, ThreatActor
 from insight.schemas import DocumentInput
 from insight.services import ingest
+from insight.threat_library_build import build
+from insight.threat_library_sync import render
 
 from .test_verdicts import open_report
 
@@ -47,6 +53,30 @@ async def test_the_tab_lists_the_top_groups_with_their_evidence(user: User, ui_e
     await user.should_see('APT29 (G0016) · named in 1 of your reports')
     user.find(kind=ui.select, content='Industry').elements.pop().set_value('healthcare')
     await user.should_see('Hospitals, health services')
+
+
+async def test_misp_alias_search_opens_the_existing_group_without_creating_an_actor(
+    user: User, ui_env: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv('INSIGHT_DATA_DIR', str(tmp_path))
+    (tmp_path / 'threat-library.json').write_text(
+        render(build(mini_bundle(), alias_cluster())), encoding='utf-8'
+    )
+    threat_library.library.cache_clear()
+    try:
+        await user.open('/')
+        await user.should_see('Find any group by name')
+        user.find(kind=ui.expansion, content='Find any group by name').elements.pop().open()
+        await user.should_see('Group name or ID')
+        user.find(kind=ui.input, content='Group name or ID').type('New Panda')
+        await user.should_see('G9001 · Test Panda')
+        user.find(kind=ui.button, content='G9001 · Test Panda').click()
+        await user.should_see('Threat guide: Test Panda')
+        await user.should_see('New Panda')
+        with ui_env.app.state.session_factory() as db:
+            assert db.scalars(select(ThreatActor)).all() == []
+    finally:
+        threat_library.library.cache_clear()
 
 
 async def test_a_guide_opens_with_its_hunt_plan_and_records_a_hunt(
