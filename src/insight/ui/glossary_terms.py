@@ -151,6 +151,19 @@ GLOSSARY: Final[tuple[tuple[str, str], ...]] = (
         'To fetch new reports from a public source. This only happens when you press Sync now.',
     ),
     (
+        'Reliability',
+        'How far you trust a source, from A (completely reliable) to F (cannot be judged).',
+    ),
+    (
+        'Credibility',
+        'How believable one report is, from 1 (confirmed by other sources) to 6 (cannot be judged).',
+    ),
+    (
+        'Confidence',
+        'A score from 0 to 100 for how well your sources back up an indicator. Trusted sources that agree '
+        'raise it. Old reports count for less.',
+    ),
+    (
         'PIR',
         'One of the main questions your team must keep answering, such as: are we a target? It stands for '
         'priority intelligence requirement.',

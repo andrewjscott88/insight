@@ -232,6 +232,7 @@ def test_summary_shape_and_truncation(db: Session) -> None:
         'entity_count',
         'is_current',
         'truncated',
+        'credibility',
     }
 
 

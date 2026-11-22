@@ -22,7 +22,6 @@ from insight import migrations, services
 from insight.connectors import import_kev
 from insight.demo import seed
 from insight.models import ActorDocument, Base, Document, Note, Observation, ThreatActor, WatchTerm, database
-from insight.schemas import DocumentInput
 from insight.services import DocumentQuery, search_documents
 
 RELEASES = Path(__file__).parent.parent / 'fixtures' / 'releases'
@@ -265,9 +264,17 @@ def test_upgrades_are_logged(release_0_1_0: Path, caplog: pytest.LogCaptureFixtu
 
 def test_0015_preserves_markings_in_existing_actor_notes(engine: Engine) -> None:
     migrations.upgrade(engine, '0014')
+    stamp = '2026-01-01T00:00:00+00:00'
     with Session(engine) as db, db.begin():
-        doc, _ = services.ingest(
-            db, DocumentInput(title='Synthetic', body='Example only.', source_name='Lab', tlp='GREEN')
+        # Raw SQL: the ORM model has columns later migrations add (0025's credibility).
+        db.execute(
+            text(
+                'INSERT INTO documents (id, fingerprint, content_hash, title, body, source_name, source_url, '
+                'tlp, status, created_at, extractor_version, is_current, search_text, truncated) '
+                "VALUES (:id, :id, :id, 'Synthetic', 'Example only.', 'Lab', '', 'GREEN', 'new', :stamp, "
+                "'1', :yes, '', :no)"
+            ),
+            {'id': 'historical-doc', 'stamp': stamp, 'yes': True, 'no': False},
         )
         actor = ThreatActor(name='Tracked example', description='Restricted TLP:AMBER', tlp='CLEAR')
         db.add(actor)
@@ -280,9 +287,9 @@ def test_0015_preserves_markings_in_existing_actor_notes(engine: Engine) -> None
             {
                 'id': 'historical-link',
                 'group_ref': actor.id,
-                'document_id': doc.id,
+                'document_id': 'historical-doc',
                 'note': 'Private TLP:RED, retained.',
-                'stamp': doc.created_at,
+                'stamp': stamp,
             },
         )
     migrations.upgrade(engine)

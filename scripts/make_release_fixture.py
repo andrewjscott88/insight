@@ -34,6 +34,7 @@ from insight.schemas import (
     CaseInput,
     CaseItemInput,
     CaseNoteInput,
+    CredibilityInput,
     CriterionInput,
     DocumentInput,
     EvidenceInput,
@@ -44,6 +45,7 @@ from insight.schemas import (
     RfiInput,
     RuleInput,
     RuleLinkInput,
+    SourceRatingInput,
     ThreatLinkInput,
 )
 
@@ -170,6 +172,9 @@ def build(path: Path) -> None:
             )
             services.add_evidence(db, pir.id, EvidenceInput(document_id=manual.id))
             services.file_rfi(db, RfiInput(question='Is the beacon known C2?', external_ref='hunt-1'))
+            # 1.0: a source grade and a report credibility (TIP 4.2)
+            services.rate_source(db, SourceRatingInput(source_name='Fixture vendor', reliability='B'))
+            services.set_credibility(db, manual.id, CredibilityInput(credibility=2))
     finally:
         engine.dispose()
 

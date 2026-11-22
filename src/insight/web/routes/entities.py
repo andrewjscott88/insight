@@ -11,6 +11,7 @@ from ...flags import flags
 from ...models import EntityAssessment, SessionFactory
 from ...schemas import AssessmentInput
 from ..auth import AuthDependency, acting, reader_limit
+from .confidence import confidence_view
 from .cves import exploit_view
 
 
@@ -67,6 +68,8 @@ def _register_entity_routes(app: FastAPI, sessions: SessionFactory, require_auth
                 'offset': max(0, offset),
                 'documents': services.summaries(db, docs),
                 'exploit': exploit_view(exploit),
+                # TIP 4.2: how strongly the reports this caller may see support it.
+                'confidence': confidence_view(services.indicator_confidence(db, e.id, max_tlp=max_tlp)),
             }
 
     @app.post('/api/entities/{entity_id}/assessment', dependencies=[Depends(require_auth)])

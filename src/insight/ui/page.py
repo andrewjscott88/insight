@@ -25,6 +25,7 @@ from ..appearance import (
 from ..models import SessionFactory
 from .appearance import TextSizeSwitch, ThemeSwitch
 from .cases import build_cases
+from .confidence import build_source_ratings
 from .cves import build_cves
 from .entities import build_entities
 from .glossary import open_glossary
@@ -156,6 +157,8 @@ def register_ui(app: FastAPI, session_factory: SessionFactory) -> None:
                         heading('Settings', 1)
                         with ui.column().classes('panel w-full p-4 sm:p-5'):
                             build_sources(ws)
+                        with ui.column().classes('panel w-full p-4 sm:p-5'):
+                            build_source_ratings(ws)
                         with ui.column().classes('panel w-full p-4 sm:p-5'):
                             build_watch_terms(ws)
 

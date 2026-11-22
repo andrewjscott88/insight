@@ -6,6 +6,22 @@
 
 - Migration `0024` adds the `requirements`, `requirement_criteria` and `requirement_evidence` tables. It runs
   at start-up and changes no existing data.
+- Migration `0025` adds the `source_ratings` table and a `credibility` column on reports (every existing report
+  starts at 6, cannot be judged). It runs at start-up.
+
+### Added: confidence and source reliability (TIP 4.2)
+
+- Grade each source on the Admiralty scale, from **A** (completely reliable) to **F** (cannot be judged), and
+  each report from **1** (confirmed by other sources) to **6** (cannot be judged)
+  ([ADR 0033](docs/adr/0033-confidence-and-source-reliability.md)).
+- Every indicator gets a **confidence** from 0 to 100, built from how many independent sources report it, how
+  far each is trusted, and how old the reports are. IP addresses lose half their weight every 30 days, domains
+  every 90; hashes do not age. A source can age faster. The indicator view shows the score and the sources
+  behind it.
+- **Settings > Source reliability** grades sources and shows what each adds: reports, indicators, indicators
+  no other source reported, and how often its indicators were rejected.
+- `GET`/`PUT /api/source-ratings`, `PUT /api/documents/{id}/credibility`, `GET /api/entities/{id}/confidence`,
+  `confidence` in `GET /api/entities/{id}`, and glossary entries for reliability, credibility and confidence.
 
 ### Added: intelligence requirements and requests for information (TIP 4.1)
 

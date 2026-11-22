@@ -552,6 +552,30 @@ RFI_ID=$(curl -fsS -X POST "$INSIGHT_URL/api/rfis" -H "Authorization: Bearer $IN
 curl -fsS "$INSIGHT_URL/api/requirements/$RFI_ID" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq '{status, answer, answered_at}'
 ```
 
+### Confidence and source reliability
+
+Grade each source A (completely reliable) to F (cannot be judged) and each report 1 (confirmed) to 6 (cannot
+be judged); Insight combines the grades, agreement between sources and age into a confidence score from 0 to
+100 for each indicator ([ADR 0033](adr/0033-confidence-and-source-reliability.md)). IP addresses lose half
+their weight every 30 days by default; hashes do not age.
+
+```bash
+# What each source adds, and how often its indicators are rejected
+curl -fsS "$INSIGHT_URL/api/source-ratings" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  | jq '.sources[] | {source_name, reliability, reports, unique_indicators, rejected}'
+# Grade a source, and age its network indicators faster
+curl -fsS -X PUT "$INSIGHT_URL/api/source-ratings" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d '{"source_name": "CISA advisories", "reliability": "A"}'
+curl -fsS -X PUT "$INSIGHT_URL/api/source-ratings" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d '{"source_name": "Paste feed", "reliability": "D", "half_life_days": 7}'
+# Mark a report as confirmed by other sources
+curl -fsS -X PUT "$INSIGHT_URL/api/documents/$DOC_ID/credibility" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d '{"credibility": 1}'
+# An indicator's confidence and the sources behind it
+curl -fsS "$INSIGHT_URL/api/entities/$ENTITY_ID/confidence" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  | jq '{score, band, sources: [.sources[] | {source_name, reliability, weight}]}'
+```
+
 ### Sources and enrichment (outbound internet)
 
 These are the only routes that make Insight contact other servers. Sync imports a curated public feed; enrichment

@@ -21,6 +21,7 @@ from ..extraction import EVIDENCE_CONTEXT
 from ..schemas import DOCUMENT_STATUSES, NoteInput
 from .actors import render_report_groups
 from .cases import open_add_to_case
+from .confidence import render_credibility
 from .enrichment import open_enrichment_dialog
 from .graph import open_graph
 from .messages import tell
@@ -75,6 +76,7 @@ def render_report(ws: Workspace, data: dict[str, Any], actions: ReaderActions) -
         label='Document review',
         on_change=lambda event: actions.review_document(data['id'], event.value),
     ).props('outlined').classes('w-60 max-w-full')
+    render_credibility(ws, data['id'], data.get('credibility', 6))
     heading('Report text', 3, 'subsection-title mt-3')
     ui.label(data['body']).classes('source-body panel p-4 w-full').props(
         'role=region aria-label="Report text"'
