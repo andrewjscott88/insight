@@ -39,7 +39,7 @@ async def test_a_lookup_needs_approval_and_shows_refusals_and_attribution(
     user.find(kind=ui.expansion, content=IP).elements.pop().open()
     user.find(marker=f'entity-shodan-{IP}').click()
     await user.should_see('No cached Shodan context.')
-    assert not user.find(marker='shodan-fetch').elements.pop().enabled
+    assert not user.find(kind=ui.button, marker='shodan-fetch').elements.pop().enabled
     assert calls == []
     user.find(marker='shodan-consent').click()
     user.find(marker='shodan-fetch').click()
