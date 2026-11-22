@@ -45,7 +45,7 @@ from .watch_terms import build_watch_terms
 from .workspace import Workspace
 
 RECONNECT_SECONDS: Final = 30.0
-TAGLINE: Final = 'Threat intelligence workbench'
+TAGLINE: Final = 'Cyber Threat Intelligence Platform'
 #: The side menu, in the order of an analyst's day: (name, label).
 SECTIONS: Final = (
     ('today', 'Today'),

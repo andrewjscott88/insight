@@ -37,7 +37,7 @@ async def test_the_workspace_opens_on_today_with_every_section_in_the_menu(user:
         await user.should_see(label)
     menu, investigate = tabs(user)
     assert (menu.value, investigate.value) == ('today', 'indicators')
-    await user.should_see('Threat intelligence workbench')
+    await user.should_see('Cyber Threat Intelligence Platform')
 
 
 async def test_each_counter_opens_the_list_it_counts(user: User, ui_env: SimpleNamespace) -> None:

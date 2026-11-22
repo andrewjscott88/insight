@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Changed: platform branding
+
+- The workspace, browser title, and sign-in and sign-out pages now use **Cyber Threat Intelligence Platform**
+  as the descriptor. The **Insight** name and symbol stay the same.
+
 ### Upgrade notes
 
 - Migration `0024` adds the `requirements`, `requirement_criteria` and `requirement_evidence` tables. It runs
