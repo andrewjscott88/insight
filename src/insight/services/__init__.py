@@ -168,7 +168,7 @@ from .lookups import (
     record_lookup_failure,
     set_lookup_switch,
 )
-from .pdf_reports import import_pdf
+from .pdf_reports import PdfReport, import_pdf, prepare_pdf_report, store_pdf_report
 from .ranked_search import RankedHit, RankedPage, ranked_search, search_terms
 from .retention import MAX_REASON_LENGTH, DeletionPreview, DeletionResult, delete_document, deletion_preview
 from .rules import (
@@ -312,6 +312,7 @@ __all__ = [
     'LandscapeData',
     'LinkedRule',
     'Mention',
+    'PdfReport',
     'ProfileEntry',
     'RankedHit',
     'RankedPage',
@@ -433,6 +434,7 @@ __all__ = [
     'operator_session_valid',
     'pair_mfa',
     'permitted_tlp_levels',
+    'prepare_pdf_report',
     'prune_jobs',
     'queue_kev_alerts',
     'queue_report_alerts',
@@ -476,6 +478,7 @@ __all__ = [
     'start_operator_session',
     'stats',
     'store_greynoise_context',
+    'store_pdf_report',
     'stricter_limit',
     'summaries',
     'summary',

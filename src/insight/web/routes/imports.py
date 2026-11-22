@@ -83,9 +83,12 @@ def _register_import_routes(app: FastAPI, sessions: SessionFactory, require_auth
         data: Annotated[bytes, Depends(_pdf_body)],
     ) -> dict[str, Any]:
         limit = services.stricter_limit(app.state.settings.max_tlp, reader_limit(request))
+        ceiling = limit or app.state.settings.max_tlp
         try:
+            # Parse before opening a session: the sandboxed parse can take up to 10 s.
+            report = services.prepare_pdf_report(data, max_tlp=ceiling, **metadata)
             with acting(sessions, request) as db:
-                return services.import_pdf(db, data, max_tlp=limit or app.state.settings.max_tlp, **metadata)
+                return services.store_pdf_report(db, report, max_tlp=ceiling)
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
         except PdfUnavailable as exc:
