@@ -125,6 +125,17 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
 - [x] **TIP 3.7 Optional Shodan enrichment** with the operator's own key ([ADR 0031](docs/adr/0031-shodan.md));
       Censys waits for its Platform API transition.
 
+## Next: an intelligence program (TIP Phase 4)
+
+Insight owns the intelligence cycle and feeds hunt and response tools over TAXII and STIX; sightings and
+requests for information come back ([plan](docs/ROADMAP-TIP.md#phase-4--an-intelligence-program-planned-22-november-2026)).
+
+- [ ] **TIP 4.1 Intelligence requirements and requests for information** (in progress).
+- [ ] **TIP 4.2 Confidence, source reliability and sightings.**
+- [ ] **TIP 4.3 Hunt packages over TAXII.**
+- [ ] **TIP 4.4 Finished intelligence products.**
+- [ ] **TIP 4.5–4.8** Operator-defined sources, infrastructure pivots, adversary library imports, read-only MCP.
+
 **Out of scope on purpose:** cloning CrowdStrike, Mandiant or Recorded Future collection, a malware sandbox,
 automated adversary attribution, and any always-on cloud AI.
 

@@ -487,6 +487,73 @@ session secret is deliberately changed. [Upgrade, backup and recovery](RUNBOOK.m
 
 ---
 
+## Phase 4 — An intelligence program (planned 22 November 2026)
+
+By 0.9.0 Insight covers the basics a premium TIP offers. What it still lacks against the 2026 market leaders
+is the intelligence craft around them: requirements, confidence, analytic products and infrastructure pivots.
+Proprietary collection (dark web, telemetry, human sources) stays out of scope.
+
+**Boundary with hunting and response.** Insight owns the intelligence cycle: requirements, collection,
+analysis, finished products and dissemination. Hunting against an organisation's own telemetry, detections,
+incidents and response belong to a separate tool (the maintainer's is Shift). Insight feeds such tools over
+open standards (TAXII 2.1 and STIX 2.1), so it stays a standalone TIP that any SIEM or hunt tool can use.
+What comes back is intelligence, not response: **sightings** ("seen in our environment, at this time") and
+**requests for information**. Insight never records what was done about an indicator. Its hunt records
+(TIP 2.10) and cases (TIP 3.8) get no new response features: 4.3 replaces hunt tracking with hunt packages,
+and 4.4 turns cases into intelligence products.
+
+### 4.1 Intelligence requirements and requests for information
+
+Priority intelligence requirements (PIRs), the narrower intelligence requirements (IRs) under them, and
+requests for information (RFIs), each a question with a stakeholder, a priority and a TLP. A requirement
+lists what makes a report relevant (terms, CVEs, ATT&CK techniques, actors, campaigns); Insight shows which
+requirements each report addresses, which have gone quiet, and the evidence behind each answer. RFIs can be
+posted by an API key with the new `rfi` scope, so a hunt tool can ask a question without reading anything.
+Peers: ThreatConnect, Flashpoint Ignite, Anomali ThreatStream, Silobreaker, OpenCTI Enterprise Edition.
+
+### 4.2 Confidence, source reliability and sightings
+
+Admiralty grades per source (reliability A–F) and per assessment (credibility 1–6), an indicator confidence
+built from which sources agree and how recently, ageing per source and indicator type, source statistics
+(what a feed added that nothing else did, how often its indicators were rejected), and a sightings API
+(STIX `sighting`) whose sightings are the strongest confidence signal. Peers: ThreatQ, ThreatConnect, Cyware,
+Google Threat Intelligence, MISP decaying models.
+
+### 4.3 Hunt packages over TAXII
+
+A hunt package is a hypothesis, its ATT&CK techniques, indicators, the linked Sigma, YARA, Suricata or Snort
+rules (STIX indicators with those `pattern_type`s) and the intelligence context, served in a *Hunt packages*
+TAXII collection. Running hunts and recording their results belongs to the hunt tool; Insight's hunt record
+stops growing.
+
+### 4.4 Finished intelligence products
+
+Cases become analytic products: bottom line up front, key judgements with standard estimative language and
+confidence, intelligence gaps, linked evidence, a TLP never below the strictest source cited, and export to
+PDF, Markdown and STIX `report`. Peers: EclecticIQ, OpenCTI.
+
+### 4.5 Operator-defined sources
+
+RSS or Atom feeds and TAXII collections added in Settings, switched off by default, each with its own TLP and
+redistribution rule (review J3).
+
+### 4.6 Infrastructure pivots
+
+Manual, approved-per-lookup, metadata-only pivots that land in the link map: RDAP, certificate transparency
+(crt.sh), IP-to-ASN, and passive DNS where the operator has access (for example CIRCL for vetted users).
+
+### 4.7 Adversary library imports
+
+MITRE ATT&CK groups and software, and the MISP threat-actor galaxy for aliases, as malware and tool entities;
+an activity timeline per actor; ATT&CK Navigator layers per actor and for the landscape.
+
+### 4.8 Read-only MCP endpoint
+
+Model Context Protocol access for AI agents, using API keys and their TLP ceilings. Insight itself still
+writes nothing with a model ([LLM_EXTENSION.md](LLM_EXTENSION.md); 3.6 stays separate and opt-in).
+
+---
+
 ## 4. Implementation order
 
 [ROADMAP.md](../ROADMAP.md) assigns these items to releases. Within and across phases:
@@ -497,6 +564,8 @@ session secret is deliberately changed. [Upgrade, backup and recovery](RUNBOOK.m
   2.7 and 2.9 after the export patterns exist; 2.10 after 2.3 (done) and with or after 2.5.
 - Phase 3: 3.1 after 2.1; 3.4 before treating Insight as multi-user; 3.6 only after evaluation hooks exist;
   3.7 last and optional.
+- Phase 4: 4.1 → 4.2 → 4.3 → 4.4 (the intelligence cycle and the hunt-tool contract), then 4.5–4.8 in any
+  order. 4.2's sightings and 4.3's collection extend the TAXII and API contract that 4.1's RFI intake starts.
 
 Three items from the 0.5.0 review are prerequisites that this plan does not list:
 
@@ -552,7 +621,18 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
 - [x] **3.7** Optional Shodan/Censys enrichment (operator keys; vendor-priced): Shodan done, ADR 0031; Censys deferred
 - [x] **3.8** Lightweight case management: done, ADR 0029 (no webhook on open)
 
-**Total: 31 items.** Out of scope on purpose: cloning CrowdStrike/Mandiant/Recorded Future collection, building a malware sandbox, automated adversary attribution, and any always-on cloud AI.
+### Phase 4 — An intelligence program (8)
+
+- [ ] **4.1** Intelligence requirements (PIR, IR) and requests for information, with RFI intake for API keys
+- [ ] **4.2** Admiralty grades, indicator confidence and ageing, source statistics, sightings API
+- [ ] **4.3** Hunt packages (Sigma, YARA, Suricata, Snort as STIX indicators) in a TAXII collection
+- [ ] **4.4** Finished intelligence products (key judgements, estimative language, PDF/Markdown/STIX)
+- [ ] **4.5** Operator-defined RSS/Atom and TAXII sources
+- [ ] **4.6** Infrastructure pivots: RDAP, certificate transparency, ASN, passive DNS
+- [ ] **4.7** ATT&CK groups and software, MISP threat-actor galaxy, actor timelines, Navigator layers
+- [ ] **4.8** Read-only MCP endpoint for AI agents
+
+**Total: 39 items.** Out of scope on purpose: cloning CrowdStrike/Mandiant/Recorded Future collection, building a malware sandbox, automated adversary attribution, and any always-on cloud AI.
 
 ---
 
@@ -560,4 +640,5 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
 
 Written 21 November 2026 from the Insight 0.6.0 source and official vendor documentation, then adapted for the
 repository: the release order lives in `ROADMAP.md`, deployment-specific notes are kept out of this public file,
-and item 0.2 is done.
+and item 0.2 is done. Phase 4 added 22 November 2026 after comparing 0.9.0 with the 2026 TIP market and
+setting the boundary with hunting and response tools.
