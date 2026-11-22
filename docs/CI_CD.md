@@ -81,7 +81,7 @@ every supported Python (`workflow_call`), then:
 | --- | --- |
 | Release metadata | Tag = `__version__`, `CHANGELOG.md` section, `VALIDATION.md` updated |
 | Extraction quality | Labelled corpus (`tests/corpus/extraction.json`): no kind may lose > 1 point of precision or recall vs `benchmarks/extraction-baseline.json` |
-| Performance budget | 1,000-document ingest, search p95, detail p95, list query count, on SQLite **and** PostgreSQL (`benchmarks/performance-budget.json`) |
+| Performance budget | 1,000-document ingest, search p95, detail p95, list query count, on SQLite (`benchmarks/performance-budget.json`) **and** PostgreSQL (`benchmarks/performance-budget-postgres.json`, tighter since issue #11) |
 | Backup/restore drill | Online `insight backup` from a running server, restore into a second server, verify data |
 | Browser E2E (Playwright) | Real Chromium against the read-only container: sign-in, security headers, demo, ingest → review → note, search, sign-out revokes other tabs |
 | OWASP ZAP baseline | Signed-in passive scan of the container; fails on FAIL-level alerts |

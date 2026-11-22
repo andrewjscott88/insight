@@ -34,3 +34,4 @@ superseded ones are marked, never deleted.
 | [0027](0027-ranked-search-and-link-graph.md) | Ranked search and a link graph from what Insight already records | Accepted |
 | [0028](0028-exploit-availability.md) | Exploit-availability context from reports and VulnCheck KEV, metadata only | Accepted |
 | [0029](0029-cases.md) | Lightweight case management | Accepted |
+| [0030](0030-postgres-timestamps-and-feed-cursors.md) | Native PostgreSQL timestamps and resumable OTX syncs | Accepted |

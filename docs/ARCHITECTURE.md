@@ -97,7 +97,7 @@ Alembic owns the schema (revisions: `0001` baseline = 0.1.0, `0002` document rev
 To add a migration: change `models.py`, then run
 `INSIGHT_DATABASE_URL=sqlite:///data/dev.db alembic revision --autogenerate --rev-id 0004 -m "..."` (using the repository's `alembic.ini`), review the file, and run the tests. `test_models_match_migrations` fails if the models and migrations disagree; `test_every_revision_is_reversible` checks `downgrade()`.
 
-**Timestamps stay ISO-8601 UTC strings for now (deliberate).** They sort correctly because every writer uses `models.now()`. Switching to datetime columns only pays off with PostgreSQL's `timestamptz`. On SQLite, SQLAlchemy's `DateTime(timezone=True)` **silently drops the UTC offset**: we verified that `12:00+05:00` is read back as a naive `12:00`. When that conversion happens (PostgreSQL milestone), use a `TypeDecorator` that normalises to UTC on write and returns aware datetimes, plus a data migration.
+**Timestamps are ISO-8601 UTC strings in Python, and `timestamptz` on PostgreSQL** ([ADR 0030](adr/0030-postgres-timestamps-and-feed-cursors.md)). Timestamp columns use `models.UtcTimestamp`: on PostgreSQL the database stores, compares and indexes real moments; on SQLite the column stays text, because SQLAlchemy's `DateTime(timezone=True)` **silently drops the UTC offset** there (we verified that `12:00+05:00` is read back as a naive `12:00`). Code writes `models.now()` or `services.stamp(...)` and compares with such strings either way. A new timestamp column should use `UtcTimestamp()`, never `String(40)`.
 
 ## API
 

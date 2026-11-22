@@ -111,14 +111,16 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
 - [x] [#17](https://github.com/andrewjscott88/insight/issues/17) **TIP 3.2 Ranked search and a graph view.** BM25-style ranking
       identical on SQLite and PostgreSQL, `GET /api/graph`, and a keyboard-friendly link map
       ([ADR 0027](docs/adr/0027-ranked-search-and-link-graph.md)).
-- [ ] **TIP 3.3 Exploit-availability signals,** metadata only, from terms-reviewed sources.
+- [x] **TIP 3.3 Exploit-availability signals,** metadata only: report signals and optional VulnCheck KEV
+      ([ADR 0028](docs/adr/0028-exploit-availability.md)).
 - [ ] [#14](https://github.com/andrewjscott88/insight/issues/14) **TIP 3.4 OIDC sign-in and roles (M3),** with an
       authenticated ZAP active scan.
 - [ ] [#16](https://github.com/andrewjscott88/insight/issues/16) **TIP 3.5 Multi-worker deployments:** shared rate
       limits (sessions are already in the database).
-- [ ] [#11](https://github.com/andrewjscott88/insight/issues/11) **PostgreSQL datetime columns and feed cursors
-      (M2).**
-- [ ] **TIP 3.8 Lightweight case management.**
+- [x] [#11](https://github.com/andrewjscott88/insight/issues/11) **PostgreSQL datetime columns and feed cursors
+      (M2):** `timestamptz` on PostgreSQL, resumable OTX syncs, a tighter PostgreSQL budget
+      ([ADR 0030](docs/adr/0030-postgres-timestamps-and-feed-cursors.md)).
+- [x] **TIP 3.8 Lightweight case management** ([ADR 0029](docs/adr/0029-cases.md)).
 - [ ] **TIP 3.6 Opt-in LLM proposals** under the contract in [docs/LLM_EXTENSION.md](docs/LLM_EXTENSION.md).
 - [ ] **TIP 3.7 Optional Shodan or Censys enrichment** with the operator's own keys.
 

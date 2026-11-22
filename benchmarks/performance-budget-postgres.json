@@ -1,0 +1,8 @@
+{
+  "_comment": "PostgreSQL (issue #11): about 3x the CI runner's measured 0.8-0.9 results (ingest 5-7 s, search p95 14-17 ms, detail p95 3-5 ms), so a real regression fails the gate while runner noise does not.",
+  "documents": 1000,
+  "ingest_seconds_max": 20.0,
+  "search_p95_ms_max": 80.0,
+  "list_page_queries_max": 2,
+  "detail_p95_ms_max": 25.0
+}

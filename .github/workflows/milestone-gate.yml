@@ -65,6 +65,7 @@ jobs:
       - name: Performance budget (PostgreSQL)
         run: >-
           python scripts/benchmark_performance.py --report performance-postgres.md
+          --budget benchmarks/performance-budget-postgres.json
           --database-url postgresql+psycopg://postgres:postgres@127.0.0.1:5432/postgres
       - name: Publish reports
         if: always()

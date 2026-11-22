@@ -8,8 +8,21 @@
   reports stored before this release (safe to rerun).
 - Migration `0020` records when each KEV entry last changed; existing entries start with their last sync time.
 - Migration `0021` adds the `cases` and `case_items` tables.
+- **PostgreSQL:** migration `0022` turns 48 timestamp columns into `timestamptz`, rewriting those tables once
+  in a single transaction. Back up first (`pg_dump --format=custom`); a value that is not a timestamp stops
+  the upgrade and changes nothing. SQLite is unchanged.
+- Migration `0023` adds where a paged feed resumes (`fetch_state.cursor`).
 - `GET /api/cves` has two new groups, so `tier` numbers after *Known exploited* move down by two. Scripts that
   compare tier numbers should use the new numbers or the `label`.
+
+### Changed: PostgreSQL timestamps and OTX paging (issue #11)
+
+- On PostgreSQL, timestamps are real `timestamptz` columns, so the database compares and indexes moments
+  instead of text. The API, exports and workspace show the same ISO-8601 UTC values as before.
+- OTX syncs read up to four pages of subscribed pulses (was one), then only pulses changed since the last
+  pass. A longer backlog or a sync that fails part-way continues from the next page at the following sync.
+- The milestone gate holds PostgreSQL to a tighter performance budget of its own.
+  [ADR 0030](docs/adr/0030-postgres-timestamps-and-feed-cursors.md)
 
 ### Added: cases (TIP 3.8)
 

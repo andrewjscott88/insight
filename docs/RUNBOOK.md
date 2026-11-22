@@ -439,7 +439,9 @@ Successful results and “no record” responses are reused for 24 hours. The ma
 
 **AlienVault Open Threat Exchange (OTX).** Set `INSIGHT_OTX_API_KEY` in the host environment (or Compose
 `.env`), restart Insight, then turn on **AlienVault Open Threat Exchange (OTX)** in Sources. **Sync now**
-requests the first 25 subscribed pulses. Insight imports only explicitly public pulses marked TLP:CLEAR
+reads up to four pages of 25 subscribed pulses. Later syncs ask only for pulses changed since the newest one
+read; a longer backlog, or a sync that fails part-way, continues from the next page at the following sync
+(the run message says so). Insight imports only explicitly public pulses marked TLP:CLEAR
 or its former name, WHITE. Recent sync activity gives the numbers imported and skipped. A missing key,
 refused request or malformed response records an error. A valid empty page is a successful sync.
 
