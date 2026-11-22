@@ -16,8 +16,10 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from insight import services
+from insight.mcp import TOOL_BY_NAME
 from insight.models import Enrichment
 from insight.schemas import (
+    ActorInput,
     AssessmentInput,
     CaseInput,
     CaseItemInput,
@@ -100,9 +102,14 @@ def world(app: FastAPI) -> dict[str, Any]:
             db, SightingInput(value=SHARED_IP, first_seen=seen, note=MARKER, where=MARKER, tlp='AMBER')
         )
         services.record_sighting(db, SightingInput(value=HIDDEN_IP, first_seen=seen, tlp='GREEN'))
+        hidden_actor = services.create_actor(db, ActorInput(name=f'{MARKER} actor', tlp='AMBER'))
+        services.create_requirement(
+            db, RequirementInput(kind='rfi', question=f'{MARKER} request?', tlp='AMBER')
+        )
         _, token = services.create_api_key(db, name='siem', access='read-write', max_tlp='GREEN')
     return {
         'case': case.id,
+        'hidden_actor': hidden_actor.id,
         'hunt_package': hunt.id,
         'requirement': open_req.id,
         'cited': cited.id,
@@ -115,6 +122,68 @@ def world(app: FastAPI) -> dict[str, Any]:
         'shared_entity': shared['entity_id'],
         'headers': {'Authorization': f'Bearer {token}'},
     }
+
+
+@pytest.mark.parametrize('protocol', ['2025-11-25', '2026-07-28'])
+def test_every_mcp_tool_keeps_the_green_ceiling(
+    client: TestClient,
+    world: dict[str, Any],
+    protocol: str,
+) -> None:
+    """Every advertised MCP tool is swept in the same planted AMBER world as the REST API."""
+    calls = [
+        ('search_indicators', {'q': HIDDEN_IP}),
+        ('get_report_summary', {'id': world['amber']}),
+        ('get_report_summary', {'id': world['old']}),
+        ('list_requirements', {}),
+        ('list_requirements', {'kind': 'rfi'}),
+        ('get_hunt_package', {'id': world['hunt_package']}),
+        ('get_threat_group', {'id': world['hidden_actor']}),
+        ('get_threat_group', {'id': 'G0016'}),
+        ('get_landscape_summary', {}),
+    ]
+    assert {name for name, _ in calls} == set(TOOL_BY_NAME)
+    headers = world['headers'] | {
+        'Accept': 'application/json, text/event-stream',
+        'MCP-Protocol-Version': protocol,
+    }
+
+    def request_tool(name: str, arguments: dict[str, Any]) -> Any:
+        params: dict[str, Any] = {'name': name, 'arguments': arguments}
+        sent_headers = dict(headers)
+        if protocol == '2026-07-28':
+            params['_meta'] = {
+                'io.modelcontextprotocol/protocolVersion': protocol,
+                'io.modelcontextprotocol/clientCapabilities': {},
+            }
+            sent_headers |= {'Mcp-Method': 'tools/call', 'Mcp-Name': name}
+        return client.post(
+            '/mcp',
+            headers=sent_headers,
+            json={'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': params},
+        )
+
+    forbidden = [
+        MARKER,
+        HIDDEN_IP,
+        world['amber'],
+        world['new'],
+        world['hidden_entity'],
+        world['hidden_actor'],
+    ]
+    for name, arguments in calls:
+        response = request_tool(name, arguments)
+        assert response.status_code == 200, response.text
+        assert response.json()['result']['structuredContent']['sharing_tlp'] == 'GREEN'
+        assert all(secret not in response.text for secret in forbidden), (name, response.text)
+        if arguments.get('id') in (
+            world['amber'],
+            world['hidden_entity'],
+            world['hunt_package'],
+            world['hidden_actor'],
+        ):
+            missing = request_tool(name, {'id': 'missing'})
+            assert response.json() == missing.json()
 
 
 def get(client: TestClient, world: dict[str, Any], path: str, **params: Any) -> Any:

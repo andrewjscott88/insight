@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added: read-only MCP (TIP 4.8 part 2)
+
+- `POST /mcp` exposes six bounded read tools for indicator search, report summaries, requirements, hunt packages, threat groups and the landscape.
+  Supports protocols 2026-07-28 and 2025-11-25, API-key TLP ceilings, publisher reuse rules and a separate
+  per-key rate budget. Browser sessions never authorize it. The other part remains separate.
+- Calls are audited as `mcp.call`; no write tools, OAuth, model calls, new dependencies or schema migration.
+  See [MCP.md](docs/MCP.md) and [ADR 0039](docs/adr/0039-read-only-mcp.md).
+
 ### Upgrade notes
 
 - Migration `0024` adds the `requirements`, `requirement_criteria` and `requirement_evidence` tables. It runs

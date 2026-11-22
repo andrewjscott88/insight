@@ -117,8 +117,9 @@ tools over TAXII and STIX; sightings and requests for information come back
 - [x] **TIP 4.3 Hunt packages over TAXII:** Sigma, YARA and network rules as STIX indicators with their context.
       *Done (unreleased):* [ADR 0034](docs/adr/0034-hunt-packages.md).
 - [ ] **TIP 4.4 Finished intelligence products,** replacing incident-style cases.
-- [ ] **TIP 4.5–4.8** Operator-defined sources, infrastructure pivots, ATT&CK and MISP-galaxy imports, and a
-      read-only MCP endpoint.
+- [ ] **TIP 4.5–4.7** Operator-defined sources, infrastructure pivots, ATT&CK and MISP-galaxy imports.
+- [ ] **TIP 4.8 Read-only MCP part 2:** implementation and tests in [MCP.md](docs/MCP.md),
+      [ADR 0039](docs/adr/0039-read-only-mcp.md); completion awaits the other part, combined checks and security review.
 
 ## Later
 

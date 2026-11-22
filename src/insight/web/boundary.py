@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hmac
 from typing import Any, Final
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI
 from starlette.responses import Response
@@ -46,6 +47,26 @@ def tokens_match(supplied: object, expected: object) -> bool:
     return hmac.compare_digest(supplied.encode(), expected.encode())
 
 
+def _mcp_origin_valid(origin: str) -> bool:
+    """A present MCP Origin must be one serialized HTTP origin, not an empty/null or malformed URL."""
+    if not origin or any(ord(char) < 33 or ord(char) > 126 for char in origin):
+        return False
+    try:
+        parsed = urlsplit(origin)
+        port = parsed.port  # Reject malformed and out-of-range ports.
+        return (
+            parsed.scheme in ('http', 'https')
+            and bool(parsed.hostname)
+            and parsed.username is None
+            and parsed.password is None
+            and not (parsed.path or parsed.query or parsed.fragment)
+            and not parsed.netloc.endswith(':')
+            and (port is None or port > 0)
+        )
+    except ValueError:
+        return False
+
+
 class BoundaryMiddleware:
     """Same-origin, socket-authentication and request-size boundary; adds defensive response headers."""
 
@@ -59,6 +80,11 @@ class BoundaryMiddleware:
         # ASGI header values are raw bytes; HTTP permits obs-text (0x80-0xFF), so decode as latin-1.
         headers = {k.decode('latin-1').lower(): v.decode('latin-1') for k, v in scope.get('headers', [])}
         origin = headers.get('origin')
+        if scope['type'] == 'http' and scope.get('path') == '/mcp' and origin is not None:
+            origins = [value for name, value in scope.get('headers', []) if name.lower() == b'origin']
+            if len(origins) != 1 or not _mcp_origin_valid(origin):
+                await Response('Forbidden', status_code=403)(scope, receive, send)
+                return
         scheme = 'https' if scope.get('scheme') in ('https', 'wss') else 'http'
         expected = f'{scheme}://{headers.get("host", "")}'
         is_socket = scope['type'] == 'websocket' or '_nicegui_ws' in scope.get('path', '')

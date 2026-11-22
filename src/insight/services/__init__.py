@@ -208,6 +208,7 @@ from .lookups import (
     record_lookup_failure,
     set_lookup_switch,
 )
+from .mcp import mcp_read
 from .pdf_reports import PdfReport, import_pdf, prepare_pdf_report, store_pdf_report
 from .ranked_search import RankedHit, RankedPage, ranked_search, search_terms
 from .requirement_matches import QUIET_DAYS, MatchView
@@ -547,6 +548,7 @@ __all__ = [
     'lookup_failures',
     'lookup_switches',
     'mark_alert',
+    'mcp_read',
     'mfa_paired',
     'navigator_layer',
     'operator_session_valid',

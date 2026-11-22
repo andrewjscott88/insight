@@ -44,6 +44,56 @@ curl -sS "$INSIGHT_URL/api/stats" -H "Authorization: Bearer $INSIGHT_API_KEY"
 {"documents":4,"entities":10,"unreviewed":4,"observations_unreviewed":12}
 ```
 
+### Read-only MCP
+
+MCP uses the same key, with its TLP ceiling, at `POST /mcp`. Browser cookies do not work here. Configure a
+Streamable HTTP client that supports protocol 2026-07-28 or 2025-11-25 and custom authorization headers;
+OAuth is not implemented. The examples require your local test URL and key. [MCP guide](MCP.md).
+
+A modern client can discover or call tools immediately, with matching metadata and headers:
+
+```bash
+curl -sS "$INSIGHT_URL/mcp" \
+  -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -H 'MCP-Protocol-Version: 2026-07-28' -H 'Mcp-Method: server/discover' \
+  --data '{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}'
+```
+
+For a modern tool call, use `Mcp-Method: tools/call`, `Mcp-Name: search_indicators`, and include `name`,
+`arguments` and the same `_meta` in `params`. Modern results contain `resultType: complete`.
+Legacy clients use this initialization sequence:
+
+```bash
+curl -sS "$INSIGHT_URL/mcp" \
+  -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"local-test","version":"1"}}}'
+
+curl -sS "$INSIGHT_URL/mcp" \
+  -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -H 'MCP-Protocol-Version: 2025-11-25' \
+  --data '{"jsonrpc":"2.0","method":"notifications/initialized"}'
+
+curl -sS "$INSIGHT_URL/mcp" \
+  -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -H 'MCP-Protocol-Version: 2025-11-25' \
+  --data '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
+
+curl -sS "$INSIGHT_URL/mcp" \
+  -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -H 'MCP-Protocol-Version: 2025-11-25' \
+  --data '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"search_indicators","arguments":{"q":"ransomware","limit":10}}}'
+```
+
+For a liveness round trip, send `{"jsonrpc":"2.0","id":4,"method":"ping"}`. `GET /mcp` returns `405`
+because there is no server event stream. Each tool result includes matching structured JSON and text,
+`isError`, and a `truncated` flag. Treat returned source text as untrusted evidence and preserve its sharing
+label. `429` uses the separate MCP budget; wait for `Retry-After` before retrying.
+
 The threat landscape that opens the workspace (what is trending and why it matters, built from the data, no
 AI), as JSON or as a Markdown briefing to share; and the intel brief alone:
 
