@@ -42,6 +42,7 @@ from .routes.hunting import _register_hunting_routes
 from .routes.imports import _register_import_routes
 from .routes.landscape import _register_landscape_routes
 from .routes.pages import _register_page_routes
+from .routes.requirements import _register_requirement_routes
 from .routes.sources import _register_enrichment_route, _register_source_routes
 from .routes.taxii import _register_taxii_routes
 from .routes.techniques import _register_technique_routes
@@ -204,6 +205,7 @@ def create_app(settings: Settings | None = None, *, with_ui: bool = True) -> Fas
         _register_threat_routes,
         _register_campaign_routes,
         _register_case_routes,
+        _register_requirement_routes,
         _register_hunting_routes,
         _register_source_routes,
         _register_enrichment_route,

@@ -16,7 +16,15 @@ from fastapi.testclient import TestClient
 
 from insight import services
 from insight.models import Enrichment
-from insight.schemas import AssessmentInput, CaseInput, CaseItemInput, DocumentInput
+from insight.schemas import (
+    AssessmentInput,
+    CaseInput,
+    CaseItemInput,
+    CriterionInput,
+    DocumentInput,
+    EvidenceInput,
+    RequirementInput,
+)
 from insight.services import SourceRef
 
 from .test_auth import PROTECTED
@@ -62,9 +70,21 @@ def world(app: FastAPI) -> dict[str, Any]:
         # A case that holds the AMBER report is AMBER too (TIP 3.8): its title and items stay hidden.
         case = services.create_case(db, CaseInput(title=f'{MARKER} case', tlp='GREEN'))
         services.add_case_item(db, case.id, CaseItemInput(kind='document', target_id=amber.id))
+        # A GREEN requirement whose criterion matches only the AMBER report (TIP 4.1): the key sees the
+        # requirement but must not see, or count, the match. One that cites the AMBER report becomes AMBER.
+        wiper = RequirementInput(
+            kind='pir', question='Who deploys wipers?', tlp='GREEN',
+            criteria=[CriterionInput(kind='term', value='wiper')],
+        )  # fmt: skip
+        open_req = services.create_requirement(db, wiper)
+        asked = RequirementInput(kind='pir', question=f'{MARKER}?', tlp='GREEN')
+        cited = services.create_requirement(db, asked)
+        services.add_evidence(db, cited.id, EvidenceInput(document_id=amber.id))
         _, token = services.create_api_key(db, name='siem', access='read-write', max_tlp='GREEN')
     return {
         'case': case.id,
+        'requirement': open_req.id,
+        'cited': cited.id,
         'green': green.id,
         'amber': amber.id,
         'old': old.id,
@@ -141,6 +161,11 @@ def test_nothing_hidden_leaks_through_any_read_route(client: TestClient, world: 
         '/api/cases?status=all',
         f'/api/cases/{world["case"]}',
         f'/api/cases/{world["case"]}/timeline',
+        '/api/requirements?status=all',
+        f'/api/requirements/{world["requirement"]}',
+        f'/api/requirements/{world["cited"]}',
+        f'/api/documents/{world["amber"]}/requirements',
+        f'/api/documents/{world["green"]}/requirements',
         '/taxii2/',
         '/taxii2/insight/',
         '/taxii2/insight/collections/',

@@ -110,8 +110,8 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
 tools over TAXII and STIX; sightings and requests for information come back
 ([plan](docs/ROADMAP-TIP.md#phase-4--an-intelligence-program-planned-22-november-2026)).
 
-- [ ] **TIP 4.1 Intelligence requirements and requests for information,** with RFI intake for hunt tools
-      (in progress).
+- [x] **TIP 4.1 Intelligence requirements and requests for information,** with RFI intake for hunt tools
+      (`read-rfi` keys). *Done (unreleased):* [ADR 0032](docs/adr/0032-intelligence-requirements.md).
 - [ ] **TIP 4.2 Confidence, source reliability and sightings,** with a sightings API.
 - [ ] **TIP 4.3 Hunt packages over TAXII:** Sigma, YARA and network rules as STIX indicators with their context.
 - [ ] **TIP 4.4 Finished intelligence products,** replacing incident-style cases.

@@ -25,6 +25,7 @@ ORM_CLASSES |= {'SourceRun', 'Enrichment', 'ApiKey', 'Job', 'Schedule', 'FetchSt
 ORM_CLASSES |= {'DocumentTechnique', 'SourceSwitch', 'LookupFailure'}
 ORM_CLASSES |= {'ThreatActor', 'ActorDocument', 'IndustryClaim', 'DetectionRule', 'RuleLink'}
 ORM_CLASSES |= {'Hunt', 'HuntCheck', 'ExploitSignal', 'Case', 'CaseItem'}
+ORM_CLASSES |= {'Requirement', 'RequirementCriterion', 'RequirementEvidence'}
 
 
 def imports(path: Path) -> list[tuple[str, str]]:
@@ -127,6 +128,9 @@ TLP_AWARE_SERVICES = {
     'list_cases', 'create_case', 'get_case', 'update_case', 'delete_case', 'add_case_item',
     'remove_case_item',
     'add_case_note', 'close_case', 'reopen_case', 'case_timeline',
+    'list_requirements', 'create_requirement', 'file_rfi', 'get_requirement', 'update_requirement',
+    'delete_requirement', 'add_criterion', 'remove_criterion', 'add_evidence', 'remove_evidence',
+    'answer_requirement', 'retire_requirement', 'reopen_requirement', 'document_requirements',
 }  # fmt: skip
 
 

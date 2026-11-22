@@ -8,6 +8,7 @@ A single-operator threat-intelligence workbench, run locally or published behind
 
 - **Built for readability, including for people with dyslexia or other reading difficulties** ([ADR 0017](docs/adr/0017-readability-standard.md)): WCAG 2.2 AA plus its reading-related AAA criteria (7:1 contrast, lines of about 70 characters, 1.5 line spacing, plain language), 16 px minimum text, no capitals, real headings, a strong focus outline, messages that stay until you dismiss them, a **Larger text** button and a **What the words mean** glossary. Checked in the test suite with axe-core on every screen.
 - **Light and dark themes, readable on phones.** The workspace follows each device's light/dark setting by default; the **Light / Dark / System** buttons in the header override it for that browser. The instance default is `INSIGHT_THEME` (`make theme THEME=dark`). On a phone the layout uses larger text, no zoom-on-focus, big touch targets, and opening a report scrolls to it (with **← Back to list**). Text in both themes meets WCAG AA contrast (tested).
+- **Intelligence requirements:** priority intelligence requirements (PIRs), narrower requirements and requests for information (RFIs), each with criteria (terms, CVEs, ATT&CK techniques, groups, campaigns). Every report shows the requirements it addresses; every requirement shows its matching reports, cited evidence and answer, and flags itself as quiet when nothing has matched for 30 days. A `read-rfi` API key lets a hunt tool file questions and nothing else ([ADR 0032](docs/adr/0032-intelligence-requirements.md)).
 - Password-protected analyst inbox with split-pane report reader, search and TLP/status filters. Search ignores case, accents and Unicode normal form identically on SQLite and PostgreSQL. A query lists reports **best match first** (every word must match; quotes keep a phrase together), with a snippet around the match.
 - **Link map:** **Show links** on a report or indicator lists what it links to (indicators, reports, ATT&CK techniques and groups, your actors and campaigns) and what is two steps away; any entry can be put in the centre. `GET /api/graph` returns the same nodes and edges. [ADR 0027](docs/adr/0027-ranked-search-and-link-graph.md)
 - Paste reports with title, source, URL and handling label; preserve original text and its SHA-256 hash.
@@ -247,7 +248,8 @@ After changing dependencies in `pyproject.toml`, run `python scripts/lock.py` (r
 ## Daily workflow
 
 The side menu follows the same day: **Today** (the brief, and counters that open the list behind them),
-**Triage** (new reports, the reader and review), **Investigate** (indicators, CVEs, ATT&CK techniques and threat
+**Requirements** (the questions your intelligence work answers, and requests for information from people or
+hunt tools, [ADR 0032](docs/adr/0032-intelligence-requirements.md)), **Triage** (new reports, the reader and review), **Investigate** (indicators, CVEs, ATT&CK techniques and threat
 groups), **Cases**, **Share** (IOC export, TAXII, API keys, MISP) and **Settings** (sources, lookups, watch terms
 and alerts). On a phone the menu sits above the content.
 

@@ -92,7 +92,7 @@ iocs = c.get('/api/iocs/export', params={'max_tlp': 'GREEN', 'review_status': 'a
 | --- | --- | --- |
 | Credential | `insight_session` cookie | `Authorization: Bearer <key>` |
 | CSRF token on writes | Required (`X-CSRF-Token`) | Not used |
-| Reads (`GET`) | Yes | Yes |
+| Writes (`POST`) | Yes | Only with `--access read-write`; `--access read-rfi` may file requests for information (`POST /api/rfis`) and nothing else |
 | Writes (`POST`) | Yes | Only with `--access read-write` |
 | `GET /api/session`, the workspace UI | Yes | No (`403`) |
 | Reports above a TLP limit | Sees all | With `--max-tlp`, invisible (see below) |
@@ -493,6 +493,32 @@ unknown or above your limit; `403`: a label above your limit; `409`: the case is
 | `POST /api/cases/{id}/close` | `{note}` | The closed case. Audited as `case.close` |
 | `POST /api/cases/{id}/reopen` | - | The open case. Audited as `case.reopen` |
 | `GET /api/cases/{id}/timeline` | - | `{events: [{at, action, actor, detail}]}`, oldest first (at most 1,000) |
+
+## Requirements and requests for information
+
+[ADR 0032](adr/0032-intelligence-requirements.md). `kind` is `pir` (priority intelligence requirement), `ir`
+(narrower, under a PIR: needs `parent_id`) or `rfi` (request for information). A requirement's `tlp` is the
+strictest of its text, criteria and cited reports, and removing a criterion or citation does not lower it.
+Matches and coverage are counted on read from the current reports the caller may see. `404`: unknown or above
+your limit; `403`: a label above your limit; `409`: retired, or a PIR with IRs under it (delete);
+`422`: invalid input, such as an IR without a PIR or a malformed CVE or technique ID.
+
+| Route | Input | Returns |
+| --- | --- | --- |
+| `GET /api/requirements` | `status` (`open`, `answered`, `retired` or `all`; default `open`), `kind` | `{requirements: [summary]}`, high priority first, then most recently changed (at most 200). A summary is `{id, kind, parent_id, question, stakeholder, priority, status, tlp, due_at, answered_at, created_at, updated_at, criteria_count, evidence_count, recent_matches, last_match_at, quiet}`: `recent_matches` counts reports in the last 30 days; `quiet` is true for an open requirement with criteria and no match in that time |
+| `POST /api/requirements` | `{kind, question, context?, stakeholder?, priority?, tlp?, parent_id?, due?, criteria?: [{kind, value}]}` (`priority` default `medium`, `tlp` default AMBER; `due` a date, today or later; at most 50 criteria) | `201` and the requirement `{id, kind, parent_id, question, context, stakeholder, priority, status, tlp, due_at, answer, answered_at, external_ref, created_at, updated_at, created_by}`. Audited as `requirement.create` |
+| `POST /api/rfis` | `{question, context?, requester?, priority?, tlp?, due?, external_ref?}` | `201` and the RFI as above (`requester` is its `stakeholder`). The only write a `read-rfi` key may make. Audited as `requirement.rfi` |
+| `GET /api/requirements/{id}` | - | The summary with `context, answer, external_ref, created_by`, `criteria: [{id, kind, value, name, tlp, added_at, added_by}]`, `evidence: [{id, document_id, title, note, tlp, added_at, added_by}]`, `children` (IRs, as summaries) and `matches: [{document_id, title, source_name, tlp, created_at, because}]` (newest 50; `because` lists the criteria each report meets, such as `cve: CVE-2024-3400`) |
+| `PATCH /api/requirements/{id}` | Any of `{question, context, stakeholder, priority, tlp, due}` | The requirement. A lower `tlp` stops at the strictest criterion, citation or marking. Audited as `requirement.update` |
+| `DELETE /api/requirements/{id}` | - | `{deleted}`; criteria and citations go with it, the reports stay. Audited as `requirement.delete` |
+| `POST /api/requirements/{id}/criteria` | `{kind, value}`: `term` (a word or phrase, 2–120 characters), `cve`, `technique` (`T1190`, `T1059.001`), `group` (`G0016` or your actor's ID; the two count as one group when linked) or `campaign` (your campaign's ID) | `201` and the criterion. A restricted actor or campaign raises the requirement's label. Adding it again changes nothing. Audited as `requirement.criterion.add` |
+| `DELETE /api/requirements/{id}/criteria/{criterion_id}` | - | `{removed}`. Audited as `requirement.criterion.remove` |
+| `POST /api/requirements/{id}/evidence` | `{document_id, note?}` | `201` and the citation; raises the label to the report's. Audited as `requirement.evidence.add` |
+| `DELETE /api/requirements/{id}/evidence/{evidence_id}` | - | `{removed}`. Audited as `requirement.evidence.remove` |
+| `POST /api/requirements/{id}/answer` | `{answer}` | The requirement: an RFI becomes `answered`; a PIR or IR stays `open` with the answer as its latest assessment. Audited as `requirement.answer` |
+| `POST /api/requirements/{id}/retire` | - | The retired requirement (it refuses changes until reopened). Audited as `requirement.retire` |
+| `POST /api/requirements/{id}/reopen` | - | The open requirement. Audited as `requirement.reopen` |
+| `GET /api/documents/{id}/requirements` | - | `{requirements: [{id, kind, question, priority, because}]}`: the open requirements that report addresses, high priority first. Empty for a report you cannot see |
 
 ## Sources and enrichment
 

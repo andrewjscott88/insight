@@ -57,12 +57,13 @@ def test_screenshot_every_section(browser: Any, device_id: str, device: dict[str
         for number, section in enumerate(SECTIONS, start=1):
             show(page, section)
             snap(page, f'{prefix}-{number}-{section.lower()}')
+        investigate = SECTIONS.index('Investigate') + 1
         for number, tab in enumerate(INVESTIGATE, start=1):
             show(page, 'Investigate', tab)
-            snap(page, f'{prefix}-3{number}-investigate-{tab.split()[0].lower()}')
+            snap(page, f'{prefix}-{investigate}{number}-investigate-{tab.split()[0].lower()}')
         show(page, 'Triage')
         open_document(page, DEMO_TITLE)
         expect(page.locator('.document-reader')).to_be_visible()
-        snap(page, f'{prefix}-21-reader')
+        snap(page, f'{prefix}-{SECTIONS.index("Triage") + 1}1-reader')
     finally:
         context.close()

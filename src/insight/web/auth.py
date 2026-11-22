@@ -11,7 +11,7 @@ from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Final, Literal, TypeAlias
+from typing import Any, Final, Literal, TypeAlias, cast
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import RedirectResponse
@@ -117,7 +117,9 @@ def api_key_verifier(sessions: SessionFactory) -> KeyVerifier:
             key, reason = services.verify_api_key(db, token)
             if key is None:
                 return None, reason
-            access: apikeys.Access = 'read-write' if key.access == 'read-write' else 'read'
+            # Anything unexpected in the column reads as the narrowest access.
+            known = key.access in apikeys.ACCESS_LEVELS
+            access = cast(apikeys.Access, key.access) if known else 'read'
             return Caller('api_key', key.key_id, access, key.max_tlp), reason
 
     return verify
@@ -205,7 +207,8 @@ def auth_dependency(
             caller = key_caller(request, token)
             if path in SESSION_ONLY_ROUTES:
                 raise HTTPException(403, 'Not available to API keys')
-            if method not in SAFE_METHODS and caller.access != 'read-write':
+            files_rfi = caller.access == 'read-rfi' and (method, path) == apikeys.RFI_INTAKE
+            if method not in SAFE_METHODS and caller.access != 'read-write' and not files_rfi:
                 raise HTTPException(403, 'This API key is read-only')
             if method not in SAFE_METHODS and path.startswith(SESSION_ONLY_WRITE_PREFIXES):
                 raise HTTPException(

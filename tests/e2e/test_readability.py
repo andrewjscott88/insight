@@ -182,6 +182,7 @@ def screens(page: Any) -> Iterator[str]:
         expect(page.get_by_role('dialog', name=dialog)).to_have_count(0)
     for section, tab in (
         ('Today', None),
+        ('Requirements', None),
         ('Investigate', 'Indicators'),
         ('Investigate', 'CVEs'),
         ('Investigate', 'ATT&CK techniques'),

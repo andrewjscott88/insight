@@ -43,6 +43,7 @@ async def test_the_workspace_has_one_h1_and_real_section_headings(user: User) ->
     # One h1 per section; only the open section is in the browser's page.
     assert [text for tag, text in found if tag == 'h1'] == [
         'Threat landscape',
+        'Requirements',
         'Triage',
         'Investigate',
         'Cases',

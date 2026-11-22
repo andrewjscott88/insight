@@ -136,7 +136,7 @@ shell-quote = '$(subst ','\'',$(1))'
 ##@ API key (Docker; one key at a time, see docs/API.md)
 
 .PHONY: api-key-create api-key-status api-key-rotate api-key-revoke
-api-key-create: env-file ## Create the key: NAME=siem [ACCESS=read|read-write] [MAX_TLP=GREEN] [EXPIRES=90]
+api-key-create: env-file ## Create the key: NAME=siem [ACCESS=read-rfi|read-write] [MAX_TLP=GREEN]
 	@test -n "$(NAME)" || { echo "usage: make api-key-create NAME=siem [ACCESS=read-write] [MAX_TLP=GREEN] [EXPIRES=90]" >&2; exit 2; }
 	$(COMPOSE) run --rm $(SERVICE) insight api-key create $(KEY_ARGS)
 

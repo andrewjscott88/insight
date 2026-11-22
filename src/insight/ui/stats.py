@@ -15,11 +15,13 @@ def build_stats(ws: Workspace) -> None:
             return
         with ws.read() as db:
             counts = services.stats(db)
+            asked = services.requirement_counts(db, max_tlp=ws.app.state.settings.max_tlp)
         # Each tile opens the list it counts.
         tiles = (
             (counts['documents'], 'Reports', 'triage', None),
             (counts['entities'], 'Indicators', 'investigate', 'indicators'),
             (counts['observations_unreviewed'], 'Waiting for review', 'triage', None),
+            (asked['open_rfis'], 'Open requests', 'requirements', None),
         )
         # As many across as fit without breaking a word (three on most screens, fewer with "Larger text" on
         # a phone). The width is in rem, so it grows with the text. Regression: labels broke mid-word.

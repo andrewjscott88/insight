@@ -317,6 +317,129 @@ class CaseCloseInput(BaseModel):
     note: str = Field(min_length=1, max_length=10_000)
 
 
+RequirementKind = Literal['pir', 'ir', 'rfi']
+RequirementStatus = Literal['open', 'answered', 'retired']
+RequirementStatusFilter = Literal['open', 'answered', 'retired', 'all']
+Priority = Literal['high', 'medium', 'low']
+CriterionKind = Literal['term', 'cve', 'technique', 'group', 'campaign']
+CRITERION_PATTERNS: Mapping[str, re.Pattern[str]] = {
+    'cve': re.compile(r'^CVE-\d{4}-\d{4,}$', re.ASCII),
+    'technique': re.compile(r'^T\d{4}(?:\.\d{3})?$', re.ASCII),
+}
+
+
+def _due(value: date | None) -> date | None:
+    if value is not None and value < datetime.now(UTC).date():
+        raise ValueError('Must be today or later')
+    return value
+
+
+def end_of_day(value: date | None) -> str | None:
+    """The end of a due date (UTC), stored like every other timestamp."""
+    return None if value is None else datetime(*value.timetuple()[:3], 23, 59, 59, tzinfo=UTC).isoformat()
+
+
+class CriterionInput(BaseModel):
+    """``POST /api/requirements/{id}/criteria``: what makes a report relevant. ``term`` is a word or phrase in
+    the report's text; ``cve`` a CVE it mentions; ``technique`` an ATT&CK technique tagged on it; ``group`` a
+    threat group (an ATT&CK ID such as ``G0016``, or one of your actors' IDs) and ``campaign`` one of your
+    campaigns' IDs, linked to the report."""
+
+    model_config = ConfigDict(frozen=True, extra='forbid')
+    kind: CriterionKind
+    value: str = Field(min_length=2, max_length=120)
+
+    @field_validator('value')
+    @classmethod
+    def tidy(cls, value: str) -> str:
+        return ' '.join(value.split())
+
+    def normalised(self) -> str:
+        """The stored value: CVE and technique IDs in upper case, checked against their formats."""
+        value = self.value.upper() if self.kind in CRITERION_PATTERNS else self.value
+        pattern = CRITERION_PATTERNS.get(self.kind)
+        if pattern is not None and not pattern.match(value):
+            example = 'CVE-2024-3400' if self.kind == 'cve' else 'T1190 or T1059.001'
+            raise ValueError(f'Not a valid ID: try {example}')
+        return value
+
+
+class RequirementInput(BaseModel):
+    """``POST /api/requirements``: a priority intelligence requirement (``pir``), an intelligence
+    requirement under one (``ir`` with ``parent_id``) or a request for information (``rfi``). TLP markings in
+    the text raise the label."""
+
+    model_config = ConfigDict(frozen=True, extra='forbid')
+    kind: RequirementKind
+    question: str = Field(min_length=5, max_length=300)
+    context: str = Field(default='', max_length=10_000)
+    stakeholder: str = Field(default='', max_length=120)
+    priority: Priority = 'medium'
+    tlp: TLP = DEFAULT_TLP
+    parent_id: DocumentId | None = None
+    due: date | None = None
+    criteria: list[CriterionInput] = Field(default_factory=list, max_length=50)
+
+    @field_validator('due')
+    @classmethod
+    def not_in_the_past(cls, value: date | None) -> date | None:
+        return _due(value)
+
+
+class RfiInput(BaseModel):
+    """``POST /api/rfis``: a request for information from another tool or person. An API key with ``read-rfi``
+    access may file one; it cannot change anything else. ``external_ref`` is the requester's own reference."""
+
+    model_config = ConfigDict(frozen=True, extra='forbid')
+    question: str = Field(min_length=5, max_length=300)
+    context: str = Field(default='', max_length=10_000)
+    requester: str = Field(default='', max_length=120)
+    priority: Priority = 'medium'
+    tlp: TLP = DEFAULT_TLP
+    due: date | None = None
+    external_ref: str = Field(default='', max_length=200)
+
+    @field_validator('due')
+    @classmethod
+    def not_in_the_past(cls, value: date | None) -> date | None:
+        return _due(value)
+
+
+class RequirementUpdate(BaseModel):
+    """``PATCH /api/requirements/{id}``: change what is given. A lower ``tlp`` never goes below the criteria,
+    the cited reports or the markings in the text."""
+
+    model_config = ConfigDict(frozen=True, extra='forbid')
+    question: str | None = Field(default=None, min_length=5, max_length=300)
+    context: str | None = Field(default=None, max_length=10_000)
+    stakeholder: str | None = Field(default=None, max_length=120)
+    priority: Priority | None = None
+    tlp: TLP | None = None
+    due: date | None = None
+
+    @field_validator('due')
+    @classmethod
+    def not_in_the_past(cls, value: date | None) -> date | None:
+        return _due(value)
+
+
+class EvidenceInput(BaseModel):
+    """``POST /api/requirements/{id}/evidence``: cite a report as evidence. Raises the requirement's label to
+    the report's."""
+
+    model_config = ConfigDict(frozen=True, extra='forbid')
+    document_id: DocumentId
+    note: str = Field(default='', max_length=2_000)
+
+
+class AnswerInput(BaseModel):
+    """``POST /api/requirements/{id}/answer``: the current answer. An RFI becomes ``answered``; a PIR or IR
+    keeps its status and shows the answer as its latest assessment."""
+
+    model_config = ConfigDict(frozen=True, extra='forbid')
+    answer: str = Field(min_length=1, max_length=20_000)
+
+
 class ActorLinkInput(BaseModel):
     """``POST /api/actors/{id}/documents``: link a report to a group or actor (the analyst's decision)."""
 
