@@ -20,7 +20,7 @@ import pytest
 if not os.environ.get('INSIGHT_E2E_URL') or not os.environ.get('INSIGHT_E2E_PASSWORD'):
     pytest.skip('set INSIGHT_E2E_URL and INSIGHT_E2E_PASSWORD to run browser tests', allow_module_level=True)
 
-from .test_browser import expect, sign_in
+from .test_browser import expect, show, sign_in
 from .test_theme_and_mobile import IPHONE_13, browser, new_context
 
 __all__ = ['browser']  # the fixture is used by name
@@ -171,7 +171,7 @@ def screens(page: Any) -> Iterator[str]:
     page.get_by_role('dialog', name='Verdict on this indicator').get_by_role('button', name='Cancel').click()
     expect(page.get_by_role('dialog', name='Verdict on this indicator')).to_have_count(0)
     for button, dialog, close in (
-        ('Ingest intelligence', 'Ingest intelligence', 'Cancel'),
+        ('Add intelligence', 'Add intelligence', 'Cancel'),
         ('Export IOCs', 'Export indicators of compromise (IOCs)', 'Cancel'),
         ('What the words mean', 'What the words mean', 'Close'),
     ):
@@ -180,12 +180,22 @@ def screens(page: Any) -> Iterator[str]:
         yield f'{dialog} dialog'
         page.get_by_role('dialog', name=dialog).get_by_role('button', name=close).click()
         expect(page.get_by_role('dialog', name=dialog)).to_have_count(0)
-    for tab in ('Entit', 'ATT&CK', 'Watch', 'Sources'):
-        page.get_by_role('tab', name=tab).first.click()
-        if tab == 'Entit':
+    for section, tab in (
+        ('Today', None),
+        ('Investigate', 'Indicators'),
+        ('Investigate', 'CVEs'),
+        ('Investigate', 'ATT&CK techniques'),
+        ('Investigate', 'Threat groups'),
+        ('Cases', None),
+        ('Share', None),
+        ('Settings', None),
+    ):
+        show(page, section, tab)
+        if tab == 'Indicators':
             page.locator('.q-expansion-item').first.click()
         page.wait_for_timeout(400)
-        yield f'{tab} tab'
+        yield f'{section} · {tab}' if tab else section
+    show(page, 'Triage')
 
 
 def signed_in(browser: Any, device: dict[str, Any], scheme: str) -> tuple[Any, Any]:
@@ -193,6 +203,7 @@ def signed_in(browser: Any, device: dict[str, Any], scheme: str) -> tuple[Any, A
     context = new_context(browser, device, color_scheme=scheme, reduced_motion='reduce')
     page = context.new_page()
     sign_in(page)
+    show(page, 'Triage')
     page.get_by_role('button', name='Load demo').click()
     expect(page.get_by_text('Synthetic demo loaded').first).to_be_visible()
     page.get_by_role('button', name='Dismiss').click()
@@ -268,6 +279,7 @@ def test_messages_stay_until_they_are_dismissed(browser: Any) -> None:
     context = new_context(browser, DESKTOP, reduced_motion='reduce')
     page = context.new_page()
     sign_in(page)
+    show(page, 'Triage')
     page.get_by_role('button', name='Load demo').click()
     message = page.get_by_role('alert').filter(has_text='Synthetic demo loaded')
     expect(message).to_be_visible()
@@ -281,8 +293,8 @@ def test_messages_stay_until_they_are_dismissed(browser: Any) -> None:
 def test_dialog_problems_are_explained_in_the_dialog_and_never_covered(browser: Any) -> None:
     context, page = signed_in(browser, IPHONE_13, 'light')
     page.get_by_role('button', name='Load demo').click()  # a message at the bottom of a phone screen
-    page.get_by_role('button', name='Ingest intelligence').click()
-    dialog = page.get_by_role('dialog', name='Ingest intelligence')
+    page.get_by_role('button', name='Add intelligence').click()
+    dialog = page.get_by_role('dialog', name='Add intelligence')
     dialog.get_by_role('button', name='Ingest document').click()
     expect(dialog.get_by_role('alert').filter(has_text='Enter a title for the report')).to_be_visible()
     expect(dialog.get_by_label('Document title')).to_be_focused()
@@ -310,7 +322,7 @@ def test_reduced_motion_turns_animations_off(browser: Any) -> None:
     context = new_context(browser, DESKTOP, reduced_motion='reduce')
     page = context.new_page()
     sign_in(page)
-    duration = page.get_by_role('button', name='Ingest intelligence').evaluate(
+    duration = page.get_by_role('button', name='Add intelligence').evaluate(
         'e => parseFloat(getComputedStyle(e).transitionDuration)'
     )
     assert duration <= 0.001

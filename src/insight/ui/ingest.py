@@ -17,7 +17,7 @@ from .stix_import import build_stix_import
 from .typography import heading
 from .workspace import Workspace
 
-TITLE: Final = 'Ingest intelligence'
+TITLE: Final = 'Add intelligence'
 #: What to do about a problem with each field, in plain words (WCAG 3.3.1, 3.3.3). Shown on the field itself.
 FIELD_HELP: Final = {
     'title': 'Enter a title for the report (up to 300 characters).',

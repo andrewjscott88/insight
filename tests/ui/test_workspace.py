@@ -53,7 +53,7 @@ async def test_unauthenticated_visitors_are_redirected(ui_env: SimpleNamespace) 
 
 async def test_workspace_renders_empty_state(user: User) -> None:
     await user.should_see('Threat landscape')
-    await user.should_see('Cyber Threat Intelligence Feed')
+    await user.should_see('Threat intelligence workbench')
     await user.should_not_see('Collect. Connect. Understand.')
     await user.should_see('No reports match.')
     await user.should_see('Choose a report from the list')
@@ -103,7 +103,7 @@ async def test_document_status_review(user: User, ui_env: SimpleNamespace) -> No
 
 
 async def test_ingest_dialog_creates_and_deduplicates(user: User, ui_env: SimpleNamespace) -> None:
-    user.find('Ingest intelligence').click()
+    user.find('Add intelligence').click()
     user.find('Document title').type('Pasted report')
     user.find('Source name').type('Analyst desk')
     user.find('Source content').type('Beacon to 192.0.2.8. Tracking CVE-2024-12345.')
@@ -121,7 +121,7 @@ def field_error(field: ui.input) -> str | None:
 
 
 async def test_ingest_dialog_validation(user: User) -> None:
-    user.find('Ingest intelligence').click()
+    user.find('Add intelligence').click()
     user.find('Ingest document').click()
     # Plain-language messages on the fields themselves (WCAG 3.3.1, 3.3.3), announced by Quasar (role=alert).
     await user.should_see('Enter a title for the report (up to 300 characters).')
@@ -476,7 +476,7 @@ async def test_full_length_report_through_the_ingest_dialog(user: User, ui_env: 
     text = (Path(__file__).parent.parent / 'corpus' / 'reports' / 'notional-intrusion-report.md').read_text(
         'utf-8'
     )
-    user.find('Ingest intelligence').click()
+    user.find('Add intelligence').click()
     user.find('Document title').type('Notional Intrusion Report: Operation GLASS HARBOR (synthetic)')
     user.find('Source name').type('Notional CTI Cell')
     user.find('Source content').type(text)
@@ -508,7 +508,9 @@ async def test_workspace_size_does_not_grow_with_recurring_indicators(
     await user.open('/')
     with user:
         elements = len(list(ElementFilter(local_scope=False)))
-    assert elements < 1500, f'{elements} UI elements'
+    # 1,600: the side menu, Share section and clickable counters add a fixed ~20 elements to every page;
+    # the regression this guards (growth with recurring indicators) was ~3,500.
+    assert elements < 1600, f'{elements} UI elements'
 
 
 async def test_tlp_marking_raises_the_label_and_warns(user: User, ui_env: SimpleNamespace) -> None:
@@ -517,7 +519,7 @@ async def test_tlp_marking_raises_the_label_and_warns(user: User, ui_env: Simple
     text = (Path(__file__).parent.parent / 'corpus' / 'reports' / 'notional-salt-meridian.md').read_text(
         'utf-8'
     )
-    user.find('Ingest intelligence').click()
+    user.find('Add intelligence').click()
     user.find('Document title').type('SALT MERIDIAN wave 2')
     user.find('Source name').type('Notional CTI Cell')
     user.find('Source content').type(text)
@@ -532,7 +534,7 @@ async def test_tlp_marking_raises_the_label_and_warns(user: User, ui_env: Simple
 
 async def test_red_reports_are_refused_by_default(user: User, ui_env: SimpleNamespace) -> None:
     """By default (INSIGHT_MAX_TLP=AMBER+STRICT) RED is not offered and a RED marking is refused."""
-    user.find('Ingest intelligence').click()
+    user.find('Add intelligence').click()
     label = user.find(kind=ui.select, content='Traffic Light Protocol').elements.pop()
     assert isinstance(label, ui.select)
     assert label.options == ['CLEAR', 'GREEN', 'AMBER', 'AMBER+STRICT']
@@ -547,7 +549,7 @@ async def test_red_reports_are_refused_by_default(user: User, ui_env: SimpleName
 
 
 async def test_workspace_actions_are_audited_as_the_operator(user: User, ui_env: SimpleNamespace) -> None:
-    user.find('Ingest intelligence').click()
+    user.find('Add intelligence').click()
     user.find('Document title').type('Analyst paste')
     user.find('Source name').type('Analyst')
     user.find('Source content').type('Seen at 192.0.2.8.')
@@ -560,7 +562,7 @@ async def test_workspace_actions_are_audited_as_the_operator(user: User, ui_env:
 async def test_the_default_label_stays_valid_under_a_low_limit(user: User, ui_env: SimpleNamespace) -> None:
     ui_env.app.state.settings = dataclasses.replace(ui_env.app.state.settings, max_tlp='GREEN')
     await user.open('/')  # the dialog is built when the page loads
-    user.find('Ingest intelligence').click()
+    user.find('Add intelligence').click()
     label = user.find(kind=ui.select, content='Traffic Light Protocol').elements.pop()
     assert isinstance(label, ui.select)
     assert (label.options, label.value) == (['CLEAR', 'GREEN'], 'GREEN')
@@ -675,7 +677,7 @@ async def test_sync_all_sources_names_the_ones_that_failed(
     monkeypatch.setattr(connectors, 'download', download)
     user.find(kind=ui.button, content='Sync all sources').click()
     await user.should_see(
-        '3 of 4 sources synced. Failed: CISA Security Advisories. The Sources tab shows why.',
+        '3 of 4 sources synced. Failed: CISA Security Advisories. The list below shows why.',
         retries=SYNC_RETRIES,
     )
     await user.should_see('cisa-csaf · error')
@@ -708,7 +710,7 @@ async def test_sync_all_sources_success_feeds_the_brief(user: User, monkeypatch:
     monkeypatch.setattr(connectors, 'download', download)
     user.find(kind=ui.button, content='Sync all sources').click()
     await user.should_see(
-        'All 4 sources synced. The Sources tab shows what each one added.', retries=SYNC_RETRIES
+        'All 4 sources synced. The list below shows what each one added.', retries=SYNC_RETRIES
     )
     with user.scope(marker='brief-summary'):
         await user.should_see('In the last 7 days, 4 new reports came in from 4 sources.')

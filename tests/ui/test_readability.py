@@ -41,7 +41,8 @@ async def test_the_workspace_has_one_h1_and_real_section_headings(user: User) ->
     await user.should_see('Threat landscape')
     found = headings(user)
     assert [text for tag, text in found if tag == 'h1'] == ['Threat landscape']
-    assert found.index(('h2', 'Executive summary')) < found.index(('h2', 'Work with the evidence'))
+    assert ('h2', 'Executive summary') in found
+    assert found.index(('h1', 'Threat landscape')) < found.index(('h2', 'Executive summary'))
     assert {'Reports', 'Your intelligence, connected.'} <= {text for tag, text in found if tag == 'h2'}
 
 
@@ -55,7 +56,7 @@ async def test_the_report_reader_is_structured_by_headings(user: User) -> None:
     }
 
 
-@pytest.mark.parametrize(('button', 'title'), [('Ingest intelligence', 'Ingest intelligence'),
+@pytest.mark.parametrize(('button', 'title'), [('Add intelligence', 'Add intelligence'),
                                                ('Export IOCs', 'Export indicators of compromise (IOCs)'),
                                                ('What the words mean', 'What the words mean')])  # fmt: skip
 async def test_dialogs_have_a_name_and_a_heading(user: User, button: str, title: str) -> None:

@@ -66,7 +66,25 @@ body.body--dark, body.body--light { background:var(--ins-bg);color:var(--ins-tex
 .brief-evidence { color:var(--ins-link); }
 .brief-evidence .q-btn__content { min-width:0;max-width:100%; }
 .brief-evidence .block { min-width:0;max-width:min(100%,56ch); }
-.workspace-tools { padding-top:1.5rem;border-top:1px solid var(--ins-line); }
+/* The side menu (sections of the analyst's day) beside the content; on narrow screens it wraps above it. */
+.app-shell { display:flex;flex-wrap:wrap;min-height:100vh;width:100%; }
+.side-nav { flex:0 0 15rem;display:flex;flex-direction:column;gap:1.5rem;padding:28px 12px;
+  border-right:1px solid var(--ins-line);background:var(--ins-evidence-bg); }
+.side-brand { padding:0 12px; }
+.app-shell > .workspace { flex:999 1 36rem;min-width:0;display:flex;flex-direction:column;margin:0; }
+.side-tabs .q-tab { justify-content:flex-start;border-radius:8px; }
+.side-tabs .q-tab--active { background:var(--ins-selected);color:var(--ins-accent); }
+.workspace-toolbar { padding-bottom:1rem;border-bottom:1px solid var(--ins-line); }
+.stat-tile .q-btn__content { justify-content:flex-start; }
+.stat-tile:hover { border-color:var(--ins-accent); }
+.share-grid { display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,20rem),1fr)); }
+.share-card { border:1px solid var(--ins-line);border-radius:10px;background:var(--ins-card); }
+@media(max-width:899.98px) {
+  .side-nav { flex:1 1 100%;flex-direction:row;flex-wrap:wrap;align-items:center;gap:0.75rem;
+    padding:16px 14px;border-right:0;border-bottom:1px solid var(--ins-line); }
+  .side-tabs.q-tabs--vertical { height:auto; }
+  .side-tabs.q-tabs--vertical .q-tabs__content { flex-direction:row;flex-wrap:wrap; }
+}
 @media(max-width:1099px) {
   .brief-overview { grid-template-columns:minmax(0,1fr); }
   .brief-section { grid-column:span 3; }

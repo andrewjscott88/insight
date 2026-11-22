@@ -101,7 +101,8 @@ def build_cves(ws: Workspace) -> None:
         'then the most severe (CVSS). None of this shows whether you use the product.'
     ).classes('muted prose')
     ui.label(
-        'Severity and attack likelihood come from automatic lookups. Switch them on in the Sources tab.'
+        'How severe a CVE is and how likely an attack is come from automatic lookups. '
+        'Turn them on in Settings.'
     ).classes('muted text-sm prose')
     ui.select(
         PERIODS, value=ws.state.cve_days, label='Reports added in', on_change=lambda e: choose(e.value)

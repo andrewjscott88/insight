@@ -159,6 +159,11 @@ GLOSSARY: Final[tuple[tuple[str, str], ...]] = (
         'To fetch new reports from a public source. This only happens when you press Sync now.',
     ),
     (
+        'API key',
+        'A secret that lets a script, or a tool such as a SIEM, read from Insight. It only sees reports up '
+        'to the TLP you set for it.',
+    ),
+    (
         'Enrichment, lookup',
         'Asking an outside service for more facts about a vulnerability. Insight asks you first.',
     ),

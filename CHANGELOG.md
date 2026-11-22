@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Changed: a side menu built around the analyst's day
+
+- The workspace is organised as **Today**, **Triage**, **Investigate**, **Cases**, **Share** and **Settings**
+  instead of eight tabs under the brief. Investigate holds indicators, CVEs, ATT&CK techniques and threat
+  groups; Settings holds sources, lookups, watch terms and alerts; Share gathers the IOC export and how to
+  set up TAXII, API keys and MISP.
+- The counters on Today open the list they count. **Ingest intelligence** is now **Add intelligence**.
+- Nothing was removed, and the API is unchanged.
+
 ### Changed: darker colours
 
 - The dark theme is now near-black with a purple accent, blue links and red for errors; the light theme uses

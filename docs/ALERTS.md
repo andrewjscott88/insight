@@ -13,7 +13,7 @@ More than 10 new KEV entries in one import become a single alert that lists them
 
 ## Destinations
 
-Add them on the **Watch terms** tab under **Alerts**, or use the host CLI. API keys cannot add, change or read
+Add them in **Settings › Watch terms** under **Alerts**, or use the host CLI. API keys cannot add, change or read
 them, as they cannot change schedules.
 
 | Kind | What it sends |

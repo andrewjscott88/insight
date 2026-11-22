@@ -11,7 +11,7 @@ import pytest
 if not os.environ.get('INSIGHT_E2E_URL') or not os.environ.get('INSIGHT_E2E_PASSWORD'):
     pytest.skip('set INSIGHT_E2E_URL and INSIGHT_E2E_PASSWORD to run browser tests', allow_module_level=True)
 
-from .test_browser import BASE_URL, browser, context, expect, sign_in
+from .test_browser import BASE_URL, browser, context, expect, show, sign_in
 
 __all__ = ['browser', 'context']
 pytestmark = pytest.mark.e2e
@@ -55,6 +55,7 @@ def test_long_feed_text_fits_a_320px_phone_with_larger_text(context: Any, theme:
     assert page.locator('.brief-evidence .block').evaluate_all(
         'elements => elements.length > 0 && elements.every(e => e.scrollWidth <= e.clientWidth)'
     )
+    show(page, 'Triage')
     card = page.locator('.source-card').filter(has=page.get_by_role('button', name=long_url, exact=True))
     expect(card).to_be_visible()
     # The inbox is a scroller: root width alone misses clipped titles and summaries inside its cards.
