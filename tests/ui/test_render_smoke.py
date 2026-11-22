@@ -30,6 +30,9 @@ app = create_app(settings)
 with TestClient(app) as client:
     assert client.get("/", follow_redirects=False).status_code == 303
     if open_access:
+        entry = client.get("/")
+        assert entry.status_code == 200 and "Continue to workspace" in entry.text
+        # A browser continues after its 200 entry page commits and confirms the session.
         response = client.get("/")
     else:
         token = re.search(r'name="csrf_token" value="([^"]+)"', client.get("/login").text).group(1)

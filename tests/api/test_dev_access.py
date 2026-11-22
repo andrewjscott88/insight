@@ -40,10 +40,36 @@ def open_client(open_app: FastAPI) -> Iterator[TestClient]:
 
 def enter(client: TestClient) -> str:
     response = client.get('/login')
-    assert (response.status_code, response.headers['location']) == (303, '/')
+    assert response.status_code == 200
+    assert 'location' not in response.headers
+    assert 'href="/">Continue to workspace</a>' in response.text
     token: str = client.get('/api/session').json()['csrf_token']
     assert len(token) >= 32
     return token
+
+
+def test_cross_site_entry_finishes_before_continuing(open_client: TestClient) -> None:
+    """Regression: a cross-site redirect chain withheld Strict cookies and bounced back to login forever."""
+    response = open_client.get(
+        '/login?next=https://elsewhere.example', headers={'Sec-Fetch-Site': 'cross-site'}
+    )
+    assert response.status_code == 200
+    assert 'location' not in response.headers
+    assert 'href="/">Continue to workspace</a>' in response.text
+    assert '<script src="/static/login-entry.js" defer></script>' in response.text
+    assert 'elsewhere.example' not in response.text
+    assert response.headers['cache-control'] == 'no-store'
+    assert len(response.headers.get_list('set-cookie')) == 1
+    assert open_client.get('/api/session').status_code == 200
+
+
+def test_entry_does_not_redirect_when_the_browser_cannot_return_its_cookie(open_client: TestClient) -> None:
+    """Regression: a browser withholding its cookie was sent through an unbounded HTTP redirect loop."""
+    for _ in range(3):
+        open_client.cookies.clear()
+        response = open_client.get('/login')
+        assert response.status_code == 200
+        assert 'location' not in response.headers
 
 
 def test_password_free_mode_bootstraps_only_browser_sessions(open_client: TestClient) -> None:

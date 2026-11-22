@@ -181,14 +181,16 @@ To enable it temporarily:
    `docker compose restart` does not apply changed Compose environment values. For local Python, restart
    `insight serve` with the new environment.
 4. From a fresh browser, open the site and confirm it enters the workspace without a password. A visit to
-   `/login` creates a normal expiring session and redirects to `/`; it no longer returns a password form.
+   `/login` creates a normal expiring session and returns a `200` page that checks the session before
+   continuing to `/`. If scripts are blocked, use **Continue to workspace**. Check a link from another site
+   as well as direct entry; neither should loop back and forth between `/` and `/login`.
 
 The cookie, CSRF checks, same-origin checks, API-key rules and HTTPS/proxy settings remain in effect.
 An API request without a valid session or key still returns `401`, but anyone can obtain a session through
 `/login` while this mode is on. API-key TLP limits do not restrict the full operator session. Signing out,
 including **Sign out everywhere**, ends existing sessions but cannot keep visitors out while the mode is
 enabled: they can visit `/login` again. Password-form smoke scripts are for the normal protected mode;
-verify the open mode's redirect, session, CSRF and report access explicitly.
+verify the open mode's entry page, session, CSRF and report access explicitly.
 
 To restore password protection:
 
