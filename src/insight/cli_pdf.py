@@ -28,18 +28,20 @@ def run_pdf(argv: Sequence[str]) -> str:
         data = source.read(MAX_PDF_BYTES + 1)
     if len(data) > MAX_PDF_BYTES:
         raise ValueError('Choose a PDF of 2 megabytes or less.')
+    ceiling = parse_max_tlp(os.getenv('INSIGHT_MAX_TLP', ''))
+    # Parse before opening the database: the sandboxed parse can take up to 10 s.
+    report = services.prepare_pdf_report(
+        data,
+        title=args.file.stem if args.title is None else args.title,
+        source_name=args.source_name,
+        source_url=args.source_url,
+        tlp=args.tlp,
+        max_tlp=ceiling,
+    )
     try:
         with _current_database() as sessions, sessions.begin() as db:
             services.set_actor(db, 'cli')
-            result = services.import_pdf(
-                db,
-                data,
-                title=args.file.stem if args.title is None else args.title,
-                source_name=args.source_name,
-                source_url=args.source_url,
-                tlp=args.tlp,
-                max_tlp=parse_max_tlp(os.getenv('INSIGHT_MAX_TLP', '')),
-            )
+            result = services.store_pdf_report(db, report, max_tlp=ceiling)
     except IntegrityError as exc:
         raise ValueError('Concurrent import; retry once') from exc
     action = 'Imported' if result['created'] else 'Already imported'

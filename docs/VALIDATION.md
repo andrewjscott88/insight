@@ -29,8 +29,8 @@ repeated here.
 **Not verified for 0.8.0 before tagging:** no benchmark, performance, ZAP or browser-E2E numbers are recorded
 here; they come from the milestone gate in the release run. The TAXII server was tested with its own HTTP
 tests, not with `taxii2-client` or a real SIEM. Live calls to optional external services were not exercised
-against real accounts. Known limitations: a PDF import holds a database session while it parses (up to 10 s);
-the MISP client applies the public-address egress check, so a MISP instance on a private network is refused.
+against real accounts. Known limitation: the MISP client applies the public-address egress check, so a MISP
+instance on a private network is refused. (Since 0.9.0 a PDF import parses before it opens a database session.)
 
 ## 0.7.0: STIX 2.1 and MISP exchange, ATT&CK techniques, alerts, threat guides, CVE enrichment, more feeds
 

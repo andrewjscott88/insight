@@ -80,3 +80,40 @@ def test_pdf_worker_unavailable_does_not_write(authed: TestClient, monkeypatch: 
     res = authed.post(ROUTE, content=ADVISORY.read_bytes(), headers=headers())
     assert res.status_code == 503
     assert authed.get('/api/documents').json() == []
+
+
+def test_the_route_parses_before_opening_a_session(
+    authed: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The sandboxed parse can take 10 s: no database session may be open while it runs (review note)."""
+    from collections.abc import Iterator
+    from contextlib import contextmanager
+    from typing import Any
+
+    from insight.pdf_import import ParsedPdf
+    from insight.services import pdf_reports
+    from insight.web.auth import acting as real_acting
+    from insight.web.routes import imports
+
+    order: list[str] = []
+
+    def parse(data: bytes) -> ParsedPdf:
+        order.append('parse')
+        return ParsedPdf('Advisory text about 192.0.2.44.', hashlib.sha256(data).hexdigest(), len(data), 1)
+
+    @contextmanager
+    def acting(*args: Any, **kwargs: Any) -> Iterator[Any]:
+        order.append('session')
+        with real_acting(*args, **kwargs) as db:
+            yield db
+
+    monkeypatch.setattr(pdf_reports, 'parse_pdf', parse)
+    monkeypatch.setattr(imports, 'acting', acting)
+    response = authed.post(ROUTE, content=b'%PDF-1.7 fixture', headers=headers())
+    assert response.status_code == 200, response.text
+    assert order == ['parse', 'session']
+    # A label above the limit is refused before parsing, and nothing opens a session.
+    order.clear()
+    with_red = authed.post(ROUTE, content=b'%PDF-1.7 fixture', headers=headers(title='TLP:RED notes'))
+    assert with_red.status_code in (400, 403)
+    assert 'session' not in order

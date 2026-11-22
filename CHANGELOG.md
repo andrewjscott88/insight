@@ -57,6 +57,12 @@
   put in the centre. `GET /api/graph` returns the nodes and edges. Only recorded links appear, within your TLP
   limit, capped and in a fixed order. [ADR 0027](docs/adr/0027-ranked-search-and-link-graph.md)
 
+### Fixed
+
+- A PDF import now checks its details and parses the file before it opens a database session, in the API, the
+  workspace and `insight import-pdf`. The sandboxed parse can take up to 10 seconds; no session waits on it, and
+  a later change cannot make one hold a connection or lock during it. A test pins the order.
+
 ## 0.8.0 - 2026-11-21
 
 ### Upgrade notes
