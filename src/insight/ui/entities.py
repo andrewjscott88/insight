@@ -12,6 +12,7 @@ from typing import Any
 from nicegui import ui
 
 from .. import greynoise, services
+from .cases import open_add_to_case
 from .graph import open_graph
 from .greynoise import open_greynoise
 from .typography import heading
@@ -66,6 +67,10 @@ def build_entities(ws: Workspace) -> None:
             ui.button('Show links', on_click=lambda: open_graph(ws, f'indicator:{target.entity_id}')).props(
                 'outline no-caps'
             ).mark(f'entity-links-{target.value}')
+            ui.button(
+                'Add to case',
+                on_click=lambda: open_add_to_case(ws, 'indicator', target.entity_id, target.value),
+            ).props('outline no-caps').mark(f'entity-add-to-case-{target.value}')
             if show_greynoise:
                 ui.button(
                     'GreyNoise Community context', on_click=lambda: open_greynoise(ws, target.value)

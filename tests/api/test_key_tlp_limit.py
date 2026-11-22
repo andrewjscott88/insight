@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 
 from insight import services
 from insight.models import Enrichment
-from insight.schemas import AssessmentInput, DocumentInput
+from insight.schemas import AssessmentInput, CaseInput, CaseItemInput, DocumentInput
 from insight.services import SourceRef
 
 from .test_auth import PROTECTED
@@ -59,8 +59,12 @@ def world(app: FastAPI) -> dict[str, Any]:
         # A cached NVD answer for a CVE only the current AMBER revision mentions.
         nvd = {'vulnerabilities': [{'cve': {'descriptions': [{'lang': 'en', 'value': MARKER}]}}]}
         db.add(Enrichment(cve='CVE-2024-11111', provider='nvd', payload=json.dumps(nvd)))
+        # A case that holds the AMBER report is AMBER too (TIP 3.8): its title and items stay hidden.
+        case = services.create_case(db, CaseInput(title=f'{MARKER} case', tlp='GREEN'))
+        services.add_case_item(db, case.id, CaseItemInput(kind='document', target_id=amber.id))
         _, token = services.create_api_key(db, name='siem', access='read-write', max_tlp='GREEN')
     return {
+        'case': case.id,
         'green': green.id,
         'amber': amber.id,
         'old': old.id,
@@ -134,6 +138,9 @@ def test_nothing_hidden_leaks_through_any_read_route(client: TestClient, world: 
         f'/api/graph?node=report:{world["amber"]}',
         f'/api/graph?node=indicator:{world["shared_entity"]}&depth=2',
         f'/api/graph?node=indicator:{world["hidden_entity"]}',
+        '/api/cases?status=all',
+        f'/api/cases/{world["case"]}',
+        f'/api/cases/{world["case"]}/timeline',
         '/taxii2/',
         '/taxii2/insight/',
         '/taxii2/insight/collections/',

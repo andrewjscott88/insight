@@ -550,7 +550,7 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
 - [ ] **3.5** Shared rate limits for multi-worker deploys (`ROADMAP` #16)
 - [ ] **3.6** Opt-in LLM proposals per `docs/LLM_EXTENSION.md`
 - [ ] **3.7** Optional Shodan/Censys enrichment (operator keys; vendor-priced)
-- [ ] **3.8** Lightweight case management
+- [x] **3.8** Lightweight case management: done, ADR 0029 (no webhook on open)
 
 **Total: 31 items.** Out of scope on purpose: cloning CrowdStrike/Mandiant/Recorded Future collection, building a malware sandbox, automated adversary attribution, and any always-on cloud AI.
 

@@ -473,6 +473,36 @@ curl -fsS "$INSIGHT_URL/api/rules/$RULE_ID/export" -H "Authorization: Bearer $IN
 curl -sS -X DELETE "$INSIGHT_URL/api/rules/$RULE_ID" -H "Authorization: Bearer $INSIGHT_API_KEY"
 ```
 
+### Cases
+
+One investigation's reports, indicators, actors, campaigns and notes ([ADR 0029](adr/0029-cases.md)). A case
+takes the strictest label of what it holds and keeps it when items are removed. A closed case answers `409`
+to changes until it is reopened.
+
+```bash
+# Open a case, add a report and an indicator, and note what you asked for
+CASE_ID=$(curl -fsS -X POST "$INSIGHT_URL/api/cases" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d '{"title": "Gateway intrusion", "tlp": "GREEN"}' | jq -r .id)
+curl -fsS -X POST "$INSIGHT_URL/api/cases/$CASE_ID/items" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d "{\"kind\": \"document\", \"target_id\": \"$DOC_ID\"}"
+ITEM_ID=$(curl -fsS -X POST "$INSIGHT_URL/api/cases/$CASE_ID/items" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d "{\"kind\": \"indicator\", \"target_id\": \"$ENTITY_ID\"}" | jq -r .id)
+curl -fsS -X POST "$INSIGHT_URL/api/cases/$CASE_ID/notes" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d '{"text": "Asked the network team for firewall logs."}'
+# Open cases, one case with its items, and what happened to it
+curl -fsS "$INSIGHT_URL/api/cases?status=open" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq '.cases[] | {id, title, tlp, items}'
+curl -fsS "$INSIGHT_URL/api/cases/$CASE_ID" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq '.items[] | {kind, name, tlp}'
+curl -fsS "$INSIGHT_URL/api/cases/$CASE_ID/timeline" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq -r '.events[] | "\(.at)\t\(.action)\t\(.actor)"'
+# Change the summary, remove an item (the label stays), close with a note, reopen, delete
+curl -fsS -X PATCH "$INSIGHT_URL/api/cases/$CASE_ID" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d '{"summary": "Edge appliance compromise."}'
+curl -fsS -X DELETE "$INSIGHT_URL/api/cases/$CASE_ID/items/$ITEM_ID" -H "Authorization: Bearer $INSIGHT_API_KEY"
+curl -fsS -X POST "$INSIGHT_URL/api/cases/$CASE_ID/close" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d '{"note": "Contained; the gateway is patched."}'
+curl -fsS -X POST "$INSIGHT_URL/api/cases/$CASE_ID/reopen" -H "Authorization: Bearer $INSIGHT_API_KEY"
+curl -fsS -X DELETE "$INSIGHT_URL/api/cases/$CASE_ID" -H "Authorization: Bearer $INSIGHT_API_KEY"
+```
+
 ### Sources and enrichment (outbound internet)
 
 These are the only routes that make Insight contact other servers. Sync imports a curated public feed; enrichment

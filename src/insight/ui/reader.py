@@ -20,6 +20,7 @@ from ..exploit_signals import LABELS
 from ..extraction import EVIDENCE_CONTEXT
 from ..schemas import DOCUMENT_STATUSES, NoteInput
 from .actors import render_report_groups
+from .cases import open_add_to_case
 from .enrichment import open_enrichment_dialog
 from .graph import open_graph
 from .messages import tell
@@ -100,6 +101,9 @@ def render_report(ws: Workspace, data: dict[str, Any], actions: ReaderActions) -
         ui.button('Show links', on_click=lambda: open_graph(ws, f'report:{data["id"]}')).props(
             'outline no-caps'
         ).mark('report-links')
+        ui.button(
+            'Add to case', on_click=lambda: open_add_to_case(ws, 'document', data['id'], data['title'])
+        ).props('outline no-caps').mark('report-add-to-case')
         new_tab_link('Download this report as JSON', f'/api/documents/{data["id"]}/export')
         new_tab_link("Export this report's IOCs", f'/api/iocs/export?document_id={data["id"]}')
     ui.label('Exports keep the TLP label. They do not give permission to share.').classes('muted prose')

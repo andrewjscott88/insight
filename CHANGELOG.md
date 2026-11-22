@@ -7,8 +7,19 @@
 - Migration `0019` adds the `exploit_signals` table at start-up. Run `make exploit-backfill` once to read
   reports stored before this release (safe to rerun).
 - Migration `0020` records when each KEV entry last changed; existing entries start with their last sync time.
+- Migration `0021` adds the `cases` and `case_items` tables.
 - `GET /api/cves` has two new groups, so `tier` numbers after *Known exploited* move down by two. Scripts that
   compare tier numbers should use the new numbers or the `label`.
+
+### Added: cases (TIP 3.8)
+
+- **Cases** group one investigation's reports, indicators, actors and campaigns with your notes. Open one in
+  the new **Cases** tab, or use **Add to case** in the reader and the entity explorer. Each case shows what
+  happened to it (from the audit log) and closes with a note saying what you found; a closed case does not
+  change until you reopen it.
+- A case's label is the strictest of what it holds and of TLP markings in its text, and removing an item does
+  not lower it. Deleting a report, indicator, actor or campaign removes it from every case.
+- `/api/cases` for scripts, within each key's TLP limit. [ADR 0029](docs/adr/0029-cases.md)
 
 ### Added: more in the TAXII server
 
