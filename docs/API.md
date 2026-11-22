@@ -11,26 +11,6 @@ page is the field-by-field reference.
 
 ## Authentication and request rules
 
-### Infrastructure pivots (TIP 4.6 part 1)
-
-`GET /api/pivots?value=...` returns the fresh cached results for a reviewed indicator in a current
-TLP:CLEAR report. Each result names `provider`, `value`, `fetched_at`, `found` and bounded provider metadata.
-An eligible subject without a fresh cache returns `[]`; a missing, hidden or ineligible subject returns
-`404`. Reads never contact a provider. Results expire after 24 hours and eligibility is rechecked each time.
-
-`POST /api/pivots/{provider}` accepts `{"value":"example.com","approved":true}`. Providers in this part
-are `rdap` (domain or public IP) and `asn` (public IP). Extra fields are refused. An uncached lookup needs
-`approved: true`; each provider must be enabled in Settings first. Only an operator session with CSRF or an
-unlimited read-write API key may request it. Limited/read-only keys get `403`, disabled providers `503`,
-missing/ineligible subjects `404`, invalid/unapproved requests `422`, throttled requests `429` with
-`Retry-After`, and failed or unrelated provider answers `502`. A fresh cache is returned without disclosure.
-
-RDAP metadata includes registry status/dates, public registrar IDs and name servers, or network name,
-handle, first/last address and country. No contact data is kept. RIPEstat returns prefix and a list of origin
-network numbers and holders. `nodes` describes provider context for the link map, never new observations.
-`GET /api/graph` can include `domain`, `address`, `as`, `certificate_name` and `name_server` node types, with
-provider and fetch date in edge labels. Hidden known indicators are not linked. All graph caps still apply.
-
 1. `GET /login` returns a form containing `csrf_token` (also stored in the session cookie `insight_session`,
    HttpOnly, SameSite=Strict).
 2. `POST /login` (form fields `csrf_token`, `password`, and `otp` when MFA is on) → `303` to `/` on
@@ -431,6 +411,26 @@ API keys only (`Authorization: Bearer <key>`); a signed-in browser gets `403`. R
 | `GET /api/entities` | `q` | Up to 200 `{id, kind, value, document_count}` sorted by kind and value |
 | `GET /api/entities/{id}` | `offset` (0), `limit` (100, at most 200) | `{id, kind, value, flags, assessment, first_seen_at, last_seen_at, document_count, offset, documents: [summaries]}`, newest first, paginated. `assessment` is `null` or `{verdict, reason, tlp, valid_until, decided_at, actor}`; a TLP-limited key sees it only within its limit. `exploit` is the CVE's exploit context as in `GET /api/cves` (`null` for other kinds, or when nothing is known). `first_seen_at` / `last_seen_at`: when the oldest and newest report **you can see** that mentions it was added. `confidence`: see [Confidence and source reliability](#confidence-and-source-reliability) |
 | `POST /api/entities/{id}/assessment` | JSON `{verdict, reason, tlp, valid_until}`: `verdict` `unknown` (clears) / `benign` / `suspicious` / `malicious`; `reason` up to 2,000 characters; `tlp` (default `AMBER`) labels the reason; `valid_until` a date, today or later, or omitted | The recorded assessment, or `{"verdict": "unknown"}`. Audited as `entity.assess`. `404` if you cannot see the entity; `403` if a TLP-limited key would set, or replace, a verdict above its limit |
+
+## Infrastructure pivots (TIP 4.6 part 1)
+
+`GET /api/pivots?value=...` returns the fresh cached results for a reviewed indicator in a current
+TLP:CLEAR report. Each result names `provider`, `value`, `fetched_at`, `found` and bounded provider metadata.
+An eligible subject without a fresh cache returns `[]`; a missing, hidden or ineligible subject returns
+`404`. Reads never contact a provider. Results expire after 24 hours and eligibility is rechecked each time.
+
+`POST /api/pivots/{provider}` accepts `{"value":"example.com","approved":true}`. Providers in this part
+are `rdap` (domain or public IP) and `asn` (public IP). Extra fields are refused. An uncached lookup needs
+`approved: true`; each provider must be enabled in Settings first. Only an operator session with CSRF or an
+unlimited read-write API key may request it. Limited/read-only keys get `403`, disabled providers `503`,
+missing/ineligible subjects `404`, invalid/unapproved requests `422`, throttled requests `429` with
+`Retry-After`, and failed or unrelated provider answers `502`. A fresh cache is returned without disclosure.
+
+RDAP metadata includes registry status/dates, public registrar IDs and name servers, or network name,
+handle, first/last address and country. No contact data is kept. RIPEstat returns prefix and a list of origin
+network numbers and holders. `nodes` describes provider context for the link map, never new observations.
+`GET /api/graph` can include `domain`, `address`, `as`, `certificate_name` and `name_server` node types, with
+provider and fetch date in edge labels. Hidden known indicators are not linked. All graph caps still apply.
 
 ## ATT&CK techniques
 

@@ -290,7 +290,7 @@ class _Walker:
         return [
             [(n, label, detail, 'mentions') for n, label, detail, _ in mentioned],
             self._subjects(self._threat_links(ThreatLink.entity_id == key)),
-            _pivot_neighbours(self.db, key, self.max_tlp),
+            _pivot_neighbours(self.db, key, self.max_tlp, limit=PER_NODE + 1),
         ]
 
     def _from_technique(self, key: str) -> list[list[Neighbour]]:

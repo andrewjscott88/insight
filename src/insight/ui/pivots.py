@@ -37,7 +37,7 @@ def _render_result(result: dict[str, Any]) -> None:
     for event, date in result.get('dates', {}).items():
         ui.label(f'{event.capitalize()}: {date[:10]}')
     for network in result.get('networks', []):
-        ui.label(f'Network AS{network["asn"]}: {network["holder"]}').classes('break-value')
+        ui.label(f'Network number {network["asn"]}: {network["holder"]}').classes('break-value')
 
 
 def build_pivot_switches(ws: Workspace) -> None:
@@ -77,7 +77,10 @@ def open_pivots(ws: Workspace, value: str) -> None:
             return
         enabled = services.pivot_switches(db)
     kind, _ = pivot_data.subject(value)
-    with ui.dialog() as dialog, ui.card().classes('panel dialog-card gap-3'):
+    with (
+        ui.dialog().props('aria-label="Infrastructure pivots"') as dialog,
+        ui.card().classes('panel dialog-card gap-3'),
+    ):
         heading(f'Infrastructure around {value}', 2)
         ui.label(
             'These results describe infrastructure. They do not prove harm. '
@@ -97,7 +100,7 @@ def open_pivots(ws: Workspace, value: str) -> None:
 
         render()
         for provider, name in pivot_data.PROVIDERS.items():
-            if not enabled[provider] or (provider == 'asn' and kind != 'ip'):
+            if not enabled[provider] or kind not in pivot_data.PROVIDER_KINDS[provider]:
                 continue
             with ui.column().classes('w-full gap-2'):
                 consent = ui.checkbox(f'I approve sending {value} to {name}.')

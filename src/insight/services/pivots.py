@@ -36,6 +36,8 @@ def eligible_pivot(db: Session, value: str, *, max_tlp: str | None = None) -> st
         kind, value = pivot_data.subject(value)
     except ValueError:
         return None
+    if not any(kind in kinds for kinds in pivot_data.PROVIDER_KINDS.values()):
+        return None
     if max_tlp is not None and 'CLEAR' not in visible_levels(max_tlp):
         return None
     return db.scalar(

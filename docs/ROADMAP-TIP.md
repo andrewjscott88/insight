@@ -540,7 +540,7 @@ redistribution rule (review J3).
 ### 4.6 Infrastructure pivots
 
 Part 1 implements RDAP and RIPEstat lookups, shared consent/cache policy, Settings switches and graph views.
-Validation and security review are pending; certificate transparency and passive DNS remain planned.
+Certificate transparency and passive DNS remain separate planned parts.
 See [ADR 0037](adr/0037-infrastructure-pivots.md). This item stays unchecked until all parts pass their gates.
 
 Manual, approved-per-lookup, metadata-only pivots that land in the link map: RDAP, certificate transparency

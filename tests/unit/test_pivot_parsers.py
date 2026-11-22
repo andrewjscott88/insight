@@ -89,6 +89,9 @@ def test_bootstrap_is_pinned_and_selects_only_an_iana_https_endpoint() -> None:
     ip_url, _ = rdap.destination('8.8.8.8')
     assert ip_url.startswith('https://')
     assert ip_url.endswith('/ip/8.8.8.8')
+    ipv6_url, _ = rdap.destination('2606:4700:4700::1111')
+    assert ipv6_url.startswith('https://')
+    assert ipv6_url.endswith('/ip/2606:4700:4700::1111')
 
 
 def test_http_only_bootstrap_service_is_not_upgraded_or_followed(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -97,3 +100,48 @@ def test_http_only_bootstrap_service_is_not_upgraded_or_followed(monkeypatch: py
     )
     with pytest.raises(ValueError, match='No pinned HTTPS'):
         rdap.destination('host.example')
+
+
+def test_altered_bootstrap_bytes_are_refused_before_routing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression: a modified packaged registry must not expand the approved outbound host set."""
+    data = tmp_path / 'data'
+    data.mkdir()
+    (data / 'rdap-bootstrap-pins.json').write_text(
+        json.dumps({'dns': {'sha256': '0' * 64}}), encoding='utf-8'
+    )
+    (data / 'rdap-dns.json').write_bytes(b'{"services":[[["example"],["https://changed.example/"]]]}')
+    monkeypatch.setattr(rdap, 'files', lambda package: tmp_path)
+    rdap._bootstrap.cache_clear()
+    try:
+        with pytest.raises(ValueError, match='integrity check failed'):
+            rdap.destination('host.example')
+    finally:
+        rdap._bootstrap.cache_clear()
+
+
+@pytest.mark.parametrize(
+    ('field', 'value'),
+    [
+        ('nameservers', [{'ldhName': 'ns.example.net'}] * 501),
+        ('status', ['active'] * 51),
+        ('events', [{'eventAction': 'registration', 'eventDate': 'invalid'}]),
+        ('entities', [None]),
+    ],
+)
+async def test_rdap_malformed_or_excessive_metadata_fails_closed(
+    monkeypatch: pytest.MonkeyPatch, field: str, value: Any
+) -> None:
+    from insight import pivots
+    from insight.connectors import ProviderError
+
+    data = json.loads((FIXTURES / 'rdap-domain.json').read_bytes())
+    data[field] = value
+
+    async def fetch(*args: Any, **kwargs: Any) -> bytes:
+        return json.dumps(data).encode()
+
+    monkeypatch.setattr(pivots, 'download', fetch)
+    with pytest.raises(ProviderError, match='invalid or unrelated'):
+        await pivots._fetch('rdap', 'example.com')

@@ -1,6 +1,6 @@
 # 0037: Approved infrastructure pivots
 
-Status: Proposed (TIP 4.6, part 1; checks and maintainer review pending)
+Status: Proposed (TIP 4.6, part 1; maintainer review pending)
 
 ## Decision
 
@@ -35,7 +35,8 @@ removes pivot cache rows with orphan indicators; cache writes use the existing e
 Graph nodes are views of eligible cached metadata, with provider and fetch date on each edge. A matching
 known indicator is linked only when visible to the caller. Otherwise the result remains provider context.
 No pivot creates an indicator, observation, verdict or attribution. Stale or newly ineligible graph roots
-are missing. The graph keeps its existing node and depth caps.
+are missing. The graph keeps its existing node and depth caps, and bounds known-indicator queries before
+resolving provider neighbours beyond the display limit.
 
 Certificate transparency and passive DNS are subsequent parts of this ADR and remain unimplemented here.
 They must keep the same switches, disclosure rules, TTL, tests and transport boundary.

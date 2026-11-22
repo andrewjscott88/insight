@@ -3,6 +3,14 @@ Copyright (c) 2026 Andrew Scott and the Insight contributors.
 
 Insight is licensed under the MIT License; see LICENSE.
 
+This product includes pinned IANA RDAP bootstrap registry files for DNS, IPv4
+and IPv6 under src/insight/data/rdap-*.json. Their source URLs, publication dates
+and SHA-256 checksums are recorded in rdap-bootstrap-pins.json; the manual
+refresh script is scripts/update_rdap_bootstrap.py. These protocol registries
+are covered by IANA and IETF's CC0 1.0 dedication:
+https://www.iana.org/help/licensing-terms
+This does not grant rights to data returned by the individual RDAP services.
+
 This product includes data derived from the Public Suffix List
 (https://publicsuffix.org/), licensed under the Mozilla Public License, v. 2.0
 (https://mozilla.org/MPL/2.0/): src/insight/data/tlds.txt contains the top-level

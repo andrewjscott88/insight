@@ -19,6 +19,7 @@ pytestmark = pytest.mark.ui
 async def test_manual_pivot_consent(
     user: User, ui_env: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Regression: the infrastructure dialog must have an accessible name before lookup consent."""
     with ui_env.app.state.session_factory.begin() as db:
         reviewed(db)
         services.set_pivot_switch(db, 'rdap', True)
@@ -36,6 +37,10 @@ async def test_manual_pivot_consent(
     await user.should_see('Pivot')
     user.find(kind=ui.button, content='Pivot').click()
     await user.should_see('No fresh cached results.')
+    assert any(
+        dialog.props.get('aria-label') == 'Infrastructure pivots' and dialog.value
+        for dialog in user.find(kind=ui.dialog).elements
+    )
     await user.should_see('Look up at RDAP')
     assert not user.find(kind=ui.button, content='Look up at RDAP').elements.pop().enabled
     assert calls == []

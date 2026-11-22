@@ -46,9 +46,9 @@ def _known(db: Session, value: str, max_tlp: str | None) -> str | None:
     )
 
 
-def _pivot_neighbours(db: Session, entity_id: str, max_tlp: str | None) -> list[_Neighbour]:
+def _pivot_neighbours(db: Session, entity_id: str, max_tlp: str | None, *, limit: int) -> list[_Neighbour]:
     neighbours: list[_Neighbour] = []
-    for key, node, label in _rows(db, entity_id, max_tlp):
+    for key, node, label in _rows(db, entity_id, max_tlp)[:limit]:
         value = str(node['value'])
         known = _known(db, value, max_tlp)
         identifier = f'indicator:{known}' if known else f'{node["type"]}:{key}'

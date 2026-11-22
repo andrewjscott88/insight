@@ -84,8 +84,8 @@ async def lookup(
     if provider not in pivot_data.PROVIDERS:
         raise ValueError('Unknown pivot provider')
     kind, _ = pivot_data.subject(value)
-    if provider == 'asn' and kind != 'ip':
-        raise ValueError('RIPEstat needs an IP address')
+    if kind not in pivot_data.PROVIDER_KINDS[provider]:
+        raise ValueError('This provider does not support this indicator type')
 
     def fresh() -> dict[str, Any] | None:
         with sessions() as db:
