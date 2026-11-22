@@ -60,6 +60,19 @@ def get_fetch_state(db: Session, url: str) -> FetchState | None:
     return db.get(FetchState, url)
 
 
+def fetch_cursor(db: Session, url: str) -> str:
+    """Where a paged feed resumes (issue #11), ``''`` before its first sync."""
+    state = db.get(FetchState, url)
+    return state.cursor if state is not None else ''
+
+
+def save_fetch_cursor(db: Session, url: str, cursor: str) -> None:
+    """Remember where a paged feed resumes; call in the transaction that stores the page it follows."""
+    state = db.get(FetchState, url) or FetchState(url=url)
+    state.cursor, state.updated_at = cursor, now()
+    db.add(state)
+
+
 def save_fetch_state(
     db: Session, url: str, *, etag: str, last_modified: str, payload_sha256: str, version: str
 ) -> None:

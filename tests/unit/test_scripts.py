@@ -435,6 +435,21 @@ def test_performance_budget_logic() -> None:
     assert benchmark_performance.violations(slow, budget) == ['list_page_queries = 201 exceeds budget 2']
 
 
+def test_the_postgres_budget_is_complete_and_at_least_as_strict() -> None:
+    """Issue #11: the gate measures PostgreSQL against its own, tighter ceilings."""
+    general = json.loads(benchmark_performance.BUDGET.read_text())
+    postgres = json.loads(
+        (benchmark_performance.BUDGET.parent / 'performance-budget-postgres.json').read_text()
+    )
+    limits = {k for k in general if k.endswith('_max')}
+    assert {k for k in postgres if k.endswith('_max')} == limits
+    assert postgres['documents'] == general['documents']
+    assert all(postgres[k] <= general[k] for k in limits)
+    assert any(postgres[k] < general[k] for k in limits)
+    workflow = (ROOT / '.github' / 'workflows' / 'milestone-gate.yml').read_text()
+    assert '--budget benchmarks/performance-budget-postgres.json' in workflow
+
+
 def test_performance_measurement_runs(tmp_path: Path) -> None:
     result = benchmark_performance.measure(f'sqlite:///{tmp_path / "perf.db"}', documents=25)
     assert result['documents'] == 25

@@ -199,8 +199,10 @@ from .search import (
 )
 from .sources import (
     cached_enrichments,
+    fetch_cursor,
     get_fetch_state,
     recent_source_runs,
+    save_fetch_cursor,
     save_fetch_state,
     set_source_switch,
     source_switches,
@@ -386,6 +388,7 @@ __all__ = [
     'export_iocs',
     'export_rule',
     'export_stix',
+    'fetch_cursor',
     'find_mentions',
     'fingerprint',
     'finish_job',
@@ -461,6 +464,7 @@ __all__ = [
     'rule_links',
     'rule_shape_problem',
     'rules_for_group',
+    'save_fetch_cursor',
     'save_fetch_state',
     'search_documents',
     'search_terms',

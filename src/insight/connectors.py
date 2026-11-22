@@ -29,7 +29,16 @@ from .feed_items import MAX_FEED_ITEMS as MAX_FEED_ITEMS
 from .feed_items import FeedItem as FeedItem
 from .models import Enrichment, Entity, KEVRecord, SessionFactory, SourceRun, now
 from .schemas import DocumentInput
-from .services import SourceRef, get_fetch_state, ingest, save_fetch_state, set_actor, source_switches
+from .services import (
+    SourceRef,
+    fetch_cursor,
+    get_fetch_state,
+    ingest,
+    save_fetch_cursor,
+    save_fetch_state,
+    set_actor,
+    source_switches,
+)
 from .services.alerts import known_kev, queue_kev_alerts
 
 # Re-exported: the registry used to live here, and tests and scripts still name it through this module.
@@ -749,17 +758,19 @@ def _record_failure(session_factory: SessionFactory, key: str, message: str) -> 
         db.add(SourceRun(source_key=key, status='error', message=message))
 
 
-async def fetch_otx() -> bytes:
-    """Fetch page one of this operator's subscriptions. Never follow provider-supplied links."""
+async def fetch_otx(page: int = 1, since: str = '') -> bytes:
+    """Fetch one page of this operator's subscriptions changed since ``since`` (all of them when ``''``).
+    Pages are numbered here; OTX's ``next`` link is never followed."""
     key = os.environ.get('INSIGHT_OTX_API_KEY', '').strip()
     if not key:
         raise ValueError('Set INSIGHT_OTX_API_KEY to sync subscribed pulses')
     if len(key) > 512 or not key.isascii() or not key.isprintable() or ' ' in key:
         raise ValueError('Check INSIGHT_OTX_API_KEY: the key must be one printable token')
     try:
-        return await download(
-            OTX_SUBSCRIBED_URL, {'page': '1', 'limit': str(otx.PAGE_SIZE)}, headers={'X-OTX-API-KEY': key}
-        )
+        params = {'page': str(page), 'limit': str(otx.PAGE_SIZE)}
+        if since:
+            params['modified_since'] = since
+        return await download(OTX_SUBSCRIBED_URL, params, headers={'X-OTX-API-KEY': key})
     except httpx.HTTPStatusError as exc:
         status = exc.response.status_code
         hint = ' (check INSIGHT_OTX_API_KEY)' if status in (401, 403) else ''
@@ -769,16 +780,47 @@ async def fetch_otx() -> bytes:
         raise ValueError('The OTX subscription request failed') from None
 
 
-def _store_otx(session_factory: SessionFactory, source: Source, payload: bytes) -> str:
-    batch = otx.parse_pulses(payload, source)
+def _otx_cursor(session_factory: SessionFactory) -> otx.Cursor:
+    with session_factory() as db:
+        return otx.Cursor.parse(fetch_cursor(db, OTX_SUBSCRIBED_URL))
+
+
+def _store_otx_page(
+    session_factory: SessionFactory, source: Source, batch: otx.PulseBatch, cursor: otx.Cursor
+) -> tuple[int, otx.Cursor]:
+    """Store one page and where the next sync resumes, together: a later failure keeps this page's work."""
+    following = cursor.after(batch)
     with session_factory.begin() as db:
         set_actor(db, f'connector:{source.key}')
         added = _ingest_items(db, source, batch.items)
-        message = (
-            f'Read {len(batch.items)} public pulses; {added} new reports. Skipped {batch.skipped} pulses.'
-        )
+        save_fetch_cursor(db, OTX_SUBSCRIBED_URL, following.dump())
+    return added, following
+
+
+def _record_otx(session_factory: SessionFactory, source: Source, message: str) -> str:
+    with session_factory.begin() as db:
         db.add(SourceRun(source_key=source.key, status='success', message=message))
     return message
+
+
+async def _sync_otx(session_factory: SessionFactory, source: Source) -> str:
+    """Read up to ``otx.MAX_PAGES`` pages from the saved cursor (issue #11). Each page is stored with the
+    cursor after it, so a failure or the page limit leaves the next sync to continue from the next page."""
+    cursor = await asyncio.to_thread(_otx_cursor, session_factory)
+    read = added = skipped = pages = 0
+    for _ in range(otx.MAX_PAGES):
+        batch = otx.parse_pulses(await fetch_otx(cursor.page, cursor.since), source)
+        new, cursor = await asyncio.to_thread(_store_otx_page, session_factory, source, batch, cursor)
+        read, added, skipped, pages = read + len(batch.items), added + new, skipped + batch.skipped, pages + 1
+        if cursor.page == 1:  # the pass reached OTX's last page
+            break
+    message = (
+        f'Read {read} public pulses on {pages} page{"s" if pages != 1 else ""}; {added} new reports. '
+        f'Skipped {skipped} pulses.'
+    )
+    if cursor.page > 1:
+        message += f' More remain; the next sync continues from page {cursor.page}.'
+    return await asyncio.to_thread(_record_otx, session_factory, source, message)
 
 
 def switches(session_factory: SessionFactory) -> dict[str, bool]:
@@ -830,7 +872,7 @@ async def sync_source(session_factory: SessionFactory, key: str) -> str:
     try:
         # Database work is synchronous; keep it off the event loop so the UI stays responsive.
         if source.kind == 'otx':
-            return await asyncio.to_thread(_store_otx, session_factory, source, await fetch_otx())
+            return await _sync_otx(session_factory, source)
         if source.kind == 'csaf':
             changed = [f for url in source.indexes if (f := await fetch_if_changed(session_factory, url))]
             if not changed:

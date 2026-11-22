@@ -193,3 +193,24 @@ def test_responsive_visibility_does_not_use_quasars_hidden_class(path: Path) -> 
 def test_messages_go_through_tell(path: Path) -> None:
     """Regression: messages vanished after ~5 s. ``messages.tell`` keeps them until dismissed (WCAG 2.2.1)."""
     assert 'ui.notify(' not in path.read_text(), f'{path.name}: use messages.tell(...) instead of ui.notify'
+
+
+def test_timestamp_columns_use_the_utc_timestamp_type() -> None:
+    """Issue #11 / ADR 0030: every moment is ``timestamptz`` on PostgreSQL. Only the two columns where ``''``
+    means "never" stay text."""
+    import sqlalchemy as sa
+
+    from insight.models import Base, UtcTimestamp
+
+    text_on_purpose = {('alerts', 'sent_at'), ('alert_targets', 'last_sent_at')}
+    plain = [
+        (name, column.name)
+        for name, table in Base.metadata.tables.items()
+        for column in table.columns
+        if column.name.endswith('_at') and isinstance(column.type, sa.String)
+    ]
+    assert sorted(set(plain) - text_on_purpose) == []
+    assert all(isinstance(Base.metadata.tables[t].columns[c].type, sa.String) for t, c in text_on_purpose), (
+        'converted a text_on_purpose column: update ADR 0030 and this test'
+    )
+    assert any(isinstance(c.type, UtcTimestamp) for t in Base.metadata.tables.values() for c in t.columns)

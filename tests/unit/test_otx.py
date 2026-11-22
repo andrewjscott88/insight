@@ -180,12 +180,13 @@ async def test_authentication_failure_keeps_credentials_out_of_sync_history(
 async def test_bounded_request_is_repeatable_and_pulse_edits_become_revisions(
     session_factory: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    data = pulse_data()
+    data = {**pulse_data(), 'next': None}  # one page: paging is tested below
     calls: list[str] = []
+    sent: list[dict[str, str]] = []
 
     async def fetch(url: str, params: Any = None, **kwargs: Any) -> bytes:
         assert url == ENDPOINT
-        assert {k: str(v) for k, v in params.items()} == {'page': '1', 'limit': '25'}
+        sent.append({k: str(v) for k, v in params.items()})
         assert httpx.Headers(kwargs['headers'])['X-OTX-API-KEY'] == KEY
         assert kwargs.get('validators') is None
         calls.append(url)
@@ -203,9 +204,120 @@ async def test_bounded_request_is_repeatable_and_pulse_edits_become_revisions(
     data['results'][0]['indicators'].append({'type': 'IPv4', 'indicator': '192.0.2.193'})
     await connectors.sync_source(session_factory, SOURCE)
     assert calls == [ENDPOINT] * 3
+    # The first sync asks for everything; later ones only for pulses changed since the newest one seen.
+    since = {'page': '1', 'limit': '25', 'modified_since': '2026-11-20T12:00:00.000000'}
+    assert sent == [{'page': '1', 'limit': '25'}, since, since]
     with session_factory() as db:
         current = db.scalars(select(Document).where(Document.is_current)).one()
         assert (current.supersedes_id, current.external_id) == (first_id, PUBLIC_ID)
         assert '192.0.2.193' in current.body
         assert len(db.scalars(select(Document)).all()) == 2
         assert all(r.status == 'success' and KEY not in r.message for r in db.scalars(select(SourceRun)))
+
+
+# --------------------------------------------------------------------------- paging and resume (issue #11)
+
+
+def page_of(n: int, *, more: bool, modified: str) -> dict[str, Any]:
+    """A synthetic page holding one public pulse whose ID encodes ``n``."""
+    pulse = {**pulse_data()['results'][0], 'id': f'{n:024x}', 'name': f'Pulse {n}', 'modified': modified}
+    return {'count': 99, 'next': 'https://example.invalid/untrusted' if more else None, 'results': [pulse]}
+
+
+class FakeOtx:
+    """Serves numbered pages; ``fail_on`` pages raise a connection error."""
+
+    def __init__(self, pages: dict[int, dict[str, Any]], fail_on: set[int] | None = None) -> None:
+        self.pages, self.fail_on = pages, fail_on or set()
+        self.sent: list[dict[str, str]] = []
+
+    async def __call__(self, url: str, params: Any = None, **kwargs: Any) -> bytes:
+        assert url == ENDPOINT  # never the provider's next link
+        query = {k: str(v) for k, v in params.items()}
+        self.sent.append(query)
+        page = int(query['page'])
+        if page in self.fail_on:
+            raise httpx.ConnectError('offline')
+        return json.dumps(self.pages[page]).encode()
+
+
+def pulses(session_factory: sessionmaker[Session]) -> set[str]:
+    with session_factory() as db:
+        return {d.title for d in db.scalars(select(Document).where(Document.source_key == SOURCE))}
+
+
+def cursor(session_factory: sessionmaker[Session]) -> otx.Cursor:
+    with session_factory() as db:
+        return otx.Cursor.parse(services.fetch_cursor(db, ENDPOINT))
+
+
+async def test_a_long_backlog_is_read_a_few_pages_per_sync_and_resumes(
+    session_factory: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pages = {n: page_of(n, more=n < 6, modified=f'2026-11-{10 + n:02d}T08:00:00') for n in range(1, 7)}
+    fake = FakeOtx(pages)
+    enable(session_factory)
+    monkeypatch.setenv('INSIGHT_OTX_API_KEY', KEY)
+    monkeypatch.setattr(connectors, 'download', fake)
+    first = await connectors.sync_source(session_factory, SOURCE)
+    assert first.endswith('More remain; the next sync continues from page 5.')
+    assert [q['page'] for q in fake.sent] == ['1', '2', '3', '4']
+    assert all('modified_since' not in q for q in fake.sent)
+    assert pulses(session_factory) == {f'Pulse {n}' for n in range(1, 5)}
+    assert cursor(session_factory) == otx.Cursor('', 5, '2026-11-14T08:00:00.000000')
+    fake.sent.clear()
+    second = await connectors.sync_source(session_factory, SOURCE)
+    assert 'on 2 pages' in second
+    assert 'More remain' not in second
+    assert [q['page'] for q in fake.sent] == ['5', '6']
+    assert pulses(session_factory) == {f'Pulse {n}' for n in range(1, 7)}
+    # The pass is complete: the next sync asks only for what changed since its newest pulse.
+    assert cursor(session_factory) == otx.Cursor('2026-11-16T08:00:00.000000', 1, '')
+    fake.pages = {1: page_of(7, more=False, modified='2026-11-20T08:00:00')}
+    fake.sent.clear()
+    await connectors.sync_source(session_factory, SOURCE)
+    assert fake.sent == [{'page': '1', 'limit': '25', 'modified_since': '2026-11-16T08:00:00.000000'}]
+    assert cursor(session_factory).since == '2026-11-20T08:00:00.000000'
+
+
+async def test_a_failed_page_keeps_earlier_pages_and_the_next_sync_continues_there(
+    session_factory: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pages = {n: page_of(n, more=n < 3, modified=f'2026-11-0{n}T08:00:00') for n in range(1, 4)}
+    fake = FakeOtx(pages, fail_on={2})
+    enable(session_factory)
+    monkeypatch.setenv('INSIGHT_OTX_API_KEY', KEY)
+    monkeypatch.setattr(connectors, 'download', fake)
+    with pytest.raises(connectors.SourceSyncError, match='OTX subscription request failed'):
+        await connectors.sync_source(session_factory, SOURCE)
+    assert pulses(session_factory) == {'Pulse 1'}  # page 1 was stored before page 2 failed
+    assert cursor(session_factory) == otx.Cursor('', 2, '2026-11-01T08:00:00.000000')
+    fake.fail_on.clear()
+    fake.sent.clear()
+    await connectors.sync_source(session_factory, SOURCE)
+    assert [q['page'] for q in fake.sent] == ['2', '3']
+    assert pulses(session_factory) == {'Pulse 1', 'Pulse 2', 'Pulse 3'}
+    assert cursor(session_factory) == otx.Cursor('2026-11-03T08:00:00.000000', 1, '')
+    with session_factory() as db:
+        assert [r.status for r in db.scalars(select(SourceRun).order_by(SourceRun.created_at))] == [
+            'error',
+            'success',
+        ]
+
+
+@pytest.mark.parametrize(
+    ('stored', 'expected'),
+    [
+        ('', otx.Cursor()),
+        ('not json', otx.Cursor()),
+        ('[1, 2]', otx.Cursor()),
+        ('{"since": "yesterday", "page": 0, "newest": 5}', otx.Cursor()),
+        ('{"since": "2026-11-20T08:00:00Z", "page": 3}', otx.Cursor('2026-11-20T08:00:00.000000', 3, '')),
+        (
+            '{"since": "2026-11-20T10:00:00+02:00", "page": true}',
+            otx.Cursor('2026-11-20T08:00:00.000000', 1, ''),
+        ),
+    ],
+)
+def test_a_damaged_cursor_starts_over_instead_of_failing(stored: str, expected: otx.Cursor) -> None:
+    assert otx.Cursor.parse(stored) == expected

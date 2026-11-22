@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any, Final
 
 from .extraction import canonical, refang
@@ -13,6 +14,8 @@ from .schemas import DocumentInput, tlp_markings
 from .source_registry import Source
 
 PAGE_SIZE: Final = 25
+#: Pages read per sync (issue #11); a longer backlog continues at the next sync.
+MAX_PAGES: Final = 4
 INDICATOR_LIMIT: Final = 100
 _PULSE_ID = re.compile(r'[0-9a-fA-F]{24}', re.ASCII)
 _KINDS: Final = {
@@ -36,6 +39,59 @@ _KINDS: Final = {
 class PulseBatch:
     items: list[FeedItem]
     skipped: int
+    #: The newest ``modified`` time on this page (normalised ISO-8601), ``''`` if none could be read.
+    newest: str = ''
+    #: OTX says another page follows. Only a signal: its ``next`` link is never followed.
+    more: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class Cursor:
+    """Where the next OTX sync starts (issue #11). ``since`` is sent as ``modified_since``; ``page`` is the
+    next page of that pass (above 1 after a failure or the page limit); ``newest`` is the newest change seen
+    so far in the pass, which becomes ``since`` once the pass reaches the last page."""
+
+    since: str = ''
+    page: int = 1
+    newest: str = ''
+
+    @classmethod
+    def parse(cls, stored: str) -> Cursor:
+        try:
+            raw = json.loads(stored) if stored else {}
+        except (ValueError, RecursionError):
+            return cls()
+        if not isinstance(raw, dict):
+            return cls()
+        page = raw.get('page')
+        return cls(
+            since=_moment(raw.get('since')),
+            page=page if isinstance(page, int) and not isinstance(page, bool) and 1 <= page <= 10_000 else 1,
+            newest=_moment(raw.get('newest')),
+        )
+
+    def dump(self) -> str:
+        return json.dumps({'since': self.since, 'page': self.page, 'newest': self.newest}, sort_keys=True)
+
+    def after(self, batch: PulseBatch) -> Cursor:
+        """The cursor once ``batch`` (page ``self.page``) is stored."""
+        newest = max(self.newest, batch.newest)
+        if batch.more:
+            return Cursor(self.since, self.page + 1, newest)
+        return Cursor(newest or self.since, 1, '')
+
+
+def _moment(value: Any) -> str:
+    """OTX's ``modified`` as ISO-8601 UTC without an offset (OTX's own form), or ``''`` if unreadable."""
+    if not isinstance(value, str) or not value or len(value) > 40:
+        return ''
+    try:
+        moment = datetime.fromisoformat(value.replace('Z', '+00:00'))
+    except ValueError:
+        return ''
+    if moment.tzinfo is not None:
+        moment = moment.astimezone(UTC).replace(tzinfo=None)
+    return moment.isoformat(timespec='microseconds')
 
 
 def _public_clear(pulse: dict[str, Any]) -> bool:
@@ -108,4 +164,7 @@ def parse_pulses(payload: bytes, source: Source) -> PulseBatch:
         raise ValueError('OTX did not return a pulse list')
     rows = page['results'][:PAGE_SIZE]
     items = [item for row in rows if (item := _pulse(row, source)) is not None]
-    return PulseBatch(items, len(rows) - len(items))
+    newest = max(
+        (m for row in rows if isinstance(row, dict) and (m := _moment(row.get('modified')))), default=''
+    )
+    return PulseBatch(items, len(rows) - len(items), newest, bool(page.get('next')))

@@ -291,3 +291,49 @@ def test_0015_preserves_markings_in_existing_actor_notes(engine: Engine) -> None
         link = db.scalars(select(ActorDocument)).one()
         assert (link.tlp, link.note) == ('RED', 'Private TLP:RED, retained.')
         assert services.linked_reports(db, link.group_ref, max_tlp='AMBER') == []
+
+
+def test_0022_turns_postgres_timestamps_into_timestamptz_and_back(engine: Engine) -> None:
+    """Issue #11: text in any form Insight wrote becomes the same moment; code still reads ISO strings."""
+    if engine.dialect.name != 'postgresql':
+        pytest.skip('PostgreSQL only: SQLite keeps timestamps as text')
+    migrations.upgrade(engine, '0021')
+    written = {
+        'with-offset': '2026-11-20T10:00:00.123456+00:00',
+        'other-zone': '2026-11-20T12:30:00+02:30',  # 10:00 UTC
+        'zulu': '2026-11-20T10:00:00Z',
+        'naive': '2026-11-20T10:00:00',  # legacy rows had no offset: UTC
+    }
+    with engine.begin() as connection:
+        connection.execute(text("SET TIME ZONE 'America/New_York'"))  # the session zone must not matter
+        for term, stamp in written.items():
+            connection.execute(
+                text('INSERT INTO watch_terms (id, term, created_at) VALUES (:id, :term, :stamp)'),
+                {'id': term, 'term': term, 'stamp': stamp},
+            )
+    migrations.upgrade(engine)
+    columns = {c['name']: c['type'] for c in inspect(engine).get_columns('watch_terms')}
+    assert str(columns['created_at']).startswith('TIMESTAMP')
+    with Session(engine) as db:
+        stored = {w.term: w.created_at for w in db.scalars(select(WatchTerm))}
+        assert stored == {
+            'with-offset': '2026-11-20T10:00:00.123456+00:00',
+            'other-zone': '2026-11-20T10:00:00+00:00',
+            'zulu': '2026-11-20T10:00:00+00:00',
+            'naive': '2026-11-20T10:00:00+00:00',
+        }
+        # Comparing with an ISO string still works, in time order: 11:00+02:00 is 09:00 UTC (as text it would
+        # sort after every 10:00 value and match none).
+        later = db.scalars(select(WatchTerm.term).where(WatchTerm.created_at > '2026-11-20T11:00:00+02:00'))
+        assert set(later) == set(written)
+        newest = db.scalars(
+            select(WatchTerm.term).where(WatchTerm.created_at > '2026-11-20T10:00:00.1+00:00')
+        )
+        assert list(newest) == ['with-offset']
+    migrations.downgrade(engine, '0021')
+    with engine.connect() as connection:
+        back: dict[str, str] = dict(
+            connection.execute(text('SELECT term, created_at FROM watch_terms')).all()
+        )
+    assert back['with-offset'] == '2026-11-20T10:00:00.123456+00:00'
+    assert back['naive'] == '2026-11-20T10:00:00.000000+00:00'

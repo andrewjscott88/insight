@@ -181,7 +181,7 @@ def test_old_finished_jobs_are_pruned(session_factory: sessionmaker[Session]) ->
                     kind=SOURCE_SYNC,
                     key=key,
                     status='succeeded',
-                    run_after='',
+                    run_after=services.stamp(finished),
                     finished_at=services.stamp(finished),
                 )
             )

@@ -19,6 +19,7 @@ from sqlalchemy import (
     Index,
     String,
     Text,
+    TypeDecorator,
     UniqueConstraint,
     create_engine,
     event,
@@ -27,6 +28,8 @@ from sqlalchemy import (
     text,
     true,
 )
+from sqlalchemy.dialects.postgresql import TIMESTAMP
+from sqlalchemy.engine import Dialect
 from sqlalchemy.orm import (
     DeclarativeBase,
     Mapped,
@@ -37,6 +40,7 @@ from sqlalchemy.orm import (
     synonym,
 )
 from sqlalchemy.pool import StaticPool
+from sqlalchemy.types import TypeEngine
 
 from .extraction import EXTRACTOR_VERSION
 from .schemas import most_restrictive
@@ -50,6 +54,36 @@ def uid() -> str:
 def now() -> str:
     """Return the current UTC time as an ISO-8601 string."""
     return datetime.now(UTC).isoformat()
+
+
+class UtcTimestamp(TypeDecorator[str]):
+    """A moment as an ISO-8601 UTC string in Python, stored as ``timestamptz`` on PostgreSQL (issue #11).
+
+    Code keeps reading and writing the strings :func:`now` and ``services.stamp`` make, and comparing columns
+    with such strings (``created_at >= since``). On PostgreSQL the database stores, compares and indexes real
+    moments; on SQLite the column stays the text it always was (``DateTime`` there silently drops the offset,
+    docs/ARCHITECTURE.md). A string without an offset is read as UTC, as legacy rows always were.
+    """
+
+    impl = String(40)
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect: Dialect) -> TypeEngine[Any]:
+        if dialect.name == 'postgresql':
+            return dialect.type_descriptor(TIMESTAMP(timezone=True))
+        return dialect.type_descriptor(String(40))
+
+    def process_bind_param(self, value: Any, dialect: Dialect) -> Any:
+        if value is None or dialect.name != 'postgresql':
+            return value
+        moment = value if isinstance(value, datetime) else datetime.fromisoformat(str(value))
+        return moment if moment.tzinfo is not None else moment.replace(tzinfo=UTC)
+
+    def process_result_value(self, value: Any, dialect: Dialect) -> str | None:
+        if isinstance(value, datetime):
+            moment = value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+            return moment.astimezone(UTC).isoformat()
+        return value  # type: ignore[no-any-return]
 
 
 class Base(DeclarativeBase):
@@ -84,7 +118,7 @@ class Document(Base):
     source_url: Mapped[str] = mapped_column(Text, default='')
     tlp: Mapped[str] = mapped_column(String(20), default='CLEAR')
     status: Mapped[str] = mapped_column(String(20), default='new')
-    created_at: Mapped[str] = mapped_column(String(40), default=now)
+    created_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
     extractor_version: Mapped[str] = mapped_column(String(40), default=EXTRACTOR_VERSION)
     source_key: Mapped[str | None] = mapped_column(String(80), default=None)
     external_id: Mapped[str | None] = mapped_column(String(500), default=None)
@@ -129,8 +163,8 @@ class EntityAssessment(Base):
     verdict: Mapped[str] = mapped_column(String(20))
     reason: Mapped[str] = mapped_column(Text, default='')
     tlp: Mapped[str] = mapped_column(String(20), default='AMBER')
-    valid_until: Mapped[str | None] = mapped_column(String(40), default=None)
-    decided_at: Mapped[str] = mapped_column(String(40), default=now)
+    valid_until: Mapped[str | None] = mapped_column(UtcTimestamp(), default=None)
+    decided_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
     actor: Mapped[str] = mapped_column(String(80))
 
 
@@ -145,7 +179,7 @@ class Observation(Base):
     review_status: Mapped[str] = mapped_column(String(20), default='unreviewed')
     #: When ``review_status`` last changed (``None``: never reviewed, or reviewed before 0.8). TAXII uses it
     #: so a client polling for new objects also gets indicators accepted after their report arrived.
-    reviewed_at: Mapped[str | None] = mapped_column(String(40), default=None)
+    reviewed_at: Mapped[str | None] = mapped_column(UtcTimestamp(), default=None)
 
 
 class DocumentTechnique(Base):
@@ -164,7 +198,7 @@ class DocumentTechnique(Base):
     status: Mapped[str] = mapped_column(String(10), default='tagged')
     evidence: Mapped[str] = mapped_column(Text, default='')
     actor: Mapped[str] = mapped_column(String(80), default='system')
-    created_at: Mapped[str] = mapped_column(String(40), default=now)
+    created_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
 
 
 class Note(Base):
@@ -172,7 +206,7 @@ class Note(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     document_id: Mapped[str] = mapped_column(ForeignKey('documents.id'), index=True)
     body: Mapped[str] = mapped_column(Text)
-    created_at: Mapped[str] = mapped_column(String(40), default=now)
+    created_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
 
 
 class AuditEvent(Base):
@@ -181,7 +215,7 @@ class AuditEvent(Base):
     action: Mapped[str] = mapped_column(String(50))
     object_id: Mapped[str] = mapped_column(String(36))
     detail: Mapped[str] = mapped_column(Text, default='')
-    created_at: Mapped[str] = mapped_column(String(40), default=now)
+    created_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
     #: Who acted: ``operator`` (browser session), ``api-key:<key id>``, ``cli``, ``connector:<source>`` or
     #: ``system``. Empty for events recorded before 0005. Taken from ``Session.info['actor']`` (see services).
     actor: Mapped[str] = mapped_column(String(80), default='', server_default='')
@@ -195,7 +229,7 @@ class KEVRecord(Base):
     date_added: Mapped[str] = mapped_column(String(30))
     due_date: Mapped[str] = mapped_column(String(30))
     required_action: Mapped[str] = mapped_column(Text)
-    imported_at: Mapped[str] = mapped_column(String(40), default=now)
+    imported_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
     #: CISA's name for the weakness, such as "Palo Alto Networks PAN-OS Command Injection Vulnerability".
     vulnerability_name: Mapped[str] = mapped_column(Text, default='', server_default='')
     #: ``knownRansomwareCampaignUse``: ``Known`` or ``Unknown`` (``''`` before migration 0013's first import).
@@ -205,7 +239,7 @@ class KEVRecord(Base):
     cwes: Mapped[str] = mapped_column(Text, default='', server_default='')
     #: When the entry was added or any field last changed (``imported_at`` is rewritten at every sync). The
     #: TAXII KEV collection uses it as the object's version (ADR 0026).
-    changed_at: Mapped[str] = mapped_column(String(40), default=now, server_default='')
+    changed_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
 
     @property
     def ransomware(self) -> bool:
@@ -216,7 +250,7 @@ class WatchTerm(Base):
     __tablename__ = 'watch_terms'
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     term: Mapped[str] = mapped_column(String(120), unique=True)
-    created_at: Mapped[str] = mapped_column(String(40), default=now)
+    created_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
 
 
 class SourceRun(Base):
@@ -225,7 +259,7 @@ class SourceRun(Base):
     source_key: Mapped[str] = mapped_column(String(80), index=True)
     status: Mapped[str] = mapped_column(String(20))
     message: Mapped[str] = mapped_column(Text)
-    created_at: Mapped[str] = mapped_column(String(40), default=now)
+    created_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
 
 
 class Enrichment(Base):
@@ -238,7 +272,7 @@ class Enrichment(Base):
     subject = synonym('cve')
     provider: Mapped[str] = mapped_column(String(20))
     payload: Mapped[str] = mapped_column(Text)
-    fetched_at: Mapped[str] = mapped_column(String(40), default=now)
+    fetched_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
 
 
 class ExploitSignal(Base):
@@ -256,7 +290,7 @@ class ExploitSignal(Base):
     )
     cve: Mapped[str] = mapped_column(String(40), index=True)
     signal: Mapped[str] = mapped_column(String(20))
-    found_at: Mapped[str] = mapped_column(String(40), default=now)
+    found_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
 
 
 class ApiKey(Base):
@@ -272,10 +306,10 @@ class ApiKey(Base):
     token_hash: Mapped[str] = mapped_column(String(64))
     name: Mapped[str] = mapped_column(String(100))
     access: Mapped[str] = mapped_column(String(20))
-    created_at: Mapped[str] = mapped_column(String(40), default=now)
-    expires_at: Mapped[str] = mapped_column(String(40))
-    last_used_at: Mapped[str | None] = mapped_column(String(40), default=None)
-    revoked_at: Mapped[str | None] = mapped_column(String(40), default=None)
+    created_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
+    expires_at: Mapped[str] = mapped_column(UtcTimestamp())
+    last_used_at: Mapped[str | None] = mapped_column(UtcTimestamp(), default=None)
+    revoked_at: Mapped[str | None] = mapped_column(UtcTimestamp(), default=None)
     #: Most restrictive TLP label this key may read or write; ``None`` means the instance limit only.
     max_tlp: Mapped[str | None] = mapped_column(String(20), default=None)
 
@@ -291,8 +325,8 @@ class OperatorSession(Base):
 
     __tablename__ = 'operator_sessions'
     id_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
-    created_at: Mapped[str] = mapped_column(String(40), default=now)
-    expires_at: Mapped[str] = mapped_column(String(40), index=True)
+    created_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
+    expires_at: Mapped[str] = mapped_column(UtcTimestamp(), index=True)
 
 
 class OperatorMfa(Base):
@@ -305,7 +339,7 @@ class OperatorMfa(Base):
     __tablename__ = 'operator_mfa'
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     secret: Mapped[str] = mapped_column(Text)
-    created_at: Mapped[str] = mapped_column(String(40), default=now)
+    created_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
     last_step: Mapped[int] = mapped_column(default=0)
 
 
@@ -336,12 +370,12 @@ class Job(Base):
     status: Mapped[str] = mapped_column(String(20))
     attempts: Mapped[int] = mapped_column(default=0)
     max_attempts: Mapped[int] = mapped_column(default=3)
-    run_after: Mapped[str] = mapped_column(String(40))
-    started_at: Mapped[str | None] = mapped_column(String(40), default=None)
-    finished_at: Mapped[str | None] = mapped_column(String(40), default=None)
+    run_after: Mapped[str] = mapped_column(UtcTimestamp())
+    started_at: Mapped[str | None] = mapped_column(UtcTimestamp(), default=None)
+    finished_at: Mapped[str | None] = mapped_column(UtcTimestamp(), default=None)
     message: Mapped[str] = mapped_column(Text, default='')
     actor: Mapped[str] = mapped_column(String(80), default='')
-    created_at: Mapped[str] = mapped_column(String(40), default=now)
+    created_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
 
 
 class Schedule(Base):
@@ -351,8 +385,8 @@ class Schedule(Base):
     source_key: Mapped[str] = mapped_column(String(80), primary_key=True)
     interval_minutes: Mapped[int] = mapped_column(default=0)
     enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
-    next_run_at: Mapped[str | None] = mapped_column(String(40), default=None)
-    updated_at: Mapped[str] = mapped_column(String(40), default=now)
+    next_run_at: Mapped[str | None] = mapped_column(UtcTimestamp(), default=None)
+    updated_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
     actor: Mapped[str] = mapped_column(String(80), default='')
 
 
@@ -372,7 +406,7 @@ class AlertTarget(Base):
     secret: Mapped[str] = mapped_column(String(80), default='')
     max_tlp: Mapped[str] = mapped_column(String(20), default='AMBER')
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
-    created_at: Mapped[str] = mapped_column(String(40), default=now)
+    created_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
     actor: Mapped[str] = mapped_column(String(80), default='')
     last_status: Mapped[str] = mapped_column(String(10), default='')
     last_sent_at: Mapped[str] = mapped_column(String(40), default='')
@@ -399,8 +433,8 @@ class Alert(Base):
     document_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     status: Mapped[str] = mapped_column(String(10), default='pending')  # pending | sent | failed
     attempts: Mapped[int] = mapped_column(default=0)
-    next_attempt_at: Mapped[str] = mapped_column(String(40), default=now)
-    created_at: Mapped[str] = mapped_column(String(40), default=now)
+    next_attempt_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
+    created_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
     sent_at: Mapped[str] = mapped_column(String(40), default='')
     error: Mapped[str] = mapped_column(String(300), default='')
 
@@ -411,7 +445,7 @@ class SourceSwitch(Base):
     __tablename__ = 'source_switches'
     source_key: Mapped[str] = mapped_column(String(80), primary_key=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
-    updated_at: Mapped[str] = mapped_column(String(40), default=now)
+    updated_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
     actor: Mapped[str] = mapped_column(String(80), default='')
 
 
@@ -424,8 +458,8 @@ class LookupFailure(Base):
     cve: Mapped[str] = mapped_column(String(40), primary_key=True)
     failures: Mapped[int] = mapped_column(default=1)
     message: Mapped[str] = mapped_column(String(200), default='')
-    failed_at: Mapped[str] = mapped_column(String(40), default=now)
-    retry_at: Mapped[str] = mapped_column(String(40), index=True)
+    failed_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
+    retry_at: Mapped[str] = mapped_column(UtcTimestamp(), index=True)
 
 
 class ThreatActor(Base):
@@ -443,8 +477,8 @@ class ThreatActor(Base):
     description: Mapped[str] = mapped_column(Text, default='')
     attack_group_id: Mapped[str | None] = mapped_column(String(10), default=None)
     tlp: Mapped[str] = mapped_column(String(20), default='AMBER')
-    created_at: Mapped[str] = mapped_column(String(40), default=now)
-    updated_at: Mapped[str] = mapped_column(String(40), default=now)
+    created_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
+    updated_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
     actor: Mapped[str] = mapped_column(String(80), default='')
 
 
@@ -459,7 +493,7 @@ class ActorDocument(Base):
     document_id: Mapped[str] = mapped_column(ForeignKey('documents.id'), index=True)
     tlp: Mapped[str] = mapped_column(String(20), default='CLEAR', server_default='CLEAR')
     note: Mapped[str] = mapped_column(Text, default='')
-    created_at: Mapped[str] = mapped_column(String(40), default=now)
+    created_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
     actor: Mapped[str] = mapped_column(String(80), default='')
 
 
@@ -472,7 +506,7 @@ class Campaign(Base):
     aliases: Mapped[str] = mapped_column(Text, default='')
     description: Mapped[str] = mapped_column(Text, default='')
     tlp: Mapped[str] = mapped_column(String(20), default='AMBER')
-    created_at: Mapped[str] = mapped_column(String(40), default=now)
+    created_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
     actor: Mapped[str] = mapped_column(String(80), default='')
 
 
@@ -490,9 +524,9 @@ class Case(Base):
     summary: Mapped[str] = mapped_column(Text, default='')
     status: Mapped[str] = mapped_column(String(10), default='open', index=True)
     tlp: Mapped[str] = mapped_column(String(20), default='AMBER')
-    created_at: Mapped[str] = mapped_column(String(40), default=now)
-    updated_at: Mapped[str] = mapped_column(String(40), default=now)
-    closed_at: Mapped[str | None] = mapped_column(String(40))
+    created_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
+    updated_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
+    closed_at: Mapped[str | None] = mapped_column(UtcTimestamp())
     close_note: Mapped[str] = mapped_column(Text, default='')
     actor: Mapped[str] = mapped_column(String(80), default='')
 
@@ -532,7 +566,7 @@ class CaseItem(Base):
     )
     note: Mapped[str] = mapped_column(Text, default='')
     tlp: Mapped[str] = mapped_column(String(20), default='AMBER')
-    added_at: Mapped[str] = mapped_column(String(40), default=now)
+    added_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
     actor: Mapped[str] = mapped_column(String(80), default='')
 
 
@@ -568,7 +602,7 @@ class ThreatLink(Base):
     entity_id: Mapped[str | None] = mapped_column(ForeignKey('entities.id', ondelete='CASCADE'), index=True)
     technique_id: Mapped[str | None] = mapped_column(String(16), index=True)
     tlp: Mapped[str] = mapped_column(String(20))
-    created_at: Mapped[str] = mapped_column(String(40), default=now)
+    created_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
     actor: Mapped[str] = mapped_column(String(80), default='')
 
 
@@ -586,7 +620,7 @@ class IndustryClaim(Base):
     document_id: Mapped[str | None] = mapped_column(ForeignKey('documents.id'), default=None)
     reason: Mapped[str] = mapped_column(Text, default='')
     tlp: Mapped[str] = mapped_column(String(20), default='AMBER')
-    created_at: Mapped[str] = mapped_column(String(40), default=now)
+    created_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
     actor: Mapped[str] = mapped_column(String(80), default='')
     subject_tlp = column_property(
         select(ThreatActor.tlp)
@@ -615,7 +649,7 @@ class DetectionRule(Base):
     licence: Mapped[str] = mapped_column(String(120), default='')
     content_hash: Mapped[str] = mapped_column(String(64), unique=True)
     tlp: Mapped[str] = mapped_column(String(20), default='AMBER')
-    created_at: Mapped[str] = mapped_column(String(40), default=now)
+    created_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
     actor: Mapped[str] = mapped_column(String(80), default='')
 
 
@@ -628,7 +662,7 @@ class RuleLink(Base):
     rule_id: Mapped[str] = mapped_column(ForeignKey('detection_rules.id'), index=True)
     target_kind: Mapped[str] = mapped_column(String(12))
     target_id: Mapped[str] = mapped_column(String(36), index=True)
-    created_at: Mapped[str] = mapped_column(String(40), default=now)
+    created_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
     actor: Mapped[str] = mapped_column(String(80), default='')
 
 
@@ -642,8 +676,8 @@ class Hunt(Base):
     status: Mapped[str] = mapped_column(String(10), default='open')  # open | closed
     summary: Mapped[str] = mapped_column(Text, default='')
     tlp: Mapped[str] = mapped_column(String(20), default='AMBER')
-    created_at: Mapped[str] = mapped_column(String(40), default=now)
-    updated_at: Mapped[str] = mapped_column(String(40), default=now)
+    created_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
+    updated_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
     actor: Mapped[str] = mapped_column(String(80), default='')
     subject_tlp = column_property(
         select(ThreatActor.tlp)
@@ -671,7 +705,7 @@ class HuntCheck(Base):
     period_start: Mapped[str] = mapped_column(String(40), default='')
     period_end: Mapped[str] = mapped_column(String(40), default='')
     notes: Mapped[str] = mapped_column(Text, default='')
-    updated_at: Mapped[str] = mapped_column(String(40), default=now)
+    updated_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
     actor: Mapped[str] = mapped_column(String(80), default='')
 
 
@@ -689,7 +723,9 @@ class FetchState(Base):
     last_modified: Mapped[str] = mapped_column(String(100), default='')
     payload_sha256: Mapped[str] = mapped_column(String(64), default='')
     insight_version: Mapped[str] = mapped_column(String(40), default='')
-    updated_at: Mapped[str] = mapped_column(String(40), default=now)
+    #: Where a paged feed resumes (OTX: JSON from ``otx.Cursor``); ``''`` for feeds read whole (issue #11).
+    cursor: Mapped[str] = mapped_column(Text, default='', server_default='')
+    updated_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
 
 
 SessionFactory: TypeAlias = sessionmaker[Session]
