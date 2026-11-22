@@ -10,20 +10,25 @@ from sqlalchemy.orm import Session
 
 from ..models import ActorDocument, Campaign, ThreatActor, ThreatLink
 from ..schemas import most_restrictive
-from ..stix_export import TLP_MARKINGS, stix_timestamp, tlp_marking
+from ..stix_export import TLP_MARKINGS, stable_id, stix_timestamp, tlp_marking
 from .tlp import visible_levels
 
 MAX_EXPORT_THREAT_RELATIONSHIPS: Final = 100_000
 _MARKING_LEVEL = {ref: level for level, ref in TLP_MARKINGS.items()}
 
 
-def _subject_object(kind: str, label: str, row: RowMapping) -> dict[str, Any]:
+def _subject_object(kind: str, label: str, row: RowMapping, *, stable: bool = False) -> dict[str, Any]:
     # A more restrictive association gets its own subject projection, just like a marked technique copy.
-    object_id = row['subject_id'] if label == row['subject_tlp'] else str(uuid4())
+    if label == row['subject_tlp']:
+        object_id = f'{kind}--{row["subject_id"]}'
+    elif stable:  # TAXII: the same projection always has the same ID (ADR 0026)
+        object_id = stable_id(kind, 'insight-projection', f'{row["subject_id"]}|{label}')
+    else:
+        object_id = f'{kind}--{uuid4()}'
     obj: dict[str, Any] = {
         'type': kind,
         'spec_version': '2.1',
-        'id': f'{kind}--{object_id}',
+        'id': object_id,
         'name': row['name'],
         'created': stix_timestamp(row['subject_created']),
         'modified': stix_timestamp(row['subject_updated']),
@@ -44,8 +49,14 @@ def _add_stix_threats(
     max_tlp: str | None,
     initial_tlp: str,
     modified: str,
+    stable: bool = False,
 ) -> str:
-    """Emit only visible links with selected endpoints. Return the highest marking for the export audit."""
+    """Emit only visible links with selected endpoints. Return the highest marking for the export audit.
+
+    With ``stable`` (TAXII, ADR 0026), every ID is deterministic and a relationship's ``modified`` is the
+    later of its link's creation and its target's own change time, so it appears to a polling client when
+    the client can first see it; ``modified`` (the export time) is not used.
+    """
     reports = {
         obj['id'].removeprefix('report--'): [obj]
         for obj in bundle.get('objects', [])
@@ -106,20 +117,27 @@ def _add_stix_threats(
                     label = most_restrictive(row['subject_tlp'], row['link_tlp'], target_tlp)
                     key = (kind, row['subject_id'], label)
                     if key not in subjects:
-                        obj = _subject_object(kind, label, row)
+                        obj = _subject_object(kind, label, row, stable=stable)
                         bundle['objects'].append(obj)
                         subjects[key] = obj['id']
                     needed_labels.add(label)
-                    stable = target['type'] == 'report' and label == row['subject_tlp']
-                    relationship_id = row['link_id'] if stable else str(uuid4())
                     created = stix_timestamp(row['link_created'])
+                    if target['type'] == 'report' and label == row['subject_tlp']:
+                        relationship_id = f'relationship--{row["link_id"]}'
+                    elif stable:
+                        relationship_id = stable_id(
+                            'relationship', 'insight-link', f'{row["link_id"]}|{target["id"]}|{label}'
+                        )
+                    else:
+                        relationship_id = f'relationship--{uuid4()}'
+                    changed = max(created, target['modified']) if stable else max(modified, created)
                     bundle['objects'].append(
                         {
                             'type': 'relationship',
                             'spec_version': '2.1',
-                            'id': 'relationship--' + relationship_id,
+                            'id': relationship_id,
                             'created': created,
-                            'modified': max(modified, created),
+                            'modified': changed,
                             'relationship_type': 'related-to',
                             'source_ref': subjects[key],
                             'target_ref': target['id'],

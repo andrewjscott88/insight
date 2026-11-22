@@ -25,19 +25,32 @@ MAX_MATCH_VALUES: Final = 100
 
 #: The collections are fixed here: no API key, setting or database row can create one.
 INDICATORS_COLLECTION: Final = '5b2f8a7e-4c1d-4e3a-9f6b-0d8c7a1e2f34'
+KEV_COLLECTION: Final = 'c4e1b7d2-6a35-4f08-8b9e-3d7f2a5c1e60'
 COLLECTIONS: Final = {
     INDICATORS_COLLECTION: {
         'id': INDICATORS_COLLECTION,
         'title': 'Reviewed indicators',
         'description': (
-            'Indicators and CVEs an analyst accepted in Insight, with the reports that mention them and '
-            "their TLP markings, up to the API key's TLP limit. Publisher text appears only where the "
-            'publisher allows it.'
+            'Indicators and CVEs an analyst accepted in Insight, with the reports that mention them, their '
+            "ATT&CK techniques, linked actors and campaigns, and TLP markings, up to the API key's TLP "
+            'limit. Publisher text appears only where the publisher allows it.'
         ),
         'can_read': True,
         'can_write': False,
         'media_types': [STIX_MEDIA_TYPE],
-    }
+    },
+    KEV_COLLECTION: {
+        'id': KEV_COLLECTION,
+        'title': 'CISA Known Exploited Vulnerabilities',
+        'description': (
+            "Every entry of CISA's Known Exploited Vulnerabilities catalog that Insight has synced, as STIX "
+            'vulnerabilities with the dates, required action and ransomware use CISA publishes. Public '
+            'data (TLP:CLEAR).'
+        ),
+        'can_read': True,
+        'can_write': False,
+        'media_types': [STIX_MEDIA_TYPE],
+    },
 }
 
 

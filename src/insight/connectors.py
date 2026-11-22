@@ -579,15 +579,21 @@ def import_kev(db: Session, payload: bytes) -> tuple[int, int]:
         if record is None:
             record = KEVRecord(cve=row['cveID'])
             db.add(record)
-        record.vendor = row['vendorProject']
-        record.product = row['product']
-        record.date_added = row['dateAdded']
-        record.due_date = row['dueDate']
-        record.required_action = row['requiredAction']
-        record.vulnerability_name = row['vulnerabilityName']
-        record.ransomware_use = row['knownRansomwareCampaignUse']
-        record.notes = row['notes']
-        record.cwes = row['cwes']
+        fields = {
+            'vendor': row['vendorProject'],
+            'product': row['product'],
+            'date_added': row['dateAdded'],
+            'due_date': row['dueDate'],
+            'required_action': row['requiredAction'],
+            'vulnerability_name': row['vulnerabilityName'],
+            'ransomware_use': row['knownRansomwareCampaignUse'],
+            'notes': row['notes'],
+            'cwes': row['cwes'],
+        }
+        if not record.changed_at or any(getattr(record, name) != value for name, value in fields.items()):
+            record.changed_at = imported_at
+        for name, value in fields.items():
+            setattr(record, name, value)
         record.imported_at = imported_at
     added = 0
     by_date = sorted(validated, key=lambda r: r['dateAdded'], reverse=True)
