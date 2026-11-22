@@ -13,8 +13,9 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from insight import connectors, services
+from insight.cve_scores import VULNCHECK_NOTICE
 from insight.lookups import THROTTLES
-from insight.models import Document, KEVRecord
+from insight.models import Document, Enrichment, KEVRecord
 
 KEV = json.dumps(
     {
@@ -320,3 +321,63 @@ def test_prioritised_cves_rank_with_reasons_and_follow_the_keys_tlp_limit(
     assert {c['cve'] for c in limited['cves']} == {'CVE-2026-1111', 'CVE-2026-2222'}
     for bad in ({'days': 0}, {'days': 366}, {'limit': 0}, {'limit': 501}):
         assert authed.get('/api/cves', params=bad).status_code == 422
+
+
+def test_cve_routes_show_exploit_context_within_the_keys_tlp_limit(
+    app: FastAPI, client: TestClient, authed: TestClient
+) -> None:
+    """TIP 3.3: report signals count only reports the caller may see; VulnCheck data carries its notice."""
+    for title, body, tlp in (
+        ('Public note', 'CVE-2026-4444 affects Acme gateways.', 'GREEN'),
+        ('Partner only', 'A public PoC for CVE-2026-4444 is on GitHub.', 'AMBER'),
+        ('Other', 'CVE-2026-5555 affects Acme routers.', 'GREEN'),
+    ):
+        response = authed.post(
+            '/api/documents', json={'title': title, 'body': body, 'source_name': 's', 'tlp': tlp}
+        )
+        assert response.status_code == 200
+    listed = {
+        'cve': 'CVE-2026-4444',
+        'listed': True,
+        'date_added': '2026-11-02',
+        'exploits': [],
+        'exploit_count': 0,
+    }
+    with app.state.session_factory.begin() as db:
+        db.add(Enrichment(cve='CVE-2026-4444', provider='vulncheck', payload=json.dumps(listed)))
+        _, token = services.create_api_key(db, name='siem', access='read', max_tlp='GREEN')
+    bearer = {'Authorization': f'Bearer {token}'}
+
+    rows = {c['cve']: c for c in authed.get('/api/cves').json()['cves']}
+    found = rows['CVE-2026-4444']
+    assert (found['tier'], found['label']) == (3, 'Reported exploited')
+    assert found['exploit'] == {
+        'public_exploit': True,
+        'reported_exploited': True,
+        'reports': {'poc': 1},
+        'vulncheck': {
+            'listed': True,
+            'date_added': '2026-11-02',
+            'exploits': [],
+            'exploit_count': 0,
+            'reported_count': 0,
+            'canaries': False,
+            'ransomware': False,
+        },
+        'attribution': VULNCHECK_NOTICE,
+    }
+    assert '1 report mentions a public proof of concept near it' in found['details']
+    assert rows['CVE-2026-5555']['exploit'] is None
+
+    limited = {c['cve']: c for c in client.get('/api/cves', headers=bearer).json()['cves']}
+    assert limited['CVE-2026-4444']['exploit']['reports'] == {}  # The PoC is in the AMBER report.
+    assert limited['CVE-2026-4444']['exploit']['public_exploit'] is False
+    scores = client.get('/api/cves/CVE-2026-4444/scores', headers=bearer).json()
+    assert scores['exploit']['reports'] == {}
+    assert scores['exploit']['attribution'] == VULNCHECK_NOTICE
+    assert authed.get('/api/cves/CVE-2026-4444/scores').json()['exploit']['reports'] == {'poc': 1}
+    assert authed.get('/api/cves/CVE-2026-5555/scores').json()['exploit'] is None
+    # The entity view of the CVE carries the same context, within the same limit.
+    entity_id = authed.get('/api/entities', params={'q': 'CVE-2026-4444'}).json()[0]['id']
+    assert authed.get(f'/api/entities/{entity_id}').json()['exploit']['reports'] == {'poc': 1}
+    assert client.get(f'/api/entities/{entity_id}', headers=bearer).json()['exploit']['reports'] == {}

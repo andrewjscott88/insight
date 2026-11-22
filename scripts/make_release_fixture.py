@@ -87,7 +87,7 @@ def build(path: Path) -> None:
                 db,
                 DocumentInput(
                     title='Analyst paste',
-                    body='Seen CVE-2024-3400 exploited; beacon to 198.51.100.7',
+                    body='Seen CVE-2024-3400 exploited with a public PoC; beacon to 198.51.100.7',
                     source_name='IR team',
                     tlp='AMBER',
                 ),

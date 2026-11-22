@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 import pytest
 from nicegui import ui
 from nicegui.testing.user import User
 
-from insight.models import KEVRecord
+from insight.cve_scores import VULNCHECK_NOTICE
+from insight.models import Enrichment, KEVRecord
 from insight.schemas import DocumentInput
 from insight.services import ingest
 
@@ -60,3 +62,26 @@ async def test_regression_each_tab_has_its_own_period_control(user: User, ui_env
     cve_period.set_value(7)
     assert technique_period.value == before
     assert cve_period.value == 7
+
+
+async def test_public_exploits_raise_a_cve_and_the_reader_shows_the_reports_signal(
+    user: User, ui_env: SimpleNamespace
+) -> None:
+    """TIP 3.3: a public PoC in a report, or VulnCheck KEV, moves a CVE above EPSS and CVSS signals."""
+    await user.should_see('Prioritised CVEs')
+    add_report(ui_env, 'Exploit write-up', 'A public PoC for CVE-2026-3333 was published on GitHub.')
+    add_report(ui_env, 'Router note', 'CVE-2026-4444 affects Acme routers.')
+    listed = {'cve': 'CVE-2026-4444', 'listed': True, 'date_added': '2026-11-02', 'exploit_count': 2}
+    with ui_env.app.state.session_factory.begin() as db:
+        db.add(Enrichment(cve='CVE-2026-4444', provider='vulncheck', payload=json.dumps(listed)))
+    await user.open('/')
+    await user.should_see('Reported exploited: 1 · Public exploit: 1')
+    with user.scope(marker='cve-CVE-2026-4444'):
+        await user.should_see('VulnCheck KEV: exploited, listed 2026-11-02, 2 public exploits')
+        await user.should_see(VULNCHECK_NOTICE)
+        await user.should_see('Not looked up at NIST NVD or FIRST EPSS yet.')
+    with user.scope(marker='cve-CVE-2026-3333'):
+        await user.should_see('1 report mentions a public proof of concept near it')
+        user.find(kind=ui.button, content='Open the newest report: Exploit write-up').click()
+    with user.scope(marker='document-detail'):
+        await user.should_see('This report mentions a public proof of concept near it.')

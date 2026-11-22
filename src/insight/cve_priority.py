@@ -5,10 +5,12 @@ Insight ranks by stated rules, not a hidden score, so an analyst can always see 
 1. **Used in ransomware campaigns**: on CISA's Known Exploited Vulnerabilities (KEV) list, and CISA knows of
    ransomware campaigns that use it.
 2. **Known to be exploited**: on CISA's KEV list.
-3. **Likely to be attacked soon**: an EPSS score of 10% or more (FIRST's estimate for the next 30 days).
-4. **Critical**: a CVSS base score of 9 or more (NIST NVD, or a CISA advisory).
-5. **High**: a CVSS base score of 7 or more.
-6. **No strong signal yet**: everything else, including CVEs not looked up yet.
+3. **Reported exploited**: VulnCheck KEV lists exploitation in the wild (TIP 3.3; only if looked up).
+4. **Public exploit**: a report you can see, or VulnCheck, says exploit code is public (TIP 3.3).
+5. **Likely to be attacked soon**: an EPSS score of 10% or more (FIRST's estimate for the next 30 days).
+6. **Critical**: a CVSS base score of 9 or more (NIST NVD, or a CISA advisory).
+7. **High**: a CVSS base score of 7 or more.
+8. **No strong signal yet**: everything else, including CVEs not looked up yet.
 
 Within a group: higher EPSS first, then higher CVSS, more reports, and the most recently seen. Nothing here
 says whether the reader's organisation uses the product: every signal describes the weakness, not exposure.
@@ -20,7 +22,8 @@ from dataclasses import dataclass
 from typing import Final
 
 from .brief import count_of
-from .cve_scores import describe_epss, describe_nvd
+from .cve_scores import describe_epss, describe_nvd, describe_vulncheck
+from .exploit_signals import LABELS
 from .services import CveSignal
 
 #: EPSS probability from which a CVE counts as likely to be attacked soon (as in the brief).
@@ -31,10 +34,12 @@ HIGH: Final = 7.0
 TIERS: Final[dict[int, tuple[str, str]]] = {
     1: ('Used in ransomware', 'CISA knows of ransomware campaigns that use it.'),
     2: ('Known exploited', "It is on CISA's list of weaknesses attackers have used."),
-    3: ('Likely attacked soon', 'EPSS gives it a 10% or higher chance of attack attempts in 30 days.'),
-    4: ('Critical', 'Its CVSS base score is 9 or more.'),
-    5: ('High', 'Its CVSS base score is 7 or more.'),
-    6: ('No strong signal', 'No KEV entry, high EPSS score or high CVSS score is known for it yet.'),
+    3: ('Reported exploited', 'VulnCheck KEV lists reports of attackers using it.'),
+    4: ('Public exploit', 'A report or VulnCheck says exploit code for it is public.'),
+    5: ('Likely attacked soon', 'EPSS gives it a 10% or higher chance of attack attempts in 30 days.'),
+    6: ('Critical', 'Its CVSS base score is 9 or more.'),
+    7: ('High', 'Its CVSS base score is 7 or more.'),
+    8: ('No strong signal', 'No KEV entry, public exploit, high EPSS score or high CVSS score is known yet.'),
 }
 
 
@@ -71,14 +76,18 @@ def prioritise(signal: CveSignal) -> PrioritisedCve:
         tier = 1
     elif signal.kev is not None:
         tier = 2
-    elif epss is not None and epss >= LIKELY:
+    elif signal.exploit is not None and signal.exploit.reported_exploited:
         tier = 3
-    elif cvss is not None and cvss >= CRITICAL:
+    elif signal.exploit is not None and signal.exploit.public_exploit:
         tier = 4
-    elif cvss is not None and cvss >= HIGH:
+    elif epss is not None and epss >= LIKELY:
         tier = 5
-    else:
+    elif cvss is not None and cvss >= CRITICAL:
         tier = 6
+    elif cvss is not None and cvss >= HIGH:
+        tier = 7
+    else:
+        tier = 8
     return PrioritisedCve(signal, tier, cvss, source, epss)
 
 
@@ -110,7 +119,14 @@ def details(item: PrioritisedCve) -> list[str]:
         lines.append(f'CVSS {signal.csaf_score:g} in a CISA advisory')
     if signal.scores.epss is not None:
         lines.append(describe_epss(signal.scores.epss))
-    if not signal.scores.checked:
+    if (exploit := signal.exploit) is not None:
+        for kind, count in sorted(exploit.reports.items()):
+            lines.append(
+                f'{count_of(count, "report")} mention{"s" if count == 1 else ""} {LABELS[kind]} near it'
+            )
+        if exploit.vulncheck is not None:
+            lines.append(describe_vulncheck(exploit.vulncheck))
+    if not (signal.scores.nvd_checked_at or signal.scores.epss_checked_at):
         lines.append('Not looked up at NIST NVD or FIRST EPSS yet.')
     seen = f'{count_of(signal.reports, "report")} from {count_of(signal.sources, "source")}'
     lines.append(f'{seen} · last seen {signal.last_seen[:10]}')

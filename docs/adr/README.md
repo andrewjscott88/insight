@@ -32,3 +32,4 @@ superseded ones are marked, never deleted.
 | [0025](0025-threat-guides.md) | Industry threat profiles and actor threat guides from a sourced, pinned threat-group library | Accepted |
 | [0026](0026-taxii-server.md) | A read-only TAXII 2.1 server over the STIX export, with stable objects | Accepted |
 | [0027](0027-ranked-search-and-link-graph.md) | Ranked search and a link graph from what Insight already records | Accepted |
+| [0028](0028-exploit-availability.md) | Exploit-availability context from reports and VulnCheck KEV, metadata only | Accepted |

@@ -1,4 +1,4 @@
-"""CVE lookups at NIST NVD and FIRST EPSS: one throttle for everyone, people's lookups and automatic ones.
+"""CVE lookups at NIST NVD, FIRST EPSS and VulnCheck KEV: one throttle per provider for everyone.
 
 **One throttle per provider** (review B2), shared by the API, the workspace and the job runner in this
 process: NVD allows 5 requests in 30 seconds without a key (one every 6.5 s here) and 50 with one
@@ -25,9 +25,13 @@ from . import services
 from .brief import count_of
 from .connectors import (
     CVE_RE,
+    KEY_REQUIRED,
+    PROVIDER_KEYS,
     ProviderError,
     enrich_cve,
+    enrichment_request,
     fetch_provider_json,
+    provider_key,
     store_enrichment,
     validate_enrichment,
 )
@@ -36,9 +40,11 @@ from .models import SessionFactory
 NVD_INTERVAL: Final = 6.5
 NVD_KEYED_INTERVAL: Final = 0.7
 EPSS_INTERVAL: Final = 1.0
+#: VulnCheck does not publish community rate limits we can rely on; one request every 2 s stays polite.
+VULNCHECK_INTERVAL: Final = 2.0
 #: CVEs per automatic lookup job.
-BATCH: Final[dict[str, int]] = {'epss': 100, 'nvd': 10}
-NAMES: Final[dict[str, str]] = {'epss': 'FIRST EPSS', 'nvd': 'NIST NVD'}
+BATCH: Final[dict[str, int]] = {'epss': 100, 'nvd': 10, 'vulncheck': 10}
+NAMES: Final[dict[str, str]] = {'epss': 'FIRST EPSS', 'nvd': 'NIST NVD', 'vulncheck': 'VulnCheck KEV'}
 
 
 class Throttle:
@@ -83,6 +89,7 @@ def nvd_interval() -> float:
 THROTTLES: Final[dict[str, Throttle]] = {
     'nvd': Throttle(nvd_interval()),
     'epss': Throttle(EPSS_INTERVAL),
+    'vulncheck': Throttle(VULNCHECK_INTERVAL),
     'greynoise': Throttle(1.0),
 }
 
@@ -106,6 +113,11 @@ async def request_lookup(session_factory: SessionFactory, cve: str, provider: st
     if wait := THROTTLES[provider].try_acquire():
         raise LookupThrottled(provider, wait)
     return await enrich_cve(session_factory, cve, provider)
+
+
+def unready_providers() -> frozenset[str]:
+    """Providers that need a key the operator has not set (VulnCheck KEV); the scheduler skips them."""
+    return frozenset(p for p in KEY_REQUIRED if not provider_key(p))
 
 
 def _answered(session_factory: SessionFactory, provider: str, cve: str, payload: dict[str, Any]) -> None:
@@ -152,20 +164,25 @@ async def look_up_due(
             }
             await asyncio.to_thread(store_enrichment, session_factory, cve, 'epss', answer)
     else:
+        if provider in KEY_REQUIRED and not provider_key(provider):
+            raise ProviderError(
+                f'{NAMES[provider]} needs {PROVIDER_KEYS[provider]}; set it, or switch this off.'
+            )
         # One CVE the provider cannot answer for is set aside with a growing wait and the others go on
         # (review M2); a problem with the provider itself (network, rate limit, key) stops the job.
         failed: list[str] = []
         for cve in cves:
-            await THROTTLES['nvd'].acquire()
+            await THROTTLES[provider].acquire()
             try:
-                payload = await fetch_provider_json('nvd', {'cveId': cve})
+                _, params = enrichment_request(cve, provider)
+                payload = await fetch_provider_json(provider, params)
             except ProviderError as exc:
                 if exc.provider_wide:
                     raise
-                await asyncio.to_thread(_failed, session_factory, 'nvd', cve, str(exc), clock())
+                await asyncio.to_thread(_failed, session_factory, provider, cve, str(exc), clock())
                 failed.append(cve)
                 continue
-            await asyncio.to_thread(_answered, session_factory, 'nvd', cve, payload)
+            await asyncio.to_thread(_answered, session_factory, provider, cve, payload)
         if failed and len(failed) == len(cves):
             raise ProviderError(
                 f'{NAMES[provider]} could not answer for any of {count_of(len(cves), "CVE")}.'

@@ -1,6 +1,6 @@
 # ADR 0024: A prioritised CVE view, and a brief that uses KEV ransomware use, NVD CVSS and EPSS
 
-Status: accepted (unreleased)
+Status: accepted (unreleased). Decision 3's groups are extended by [ADR 0028](0028-exploit-availability.md).
 
 ## Context
 With automatic lookups (ADR 0023), Insight holds NIST NVD's CVSS score and FIRST's EPSS probability for many

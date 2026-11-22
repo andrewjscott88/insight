@@ -7,8 +7,9 @@ from datetime import UTC, datetime
 from nicegui import ui
 
 from .. import services
-from ..cve_scores import NVD_NOTICE
-from ..lookups import NAMES
+from ..connectors import PROVIDER_KEYS
+from ..cve_scores import NVD_NOTICE, VULNCHECK_NOTICE
+from ..lookups import NAMES, unready_providers
 from .messages import tell
 from .typography import heading
 from .workspace import Workspace
@@ -37,8 +38,13 @@ def build_lookup_switches(ws: Workspace) -> None:
             switches = services.lookup_switches(db)
             waiting = services.lookup_backlog(db, at=datetime.now(UTC))
             failed = services.lookup_failures(db, at=datetime.now(UTC))
-        for provider in ('nvd', 'epss'):
-            if switches[provider]:
+        unready = unready_providers()
+        for provider in ('nvd', 'epss', 'vulncheck'):
+            if switches[provider] and provider in unready:
+                ui.label(f'{NAMES[provider]}: waiting for {PROVIDER_KEYS[provider]}').classes(
+                    'text-warn text-sm'
+                )
+            elif switches[provider]:
                 count = waiting[provider]
                 text = 'all looked up' if not count else f'{count} CVE(s) waiting, newest reports first'
                 ui.label(f'{NAMES[provider]}: {text}').classes('muted text-sm')
@@ -53,17 +59,25 @@ def build_lookup_switches(ws: Workspace) -> None:
     ws.on_refresh(status.refresh)
     heading('Automatic CVE lookups', 3, 'subsection-title mt-6')
     ui.label(
-        'Insight can look up each CVE that your TLP:CLEAR or GREEN reports mention, without a click: how '
-        'severe it is at NIST NVD, and how likely an attack is soon at FIRST EPSS. It sends only the CVE '
-        'number. A CVE seen only in AMBER or RED reports is never looked up by itself, because a lookup '
-        'shows the provider that someone is interested in it.'
+        'Insight can look up each CVE that your TLP:CLEAR or GREEN reports mention, without a click. '
+        'NIST NVD says how severe it is. FIRST EPSS says how likely an attack is soon. VulnCheck KEV says '
+        'if attackers use it, or if exploit code is public. Insight sends only the CVE number. A CVE seen '
+        'only in AMBER or RED reports is never looked up by itself, because a lookup shows the provider '
+        'that someone is interested in it.'
     ).classes('muted prose')
     ui.label(NVD_NOTICE).classes('muted text-sm prose')
     for provider, label in (
         ('nvd', 'Look up severity at NIST NVD by itself'),
         ('epss', 'Look up attack likelihood at FIRST EPSS by itself'),
+        ('vulncheck', 'Look up exploitation and public exploits at VulnCheck KEV by itself'),
     ):
         ui.switch(label, value=switches[provider], on_change=lambda e, p=provider: switch(p, bool(e.value)))
+    ui.label(
+        'VulnCheck KEV is free but needs your own VulnCheck community key in '
+        f'{PROVIDER_KEYS["vulncheck"]}. It adds exploitation reports and links to public exploits. '
+        'Insight keeps only dates, counts and links, never exploit code.'
+    ).classes('muted text-sm prose')
+    ui.label(VULNCHECK_NOTICE).classes('muted text-sm prose')
     if not ws.app.state.settings.run_jobs:
         ui.label('This server does not look anything up by itself (INSIGHT_RUN_JOBS is off).').classes(
             'text-warn'

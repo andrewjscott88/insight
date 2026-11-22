@@ -23,6 +23,7 @@ from ...schemas import (
 )
 from ...source_registry import SOURCES, in_use
 from ..auth import AuthDependency, acting, caller_of, reader_limit
+from .cves import exploit_view
 
 #: The NVD window without an API key (kept for scripts that read it; ``insight.lookups`` owns the throttles).
 ENRICHMENT_INTERVAL_SECONDS: Final = NVD_INTERVAL
@@ -182,11 +183,14 @@ def _register_enrichment_route(app: FastAPI, sessions: SessionFactory, require_a
     # not start lookups (which would name CVEs from any report to a provider).
     @app.get('/api/cves/{cve}/scores', dependencies=[Depends(require_auth)])
     def cached_scores(request: Request, cve: str) -> dict[str, Any]:
-        """The cached NVD and EPSS scores of ``cve`` (never contacts a provider). ``404`` unless a report the
-        caller may see mentions it."""
+        """The cached NVD, EPSS and VulnCheck KEV answers for ``cve``, plus exploit signals from reports the
+        caller may see (never contacts a provider). ``404`` unless a report the caller may see mentions it."""
         try:
             with sessions() as db:
                 found = services.cve_score_view(db, cve, max_tlp=reader_limit(request))
+                exploit = services.exploit_context(db, [found.cve], max_tlp=reader_limit(request)).get(
+                    found.cve
+                )
         except LookupError as exc:
             raise HTTPException(404, 'No report you can see mentions this CVE') from exc
-        return asdict(found)
+        return {**asdict(found), 'exploit': exploit_view(exploit)}

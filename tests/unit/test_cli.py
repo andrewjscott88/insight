@@ -751,6 +751,32 @@ def test_attack_backfill_tags_reports_from_before_0_7_0(
         engine.dispose()
 
 
+def test_exploit_backfill_notes_signals_in_older_reports(
+    sqlite_env: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from sqlalchemy import delete, select
+
+    from insight.models import AuditEvent, ExploitSignal, database
+
+    _seed_report(sqlite_env, 'A public PoC for CVE-2026-1111 was released on GitHub.')
+    engine, sessions = database(f'sqlite:///{sqlite_env / "insight.db"}', migrate=False)
+    try:
+        with sessions.begin() as db:
+            db.execute(delete(ExploitSignal))  # as a 0.8.0 database holds it
+        assert cli.main(['exploit-backfill']) == 0
+        assert capsys.readouterr().out.strip() == 'Read 1 report with a CVE; added 1 exploit signal.'
+        assert cli.main(['exploit-backfill']) == 0
+        assert capsys.readouterr().out.strip() == 'Read 1 report with a CVE; added 0 exploit signals.'
+        with sessions() as db:
+            assert db.execute(select(ExploitSignal.cve, ExploitSignal.signal)).all() == [
+                ('CVE-2026-1111', 'poc')
+            ]
+            event = db.scalars(select(AuditEvent).where(AuditEvent.action == 'exploit.backfill')).one()
+            assert event.actor == 'cli'
+    finally:
+        engine.dispose()
+
+
 def test_backup_removes_incomplete_destination_and_preserves_existing_file(
     monkeypatch: pytest.MonkeyPatch, in_tmp: Path
 ) -> None:

@@ -91,6 +91,7 @@ def build_parser() -> argparse.ArgumentParser:
             'import-pdf',
             'delete-report',
             'attack-backfill',
+            'exploit-backfill',
             'threat-library-sync',
             'industries',
             'threat-profile',
@@ -112,6 +113,7 @@ def build_parser() -> argparse.ArgumentParser:
             'import-pdf FILE: add a local PDF advisory (see import-pdf --help) | '
             'delete-report ID --reason TEXT: delete one report for legal or retention reasons | '
             'attack-backfill: tag the ATT&CK techniques written in reports stored before 0.7.0 | '
+            'exploit-backfill: note public-exploit mentions in reports stored before 0.9.0 | '
             'threat-library-sync: fetch the full pinned threat library | industries | '
             'threat-profile INDUSTRY: the top ten groups | threat-guide REF DEST: write a threat guide | '
             'rule-add FILE: store a YARA or Sigma rule | '
@@ -615,6 +617,18 @@ def attack_backfill() -> str:
     return f'Read {_plural(reports, "report")} without technique tags; added {_plural(added, "tag")}.'
 
 
+def exploit_backfill() -> str:
+    """Note public-exploit mentions (proof of concept, Metasploit, Exploit-DB) near CVEs in reports stored
+    before TIP 3.3. Safe to run again: only new signals are added. Audited as ``exploit.backfill`` by ``cli``.
+    """
+    from . import services
+
+    with _current_database() as sessions, sessions.begin() as db:
+        services.set_actor(db, 'cli')
+        reports, added = services.backfill_exploit_signals(db)
+    return f'Read {_plural(reports, "report")} with a CVE; added {_plural(added, "exploit signal")}.'
+
+
 def delete_report(document_id: str, reason: str, confirm: Callable[[str], bool] | None = None) -> str:
     """Delete one report (``services.delete_document``), after ``confirm`` agrees to the summary it is shown.
 
@@ -875,6 +889,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     if args.command == 'attack-backfill':
         print(attack_backfill())
+        return 0
+    if args.command == 'exploit-backfill':
+        print(exploit_backfill())
         return 0
     if args.command == 'delete-report':
         if not args.destination or not args.reason:

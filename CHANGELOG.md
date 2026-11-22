@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+### Upgrade notes
+
+- Migration `0019` adds the `exploit_signals` table at start-up. Run `make exploit-backfill` once to read
+  reports stored before this release (safe to rerun).
+- `GET /api/cves` has two new groups, so `tier` numbers after *Known exploited* move down by two. Scripts that
+  compare tier numbers should use the new numbers or the `label`.
+
+### Added: exploit availability (TIP 3.3)
+
+- **Public exploit signals from your reports.** When a report mentions a public proof of concept, a Metasploit
+  module or an Exploit-DB entry near a CVE, Insight notes it (not when the text says there is none). The reader
+  says so beside the CVE, and the CVE moves to a new **Public exploit** group, above EPSS and CVSS. Only the
+  fact is stored, never exploit code.
+- **VulnCheck KEV lookups (optional).** With your own free VulnCheck community token
+  (`INSIGHT_VULNCHECK_API_KEY`) and the switch on in **Sources**, Insight asks VulnCheck KEV about CVEs in
+  TLP:CLEAR and GREEN reports, like NVD and EPSS. A listed CVE goes to **Reported exploited**; its public
+  exploits are counted and linked on VulnCheck's site. Only dates, counts and VulnCheck links are kept, and
+  every view with VulnCheck data credits it, as its terms require.
+- **The brief** marks new KEV entries that also have public exploit code and says how many.
+- `GET /api/cves`, `GET /api/cves/{cve}/scores` and `GET /api/entities/{id}` (CVEs) gain an `exploit` field,
+  within the caller's TLP limit. [ADR 0028](docs/adr/0028-exploit-availability.md)
+
 ### Added: ranked search and a link map (TIP 3.2)
 
 - **Best match first.** Typing in the inbox search now ranks reports: every word must match, in any order

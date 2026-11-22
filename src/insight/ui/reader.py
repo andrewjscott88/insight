@@ -15,6 +15,8 @@ from nicegui import ui
 from pydantic import ValidationError
 
 from .. import services
+from ..cve_scores import VULNCHECK_NOTICE
+from ..exploit_signals import LABELS
 from ..extraction import EVIDENCE_CONTEXT
 from ..schemas import DOCUMENT_STATUSES, NoteInput
 from .actors import render_report_groups
@@ -83,7 +85,13 @@ def render_report(ws: Workspace, data: dict[str, Any], actions: ReaderActions) -
     verdicts = data.get('verdicts', {})
     for obs in data['observations']:
         _render_observation(
-            ws, obs, actions, data['tlp'], verdicts.get(obs['entity_id']), data.get('cve_scores', {})
+            ws,
+            obs,
+            actions,
+            data['tlp'],
+            verdicts.get(obs['entity_id']),
+            data.get('cve_scores', {}),
+            data.get('exploit_signals', {}),
         )
     render_report_techniques(ws, data['id'], data.get('techniques', []), actions.refresh)
     render_report_groups(ws, data['id'], actions.refresh)
@@ -145,6 +153,7 @@ def _render_observation(
     report_tlp: str,
     verdict: VerdictView | None,
     cve_scores: dict[str, str],
+    exploit_signals: dict[str, list[str]] | None = None,
 ) -> None:
     with ui.column().classes('panel w-full p-4 gap-2'):
         with ui.row().classes('items-center w-full'):
@@ -176,8 +185,13 @@ def _render_observation(
                 ui.label(kev['vulnerability_name']).classes('text-sm prose break-value')
             ui.label(kev['required_action']).classes('muted text-sm prose')
         if obs['kind'] == 'cve':
+            if signals := (exploit_signals or {}).get(obs['value']):
+                said = ' and '.join(LABELS[s] for s in signals)
+                ui.label(f'This report mentions {said} near it.').classes('text-warn text-sm prose')
             if scores := cve_scores.get(obs['value']):
                 ui.label(scores).classes('text-sm prose')
+                if 'VulnCheck KEV' in scores:
+                    ui.label(VULNCHECK_NOTICE).classes('muted text-sm prose')
             ui.button(
                 'Look up this CVE',
                 icon='travel_explore',

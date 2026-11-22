@@ -13,11 +13,11 @@ from sqlalchemy.orm import Session, sessionmaker
 from insight import services
 from insight.brief import DEMO
 from insight.cve_priority import TIERS, details, prioritise, rank
-from insight.cve_scores import CveScores, EpssScore, NvdScore
+from insight.cve_scores import CveScores, EpssScore, NvdScore, VulnCheckEntry
 from insight.demo import seed
 from insight.models import Document, Enrichment, KEVRecord, Observation
 from insight.schemas import DocumentInput
-from insight.services import BriefKev, CveSignal, SourceRef
+from insight.services import BriefKev, CveSignal, ExploitContext, SourceRef
 
 NOW = datetime(2026, 11, 21, 12, 0, tzinfo=UTC)
 
@@ -32,12 +32,21 @@ def signal(
     reports: int = 1,
     last_seen: str = '2026-11-20T00:00:00+00:00',
     status: str = 'Analyzed',
+    exploit: ExploitContext | None = None,
 ) -> CveSignal:
     nvd = NvdScore(cvss, '', '3.1', '', status, '', '', ()) if cvss is not None else None
     scores = CveScores(
         cve, nvd, EpssScore(epss, 0.9, '') if epss is not None else None, 'x' if nvd else '', ''
     )
-    return CveSignal(cve, reports, 1, last_seen, last_seen, 'd1', 'Report', csaf, kev, scores)
+    return CveSignal(cve, reports, 1, last_seen, last_seen, 'd1', 'Report', csaf, kev, scores, exploit)
+
+
+def in_reports(cve: str) -> ExploitContext:
+    return ExploitContext(cve, {'poc': 1})
+
+
+def vulncheck(cve: str, *, listed: bool = True, exploits: int = 0) -> ExploitContext:
+    return ExploitContext(cve, {}, VulnCheckEntry(listed=listed, exploit_count=exploits))
 
 
 def kev(cve: str, ransomware: bool = False) -> BriefKev:
@@ -52,13 +61,16 @@ def kev(cve: str, ransomware: bool = False) -> BriefKev:
     [
         (signal('CVE-1', kev=kev('CVE-1', ransomware=True), cvss=5.0), 1),
         (signal('CVE-2', kev=kev('CVE-2')), 2),
-        (signal('CVE-3', epss=0.1, cvss=4.0), 3),
-        (signal('CVE-4', cvss=9.0), 4),
-        (signal('CVE-5', csaf=9.6, cvss=6.0), 4),  # a CISA advisory's higher score counts
-        (signal('CVE-6', cvss=7.0, epss=0.0999), 5),
-        (signal('CVE-7', cvss=6.9), 6),
-        (signal('CVE-8'), 6),  # not looked up yet
-        (signal('CVE-9', cvss=9.8, status='Rejected'), 6),  # NVD rejected it: its score does not count
+        (signal('CVE-10', exploit=vulncheck('CVE-10'), epss=0.9), 3),  # VulnCheck KEV: reported exploited
+        (signal('CVE-11', exploit=in_reports('CVE-11'), epss=0.9), 4),  # a report mentions a public PoC
+        (signal('CVE-12', exploit=vulncheck('CVE-12', listed=False, exploits=0)), 8),  # looked up, nothing
+        (signal('CVE-3', epss=0.1, cvss=4.0), 5),
+        (signal('CVE-4', cvss=9.0), 6),
+        (signal('CVE-5', csaf=9.6, cvss=6.0), 6),  # a CISA advisory's higher score counts
+        (signal('CVE-6', cvss=7.0, epss=0.0999), 7),
+        (signal('CVE-7', cvss=6.9), 8),
+        (signal('CVE-8'), 8),  # not looked up yet
+        (signal('CVE-9', cvss=9.8, status='Rejected'), 8),  # NVD rejected it: its score does not count
     ],
 )
 def test_each_rule_places_a_cve_in_its_group(found: CveSignal, tier: int) -> None:

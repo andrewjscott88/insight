@@ -238,6 +238,24 @@ class Enrichment(Base):
     fetched_at: Mapped[str] = mapped_column(String(40), default=now)
 
 
+class ExploitSignal(Base):
+    """A report mentions public exploit code for a CVE nearby (TIP 3.3, ADR 0028): metadata only.
+
+    ``signal`` is ``poc``, ``metasploit`` or ``exploit-db``. The report is the evidence; no exploit text,
+    code or link is stored. Readers see a signal only through a report they may read.
+    """
+
+    __tablename__ = 'exploit_signals'
+    __table_args__ = (UniqueConstraint('document_id', 'cve', 'signal'),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    document_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey('documents.id', ondelete='CASCADE'), index=True
+    )
+    cve: Mapped[str] = mapped_column(String(40), index=True)
+    signal: Mapped[str] = mapped_column(String(20))
+    found_at: Mapped[str] = mapped_column(String(40), default=now)
+
+
 class ApiKey(Base):
     """API key for scripts and SIEM integrations. Only the SHA-256 of the key is stored (``insight.apikeys``).
 

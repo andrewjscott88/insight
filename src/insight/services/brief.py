@@ -18,6 +18,7 @@ from ..models import (
 )
 from ..source_registry import SOURCES, in_use
 from .common import fold, like_pattern
+from .exploits import exploit_context
 from .lookups import cve_scores
 from .sources import source_switches
 from .tlp import _visible
@@ -66,6 +67,8 @@ class BriefKev:
     ransomware: bool = False
     #: CISA's name for the weakness.
     name: str = ''
+    #: A report the reader may see, or VulnCheck, says exploit code for it is public (TIP 3.3).
+    public_exploit: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,6 +159,7 @@ def brief_data(db: Session, *, since: str, max_tlp: str | None = None) -> BriefD
     records = db.scalars(
         select(KEVRecord).where(or_(KEVRecord.date_added >= since[:10], KEVRecord.cve.in_(cves)))
     ).all()
+    exploits = exploit_context(db, [k.cve for k in records], max_tlp=max_tlp)
     kev_reports = dict(
         db.execute(
             select(Document.external_id, Document.id).where(
@@ -176,6 +180,7 @@ def brief_data(db: Session, *, since: str, max_tlp: str | None = None) -> BriefD
             kev_reports.get(k.cve) or '',
             ransomware=k.ransomware,
             name=k.vulnerability_name,
+            public_exploit=k.cve in exploits and exploits[k.cve].public_exploit,
         )
         for k in records
     }

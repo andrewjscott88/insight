@@ -48,10 +48,13 @@ def _deadline(added: list[BriefKev], today: str) -> list[str]:
 
 #: Marks a KEV line whose CVE CISA knows to be used in ransomware campaigns.
 RANSOMWARE: Final = ' · used in ransomware'
+#: TIP 3.3: a visible report or VulnCheck says exploit code is public.
+PUBLIC_EXPLOIT: Final = ' · exploit code public'
 
 
 def _ransomware(kev: BriefKev) -> str:
-    return RANSOMWARE if kev.ransomware else ''
+    # The exploit marker comes first: ransomware-linked items are found by their ending.
+    return (PUBLIC_EXPLOIT if kev.public_exploit else '') + (RANSOMWARE if kev.ransomware else '')
 
 
 def _nvd_note(data: BriefData, cve: str, score: float, origin: str) -> str:
@@ -87,6 +90,9 @@ def _summary(facts: _Facts, days: int, today: str, kev_trend: str = '') -> tuple
         if ransomware := [k for k in added if k.ransomware]:
             which = 'it' if len(added) == 1 else count_of(len(ransomware), 'of them', 'of them')
             lines.append(f'CISA knows of ransomware campaigns that use {which}.')
+        if public := [k for k in added if k.public_exploit]:
+            which = 'it' if len(added) == 1 else count_of(len(public), 'of them', 'of them')
+            lines.append(f'Exploit code is public for {which}.')
         lines += _deadline(added, today)
     if mentioned := facts.kev_mentioned:
         verb = 'appears' if len(mentioned) == 1 else 'appear'

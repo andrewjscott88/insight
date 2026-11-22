@@ -9,7 +9,7 @@ from nicegui import ui
 from nicegui.testing.user import User
 from sqlalchemy import select
 
-from insight.cve_scores import NVD_NOTICE
+from insight.cve_scores import NVD_NOTICE, VULNCHECK_NOTICE
 from insight.models import AuditEvent
 from insight.source_registry import CATEGORIES, SOURCES
 
@@ -67,3 +67,21 @@ async def test_automatic_lookups_start_off_and_show_what_waits(user: User, ui_en
             ('lookup.on', 'nvd', 'operator'),
             ('lookup.off', 'nvd', 'operator'),
         ]
+
+
+async def test_vulncheck_lookups_show_their_notice_and_wait_for_the_key(
+    user: User, ui_env: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """TIP 3.3: VulnCheck KEV needs the operator's own key; without it the switch says what is missing."""
+    monkeypatch.delenv('INSIGHT_VULNCHECK_API_KEY', raising=False)
+    await user.should_see(VULNCHECK_NOTICE)
+    vulncheck = user.find(
+        kind=ui.switch, content='Look up exploitation and public exploits at VulnCheck KEV by itself'
+    ).elements.pop()
+    assert vulncheck.value is False
+    vulncheck.set_value(True)
+    await user.should_see('VulnCheck KEV: waiting for INSIGHT_VULNCHECK_API_KEY')
+    monkeypatch.setenv('INSIGHT_VULNCHECK_API_KEY', 'vc-key')
+    vulncheck.set_value(False)
+    vulncheck.set_value(True)
+    await user.should_see('VulnCheck KEV: all looked up')

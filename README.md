@@ -76,8 +76,10 @@ A single-operator threat-intelligence workbench, run locally or published behind
   refused together with MFA, announced on every page). While on, anyone who can reach the site can read and
   change everything; see the [runbook](docs/RUNBOOK.md#temporary-password-free-access) before using it.
 - **Prioritised CVEs** ([ADR 0024](docs/adr/0024-prioritised-cves.md)): the CVEs in your reports, most urgent
-  first by stated rules (used in ransomware, known exploited, likely to be attacked soon, critical, high), each
-  saying why. The brief names ransomware-linked and likely-to-be-attacked weaknesses too. `GET /api/cves`.
+  first by stated rules (used in ransomware, known exploited, reported exploited, public exploit, likely to be
+  attacked soon, critical, high), each saying why. Public exploits come from your reports (a proof of concept,
+  Metasploit module or Exploit-DB entry mentioned near the CVE) and, with your own free token, from VulnCheck KEV
+  ([ADR 0028](docs/adr/0028-exploit-availability.md)); Insight never stores exploit code. The brief names ransomware-linked and likely-to-be-attacked weaknesses too. `GET /api/cves`.
 - **CVE severity and attack likelihood** ([ADR 0023](docs/adr/0023-automatic-cve-lookups.md)): NIST NVD (CVSS)
   and FIRST EPSS scores shown in plain words beside each CVE, looked up on request or, once switched on in
   **Sources**, automatically for CVEs in TLP:CLEAR and GREEN reports. Only CVE numbers are sent. No key is
@@ -148,6 +150,7 @@ the reference. Common ones:
 | Back up / restore | `make backup` (into `backups/`) · `make restore BACKUP=backups/backup-....db` (asks first) |
 | Delete a report (legal or retention reasons) | `make delete-report ID=... REASON='ticket 42'` (asks first; back up first) |
 | Tag ATT&CK techniques in reports stored before 0.7.0 | `make attack-backfill` (once after upgrading; safe to rerun) |
+| Note public-exploit mentions in reports stored before 0.9.0 | `make exploit-backfill` (once after upgrading; safe to rerun) |
 | Export IOCs | `make export-iocs EXPORT_ARGS="--max-tlp GREEN --review-status accepted --defang --no-evidence"` (into `exports/`) |
 | API key | `make api-key-create NAME=siem [ACCESS=read-write] [MAX_TLP=GREEN]` · `make api-key-status` · `make api-key-rotate` · `make api-key-revoke` |
 | Sign-in MFA (off by default) | `make mfa-enable` · `make mfa-disable` · `make mfa-status` · `make mfa-reset` |
@@ -192,6 +195,7 @@ Open http://127.0.0.1:8080. Default local data lives in `./data/insight.db`. Use
 | `insight export-iocs FILE` | Write a JSON IOC export (never overwrites; owner-only file). Options and recipes: [docs/IOC_EXPORT.md](docs/IOC_EXPORT.md#2-quick-start) |
 | `insight misp-export FILE` / `insight misp-import FILE` | Exchange a single MISP event as JSON or with a configured MISP instance. [MISP guide](docs/MISP.md) |
 | `insight attack-backfill` | Tag ATT&CK technique IDs in reports stored before 0.7.0 (safe to rerun) |
+| `insight exploit-backfill` | Note public-exploit mentions near CVEs in reports stored before 0.9.0 (safe to rerun) |
 | `insight industries` · `insight threat-profile INDUSTRY` | The industries, and the top ten groups for one with their evidence ([docs/THREAT_GUIDES.md](docs/THREAT_GUIDES.md#command-line)) |
 | `insight threat-guide REF FILE` | Write a group's threat guide (`--format md\|json\|navigator\|sweep-csv\|sweep-json`, `--max-tlp`, `--include-named` to sweep reports that only name the group; never overwrites; owner-only file) |
 | `insight rule-add FILE --kind sigma --link G0016` | Store a YARA or Sigma rule (text only, never run) and link it to groups or techniques |

@@ -1,4 +1,4 @@
-"""Scores per CVE from cached NVD and EPSS answers (review C2): safe parsing, and the wording."""
+"""Scores per CVE from cached NVD, EPSS and VulnCheck KEV answers (review C2, TIP 3.3): parsing, wording."""
 
 from __future__ import annotations
 
@@ -10,15 +10,20 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from insight.cve_scores import (
+    MAX_VULNCHECK_EXPLOITS,
     CveScores,
     EpssScore,
     NvdScore,
+    VulnCheckEntry,
     describe_epss,
     describe_nvd,
+    describe_vulncheck,
     parse_epss,
     parse_nvd,
+    parse_vulncheck,
     percent,
     scores,
+    summarise_vulncheck,
     summary,
 )
 
@@ -213,3 +218,125 @@ def test_scores_reads_cached_rows_and_summary_says_what_is_missing() -> None:
     assert summary(empty) == 'NIST NVD has no record of it yet · No EPSS score yet'
     assert summary(CveScores(CVE)) == ''
     assert not CveScores(CVE).checked
+
+
+# --------------------------------------------------------------------------- VulnCheck KEV (TIP 3.3)
+
+
+def vulncheck_answer(**extra: Any) -> dict[str, Any]:
+    exploit = {
+        'xdb_id': 'a1b2c3d4e5f6',
+        'xdb_url': 'https://vulncheck.com/xdb/a1b2c3d4e5f6',
+        'date_added': '2024-04-16T00:00:00Z',
+        'exploit_type': 'initial-access',
+        'clone_ssh_url': 'git@github.com:someone/cve-2024-3400.git',
+    }
+    row = {
+        'cve': [CVE],
+        'vendorProject': 'Palo Alto Networks',
+        'shortDescription': 'A command injection ... (long text that is not kept)',
+        'date_added': '2024-04-12T00:00:00Z',
+        'knownRansomwareCampaignUse': 'Known',
+        'reported_exploited_by_vulncheck_canaries': True,
+        'vulncheck_xdb': [exploit],
+        'vulncheck_reported_exploitation': [
+            {'url': 'https://example.org/a'},
+            {'url': 'https://example.org/b'},
+        ],
+        **extra,
+    }
+    return {'_meta': {'total_documents': 1}, 'data': [row]}
+
+
+def test_vulncheck_summary_keeps_metadata_only() -> None:
+    kept = summarise_vulncheck(vulncheck_answer(), CVE)
+    assert kept == {
+        'cve': CVE,
+        'listed': True,
+        'date_added': '2024-04-12',
+        'exploits': [
+            {
+                'xdb_id': 'a1b2c3d4e5f6',
+                'url': 'https://vulncheck.com/xdb/a1b2c3d4e5f6',
+                'exploit_type': 'initial-access',
+                'date_added': '2024-04-16',
+            }
+        ],
+        'exploit_count': 1,
+        'reported_count': 2,
+        'canaries': True,
+        'ransomware': True,
+    }
+    stored = json.dumps(kept)
+    for dropped in ('git@', 'github.com', 'shortDescription', 'command injection', 'example.org'):
+        assert dropped not in stored
+
+
+@pytest.mark.parametrize(
+    'url',
+    [
+        'https://github.com/someone/poc',
+        'http://vulncheck.com/xdb/x',
+        'https://vulncheck.com.evil.example/xdb/x',
+        'javascript:alert(1)',
+        'https://vulncheck.com/xdb/x"><script>',
+        None,
+    ],
+)
+def test_vulncheck_links_other_than_its_own_pages_are_dropped(url: Any) -> None:
+    exploit = {'xdb_id': 'x', 'xdb_url': url, 'date_added': 'yesterday'}
+    kept = summarise_vulncheck(vulncheck_answer(vulncheck_xdb=[exploit]), CVE)
+    assert kept['exploits'] == [{'xdb_id': 'x', 'url': '', 'exploit_type': '', 'date_added': ''}]
+    # A tampered cache is checked again when read.
+    tampered = {**kept, 'exploits': [{'xdb_id': 'x', 'url': url}]}
+    entry = parse_vulncheck(tampered)
+    assert entry is not None
+    assert entry.exploits[0].url == ''
+
+
+def test_vulncheck_keeps_at_most_ten_exploit_links_but_counts_them_all() -> None:
+    many = [{'xdb_id': str(i), 'xdb_url': f'https://vulncheck.com/xdb/{i}'} for i in range(25)]
+    entry = parse_vulncheck(summarise_vulncheck(vulncheck_answer(vulncheck_xdb=many), CVE))
+    assert entry is not None
+    assert len(entry.exploits) == MAX_VULNCHECK_EXPLOITS
+    assert entry.exploit_count == 25
+
+
+@pytest.mark.parametrize('payload', [{'data': []}, {'data': [{'cve': ['CVE-2020-0001']}]}, {}, [], 'x', None])
+def test_vulncheck_without_an_entry_for_the_cve_reads_as_not_listed(payload: Any) -> None:
+    kept = summarise_vulncheck(payload, CVE)
+    assert kept == {'cve': CVE, 'listed': False}
+    entry = parse_vulncheck(kept)
+    assert entry == VulnCheckEntry(listed=False)
+    assert describe_vulncheck(entry) == 'Not in VulnCheck KEV'
+
+
+def test_vulncheck_entry_matches_a_cve_given_as_a_string() -> None:
+    assert summarise_vulncheck(vulncheck_answer(cve=CVE.lower()), CVE)['listed'] is True
+
+
+@given(
+    st.recursive(
+        st.none() | st.booleans() | st.integers() | st.text(max_size=20),
+        lambda c: st.lists(c, max_size=3) | st.dictionaries(st.text(max_size=12), c, max_size=4),
+        max_leaves=20,
+    )
+)
+def test_vulncheck_parsing_never_raises(junk: Any) -> None:
+    summarise_vulncheck(junk, CVE)
+    parse_vulncheck(junk)
+    if isinstance(junk, dict):
+        parse_vulncheck({**junk, 'listed': True})
+
+
+def test_vulncheck_wording_and_summary() -> None:
+    found = scores(
+        CVE, [('vulncheck', json.dumps(summarise_vulncheck(vulncheck_answer(), CVE)), '2026-11-20')]
+    )
+    assert found.checked
+    assert found.vulncheck_checked_at == '2026-11-20'
+    assert summary(found) == (
+        "VulnCheck KEV: exploited, listed 2024-04-12, 1 public exploit, seen by VulnCheck's sensors"
+    )
+    bare = VulnCheckEntry(listed=True, exploit_count=3)
+    assert describe_vulncheck(bare) == 'VulnCheck KEV: exploited, 3 public exploits'
