@@ -26,6 +26,8 @@
 - STIX exports and the Reviewed indicators TAXII collection include linked malware and tools, with stable
   software IDs and sharing labels on every association. More restricted links do not alter a report's label.
 - `/api/software`, software detail and report-link routes, and `/api/documents/{id}/software`.
+- TAXII polling picks up later label changes to explicit actor/campaign links and includes the updated
+  subject version, even when the subject was created before the link.
 
 ### Added: sightings from hunt tools (TIP 4.2)
 

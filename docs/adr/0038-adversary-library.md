@@ -13,6 +13,9 @@ public reference data and are not silently turned into analyst actors.
 The stored name/type keeps old decisions readable and removable when an entry leaves a later catalog.
 Both link models track update times; older threat links start with their original creation time. Raising
 a sharing label advances the timestamp, so clients polling TAXII do not miss the newly marked projection.
+The existing threat STIX projection also reads this update time, with creation-time fallback for other
+link models. A shared subject projection takes the latest contributing change and appears only once per
+identity and label, including when the software projection reuses it.
 New links require an entry in the current catalog. Search uses public catalog data. Detail and link views
 filter both the stored link and its report/subject by the caller's TLP limit; a hidden item looks missing.
 Write labels respect the instance and caller limits, and report-link notes can raise their label. Updating
