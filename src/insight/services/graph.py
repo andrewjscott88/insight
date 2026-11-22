@@ -239,8 +239,9 @@ class _Walker:
     def _reports(self, *conditions: ColumnElement[bool]) -> list[Neighbour]:
         rows = self.db.execute(
             select(Document.id, Document.title, Document.source_name)
+            # Callers select reports with ``Document.id.in_(subquery)``, so each appears once without DISTINCT
+            # (which PostgreSQL refuses together with ORDER BY on a column it does not return).
             .where(*conditions, *_report_ok(self.max_tlp))
-            .distinct()
             .order_by(Document.created_at.desc(), Document.id)
             .limit(PER_NODE + 1)
         )
