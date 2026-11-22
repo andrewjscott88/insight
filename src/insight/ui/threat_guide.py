@@ -169,4 +169,4 @@ def _reports(ws: Workspace, guide: ThreatGuide) -> None:
 
         ui.button(
             f'{report.title} · TLP:{report.tlp} · {report.created_at[:10]} · {how}', on_click=open_report
-        ).props('flat no-caps align=left').classes('w-full break-value')
+        ).props('flat no-caps align=left').classes('w-full shrink-0 break-value')
