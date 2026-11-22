@@ -108,7 +108,9 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
 
 - [x] **TIP 3.1 Read-only TAXII 2.1 server** over the STIX export: one *Reviewed indicators* collection for
       API keys, stable IDs, `added_after` polling ([ADR 0026](docs/adr/0026-taxii-server.md), [guide](docs/TAXII.md)).
-- [ ] [#17](https://github.com/andrewjscott88/insight/issues/17) **TIP 3.2 Ranked search and a graph view.**
+- [x] [#17](https://github.com/andrewjscott88/insight/issues/17) **TIP 3.2 Ranked search and a graph view.** BM25-style ranking
+      identical on SQLite and PostgreSQL, `GET /api/graph`, and a keyboard-friendly link map
+      ([ADR 0027](docs/adr/0027-ranked-search-and-link-graph.md)).
 - [ ] **TIP 3.3 Exploit-availability signals,** metadata only, from terms-reviewed sources.
 - [ ] [#14](https://github.com/andrewjscott88/insight/issues/14) **TIP 3.4 OIDC sign-in and roles (M3),** with an
       authenticated ZAP active scan.

@@ -123,6 +123,7 @@ TLP_AWARE_SERVICES = {
     'linked_reports', 'link_report', 'unlink_report', 'record_industry_claim', 'guide_data',
     'hunts_for', 'get_hunt', 'start_hunt', 'update_hunt', 'record_check',
     'list_rules', 'add_rule', 'get_rule', 'delete_rule', 'link_rule', 'unlink_rule',
+    'taxii_collection_objects', 'ranked_search', 'build_graph',
 }  # fmt: skip
 
 

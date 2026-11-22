@@ -101,6 +101,7 @@ from .documents import (
 )
 from .entities import PIVOT_PAGE_SIZE, count_entity_documents, entity_documents, get_entity, list_entities
 from .exports import MAX_EXPORT_MENTIONS, export_iocs, export_stix, ioc_export_counts, ioc_mentions
+from .graph import Graph, GraphEdge, GraphNode, build_graph
 from .hunts import (
     get_hunt,
     hunt_checks,
@@ -142,6 +143,7 @@ from .lookups import (
     set_lookup_switch,
 )
 from .pdf_reports import import_pdf
+from .ranked_search import RankedHit, RankedPage, ranked_search, search_terms
 from .retention import MAX_REASON_LENGTH, DeletionPreview, DeletionResult, delete_document, deletion_preview
 from .rules import (
     LinkedRule,
@@ -267,6 +269,9 @@ __all__ = [
     'DeletionResult',
     'DocumentQuery',
     'DueAlert',
+    'Graph',
+    'GraphEdge',
+    'GraphNode',
     'GroupSubject',
     'GuideData',
     'HuntView',
@@ -275,6 +280,8 @@ __all__ = [
     'LinkedRule',
     'Mention',
     'ProfileEntry',
+    'RankedHit',
+    'RankedPage',
     'ReportRef',
     'SourceRef',
     'StructuredObservations',
@@ -298,6 +305,7 @@ __all__ = [
     'backfill_techniques',
     'blocklist',
     'brief_data',
+    'build_graph',
     'cached_enrichments',
     'cached_greynoise_context',
     'carry_decisions',
@@ -385,6 +393,7 @@ __all__ = [
     'queue_kev_alerts',
     'queue_report_alerts',
     'queue_test_alert',
+    'ranked_search',
     'recent_alerts',
     'recent_jobs',
     'recent_source_runs',
@@ -405,6 +414,7 @@ __all__ = [
     'rules_for_group',
     'save_fetch_state',
     'search_documents',
+    'search_terms',
     'session_binding',
     'set_actor',
     'set_document_status',

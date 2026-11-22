@@ -65,13 +65,34 @@ def build_inbox(ws: Workspace) -> None:
         if not ws.authorized():
             return
         with ws.read() as db:
-            docs = services.search_documents(db, current_query())
+            snippets: dict[str, str] = {}
+            if state.q.strip():
+                query = current_query()
+                page = services.ranked_search(
+                    db,
+                    state.q,
+                    status=query.status,
+                    tlp=query.tlp,
+                    include_superseded=query.include_superseded,
+                    limit=services.MAX_PAGE_SIZE,
+                )
+                docs = [hit.document for hit in page.hits]
+                snippets = {hit.document.id: hit.snippet for hit in page.hits}
+                more = f' ({page.total} match)' if page.total > len(docs) else ''
+                shown = f'{len(docs)} sources shown{more} · best match first'
+            else:
+                docs = services.search_documents(db, current_query())
+                shown = f'{len(docs)} sources shown · newest first'
             terms = [t.term for t in services.list_watch_terms(db)]
             rows: list[dict[str, Any]] = [
-                {**row, 'matches': services.watch_matches(terms, doc.title + ' ' + doc.body)}
+                {
+                    **row,
+                    'summary': snippets.get(doc.id, row['summary']),
+                    'matches': services.watch_matches(terms, doc.title + ' ' + doc.body),
+                }
                 for row, doc in zip(services.summaries(db, docs), docs, strict=True)
             ]
-        ui.label(f'{len(rows)} sources shown · newest first').classes('muted text-sm')
+        ui.label(shown).classes('muted text-sm')
         if not rows:
             ui.label('No reports match. Add a report, or load the demo to try Insight.').classes(
                 'muted p-2 prose'

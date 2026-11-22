@@ -394,6 +394,17 @@ API keys only (`Authorization: Bearer <key>`); a signed-in browser gets `403`. R
 | `GET` | `/taxii2/insight/collections/{id}/objects/{object_id}/` | One object |
 | `GET` | `/taxii2/insight/collections/{id}/objects/{object_id}/versions/` | Its version (Insight keeps the current one) |
 
+## Ranked search and the link graph
+
+[ADR 0027](adr/0027-ranked-search-and-link-graph.md). Both read only what the caller's TLP limit allows.
+
+| Method | Path | Returns |
+| --- | --- | --- |
+| `GET` | `/api/search?q=` | Reports matching **every word** of `q` (quotes keep a phrase together; case, accents and width ignored), best first: `terms`, `total`, `capped` (more than 5,000 matched; the newest 5,000 were ranked) and `results`, each a report summary plus `score`, `matched_in_title` and `snippet`. Filters `status`, `tlp`, `include_superseded`; `offset`, `limit` (1 to 200, default 50). |
+| `GET` | `/api/graph?node=&depth=1` | Nodes and edges within `depth` (1 or 2) links of `node`: `report:<id>`, `indicator:<entity id>`, `technique:T1059`, `group:G0016`, `actor:<id>` or `campaign:<id>`. Edges are `mentions` (not rejected), `tagged` and `linked` (an analyst's link). At most 25 neighbours per node (`truncated`) and 150 nodes (`capped`). `404` for a node that does not exist or is above the caller's TLP limit. |
+
+`GET /api/documents?q=` keeps its literal substring match, newest first.
+
 ## Entities
 
 | Route | Parameters | Result |

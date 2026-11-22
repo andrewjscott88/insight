@@ -12,6 +12,7 @@ from typing import Any
 from nicegui import ui
 
 from .. import greynoise, services
+from .graph import open_graph
 from .greynoise import open_greynoise
 from .typography import heading
 from .verdicts import Indicator, flag_badges, load_verdicts, render_verdict
@@ -62,6 +63,9 @@ def build_entities(ws: Workspace) -> None:
         box.clear()
         with box:
             flag_badges(target.kind, target.value)
+            ui.button('Show links', on_click=lambda: open_graph(ws, f'indicator:{target.entity_id}')).props(
+                'outline no-caps'
+            ).mark(f'entity-links-{target.value}')
             if show_greynoise:
                 ui.button(
                     'GreyNoise Community context', on_click=lambda: open_greynoise(ws, target.value)
