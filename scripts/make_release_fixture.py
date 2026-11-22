@@ -31,6 +31,9 @@ from insight.schemas import (
     ActorLinkInput,
     AssessmentInput,
     CampaignInput,
+    CaseInput,
+    CaseItemInput,
+    CaseNoteInput,
     DocumentInput,
     HuntCheckInput,
     HuntInput,
@@ -146,6 +149,11 @@ def build(path: Path) -> None:
             services.record_check(
                 db, hunt.id, 'T1071.001', HuntCheckInput(result='nothing-found', data_checked='Proxy logs')
             )
+            # 0.9.0: a case (TIP 3.8) holding the IR paste and the beacon, with a note
+            case = services.create_case(db, CaseInput(title='Fixture case', tlp='AMBER'))
+            services.add_case_item(db, case.id, CaseItemInput(kind='document', target_id=manual.id))
+            services.add_case_item(db, case.id, CaseItemInput(kind='indicator', target_id=beacon.id))
+            services.add_case_note(db, case.id, CaseNoteInput(text='Waiting for proxy logs.'))
     finally:
         engine.dispose()
 

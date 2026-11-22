@@ -473,6 +473,27 @@ which is not attribution.
 | `POST /api/rules/{rule_id}/links` | JSON `{target_kind, target_id}`: `group` (a `{ref}`), `technique` (`T1059.001`), `document` (a report ID), `cve` (a CVE ID) or `malware` (a family label) | `{rule, kind, id}`. Audited as `rule.link`. `404` if you cannot see the target |
 | `DELETE /api/rules/{rule_id}/links` | Same body | `{unlinked}`. Audited as `rule.unlink` |
 
+## Cases
+
+[ADR 0029](adr/0029-cases.md). A case's `tlp` is the strictest of its items, its text and its notes, and
+removing an item does not lower it. A caller sees and changes only cases within its limit (the stricter of the
+instance and key limits), and can only add what it can see. Every change is audited on the case. `404`:
+unknown or above your limit; `403`: a label above your limit; `409`: the case is closed.
+
+| Route | Input | Returns |
+| --- | --- | --- |
+| `GET /api/cases` | `status` (`open`, `closed` or `all`; default `open`), `offset`, `limit` (1–200) | `{cases: [{id, title, status, tlp, items, created_at, updated_at, closed_at}]}`, most recently changed first; `items` leaves notes out |
+| `POST /api/cases` | `{title, summary?, tlp?}` (default AMBER; TLP markings in the text raise it) | `201` and the case `{id, title, summary, status, tlp, created_at, updated_at, closed_at, close_note, created_by}`. Audited as `case.open` |
+| `GET /api/cases/{id}` | - | The case with `items: [{id, kind, target_id, name, note, tlp, added_at, added_by}]`; `kind` is `document`, `indicator`, `actor`, `campaign` or `note` |
+| `PATCH /api/cases/{id}` | Any of `{title, summary, tlp}` | The case. A lower `tlp` stops at the strictest item or marking. Audited as `case.update` |
+| `DELETE /api/cases/{id}` | - | `{deleted}`; items and notes go with it, their targets stay. Audited as `case.delete` |
+| `POST /api/cases/{id}/items` | `{kind, target_id, tlp?}`: `document` (report ID), `indicator` (entity ID), `actor` (actor ID) or `campaign` (campaign ID) | `201` and the item. Labelled at least like its target; raises the case. Adding it again changes nothing. Audited as `case.item.add` |
+| `DELETE /api/cases/{id}/items/{item_id}` | - | `{removed}`. Audited as `case.item.remove` |
+| `POST /api/cases/{id}/notes` | `{text, tlp?}` (default: the case's label) | `201` and the note item. Audited as `case.note` |
+| `POST /api/cases/{id}/close` | `{note}` | The closed case. Audited as `case.close` |
+| `POST /api/cases/{id}/reopen` | - | The open case. Audited as `case.reopen` |
+| `GET /api/cases/{id}/timeline` | - | `{events: [{at, action, actor, detail}]}`, oldest first (at most 1,000) |
+
 ## Sources and enrichment
 
 | Route | Result |

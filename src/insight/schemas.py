@@ -269,6 +269,54 @@ class ThreatLinkInput(BaseModel):
     tlp: TLP = DEFAULT_TLP
 
 
+CaseItemKind = Literal['document', 'indicator', 'actor', 'campaign']
+CaseStatusFilter = Literal['open', 'closed', 'all']
+
+
+class CaseInput(BaseModel):
+    """``POST /api/cases``: open an investigation (TIP 3.8). TLP markings in the text raise the label."""
+
+    model_config = ConfigDict(frozen=True, extra='forbid')
+    title: str = Field(min_length=1, max_length=200)
+    summary: str = Field(default='', max_length=10_000)
+    tlp: TLP = DEFAULT_TLP
+
+
+class CaseUpdate(BaseModel):
+    """``PATCH /api/cases/{id}``: change what is given. A lower ``tlp`` never goes below the items' labels."""
+
+    model_config = ConfigDict(frozen=True, extra='forbid')
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    summary: str | None = Field(default=None, max_length=10_000)
+    tlp: TLP | None = None
+
+
+class CaseItemInput(BaseModel):
+    """``POST /api/cases/{id}/items``: add a report, indicator, actor or campaign. The item is labelled at
+    least as restrictively as the target itself (``tlp`` can only raise that)."""
+
+    model_config = ConfigDict(frozen=True, extra='forbid')
+    kind: CaseItemKind
+    target_id: DocumentId
+    tlp: TLP = 'CLEAR'
+
+
+class CaseNoteInput(BaseModel):
+    """``POST /api/cases/{id}/notes``: an analyst note, labelled like the case unless ``tlp`` says otherwise;
+    TLP markings in the text raise its label."""
+
+    model_config = ConfigDict(frozen=True, extra='forbid')
+    text: str = Field(min_length=1, max_length=10_000)
+    tlp: TLP | None = None
+
+
+class CaseCloseInput(BaseModel):
+    """``POST /api/cases/{id}/close``: close with a note saying what was found or decided."""
+
+    model_config = ConfigDict(frozen=True, extra='forbid')
+    note: str = Field(min_length=1, max_length=10_000)
+
+
 class ActorLinkInput(BaseModel):
     """``POST /api/actors/{id}/documents``: link a report to a group or actor (the analyst's decision)."""
 

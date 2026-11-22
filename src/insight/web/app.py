@@ -32,6 +32,7 @@ from .auth import (
 )
 from .boundary import BoundaryMiddleware
 from .routes.campaigns import _register_campaign_routes
+from .routes.cases import _register_case_routes
 from .routes.cves import _register_cve_routes
 from .routes.documents import _register_document_routes
 from .routes.entities import _register_entity_routes
@@ -202,6 +203,7 @@ def create_app(settings: Settings | None = None, *, with_ui: bool = True) -> Fas
         _register_technique_routes,
         _register_threat_routes,
         _register_campaign_routes,
+        _register_case_routes,
         _register_hunting_routes,
         _register_source_routes,
         _register_enrichment_route,

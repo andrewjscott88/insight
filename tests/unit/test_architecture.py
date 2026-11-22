@@ -24,7 +24,7 @@ ORM_CLASSES = {'Document', 'Entity', 'Observation', 'Note', 'AuditEvent', 'KEVRe
 ORM_CLASSES |= {'SourceRun', 'Enrichment', 'ApiKey', 'Job', 'Schedule', 'FetchState', 'EntityAssessment'}
 ORM_CLASSES |= {'DocumentTechnique', 'SourceSwitch', 'LookupFailure'}
 ORM_CLASSES |= {'ThreatActor', 'ActorDocument', 'IndustryClaim', 'DetectionRule', 'RuleLink'}
-ORM_CLASSES |= {'Hunt', 'HuntCheck', 'ExploitSignal'}
+ORM_CLASSES |= {'Hunt', 'HuntCheck', 'ExploitSignal', 'Case', 'CaseItem'}
 
 
 def imports(path: Path) -> list[tuple[str, str]]:
@@ -124,6 +124,9 @@ TLP_AWARE_SERVICES = {
     'hunts_for', 'get_hunt', 'start_hunt', 'update_hunt', 'record_check',
     'list_rules', 'add_rule', 'get_rule', 'delete_rule', 'link_rule', 'unlink_rule',
     'taxii_collection_objects', 'ranked_search', 'build_graph', 'exploit_context',
+    'list_cases', 'create_case', 'get_case', 'update_case', 'delete_case', 'add_case_item',
+    'remove_case_item',
+    'add_case_note', 'close_case', 'reopen_case', 'case_timeline',
 }  # fmt: skip
 
 

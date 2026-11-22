@@ -476,6 +476,66 @@ class Campaign(Base):
     actor: Mapped[str] = mapped_column(String(80), default='')
 
 
+class Case(Base):
+    """One investigation the operator opens and closes (TIP 3.8, ADR 0029).
+
+    ``tlp`` is at least as restrictive as every item ever added; removing an item never lowers it, because
+    the title, summary and notes may have been written with that item in view.
+    """
+
+    __tablename__ = 'cases'
+    __table_args__ = (CheckConstraint("status IN ('open', 'closed')", name='case_status'),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    title: Mapped[str] = mapped_column(String(200))
+    summary: Mapped[str] = mapped_column(Text, default='')
+    status: Mapped[str] = mapped_column(String(10), default='open', index=True)
+    tlp: Mapped[str] = mapped_column(String(20), default='AMBER')
+    created_at: Mapped[str] = mapped_column(String(40), default=now)
+    updated_at: Mapped[str] = mapped_column(String(40), default=now)
+    closed_at: Mapped[str | None] = mapped_column(String(40))
+    close_note: Mapped[str] = mapped_column(Text, default='')
+    actor: Mapped[str] = mapped_column(String(80), default='')
+
+
+class CaseItem(Base):
+    """A report, indicator, actor, campaign or note in a case. Deleting the target removes the item."""
+
+    __tablename__ = 'case_items'
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('document', 'indicator', 'actor', 'campaign', 'note')", name='case_item_kind'
+        ),
+        CheckConstraint(
+            '(CASE WHEN document_id IS NULL THEN 0 ELSE 1 END + '
+            'CASE WHEN entity_id IS NULL THEN 0 ELSE 1 END + '
+            'CASE WHEN actor_id IS NULL THEN 0 ELSE 1 END + '
+            "CASE WHEN campaign_id IS NULL THEN 0 ELSE 1 END) = CASE WHEN kind = 'note' THEN 0 ELSE 1 END",
+            name='one_case_target',
+        ),
+        UniqueConstraint('case_id', 'document_id'),
+        UniqueConstraint('case_id', 'entity_id'),
+        UniqueConstraint('case_id', 'actor_id'),
+        UniqueConstraint('case_id', 'campaign_id'),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    case_id: Mapped[str] = mapped_column(ForeignKey('cases.id', ondelete='CASCADE'), index=True)
+    kind: Mapped[str] = mapped_column(String(12))
+    document_id: Mapped[str | None] = mapped_column(
+        ForeignKey('documents.id', ondelete='CASCADE'), index=True
+    )
+    entity_id: Mapped[str | None] = mapped_column(ForeignKey('entities.id', ondelete='CASCADE'), index=True)
+    actor_id: Mapped[str | None] = mapped_column(
+        ForeignKey('threat_actors.id', ondelete='CASCADE'), index=True
+    )
+    campaign_id: Mapped[str | None] = mapped_column(
+        ForeignKey('campaigns.id', ondelete='CASCADE'), index=True
+    )
+    note: Mapped[str] = mapped_column(Text, default='')
+    tlp: Mapped[str] = mapped_column(String(20), default='AMBER')
+    added_at: Mapped[str] = mapped_column(String(40), default=now)
+    actor: Mapped[str] = mapped_column(String(80), default='')
+
+
 class ThreatLink(Base):
     """One explicit link. Actor/report links stay in actor_documents for existing guides."""
 

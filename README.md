@@ -278,7 +278,7 @@ docker compose cp insight:/data/backup-$(date +%Y%m%d).db ./
 
 - No team accounts, SSO, RBAC or recipient-level dissemination rules. MFA is an optional single-operator authenticator-app code, off by default (`make mfa-enable`). One API key at a time.
 - Rate limits live in server memory: one worker, and a restart resets them. Sessions are stored in the database and survive restarts. The API is unversioned (breaking changes are listed in the CHANGELOG's upgrade notes).
-- No full-text relevance ranking engine, case management or graph visualization yet. Source syncs can run on opt-in schedules (off by default).
+- No full-text relevance ranking engine or drawn graph visualization yet. Source syncs can run on opt-in schedules (off by default).
 - Local PDF import extracts text in a bounded Linux worker. Arbitrary URL fetching, arbitrary feed entry, STIX/TAXII/MISP synchronization and automatic full-article storage remain outside the collection workflow.
 - No actor/malware attribution, ML or LLM inference (threat guides show what cited catalogs say about a group and which of your reports name it or you linked, never an inferred attribution). Extraction is deterministic and can still miss or mis-read unusual formats (see the known gaps in [docs/EXTRACTION.md](docs/EXTRACTION.md); the labelled benchmark `python scripts/benchmark_extraction.py` measures quality). Manual review is essential. URL extraction trims sentence punctuation and unbalanced closing brackets, so verify against the source evidence.
 - Matching is literal; watch terms are not an asset inventory. Source-language dates are not authoritative ingestion dates.

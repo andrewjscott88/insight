@@ -12,6 +12,7 @@ from nicegui import ui
 from ..appearance import TEXT_SIZE_COOKIE, THEME_COOKIE, dark_mode_value, text_size_choice, theme_choice
 from ..models import SessionFactory
 from .appearance import TextSizeSwitch, ThemeSwitch
+from .cases import build_cases
 from .cves import build_cves
 from .entities import build_entities
 from .glossary import open_glossary
@@ -103,6 +104,7 @@ def register_ui(app: FastAPI, session_factory: SessionFactory) -> None:
                 entities_tab = _tab('Entity explorer', 'Entities')
                 techniques_tab = _tab('ATT&CK techniques', 'ATT&CK')
                 threats_tab = _tab('Industry threats', 'Threats')
+                cases_tab = _tab('Cases', 'Cases')
                 watch_tab = _tab('Watch terms', 'Watch')
                 sources_tab = _tab('Sources', 'Sources')
 
@@ -126,6 +128,8 @@ def register_ui(app: FastAPI, session_factory: SessionFactory) -> None:
                     build_techniques(ws)
                 with ui.tab_panel(threats_tab).classes('panel p-4 sm:p-5'):
                     build_threats(ws)
+                with ui.tab_panel(cases_tab).classes('panel p-4 sm:p-5'):
+                    build_cases(ws)
                 with ui.tab_panel(watch_tab).classes('panel p-4 sm:p-5'):
                     build_watch_terms(ws)
                 with ui.tab_panel(sources_tab).classes('panel p-4 sm:p-5'):

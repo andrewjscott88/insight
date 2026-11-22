@@ -33,3 +33,4 @@ superseded ones are marked, never deleted.
 | [0026](0026-taxii-server.md) | A read-only TAXII 2.1 server over the STIX export, with stable objects | Accepted |
 | [0027](0027-ranked-search-and-link-graph.md) | Ranked search and a link graph from what Insight already records | Accepted |
 | [0028](0028-exploit-availability.md) | Exploit-availability context from reports and VulnCheck KEV, metadata only | Accepted |
+| [0029](0029-cases.md) | Lightweight case management | Accepted |
