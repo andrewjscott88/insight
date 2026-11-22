@@ -104,6 +104,20 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
 - [x] [#13](https://github.com/andrewjscott88/insight/issues/13) **TIP 2.8 PDF report ingestion,** keeping the
       file's hash as evidence.
 
+### Also required for 1.0: an intelligence program (Andrew, 2026-11-22)
+
+1.0 ships only when these five are done. Insight owns the intelligence cycle and feeds hunt and response
+tools over TAXII and STIX; sightings and requests for information come back
+([plan](docs/ROADMAP-TIP.md#phase-4--an-intelligence-program-planned-22-november-2026)).
+
+- [ ] **TIP 4.1 Intelligence requirements and requests for information,** with RFI intake for hunt tools
+      (in progress).
+- [ ] **TIP 4.2 Confidence, source reliability and sightings,** with a sightings API.
+- [ ] **TIP 4.3 Hunt packages over TAXII:** Sigma, YARA and network rules as STIX indicators with their context.
+- [ ] **TIP 4.4 Finished intelligence products,** replacing incident-style cases.
+- [ ] **TIP 4.5–4.8** Operator-defined sources, infrastructure pivots, ATT&CK and MISP-galaxy imports, and a
+      read-only MCP endpoint.
+
 ## Later
 
 - [x] **TIP 3.1 Read-only TAXII 2.1 server** over the STIX export: one *Reviewed indicators* collection for
@@ -124,17 +138,6 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
 - [ ] **TIP 3.6 Opt-in LLM proposals** under the contract in [docs/LLM_EXTENSION.md](docs/LLM_EXTENSION.md).
 - [x] **TIP 3.7 Optional Shodan enrichment** with the operator's own key ([ADR 0031](docs/adr/0031-shodan.md));
       Censys waits for its Platform API transition.
-
-## Next: an intelligence program (TIP Phase 4)
-
-Insight owns the intelligence cycle and feeds hunt and response tools over TAXII and STIX; sightings and
-requests for information come back ([plan](docs/ROADMAP-TIP.md#phase-4--an-intelligence-program-planned-22-november-2026)).
-
-- [ ] **TIP 4.1 Intelligence requirements and requests for information** (in progress).
-- [ ] **TIP 4.2 Confidence, source reliability and sightings.**
-- [ ] **TIP 4.3 Hunt packages over TAXII.**
-- [ ] **TIP 4.4 Finished intelligence products.**
-- [ ] **TIP 4.5–4.8** Operator-defined sources, infrastructure pivots, adversary library imports, read-only MCP.
 
 **Out of scope on purpose:** cloning CrowdStrike, Mandiant or Recorded Future collection, a malware sandbox,
 automated adversary attribution, and any always-on cloud AI.

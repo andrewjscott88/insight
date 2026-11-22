@@ -564,8 +564,8 @@ writes nothing with a model ([LLM_EXTENSION.md](LLM_EXTENSION.md); 3.6 stays sep
   2.7 and 2.9 after the export patterns exist; 2.10 after 2.3 (done) and with or after 2.5.
 - Phase 3: 3.1 after 2.1; 3.4 before treating Insight as multi-user; 3.6 only after evaluation hooks exist;
   3.7 last and optional.
-- Phase 4: 4.1 → 4.2 → 4.3 → 4.4 (the intelligence cycle and the hunt-tool contract), then 4.5–4.8 in any
-  order. 4.2's sightings and 4.3's collection extend the TAXII and API contract that 4.1's RFI intake starts.
+- Phase 4 is required for 1.0 (Andrew, 22 November 2026): 4.1 → 4.2 → 4.3 → 4.4 (the intelligence cycle and
+  the hunt-tool contract), then 4.5–4.8 in any order. 4.2's sightings and 4.3's collection extend the TAXII and API contract that 4.1's RFI intake starts.
 
 Three items from the 0.5.0 review are prerequisites that this plan does not list:
 
