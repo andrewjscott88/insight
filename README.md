@@ -2,7 +2,7 @@
 
 A single-operator threat-intelligence workbench, run locally or published behind a TLS reverse proxy. Application logic and the interactive GUI are authored in **Python**, using **NiceGUI + FastAPI + SQLAlchemy**. NiceGUI supplies the underlying browser assets; no separate React/Node build is required.
 
-**Version 0.8.0: a single-operator pilot release, not a production multi-user TIP.** Nothing is deployed or connected automatically. Operating it: [docs/RUNBOOK.md](docs/RUNBOOK.md). Scripting against it: [docs/API_GUIDE.md](docs/API_GUIDE.md) (every call, with `curl`). All documentation: [docs/README.md](docs/README.md).
+**Version 0.9.0: a single-operator pilot release, not a production multi-user TIP.** Nothing is deployed or connected automatically. Operating it: [docs/RUNBOOK.md](docs/RUNBOOK.md). Scripting against it: [docs/API_GUIDE.md](docs/API_GUIDE.md) (every call, with `curl`). All documentation: [docs/README.md](docs/README.md).
 
 ## What works
 
@@ -166,7 +166,7 @@ Data survives container rebuilds in `insight_insight-data` (the exact Compose pr
 
 ## Upgrading
 
-**Back up first** (see below). Then rebuild and start as usual (`docker compose up --build -d`). Insight applies database migrations automatically at start-up; `insight migrate` does the same explicitly and prints the before/after revision. Databases from 0.1.0 are recognised and upgraded in place. Reports that 0.1.0 duplicated because a publisher edited an item are linked as revisions, and nothing is deleted. Since 0.6.0 sessions are stored in the database, so a restart keeps you signed in. After upgrading to 0.7.0, run `make attack-backfill` once to tag ATT&CK techniques in older reports. From 0.8.0, keep `INSIGHT_SESSION_SECRET` unchanged across upgrades: it also encrypts the authenticator pairing.
+**Back up first** (see below). Then rebuild and start as usual (`docker compose up --build -d`). Insight applies database migrations automatically at start-up; `insight migrate` does the same explicitly and prints the before/after revision. Databases from 0.1.0 are recognised and upgraded in place. Reports that 0.1.0 duplicated because a publisher edited an item are linked as revisions, and nothing is deleted. Since 0.6.0 sessions are stored in the database, so a restart keeps you signed in. After upgrading to 0.7.0, run `make attack-backfill` once to tag ATT&CK techniques in older reports. From 0.8.0, keep `INSIGHT_SESSION_SECRET` unchanged across upgrades: it also encrypts the authenticator pairing. After upgrading to 0.9.0, run `make exploit-backfill` once to note public-exploit mentions in older reports. On PostgreSQL, the 0.9.0 upgrade rewrites the timestamp columns once, so take the backup with `pg_dump --format=custom` before it.
 
 ## Local Python development
 
