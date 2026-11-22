@@ -414,8 +414,10 @@ def test_benign_and_expired_verdicts_leave_the_sweep_list(db: Session) -> None:
     _guide_fixture(db)
     services.assess_entity(db, _entity_id(db, 'evil-c2.biz'), AssessmentInput(verdict='benign'))
     md5 = '44d88612fea8a8f36de82e1278abb02f'
-    today = NOW.date().isoformat()
-    services.assess_entity(db, _entity_id(db, md5), AssessmentInput(verdict='malicious', valid_until=today))
+    # The test's clock is NOW, not the real one: build the verdict without the API's "today or later" check,
+    # which would start failing once the real date passes NOW.
+    expiring = AssessmentInput.model_construct(verdict='malicious', valid_until=NOW.date())
+    services.assess_entity(db, _entity_id(db, md5), expiring)
     current = {e.value: e for e in services.guide_data(db, 'G0016', now=NOW).sweep}
     assert 'evil-c2.biz' not in current
     assert current[md5].verdict == 'malicious'
