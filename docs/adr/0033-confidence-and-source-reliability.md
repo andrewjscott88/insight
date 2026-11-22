@@ -42,8 +42,8 @@ dependency; the score must be explainable to an analyst in one line.
    `GET /api/entities/{id}/confidence`, and `confidence` in `GET /api/entities/{id}`; report summaries carry
    `credibility`. In the workspace: a confidence line with its sources on each indicator, a credibility select
    in the reader, and **Source reliability** in Settings.
-7. **Not built yet.** Sightings (TIP 4.2b), confidence in TAXII and exports, sorting and filtering by
-   confidence, and automatic credibility from corroboration.
+7. **Not built yet.** Confidence in TAXII and exports, sorting and filtering by confidence, and automatic
+   credibility from corroboration. Sightings followed in [ADR 0035](0035-sightings.md).
 
 ## Consequences
 - Analysts can see why an indicator is trusted, and grading a source changes every indicator it reported.

@@ -3,6 +3,7 @@ and grading sources in Settings."""
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -11,8 +12,8 @@ from nicegui.testing.user import User
 from sqlalchemy import select
 
 from insight.models import AuditEvent, Document, SourceRating
-from insight.schemas import DocumentInput
-from insight.services import ingest
+from insight.schemas import DocumentInput, SightingInput
+from insight.services import ingest, record_sighting
 
 pytestmark = pytest.mark.ui
 
@@ -56,3 +57,17 @@ async def test_settings_grades_a_source_and_shows_what_it_adds(user: User, ui_en
     with ui_env.app.state.session_factory() as db:
         row = db.scalars(select(SourceRating)).one()
         assert (row.source_name, row.reliability, row.half_life_days) == ('Vendor', 'B', None)
+
+
+async def test_the_explorer_shows_sightings_from_hunt_tools(user: User, ui_env: SimpleNamespace) -> None:
+    add_report(ui_env, 'Vendor note', 'Beacon to 203.0.113.98.', 'Vendor')
+    seen = datetime.now(UTC) - timedelta(hours=1)
+    with ui_env.app.state.session_factory.begin() as db:
+        record_sighting(
+            db, SightingInput(value='203.0.113.98', first_seen=seen, where='Corp east', tlp='GREEN')
+        )
+    await user.open('/')
+    user.find(kind=ui.expansion, content='203.0.113.98').elements.pop().open()
+    await user.should_see(f'Seen in your own data: last on {seen.date().isoformat()}.')
+    user.find(kind=ui.expansion, marker='entity-confidence').elements.pop().open()
+    await user.should_see('Seen in Corp east · 1 sighting(s)')

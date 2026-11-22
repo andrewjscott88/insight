@@ -23,12 +23,23 @@ def render_confidence(found: services.Confidence) -> None:
     count = len(found.sources)
     sources = 'source' if count == 1 else 'sources'
     line = f'Confidence {found.score} ({BAND_TEXT[found.band].lower()}): {count} {sources} you can see'
+    sightings = [s for s in found.sources if s.kind == 'sighting']
+    if sightings:
+        last = max(s.newest_at for s in sightings)[:10]
+        ui.label(f'Seen in your own data: last on {last}.').classes('text-warn').mark('entity-sighted')
     with ui.expansion(line).classes('w-full').props('dense').mark('entity-confidence'):
         for source in found.sources:
-            ui.label(
-                f'{source.source_name} · reliability {source.reliability} · {source.reports} report(s), '
-                f'newest {source.newest_at[:10]} · adds {source.weight}'
-            ).classes('text-sm break-value')
+            if source.kind == 'sighting':
+                text = (
+                    f'{source.source_name} · {source.reports} sighting(s), last {source.newest_at[:10]} · '
+                    f'adds {source.weight}'
+                )
+            else:
+                text = (
+                    f'{source.source_name} · reliability {source.reliability} · {source.reports} report(s), '
+                    f'newest {source.newest_at[:10]} · adds {source.weight}'
+                )
+            ui.label(text).classes('text-sm break-value')
         ageing = (
             f'Reports lose half their weight every {found.half_life_days} days.'
             if found.half_life_days

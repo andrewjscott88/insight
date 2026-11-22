@@ -600,8 +600,9 @@ class Requirement(Base):
     """An intelligence requirement (TIP 4.1, ADR 0032): a question someone needs answered.
 
     ``pir``: a priority intelligence requirement; ``ir``: a narrower requirement under a PIR (``parent_id``);
-    ``rfi``: a one-off request for information, which an API key with ``read-rfi`` access may file. The label
-    is the most restrictive of the text, the criteria and the cited reports; removing one never lowers it.
+    ``rfi``: a one-off request for information, which an API key with ``read-feedback`` access may file. The
+    label is the most restrictive of the text, the criteria and the cited reports; removing one never lowers
+    it.
     """
 
     __tablename__ = 'requirements'
@@ -867,6 +868,32 @@ class HuntPackageItem(Base):
     )
     tlp: Mapped[str] = mapped_column(String(20), default='CLEAR')
     added_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
+    actor: Mapped[str] = mapped_column(String(80), default='')
+
+
+class Sighting(Base):
+    """A hunt tool (or an analyst) saw a known indicator in its own data (TIP 4.2, ADR 0035): when, how often
+    and where. A sighting is intelligence, not response: nothing here records what was done about it. It is
+    the strongest confidence signal (ADR 0033); deleting the indicator deletes its sightings."""
+
+    __tablename__ = 'sightings'
+    __table_args__ = (CheckConstraint('count >= 1', name='sighting_count'),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    entity_id: Mapped[str] = mapped_column(ForeignKey('entities.id', ondelete='CASCADE'), index=True)
+    hunt_package_id: Mapped[str | None] = mapped_column(
+        ForeignKey('hunt_packages.id', ondelete='SET NULL'), index=True, default=None
+    )
+    first_seen: Mapped[str] = mapped_column(UtcTimestamp())
+    last_seen: Mapped[str] = mapped_column(UtcTimestamp())
+    count: Mapped[int] = mapped_column(Integer, default=1)
+    #: Where it was seen, in the reporter's words (a site, a network, a data set).
+    location: Mapped[str] = mapped_column(String(120), default='')
+    #: What saw it (a hunt tool, a sensor), in the reporter's words.
+    observer: Mapped[str] = mapped_column(String(120), default='')
+    note: Mapped[str] = mapped_column(Text, default='')
+    external_ref: Mapped[str] = mapped_column(String(200), default='')
+    tlp: Mapped[str] = mapped_column(String(20), default='AMBER')
+    created_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
     actor: Mapped[str] = mapped_column(String(80), default='')
 
 

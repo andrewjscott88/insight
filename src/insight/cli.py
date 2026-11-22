@@ -250,9 +250,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     keys.add_argument(
         '--access',
-        choices=['read', 'read-rfi', 'read-write'],
-        help='create/rotate: read = GET requests only (default on create) | read-rfi = also file requests '
-        'for information | read-write = also writes',
+        choices=['read', 'read-feedback', 'read-write'],
+        help='create/rotate: read = GET requests only (default on create) | read-feedback = also send '
+        'requests for information and sightings | read-write = also writes',
     )
     keys.add_argument(
         '--expires-days', type=int, default=90, metavar='DAYS', help='create/rotate: 1-365 (default: 90)'
@@ -436,7 +436,11 @@ def _current_database() -> Iterator[SessionFactory]:
 
 
 def _describe_key(key: Any) -> str:
-    access = {'read': 'read-only', 'read-rfi': 'read-only, files requests'}.get(key.access, 'read-write')
+    access = {
+        'read': 'read-only',
+        'read-feedback': 'read-only, sends requests and sightings',
+        'read-write': 'read-write',
+    }.get(key.access, 'read-only')  # an unknown level is treated as read-only (web.auth)
     visibility = f'TLP:{key.max_tlp} and below' if key.max_tlp else 'every label stored'
     return f'{key.key_id} "{key.name}" ({access}; sees {visibility}; expires {key.expires_at[:10]})'
 

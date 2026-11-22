@@ -33,7 +33,8 @@ records intelligence, never response actions (TIP Phase 4 boundary); no new depe
 4. **Answers.** Answering an RFI marks it `answered`; a PIR or IR stays open and shows the answer as its latest
    assessment. A retired requirement refuses changes (`409`) until reopened. A PIR with IRs under it cannot be
    deleted.
-5. **`read-rfi` API keys.** A new access level between `read` and `read-write`: GET requests, plus
+5. **`read-rfi` API keys** (renamed `read-feedback` by [ADR 0035](0035-sightings.md), which also lets them
+   send sightings). A new access level between `read` and `read-write`: GET requests, plus
    `POST /api/rfis` and nothing else. A hunt tool can file a question within its TLP limit and poll
    `GET /api/requirements/{id}` for the answer. It cannot answer, edit or ingest. `external_ref` carries the
    tool's own reference.

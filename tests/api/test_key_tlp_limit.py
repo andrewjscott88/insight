@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -26,6 +27,7 @@ from insight.schemas import (
     HuntPackageInput,
     HuntPackageItemInput,
     RequirementInput,
+    SightingInput,
 )
 from insight.services import SourceRef
 
@@ -91,6 +93,13 @@ def world(app: FastAPI) -> dict[str, Any]:
             ),
         )  # fmt: skip
         services.publish_hunt_package(db, hunt.id)
+        # An AMBER sighting of the shared indicator, and a GREEN one of the hidden indicator (TIP 4.2): the
+        # key sees neither, nor the sighting in the shared indicator's confidence.
+        seen = datetime.now(UTC) - timedelta(hours=1)
+        services.record_sighting(
+            db, SightingInput(value=SHARED_IP, first_seen=seen, note=MARKER, where=MARKER, tlp='AMBER')
+        )
+        services.record_sighting(db, SightingInput(value=HIDDEN_IP, first_seen=seen, tlp='GREEN'))
         _, token = services.create_api_key(db, name='siem', access='read-write', max_tlp='GREEN')
     return {
         'case': case.id,
@@ -179,6 +188,8 @@ def test_nothing_hidden_leaks_through_any_read_route(client: TestClient, world: 
         f'/api/documents/{world["amber"]}/requirements',
         f'/api/documents/{world["green"]}/requirements',
         '/api/hunt-packages',
+        '/api/sightings',
+        f'/api/sightings?entity_id={world["shared_entity"]}',
         f'/api/hunt-packages/{world["hunt_package"]}',
         f'/api/hunt-packages/{world["hunt_package"]}/stix',
         '/taxii2/insight/collections/9d3f6b1a-2c4e-4a7b-8e5d-1f0a3c6b9e27/objects/',

@@ -1,7 +1,7 @@
 """Intelligence requirements and requests for information (TIP 4.1, ADR 0032).
 
-``POST /api/rfis`` is the one write an API key with ``read-rfi`` access may make (``web.auth``), so a hunt or
-response tool can ask a question without being able to change anything else.
+``POST /api/rfis`` is one of the two writes an API key with ``read-feedback`` access may make (``web.auth``),
+so a hunt or response tool can ask a question without being able to change anything else.
 """
 
 from __future__ import annotations
