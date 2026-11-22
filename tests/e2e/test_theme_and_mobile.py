@@ -24,7 +24,7 @@ __all__ = ['browser']  # the fixture is used by name
 
 pytestmark = pytest.mark.e2e
 
-PAGE_BACKGROUND = {'light': 'rgb(243, 245, 247)', 'dark': 'rgb(11, 18, 28)'}
+PAGE_BACKGROUND = {'light': 'rgb(246, 244, 250)', 'dark': 'rgb(5, 4, 7)'}
 DEMO_TITLE = 'Training scenario: edge appliance activity'
 #: Playwright's descriptors for these phones (pinned: a second Playwright instance cannot run beside the
 #: shared browser fixture's). Viewport, touch and pixel ratio are what matter for layout.
@@ -140,7 +140,7 @@ def test_a_theme_choice_applies_at_once_and_is_remembered_on_this_device_only(br
     page.get_by_role('button', name='Light theme').click()
     expect(page.locator('body.body--light')).to_have_count(1)
     assert background(page) == PAGE_BACKGROUND['light']
-    assert page.eval_on_selector('meta[name=theme-color]', 'm => m.content') == '#f3f5f7'
+    assert page.eval_on_selector('meta[name=theme-color]', 'm => m.content') == '#f6f4fa'
     cookie = next(c for c in context.cookies() if c['name'] == 'insight_theme')
     assert (cookie['value'], cookie['sameSite'], cookie['path']) == ('light', 'Lax', '/')
 

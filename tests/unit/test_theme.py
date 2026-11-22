@@ -250,18 +250,18 @@ def test_regression_quasars_dark_surface_is_only_remapped_in_the_dark_theme() ->
 def test_theme_head_html_sets_the_first_paint_and_the_text_size() -> None:
     system = theme_head_html('system')
     assert system.count('<meta name="theme-color"') == 2
-    assert 'media="(prefers-color-scheme: light)" content="#f3f5f7"' in system
-    assert 'media="(prefers-color-scheme: dark)" content="#0b121c"' in system
+    assert 'media="(prefers-color-scheme: light)" content="#f6f4fa"' in system
+    assert 'media="(prefers-color-scheme: dark)" content="#050407"' in system
     light = theme_head_html('light', 'large')
     assert light.count('<meta name="theme-color"') == 1
-    assert 'content="#f3f5f7"' in light
+    assert 'content="#f6f4fa"' in light
     assert 'prefers-color-scheme' not in light
     assert 'document.documentElement.dataset.text = "large";' in light
 
 
 def test_theme_color_script_replaces_the_address_bar_colour() -> None:
     assert theme_color_script('dark').count("name: 'theme-color'") == 1
-    assert "content: '#0b121c'" in theme_color_script('dark')
+    assert "content: '#050407'" in theme_color_script('dark')
     assert theme_color_script('system').count('prefers-color-scheme') == 2
 
 
