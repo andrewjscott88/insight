@@ -25,6 +25,7 @@ from .enrichment import open_enrichment_dialog
 from .graph import open_graph
 from .messages import tell
 from .mobile import back_to_list_button
+from .report_requirements import render_report_requirements
 from .rules import render_report_rules
 from .techniques import render_report_techniques
 from .theme import tlp_badge
@@ -66,6 +67,7 @@ def render_report(ws: Workspace, data: dict[str, Any], actions: ReaderActions) -
     )
     if data['source_url']:
         new_tab_link('Open the original report', data['source_url'])
+    render_report_requirements(ws, data['id'], actions.refresh)
     _render_revisions(data, actions)
     ui.select(
         list(DOCUMENT_STATUSES),

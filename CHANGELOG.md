@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+### Upgrade notes
+
+- Migration `0024` adds the `requirements`, `requirement_criteria` and `requirement_evidence` tables. It runs
+  at start-up and changes no existing data.
+
+### Added: intelligence requirements and requests for information (TIP 4.1)
+
+- A **Requirements** section (second in the menu) for priority intelligence requirements (PIRs), narrower
+  requirements under them, and requests for information (RFIs): each a question with who needs the answer, a
+  priority, a due date and a TLP label ([ADR 0032](docs/adr/0032-intelligence-requirements.md)).
+- Criteria say which reports address a requirement: a term, a CVE, an ATT&CK technique, a threat group or a
+  campaign. Matches are counted on read from the reports each reader may see, so each requirement shows how
+  many recent reports address it, and one with nothing in 30 days shows as **quiet**.
+- The reader lists the requirements a report addresses, with **Cite as evidence**. Requirements keep their
+  cited reports and the current answer; answering an RFI marks it answered.
+- A new API key access level, **`read-rfi`**: read, plus filing requests for information with
+  `POST /api/rfis`, and nothing else. A hunt or response tool can ask a question and poll for the answer.
+- `/api/requirements` routes, `GET /api/documents/{id}/requirements`, an **Open requests** counter on Today,
+  and glossary entries for PIR and RFI.
+
 ### Changed: a side menu built around the analyst's day
 
 - The workspace is organised as **Today**, **Triage**, **Investigate**, **Cases**, **Share** and **Settings**

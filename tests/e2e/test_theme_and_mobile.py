@@ -25,7 +25,7 @@ __all__ = ['browser']  # the fixture is used by name
 pytestmark = pytest.mark.e2e
 
 PAGE_BACKGROUND = {'light': 'rgb(246, 244, 250)', 'dark': 'rgb(5, 4, 7)'}
-SECTIONS = ('Today', 'Triage', 'Investigate', 'Cases', 'Share', 'Settings')
+SECTIONS = ('Today', 'Requirements', 'Triage', 'Investigate', 'Cases', 'Share', 'Settings')
 INVESTIGATE = ('Indicators', 'CVEs', 'ATT&CK techniques', 'Threat groups')
 DEMO_TITLE = 'Training scenario: edge appliance activity'
 #: Playwright's descriptors for these phones (pinned: a second Playwright instance cannot run beside the
@@ -259,7 +259,7 @@ def test_phone_workspace_fits_every_tab_and_dialog(phone: Any) -> None:
     sign_in(page)
     load_demo(page)
     assert overflow(page) <= 0
-    for section in (*SECTIONS[2:], *SECTIONS[:2]):
+    for section in (*SECTIONS[3:], *SECTIONS[:3]):  # Ends on Triage.
         tab = page.locator('.side-tabs').get_by_role('tab', name=section, exact=True)
         expect(tab).to_be_visible()
         tab.click()

@@ -23,8 +23,12 @@ from typing import Final, Literal, get_args
 
 PREFIX: Final = 'insk_'
 KEY_PATTERN: Final = re.compile(r'insk_([0-9a-f]{12})_([A-Za-z0-9_-]{43})')
-#: ``read``: GET requests only. ``read-write``: every API route except session-only ones.
-Access = Literal['read', 'read-write']
+#: ``read``: GET requests only. ``read-rfi``: GET requests, and filing a request for information
+#: (``POST /api/rfis``, TIP 4.1) so a hunt tool can ask without changing anything else. ``read-write``: every
+#: API route except session-only ones.
+Access = Literal['read', 'read-rfi', 'read-write']
+#: The one write a ``read-rfi`` key may make: (method, path).
+RFI_INTAKE: Final = ('POST', '/api/rfis')
 ACCESS_LEVELS: tuple[str, ...] = get_args(Access)
 DEFAULT_EXPIRY_DAYS: Final = 90
 MAX_EXPIRY_DAYS: Final = 365

@@ -32,6 +32,7 @@ from .inbox import build_inbox
 from .ingest import build_ingest_dialog
 from .ioc_export import open_ioc_export_dialog
 from .landscape import build_landscape
+from .requirements import build_requirements
 from .share import build_share
 from .sources import build_sources
 from .stats import build_stats
@@ -47,6 +48,7 @@ TAGLINE: Final = 'Threat intelligence workbench'
 #: The side menu, in the order of an analyst's day: (name, label).
 SECTIONS: Final = (
     ('today', 'Today'),
+    ('requirements', 'Requirements'),
     ('triage', 'Triage'),
     ('investigate', 'Investigate'),
     ('cases', 'Cases'),
@@ -137,6 +139,8 @@ def register_ui(app: FastAPI, session_factory: SessionFactory) -> None:
                     with ui.tab_panel('today').classes('p-0 flex flex-col gap-6'):
                         build_landscape(ws)
                         build_stats(ws)
+                    with ui.tab_panel('requirements').classes('panel p-4 sm:p-5'):
+                        build_requirements(ws)
                     # Only the open section is in the page, so each has an h1 (axe: page-has-heading-one).
                     with ui.tab_panel('triage').classes('p-0 flex flex-col gap-4'):
                         heading('Triage', 1)
@@ -165,6 +169,13 @@ def register_ui(app: FastAPI, session_factory: SessionFactory) -> None:
             ws.find_entity(value)
 
         ws.show_section = show_section
+        open_requirement = ws.show_requirement  # The Requirements section's dialog.
+
+        def show_requirement(requirement_id: str) -> None:
+            show_section('requirements')
+            open_requirement(requirement_id)
+
+        ws.show_requirement = show_requirement
         ws.show_inbox = lambda: show_section('triage')
         ws.show_entity = show_entity
         # Alerts link to /?report=<id> (ADR 0022). An unknown ID opens nothing, as a deleted report would.

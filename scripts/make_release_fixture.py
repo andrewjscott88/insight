@@ -34,10 +34,14 @@ from insight.schemas import (
     CaseInput,
     CaseItemInput,
     CaseNoteInput,
+    CriterionInput,
     DocumentInput,
+    EvidenceInput,
     HuntCheckInput,
     HuntInput,
     IndustryClaimInput,
+    RequirementInput,
+    RfiInput,
     RuleInput,
     RuleLinkInput,
     ThreatLinkInput,
@@ -154,6 +158,18 @@ def build(path: Path) -> None:
             services.add_case_item(db, case.id, CaseItemInput(kind='document', target_id=manual.id))
             services.add_case_item(db, case.id, CaseItemInput(kind='indicator', target_id=beacon.id))
             services.add_case_note(db, case.id, CaseNoteInput(text='Waiting for proxy logs.'))
+            # 1.0: a PIR (TIP 4.1) with a criterion and a cited report, and an RFI from a hunt tool
+            pir = services.create_requirement(
+                db,
+                RequirementInput(
+                    kind='pir',
+                    question='Are edge appliances being exploited?',
+                    tlp='GREEN',
+                    criteria=[CriterionInput(kind='cve', value='CVE-2024-3400')],
+                ),
+            )
+            services.add_evidence(db, pir.id, EvidenceInput(document_id=manual.id))
+            services.file_rfi(db, RfiInput(question='Is the beacon known C2?', external_ref='hunt-1'))
     finally:
         engine.dispose()
 

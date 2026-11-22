@@ -66,6 +66,8 @@ class Workspace:
     show_entity: Callable[[str], None] = _noop
     #: Switch the side menu to a section (``triage``...) and Investigate to a tab (set by the page).
     show_section: Callable[..., None] = _noop
+    #: Open one requirement's dialog in the Requirements section (set by that section).
+    show_requirement: Callable[[str], None] = _noop
     #: Search the inbox for a word, as if typed into its search box (set by the inbox).
     search_reports: Callable[[str], None] = _noop
     #: Open a group's threat guide by its ATT&CK ID or actor ID (set by the industry threats tab).

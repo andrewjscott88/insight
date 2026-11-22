@@ -570,6 +570,74 @@ class CaseItem(Base):
     actor: Mapped[str] = mapped_column(String(80), default='')
 
 
+class Requirement(Base):
+    """An intelligence requirement (TIP 4.1, ADR 0032): a question someone needs answered.
+
+    ``pir``: a priority intelligence requirement; ``ir``: a narrower requirement under a PIR (``parent_id``);
+    ``rfi``: a one-off request for information, which an API key with ``read-rfi`` access may file. The label
+    is the most restrictive of the text, the criteria and the cited reports; removing one never lowers it.
+    """
+
+    __tablename__ = 'requirements'
+    __table_args__ = (
+        CheckConstraint("kind IN ('pir', 'ir', 'rfi')", name='requirement_kind'),
+        CheckConstraint("status IN ('open', 'answered', 'retired')", name='requirement_status'),
+        CheckConstraint("priority IN ('high', 'medium', 'low')", name='requirement_priority'),
+        CheckConstraint("kind = 'ir' OR parent_id IS NULL", name='only_irs_have_parents'),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    kind: Mapped[str] = mapped_column(String(4))
+    parent_id: Mapped[str | None] = mapped_column(ForeignKey('requirements.id'), index=True, default=None)
+    question: Mapped[str] = mapped_column(String(300))
+    context: Mapped[str] = mapped_column(Text, default='')
+    stakeholder: Mapped[str] = mapped_column(String(120), default='')
+    priority: Mapped[str] = mapped_column(String(6), default='medium')
+    status: Mapped[str] = mapped_column(String(10), default='open', index=True)
+    tlp: Mapped[str] = mapped_column(String(20), default='AMBER')
+    due_at: Mapped[str | None] = mapped_column(UtcTimestamp(), default=None)
+    answer: Mapped[str] = mapped_column(Text, default='')
+    answered_at: Mapped[str | None] = mapped_column(UtcTimestamp(), default=None)
+    #: The requester's own reference, such as a hunt ID in the tool that asked (RFIs from API keys).
+    external_ref: Mapped[str] = mapped_column(String(200), default='')
+    created_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
+    updated_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
+    actor: Mapped[str] = mapped_column(String(80), default='')
+
+
+class RequirementCriterion(Base):
+    """What makes a report relevant to a requirement: a term in its text, a CVE it mentions, an ATT&CK
+    technique tagged on it, or a link to a threat group or campaign. Matches are computed on read."""
+
+    __tablename__ = 'requirement_criteria'
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('term', 'cve', 'technique', 'group', 'campaign')", name='requirement_criterion_kind'
+        ),
+        UniqueConstraint('requirement_id', 'kind', 'value'),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    requirement_id: Mapped[str] = mapped_column(ForeignKey('requirements.id', ondelete='CASCADE'), index=True)
+    kind: Mapped[str] = mapped_column(String(10))
+    value: Mapped[str] = mapped_column(String(120))
+    tlp: Mapped[str] = mapped_column(String(20), default='CLEAR')
+    added_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
+    actor: Mapped[str] = mapped_column(String(80), default='')
+
+
+class RequirementEvidence(Base):
+    """A report an analyst cites as evidence for a requirement's answer. Deleting the report removes it."""
+
+    __tablename__ = 'requirement_evidence'
+    __table_args__ = (UniqueConstraint('requirement_id', 'document_id'),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    requirement_id: Mapped[str] = mapped_column(ForeignKey('requirements.id', ondelete='CASCADE'), index=True)
+    document_id: Mapped[str] = mapped_column(ForeignKey('documents.id', ondelete='CASCADE'), index=True)
+    note: Mapped[str] = mapped_column(Text, default='')
+    tlp: Mapped[str] = mapped_column(String(20), default='CLEAR')
+    added_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
+    actor: Mapped[str] = mapped_column(String(80), default='')
+
+
 class ThreatLink(Base):
     """One explicit link. Actor/report links stay in actor_documents for existing guides."""
 

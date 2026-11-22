@@ -65,6 +65,7 @@ Send `Authorization: Bearer <key>` on every request. No cookie or CSRF token is 
 | Key setting | Effect |
 | --- | --- |
 | `ACCESS=read` (default) | `GET` routes only; any `POST` gets `403 "This API key is read-only"` |
+| `ACCESS=read-rfi` | Also file requests for information (`POST /api/rfis`), nothing else |
 | `ACCESS=read-write` | Also ingest, triage, notes, demo, source sync and enrichment |
 | `MAX_TLP=GREEN` (optional) | Reports above GREEN are invisible to the key (they look like missing reports), exports are capped at GREEN, and the audit log, watch terms and starting CVE lookups are refused (cached scores of CVEs in reports the key can see stay readable) |
 | `EXPIRES=90` | Days until expiry (1-365, default 90). `make api-key-status` shows the date |
@@ -501,6 +502,54 @@ curl -fsS -X POST "$INSIGHT_URL/api/cases/$CASE_ID/close" -H "Authorization: Bea
   -H 'Content-Type: application/json' -d '{"note": "Contained; the gateway is patched."}'
 curl -fsS -X POST "$INSIGHT_URL/api/cases/$CASE_ID/reopen" -H "Authorization: Bearer $INSIGHT_API_KEY"
 curl -fsS -X DELETE "$INSIGHT_URL/api/cases/$CASE_ID" -H "Authorization: Bearer $INSIGHT_API_KEY"
+```
+
+### Requirements and requests for information
+
+The questions your intelligence work answers ([ADR 0032](adr/0032-intelligence-requirements.md)): priority
+intelligence requirements (`pir`), narrower requirements under one (`ir`, with `parent_id`), and requests for
+information (`rfi`). Criteria say which reports address a requirement: a `term` in the text, a `cve` it
+mentions, a `technique` tagged on it, or a `group` or `campaign` linked to it. Matches are counted on read, only
+from reports the caller may see. Like a case, a requirement takes the strictest label of its text, criteria
+and cited reports, and keeps it when they are removed. A retired requirement answers `409` to changes.
+
+```bash
+# A PIR, with what makes a report relevant to it
+REQ_ID=$(curl -fsS -X POST "$INSIGHT_URL/api/requirements" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d '{"kind": "pir", "question": "Are ransomware groups exploiting our edge devices?",
+  "stakeholder": "CISO", "priority": "high", "tlp": "GREEN", "criteria": [{"kind": "cve", "value": "CVE-2024-3400"}]}' | jq -r .id)
+CRITERION_ID=$(curl -fsS -X POST "$INSIGHT_URL/api/requirements/$REQ_ID/criteria" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d '{"kind": "group", "value": "G0016"}' | jq -r .id)
+# Open requirements with their coverage, then one with its matching reports
+curl -fsS "$INSIGHT_URL/api/requirements?status=open" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  | jq '.requirements[] | {id, kind, question, recent_matches, quiet}'
+curl -fsS "$INSIGHT_URL/api/requirements/$REQ_ID" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq '.matches[] | {title, because}'
+# Which open requirements one report addresses
+curl -fsS "$INSIGHT_URL/api/documents/$DOC_ID/requirements" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq '.requirements[] | {question, because}'
+# Cite a report as evidence, record the current answer, change the priority
+EVIDENCE_ID=$(curl -fsS -X POST "$INSIGHT_URL/api/requirements/$REQ_ID/evidence" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d "{\"document_id\": \"$DOC_ID\", \"note\": \"Confirms exploitation.\"}" | jq -r .id)
+curl -fsS -X POST "$INSIGHT_URL/api/requirements/$REQ_ID/answer" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d '{"answer": "Yes: two crews since October."}'
+curl -fsS -X PATCH "$INSIGHT_URL/api/requirements/$REQ_ID" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d '{"priority": "medium"}'
+# Remove a criterion or a citation (the label stays), retire, reopen, delete
+curl -fsS -X DELETE "$INSIGHT_URL/api/requirements/$REQ_ID/criteria/$CRITERION_ID" -H "Authorization: Bearer $INSIGHT_API_KEY"
+curl -fsS -X DELETE "$INSIGHT_URL/api/requirements/$REQ_ID/evidence/$EVIDENCE_ID" -H "Authorization: Bearer $INSIGHT_API_KEY"
+curl -fsS -X POST "$INSIGHT_URL/api/requirements/$REQ_ID/retire" -H "Authorization: Bearer $INSIGHT_API_KEY"
+curl -fsS -X POST "$INSIGHT_URL/api/requirements/$REQ_ID/reopen" -H "Authorization: Bearer $INSIGHT_API_KEY"
+curl -fsS -X DELETE "$INSIGHT_URL/api/requirements/$REQ_ID" -H "Authorization: Bearer $INSIGHT_API_KEY"
+```
+
+**A hunt or response tool asks a question.** Give the tool a key with `read-rfi` access
+(`insight api-key create --name hunt-tool --access read-rfi --max-tlp AMBER`). It can read, file a request for
+information and read the answer, and change nothing else. `external_ref` is the tool's own reference.
+
+```bash
+RFI_ID=$(curl -fsS -X POST "$INSIGHT_URL/api/rfis" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d '{"question": "Is 203.0.113.70 known C2?", "requester": "Hunt team",
+  "priority": "high", "tlp": "AMBER", "external_ref": "hunt-42"}' | jq -r .id)
+curl -fsS "$INSIGHT_URL/api/requirements/$RFI_ID" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq '{status, answer, answered_at}'
 ```
 
 ### Sources and enrichment (outbound internet)

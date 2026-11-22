@@ -20,7 +20,17 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from ..industries import BY_KEY
-from ..models import ActorDocument, CaseItem, Document, IndustryClaim, ThreatActor, ThreatLink, now
+from ..models import (
+    ActorDocument,
+    CaseItem,
+    Document,
+    IndustryClaim,
+    RequirementCriterion,
+    RequirementEvidence,
+    ThreatActor,
+    ThreatLink,
+    now,
+)
 from ..schemas import ActorInput, ActorLinkInput, IndustryClaimInput, most_restrictive, tlp_markings
 from ..threat_library import Group, library
 from .audit import DEFAULT_ACTOR, audit
@@ -146,7 +156,13 @@ def _visible_report(db: Session, document_id: str, max_tlp: str | None) -> Docum
 
 
 def _insert_link(
-    db: Session, model: type[ActorDocument] | type[ThreatLink] | type[CaseItem], values: dict[str, str]
+    db: Session,
+    model: type[ActorDocument]
+    | type[ThreatLink]
+    | type[CaseItem]
+    | type[RequirementCriterion]
+    | type[RequirementEvidence],
+    values: dict[str, str],
 ) -> bool:
     """Let the database arbitrate concurrent additions to the same pair of records."""
     insert = sqlite_insert if db.get_bind().dialect.name == 'sqlite' else pg_insert
