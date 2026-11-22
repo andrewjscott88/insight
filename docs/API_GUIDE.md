@@ -502,6 +502,12 @@ curl -sS "$INSIGHT_URL/api/cves?days=30&limit=10" -H "Authorization: Bearer $INS
 # Read the cached CVSS and EPSS scores without contacting anyone (404 unless a report you can see mentions the CVE)
 curl -sS "$INSIGHT_URL/api/cves/CVE-2023-34362/scores" -H "Authorization: Bearer $INSIGHT_API_KEY" \
   | jq '{cvss: .nvd.score, severity: .nvd.severity, epss: .epss.probability, percentile: .epss.percentile}'
+# Reports about a subject, best match first (every word must match; quotes keep a phrase together)
+curl -sS -G "$INSIGHT_URL/api/search" --data-urlencode 'q="initial access" broker' \
+  -H "Authorization: Bearer $INSIGHT_API_KEY" | jq '.results[] | {title, score, snippet}'
+# What a report links to, and what is two steps away (indicators, reports, techniques, groups, actors, campaigns)
+curl -sS "$INSIGHT_URL/api/graph?node=report:$DOC_ID&depth=2" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  | jq '{nodes: [.nodes[] | {type, label}], edges: (.edges | length)}'
 ```
 
 Turning a schedule on or off is for a signed-in browser session (the *Sources* tab, or the cookie jar of §2.2)

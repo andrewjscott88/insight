@@ -109,6 +109,8 @@ PROTECTED = [
     ('DELETE', '/api/rules/x'),
     ('POST', '/api/rules/x/links'),
     ('DELETE', '/api/rules/x/links'),
+    ('GET', '/api/search?q=x'),
+    ('GET', '/api/graph?node=report:x'),
     ('GET', '/taxii2/'),
     ('GET', '/taxii2/insight/'),
     ('GET', '/taxii2/insight/collections/'),

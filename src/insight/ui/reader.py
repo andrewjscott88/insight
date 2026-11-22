@@ -19,6 +19,7 @@ from ..extraction import EVIDENCE_CONTEXT
 from ..schemas import DOCUMENT_STATUSES, NoteInput
 from .actors import render_report_groups
 from .enrichment import open_enrichment_dialog
+from .graph import open_graph
 from .messages import tell
 from .mobile import back_to_list_button
 from .rules import render_report_rules
@@ -87,7 +88,10 @@ def render_report(ws: Workspace, data: dict[str, Any], actions: ReaderActions) -
     render_report_techniques(ws, data['id'], data.get('techniques', []), actions.refresh)
     render_report_groups(ws, data['id'], actions.refresh)
     render_report_rules(ws, data['id'], data['tlp'], actions.refresh)
-    with ui.row().classes('gap-x-6 gap-y-0'):
+    with ui.row().classes('gap-x-6 gap-y-0 items-center'):
+        ui.button('Show links', on_click=lambda: open_graph(ws, f'report:{data["id"]}')).props(
+            'outline no-caps'
+        ).mark('report-links')
         new_tab_link('Download this report as JSON', f'/api/documents/{data["id"]}/export')
         new_tab_link("Export this report's IOCs", f'/api/iocs/export?document_id={data["id"]}')
     ui.label('Exports keep the TLP label. They do not give permission to share.').classes('muted prose')

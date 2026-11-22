@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Added: ranked search and a link map (TIP 3.2)
+
+- **Best match first.** Typing in the inbox search now ranks reports: every word must match, in any order
+  (quotes keep a phrase together), and reports about the subject come before reports that mention it once.
+  Each result shows the text around the match. The ranking is the same on SQLite and PostgreSQL.
+  `GET /api/search` returns it with scores; `GET /api/documents?q=` is unchanged.
+- **Link map.** **Show links** on a report or an indicator lists what it links to (indicators, reports, ATT&CK
+  techniques and groups, your actors and campaigns) and, on request, what is two steps away. Any entry can be
+  put in the centre. `GET /api/graph` returns the nodes and edges. Only recorded links appear, within your TLP
+  limit, capped and in a fixed order. [ADR 0027](docs/adr/0027-ranked-search-and-link-graph.md)
+
 ## 0.8.0 - 2026-11-21
 
 ### Upgrade notes

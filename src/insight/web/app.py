@@ -35,6 +35,7 @@ from .routes.campaigns import _register_campaign_routes
 from .routes.cves import _register_cve_routes
 from .routes.documents import _register_document_routes
 from .routes.entities import _register_entity_routes
+from .routes.explore import _register_explore_routes
 from .routes.exports import _register_export_routes
 from .routes.hunting import _register_hunting_routes
 from .routes.imports import _register_import_routes
@@ -205,6 +206,7 @@ def create_app(settings: Settings | None = None, *, with_ui: bool = True) -> Fas
         _register_source_routes,
         _register_enrichment_route,
         _register_taxii_routes,
+        _register_explore_routes,
     ):
         register(app, sessions, require_auth)
     app.mount('/static', StaticFiles(directory=ROOT / 'static'), name='static')
