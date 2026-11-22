@@ -209,7 +209,8 @@ class IocExportQuery(BaseModel):
 # ------------------------------------------------------------------------- threat guides (TIP 2.10, ADR 0025)
 
 ClaimDecision = Literal['added', 'removed']
-RuleKind = Literal['yara', 'sigma']
+RuleKind = Literal['yara', 'sigma', 'suricata', 'snort']
+RULE_KINDS: tuple[str, ...] = get_args(RuleKind)
 RuleTarget = Literal['group', 'technique', 'document', 'cve', 'malware']
 HuntStatus = Literal['open', 'closed']
 HuntResult = Literal['not-checked', 'nothing-found', 'suspicious', 'confirmed']
@@ -337,6 +338,56 @@ def _due(value: date | None) -> date | None:
 def end_of_day(value: date | None) -> str | None:
     """The end of a due date (UTC), stored like every other timestamp."""
     return None if value is None else datetime(*value.timetuple()[:3], 23, 59, 59, tzinfo=UTC).isoformat()
+
+
+# ------------------------------------------------------------------------- hunt packages (TIP 4.3, ADR 0034)
+
+HuntPackageStatus = Literal['draft', 'published', 'retired']
+HuntPackageStatusFilter = Literal['draft', 'published', 'retired', 'all']
+HuntPackageItemKind = Literal['technique', 'indicator', 'rule', 'document']
+MAX_HUNT_PACKAGE_INPUT_ITEMS = 100
+
+
+class HuntPackageItemInput(BaseModel):
+    """``POST /api/hunt-packages/{id}/items``: an ATT&CK technique (``T1059.001``), or the ID of an indicator,
+    a detection rule or a report. The package label rises to the item's own label."""
+
+    model_config = ConfigDict(frozen=True, extra='forbid')
+    kind: HuntPackageItemKind
+    target_id: DocumentId
+
+
+class HuntPackageInput(BaseModel):
+    """``POST /api/hunt-packages``: a draft hunt package. TLP markings in the text, the group and any items
+    raise the label."""
+
+    model_config = ConfigDict(frozen=True, extra='forbid')
+    title: str = Field(min_length=1, max_length=200)
+    hypothesis: str = Field(min_length=1, max_length=10_000)
+    group: GroupRef | None = None
+    tlp: TLP = DEFAULT_TLP
+    items: list[HuntPackageItemInput] = Field(default_factory=list, max_length=MAX_HUNT_PACKAGE_INPUT_ITEMS)
+
+    @field_validator('title', 'hypothesis')
+    @classmethod
+    def not_blank(cls, value: str) -> str:
+        return _not_blank(value)
+
+
+class HuntPackageUpdate(BaseModel):
+    """``PATCH /api/hunt-packages/{id}``: change what is given; ``group: null`` removes the group. A lower
+    ``tlp`` never goes below the items, the group or the markings in the text."""
+
+    model_config = ConfigDict(frozen=True, extra='forbid')
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    hypothesis: str | None = Field(default=None, min_length=1, max_length=10_000)
+    group: GroupRef | None = None
+    tlp: TLP | None = None
+
+    @field_validator('title', 'hypothesis')
+    @classmethod
+    def not_blank(cls, value: str | None) -> str | None:
+        return None if value is None else _not_blank(value)
 
 
 class CriterionInput(BaseModel):
@@ -503,7 +554,8 @@ class IndustryClaimInput(BaseModel):
 
 
 class RuleInput(BaseModel):
-    """``POST /api/rules``: a YARA or Sigma rule, carried as text (TIP 2.7). Insight never runs it."""
+    """``POST /api/rules``: a YARA, Sigma, Suricata or Snort rule, carried as text (TIP 2.7, 4.3). Insight
+    never runs it."""
 
     model_config = ConfigDict(frozen=True, extra='forbid')
 

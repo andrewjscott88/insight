@@ -465,13 +465,36 @@ which is not attribution.
 | `GET /api/hunts/{hunt_id}` | - | One hunt, as above; `404` if unknown or above your limit |
 | `PUT /api/hunts/{hunt_id}` | JSON `{status, summary}` (`open` or `closed`) | The hunt. Audited as `hunt.update` |
 | `PUT /api/hunts/{hunt_id}/checks/{technique_id}` | JSON `{result, data_checked, period_start, period_end, notes}`; `result` is `not-checked`, `nothing-found`, `suspicious` or `confirmed`; dates `YYYY-MM-DD` | `{hunt, technique, result}`. One row per technique, replaced by the next save. Audited as `hunt.check`. `422` for a closed hunt, a technique not in the catalog or an end before the start |
-| `GET /api/rules` | Optional `kind` (`yara` or `sigma`), optional `target_kind` and `target_id` together | `[{id, kind, name, source_url, licence, sha256, tlp, created_at, created_by, linked_to: [{kind, id}], body}]` you can see |
-| `POST /api/rules` | JSON `{kind, name, body, source_url, licence, tlp}`; `body` up to 100,000 characters | The rule (`201`). Rules are stored as text and **never compiled or run**; a basic shape check (YARA `rule name { … condition: … }`, Sigma `title:` and `detection:`) catches pasting mistakes. `422` for a bad shape or the same text twice. Audited as `rule.add` |
+| `GET /api/rules` | Optional `kind` (`yara`, `sigma`, `suricata` or `snort`), optional `target_kind` and `target_id` together | `[{id, kind, name, source_url, licence, sha256, tlp, created_at, created_by, linked_to: [{kind, id}], body}]` you can see |
+| `POST /api/rules` | JSON `{kind, name, body, source_url, licence, tlp}`; `body` up to 100,000 characters | The rule (`201`). Rules are stored as text and **never compiled or run**; a basic shape check (YARA `rule name { … condition: … }`, Sigma `title:` and `detection:`, Suricata and Snort an action then options with a numeric `sid`) catches pasting mistakes. `422` for a bad shape or the same text twice. Audited as `rule.add` |
 | `GET /api/rules/{rule_id}` | - | One rule; `404` if unknown or above your limit |
 | `GET /api/rules/{rule_id}/export` | - | ZIP attachment with the rule file and a JSON manifest containing its source, licence, TLP and SHA-256. Returns `404` above the instance or key limit. Audited as `rule.export` |
 | `DELETE /api/rules/{rule_id}` | - | `{deleted}`, with its links. Audited as `rule.delete` |
 | `POST /api/rules/{rule_id}/links` | JSON `{target_kind, target_id}`: `group` (a `{ref}`), `technique` (`T1059.001`), `document` (a report ID), `cve` (a CVE ID) or `malware` (a family label) | `{rule, kind, id}`. Audited as `rule.link`. `404` if you cannot see the target |
 | `DELETE /api/rules/{rule_id}/links` | Same body | `{unlinked}`. Audited as `rule.unlink` |
+
+## Hunt packages
+
+[ADR 0034](adr/0034-hunt-packages.md). A hunt package is one hypothesis for a hunt tool, with the ATT&CK
+techniques, indicators, detection rules and reports behind it. Its `tlp` is the strictest of its text, its
+group and every item ever added, and removing an item does not lower it. `draft` packages stay in Insight;
+`published` ones are served in the *Hunt packages* TAXII collection ([TAXII](TAXII.md)); `retired` ones are
+served as revoked and refuse changes (`409`) until published again. A caller sees and changes only packages
+within its limit (the stricter of the instance and key limits), and can only add what it can see. Every change
+is audited on the package.
+
+| Route | Input | Returns |
+| --- | --- | --- |
+| `GET /api/hunt-packages` | `status` (`draft`, `published`, `retired` or `all`; default `all`) | `{hunt_packages: [{id, title, status, tlp, group_ref, techniques, indicators, rules, documents, created_at, updated_at, published_at}]}`, most recently changed first (at most 200); the four counts are items of each kind |
+| `POST /api/hunt-packages` | `{title, hypothesis, group?, tlp?, items?: [{kind, target_id}]}` (`group` an ATT&CK group ID or one of your actor IDs; `tlp` default AMBER; at most 100 items here) | `201` and the package `{id, title, hypothesis, group_ref, status, publication, tlp, created_at, updated_at, published_at, created_by}`, as a draft. Audited as `hunt_package.create` |
+| `GET /api/hunt-packages/{id}` | - | The package with `group_name` and `items: [{id, kind, target_id, name, tlp, added_at, added_by}]` |
+| `PATCH /api/hunt-packages/{id}` | Any of `{title, hypothesis, group, tlp}`; `group: null` removes the group | The package. A lower `tlp` stops at the items, the group and the TLP markings in the text. Audited as `hunt_package.update` |
+| `DELETE /api/hunt-packages/{id}` | - | `{deleted}` for a draft or retired package (its items go, what they point to stays); `409` for a published one: retire it first, so hunt tools learn it was withdrawn. Audited as `hunt_package.delete` |
+| `POST /api/hunt-packages/{id}/items` | `{kind, target_id}`: `technique` (`T1059.001`), `indicator` (an indicator ID), `rule` (a rule ID) or `document` (a report ID, as context) | `201` and the item; adding it twice changes nothing. Raises the package label to the item's own. At most 500 items. Audited as `hunt_package.item.add` |
+| `DELETE /api/hunt-packages/{id}/items/{item_id}` | - | `{removed}`. A published package keeps at least one technique, indicator or rule (`409`). Audited as `hunt_package.item.remove` |
+| `POST /api/hunt-packages/{id}/publish` | - | The published package; `409` without a technique, indicator or rule. Publishing a retired package again gives its STIX objects new IDs. Audited as `hunt_package.publish` |
+| `POST /api/hunt-packages/{id}/retire` | - | The retired package (served as revoked). Audited as `hunt_package.retire` |
+| `GET /api/hunt-packages/{id}/stix` | - | The package as a validated STIX 2.1 bundle attachment, in any status (check a draft before publishing it): a `grouping` (context `suspicious-activity`, description the hypothesis), an `attack-pattern` per technique, an `indicator` or `vulnerability` per indicator, an `indicator` per rule (`pattern_type` `sigma`, `yara`, `suricata` or `snort`, the rule text as `pattern`), `indicates` relationships from rules to the package techniques they are linked to, and the TLP marking. The group and the reports are external references; report text is never included. `422` with nothing huntable in it. Audited as `hunt_package.export` |
 
 ## Cases
 

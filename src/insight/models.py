@@ -732,11 +732,11 @@ class IndustryClaim(Base):
 
 
 class DetectionRule(Base):
-    """A YARA or Sigma rule carried as text (TIP 2.7, minimum for TIP 2.10). Insight never runs it."""
+    """A YARA, Sigma, Suricata or Snort rule carried as text (TIP 2.7, 4.3). Insight never runs it."""
 
     __tablename__ = 'detection_rules'
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
-    kind: Mapped[str] = mapped_column(String(10))  # yara | sigma
+    kind: Mapped[str] = mapped_column(String(10))  # yara | sigma | suricata | snort
     name: Mapped[str] = mapped_column(String(200))
     body: Mapped[str] = mapped_column(Text)
     source_url: Mapped[str] = mapped_column(Text, default='')
@@ -800,6 +800,73 @@ class HuntCheck(Base):
     period_end: Mapped[str] = mapped_column(String(40), default='')
     notes: Mapped[str] = mapped_column(Text, default='')
     updated_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
+    actor: Mapped[str] = mapped_column(String(80), default='')
+
+
+class HuntPackage(Base):
+    """A hunt package (TIP 4.3, ADR 0034): a hypothesis to hunt for, with the ATT&CK techniques, indicators,
+    detection rules and reports behind it, prepared for a hunt tool and served over TAXII once published.
+
+    ``draft`` packages are not served; ``published`` ones are; ``retired`` ones are served as revoked STIX
+    objects, so hunt tools learn they were withdrawn. ``publication`` counts how often it was published after
+    being retired: each publication gets new STIX IDs, because a revoked STIX object never comes back. The
+    label is the most restrictive of the text, the group and the items; removing an item never lowers it.
+    """
+
+    __tablename__ = 'hunt_packages'
+    __table_args__ = (
+        CheckConstraint("status IN ('draft', 'published', 'retired')", name='hunt_package_status'),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    title: Mapped[str] = mapped_column(String(200))
+    hypothesis: Mapped[str] = mapped_column(Text)
+    #: An ATT&CK group ID (``G0016``) or an analyst actor's ID, or ``None``.
+    group_ref: Mapped[str | None] = mapped_column(String(36), default=None)
+    status: Mapped[str] = mapped_column(String(10), default='draft', index=True)
+    publication: Mapped[int] = mapped_column(Integer, default=0, server_default='0')
+    tlp: Mapped[str] = mapped_column(String(20), default='AMBER')
+    created_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
+    updated_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
+    published_at: Mapped[str | None] = mapped_column(UtcTimestamp(), default=None)
+    actor: Mapped[str] = mapped_column(String(80), default='')
+
+
+class HuntPackageItem(Base):
+    """An ATT&CK technique, indicator, detection rule or report in a hunt package. Deleting the target removes
+    the item (and marks the package changed first, so TAXII clients get a new version)."""
+
+    __tablename__ = 'hunt_package_items'
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('technique', 'indicator', 'rule', 'document')", name='hunt_package_item_kind'
+        ),
+        CheckConstraint(
+            '(CASE WHEN technique_id IS NULL THEN 0 ELSE 1 END + '
+            'CASE WHEN entity_id IS NULL THEN 0 ELSE 1 END + '
+            'CASE WHEN rule_id IS NULL THEN 0 ELSE 1 END + '
+            'CASE WHEN document_id IS NULL THEN 0 ELSE 1 END) = 1',
+            name='one_hunt_package_target',
+        ),
+        UniqueConstraint('package_id', 'technique_id'),
+        UniqueConstraint('package_id', 'entity_id'),
+        UniqueConstraint('package_id', 'rule_id'),
+        UniqueConstraint('package_id', 'document_id'),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    package_id: Mapped[str] = mapped_column(ForeignKey('hunt_packages.id', ondelete='CASCADE'), index=True)
+    kind: Mapped[str] = mapped_column(String(12))
+    technique_id: Mapped[str | None] = mapped_column(String(16), default=None)
+    entity_id: Mapped[str | None] = mapped_column(
+        ForeignKey('entities.id', ondelete='CASCADE'), index=True, default=None
+    )
+    rule_id: Mapped[str | None] = mapped_column(
+        ForeignKey('detection_rules.id', ondelete='CASCADE'), index=True, default=None
+    )
+    document_id: Mapped[str | None] = mapped_column(
+        ForeignKey('documents.id', ondelete='CASCADE'), index=True, default=None
+    )
+    tlp: Mapped[str] = mapped_column(String(20), default='CLEAR')
+    added_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
     actor: Mapped[str] = mapped_column(String(80), default='')
 
 

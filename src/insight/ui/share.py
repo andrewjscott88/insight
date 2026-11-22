@@ -10,6 +10,7 @@ from typing import Final
 
 from nicegui import ui
 
+from .hunt_packages import build_hunt_packages
 from .ioc_export import open_ioc_export_dialog
 from .typography import heading, new_tab_link
 from .workspace import Workspace
@@ -41,8 +42,8 @@ def build_share(ws: Workspace) -> None:
         with _card(
             'TAXII 2.1 feed',
             'SIEMs and threat-intelligence platforms can poll /taxii2/ on this site with an API key. It '
-            'serves your reviewed indicators, ATT&CK techniques, actors and campaigns, and the CISA KEV '
-            'catalog.',
+            'serves your reviewed indicators, ATT&CK techniques, actors and campaigns, the CISA KEV '
+            'catalog, and your published hunt packages.',
         ):
             new_tab_link('How to connect a client', f'{DOCS}/TAXII.md')
         with _card(
@@ -57,3 +58,4 @@ def build_share(ws: Workspace) -> None:
             'file or with your MISP instance.',
         ):
             new_tab_link('MISP guide', f'{DOCS}/MISP.md')
+    build_hunt_packages(ws)

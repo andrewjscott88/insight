@@ -24,6 +24,7 @@ from .cases import open_add_to_case
 from .confidence import render_credibility
 from .enrichment import open_enrichment_dialog
 from .graph import open_graph
+from .hunt_packages import open_add_to_package
 from .messages import tell
 from .mobile import back_to_list_button
 from .report_requirements import render_report_requirements
@@ -108,6 +109,10 @@ def render_report(ws: Workspace, data: dict[str, Any], actions: ReaderActions) -
         ui.button(
             'Add to case', on_click=lambda: open_add_to_case(ws, 'document', data['id'], data['title'])
         ).props('outline no-caps').mark('report-add-to-case')
+        ui.button(
+            'Add to hunt package',
+            on_click=lambda: open_add_to_package(ws, 'document', data['id'], data['title']),
+        ).props('outline no-caps').mark('report-add-to-hunt')
         new_tab_link('Download this report as JSON', f'/api/documents/{data["id"]}/export')
         new_tab_link("Export this report's IOCs", f'/api/iocs/export?document_id={data["id"]}')
     ui.label('Exports keep the TLP label. They do not give permission to share.').classes('muted prose')

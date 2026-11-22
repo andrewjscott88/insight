@@ -31,12 +31,14 @@ from ..models import (
     Enrichment,
     Entity,
     EntityAssessment,
+    HuntPackageItem,
     IndustryClaim,
     Note,
     Observation,
     RuleLink,
 )
 from .audit import audit
+from .hunt_packages import _touch_packages
 
 MAX_REASON_LENGTH = 500
 
@@ -136,6 +138,7 @@ def delete_document(db: Session, document_id: str, reason: str) -> DeletionResul
     )
     db.execute(update(IndustryClaim).where(IndustryClaim.document_id == doc.id).values(document_id=None))
     content_hash = doc.content_hash
+    _touch_packages(db, HuntPackageItem.document_id, [doc.id])  # before the database removes the items
     db.delete(doc)
     db.flush()  # Gone before a predecessor is made current: one current revision per item (a unique index).
 
@@ -161,6 +164,7 @@ def delete_document(db: Session, document_id: str, reason: str) -> DeletionResul
             or 0
         )
         db.execute(delete(EntityAssessment).where(EntityAssessment.entity_id.in_(orphans)))
+        _touch_packages(db, HuntPackageItem.entity_id, orphans)
         db.execute(delete(Entity).where(Entity.id.in_(orphans)))
         # Deleting the entity first synchronizes with a provider response being saved concurrently.
         db.execute(

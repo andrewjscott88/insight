@@ -38,3 +38,4 @@ superseded ones are marked, never deleted.
 | [0031](0031-shodan.md) | Optional Shodan exposure context for reviewed IPs | Accepted |
 | [0032](0032-intelligence-requirements.md) | Intelligence requirements and requests for information | Accepted |
 | [0033](0033-confidence-and-source-reliability.md) | Confidence, source reliability and report credibility | Accepted |
+| [0034](0034-hunt-packages.md) | Hunt packages over TAXII | Accepted |

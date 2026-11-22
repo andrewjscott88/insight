@@ -626,7 +626,7 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
 - [x] **4.1** Intelligence requirements (PIR, IR) and requests for information, with RFI intake for API keys:
   done, ADR 0032
 - [ ] **4.2** Admiralty grades, indicator confidence and ageing, source statistics (done, ADR 0033); sightings API
-- [ ] **4.3** Hunt packages (Sigma, YARA, Suricata, Snort as STIX indicators) in a TAXII collection
+- [x] **4.3** Hunt packages (Sigma, YARA, Suricata, Snort as STIX indicators) in a TAXII collection (ADR 0034)
 - [ ] **4.4** Finished intelligence products (key judgements, estimative language, PDF/Markdown/STIX)
 - [ ] **4.5** Operator-defined RSS/Atom and TAXII sources
 - [ ] **4.6** Infrastructure pivots: RDAP, certificate transparency, ASN, passive DNS

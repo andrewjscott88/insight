@@ -24,6 +24,7 @@ from ..models import (
     ActorDocument,
     CaseItem,
     Document,
+    HuntPackageItem,
     IndustryClaim,
     RequirementCriterion,
     RequirementEvidence,
@@ -161,7 +162,8 @@ def _insert_link(
     | type[ThreatLink]
     | type[CaseItem]
     | type[RequirementCriterion]
-    | type[RequirementEvidence],
+    | type[RequirementEvidence]
+    | type[HuntPackageItem],
     values: dict[str, str],
 ) -> bool:
     """Let the database arbitrate concurrent additions to the same pair of records."""

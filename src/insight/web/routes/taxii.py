@@ -66,7 +66,9 @@ def _register_taxii_routes(app: FastAPI, sessions: SessionFactory, require_auth:
         return _taxii(
             {
                 'title': 'Insight TAXII server',
-                'description': 'Read-only TAXII 2.1 collections: reviewed indicators and CISA KEV.',
+                'description': (
+                    'Read-only TAXII 2.1 collections: reviewed indicators, CISA KEV and hunt packages.'
+                ),
                 'default': root,
                 'api_roots': [root],
             }

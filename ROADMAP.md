@@ -113,7 +113,8 @@ tools over TAXII and STIX; sightings and requests for information come back
 - [x] **TIP 4.1 Intelligence requirements and requests for information,** with RFI intake for hunt tools
       (`read-rfi` keys). *Done (unreleased):* [ADR 0032](docs/adr/0032-intelligence-requirements.md).
 - [ ] **TIP 4.2 Confidence, source reliability and sightings,** with a sightings API.
-- [ ] **TIP 4.3 Hunt packages over TAXII:** Sigma, YARA and network rules as STIX indicators with their context.
+- [x] **TIP 4.3 Hunt packages over TAXII:** Sigma, YARA and network rules as STIX indicators with their context.
+      *Done (unreleased):* [ADR 0034](docs/adr/0034-hunt-packages.md).
 - [ ] **TIP 4.4 Finished intelligence products,** replacing incident-style cases.
 - [ ] **TIP 4.5–4.8** Operator-defined sources, infrastructure pivots, ATT&CK and MISP-galaxy imports, and a
       read-only MCP endpoint.

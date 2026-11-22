@@ -6,6 +6,7 @@ polling with ``added_after`` sees every new or changed object exactly when it ch
 - **Reviewed indicators**: the STIX export of accepted indicators and CVEs, their reports, the ATT&CK
   techniques tagged on those reports, and the analyst's actors and campaigns linked to any of them.
 - **CISA KEV**: every synced entry of CISA's Known Exploited Vulnerabilities catalog (public, TLP:CLEAR).
+- **Hunt packages**: published hunt packages (TIP 4.3, ADR 0034), and retired ones as revoked objects.
 """
 
 from __future__ import annotations
@@ -27,9 +28,10 @@ from ..stix_export import (
     tlp_marking,
 )
 from ..stix_validation import validate_stix_bundle
-from ..taxii import COLLECTIONS, KEV_COLLECTION, TaxiiError, TaxiiObject
+from ..taxii import COLLECTIONS, HUNT_PACKAGES_COLLECTION, KEV_COLLECTION, TaxiiError, TaxiiObject
 from .audit import audit
 from .exports import _selection
+from .hunt_package_stix import _hunt_package_bundle
 from .stix_techniques import _add_stix_techniques
 from .stix_threats import _add_stix_threats
 
@@ -47,7 +49,15 @@ def taxii_collection_objects(db: Session, collection_id: str, *, max_tlp: str | 
     """
     if collection_id not in COLLECTIONS:
         raise TaxiiError(404, 'Collection not found')
-    bundle = _kev_bundle(db) if collection_id == KEV_COLLECTION else _indicator_bundle(db, max_tlp)
+    if collection_id == KEV_COLLECTION:
+        bundle = _kev_bundle(db)
+    elif collection_id == HUNT_PACKAGES_COLLECTION:
+        try:
+            bundle = _hunt_package_bundle(db, max_tlp)
+        except ValueError as exc:  # more packages than one snapshot may hold
+            raise TaxiiError(413, 'Collection too large to serve', str(exc)) from None
+    else:
+        bundle = _indicator_bundle(db, max_tlp)
     validate_stix_bundle(bundle)
     items = _dated(bundle.get('objects', []))
     detail = {'collection': collection_id, 'objects': len(items), 'max_tlp': max_tlp}

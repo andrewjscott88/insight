@@ -1,12 +1,12 @@
 # TAXII 2.1 server
 
-Insight serves its reviewed indicators and the CISA KEV catalog over TAXII 2.1, so a SIEM or threat-intelligence platform can poll them
+Insight serves its reviewed indicators, the CISA KEV catalog and your published hunt packages over TAXII 2.1, so a SIEM or threat-intelligence platform can poll them
 on a schedule without a custom script ([ADR 0026](adr/0026-taxii-server.md)). The server is read-only: clients
 can list collections and read objects, but nothing can be written or created.
 
 ## What a client gets
 
-Two fixed collections. **Reviewed indicators** (ID `5b2f8a7e-4c1d-4e3a-9f6b-0d8c7a1e2f34`):
+Three fixed collections. **Reviewed indicators** (ID `5b2f8a7e-4c1d-4e3a-9f6b-0d8c7a1e2f34`):
 
 - every indicator and CVE an analyst **accepted**, as STIX 2.1 `indicator` and `vulnerability` objects;
 - the `report` objects that mention them, with publisher text only where the publisher allows it;
@@ -24,6 +24,23 @@ has synced, as a `vulnerability` with CISA's name for the weakness and an `x_ins
 the vendor, product, date added, due date, required action, ransomware use and CWEs. It is public data
 (TLP:CLEAR), so every key may read it. Its vulnerability IDs differ from the indicators collection's CVE
 objects, which carry different content; relate the two by the `cve` external reference.
+
+**Hunt packages** (ID `9d3f6b1a-2c4e-4a7b-8e5d-1f0a3c6b9e27`): one hypothesis per package for a hunt tool to
+test in its own data ([ADR 0034](adr/0034-hunt-packages.md)). Each published package is:
+
+- a `grouping` (context `suspicious-activity`) whose `name` is the title and `description` the hypothesis,
+  with the threat group and the reports behind it as external references (report text is never included);
+- an `attack-pattern` for each ATT&CK technique, and an `indicator` (or `vulnerability`, for a CVE) for each
+  indicator;
+- an `indicator` for each detection rule, with the rule text as its `pattern` and `pattern_type` `sigma`,
+  `yara`, `suricata` or `snort`, and an `indicates` relationship to each package technique the rule is
+  linked to;
+- the package's TLP marking on every object.
+
+A key sees a package only within its TLP limit. Drafts are never served. A retired package is served once more
+with every object `revoked: true`, so drop it when you see that; publishing it again later brings new IDs. Any
+change to a package brings a new version of all its objects. Find the objects of one package through the
+grouping's `object_refs`.
 
 ## Connect a client
 
@@ -76,12 +93,14 @@ for page in as_pages(collection.get_objects, per_request=1000, added_after='2026
 - **Follow `next`.** A page holds up to 1,000 objects (`limit`, default 1,000). While `more` is `true`, send the
   page's `next` value unchanged.
 - **IDs are stable.** The same indicator, technique, actor, campaign, link or KEV entry always has the same
-  STIX ID, whichever report or key it comes from, so clients can update rather than duplicate. A technique's
+  STIX ID, whichever report or key it comes from, so clients can update rather than duplicate. Hunt package
+  objects belong to their package and its publication. A technique's
   ID includes the ATT&CK version, so an ATT&CK upgrade in Insight brings new technique objects.
 - **Links count as new.** An actor or campaign appears after your last poll when you link it to something the
   key can see, even if you created it long before. A KEV entry appears again only when CISA changes it.
 - **Removals are not sent.** If an indicator is later rejected, or its report is deleted, it simply stops
-  appearing. To drop such indicators, re-pull the whole collection now and then.
+  appearing. To drop such indicators, re-pull the whole collection now and then. Hunt packages are the
+  exception: a retired package comes back as revoked objects.
 - **Budget.** Collection reads draw on a `taxii` budget of 240 requests per hour per key. A client polling
   every 15 minutes uses 4 to 8 of them.
 
@@ -101,7 +120,7 @@ Errors use the TAXII error format, for example
 | `404` | Unknown collection, or an object that does not exist or is above the key's TLP limit |
 | `405` | A write (Insight's TAXII server is read-only) |
 | `406` | The client does not accept `application/taxii+json;version=2.1` |
-| `413` | More than 100,000 accepted mentions: the collection is too large to serve |
+| `413` | More than 100,000 accepted mentions, or more than 500 hunt packages to serve: the collection is too large to serve |
 | `429` | The `taxii` budget is used up; wait for `Retry-After` |
 
 Every read is audited as `taxii.read`, with the key that made it.

@@ -26,7 +26,7 @@ The narrower first release trades the research report's React, RabbitMQ/Celery, 
   (IOC export queries), `sources` (source runs, enrichment cache, fetch state), `jobs` (queue and schedules),
   `access` (API keys, MFA), and for threat guides ([ADR 0025](adr/0025-threat-guides.md)) `actors` (actors,
   report links, industry decisions), `threat_profiles` (an industry's top ten), `threat_guides` (a guide's
-  facts and the sweep list), `rules` (YARA and Sigma as text) and `hunts` (hunt records).
+  facts and the sweep list), `rules` (YARA, Sigma, Suricata and Snort as text) and `hunts` (hunt records).
 - `industries.py`: the fixed industry list and the reviewed words that map catalog labels and ATT&CK prose to it.
   `threat_library_build.py` builds the threat-group library from ATT&CK and the MISP galaxy (pure);
   `threat_library.py` loads the bundled `data/actors.json` or the synced full edition; `threat_library_sync.py`

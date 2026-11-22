@@ -8,6 +8,22 @@
   at start-up and changes no existing data.
 - Migration `0025` adds the `source_ratings` table and a `credibility` column on reports (every existing report
   starts at 6, cannot be judged). It runs at start-up.
+- Migration `0026` adds the `hunt_packages` and `hunt_package_items` tables. It runs at start-up and changes no
+  existing data.
+
+### Added: hunt packages over TAXII (TIP 4.3)
+
+- **Hunt packages** in Share: one hypothesis for a hunt tool to test, with the ATT&CK techniques, indicators,
+  detection rules and reports behind it, and a TLP label that is the strictest of what it holds
+  ([ADR 0034](docs/adr/0034-hunt-packages.md)). **Add to hunt package** in the reader and the indicator
+  explorer.
+- Published packages are served in a new TAXII collection, **Hunt packages**, as STIX 2.1: a `grouping` with
+  the hypothesis, `attack-pattern`s, `indicator`s, and each rule as an `indicator` whose `pattern_type` is its
+  rule language. Retired packages come back as revoked, so hunt tools learn they no longer apply.
+- Detection rules can now be **Suricata** and **Snort** rules as well as YARA and Sigma (stored as text, never
+  run).
+- `/api/hunt-packages` routes, including a STIX download to check a draft, and a glossary entry for TAXII.
+- Hunt records (TIP 2.10) stay as they are: running hunts and recording their results belong to the hunt tool.
 
 ### Added: confidence and source reliability (TIP 4.2)
 
