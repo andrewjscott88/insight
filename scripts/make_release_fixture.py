@@ -48,6 +48,7 @@ from insight.schemas import (
     RuleInput,
     RuleLinkInput,
     SightingInput,
+    SoftwareLinkInput,
     SourceRatingInput,
     ThreatLinkInput,
 )
@@ -146,6 +147,13 @@ def build(path: Path) -> None:
             )
             actor = services.create_actor(db, ActorInput(name='Fixture Fox', aliases=('FF-1',), tlp='AMBER'))
             services.link_report(db, actor.id, ActorLinkInput(document_id=manual.id, note='Same beacon'))
+            services.link_software_report(db, 'S0154', SoftwareLinkInput(document_id=manual.id))
+            services.link_threat(
+                db,
+                'actor',
+                actor.id,
+                ThreatLinkInput(target_kind='software', target_id='S0154', tlp='AMBER'),
+            )
             services.record_industry_claim(
                 db, actor.id, IndustryClaimInput(industry='energy', document_id=manual.id, tlp='AMBER')
             )

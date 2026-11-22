@@ -266,11 +266,11 @@ class ActorInput(CampaignInput):
 
 
 ThreatSubjectKind = Literal['actor', 'campaign']
-ThreatTargetKind = Literal['document', 'indicator', 'technique']
+ThreatTargetKind = Literal['document', 'indicator', 'technique', 'software']
 
 
 class ThreatLinkInput(BaseModel):
-    """An explicit link to an existing report, indicator, or catalog technique."""
+    """An explicit link to an existing report, indicator, catalog technique or software."""
 
     model_config = ConfigDict(frozen=True, extra='forbid')
     target_kind: ThreatTargetKind
@@ -567,6 +567,10 @@ class ActorLinkInput(BaseModel):
     document_id: DocumentId
     note: str = Field(default='', max_length=2_000)
     tlp: TLP = 'CLEAR'
+
+
+class SoftwareLinkInput(ActorLinkInput):
+    """An explicit, labelled software/report link; no attribution follows from the association."""
 
 
 class IndustryClaimInput(BaseModel):

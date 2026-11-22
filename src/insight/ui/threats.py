@@ -17,6 +17,7 @@ from ..industries import BY_KEY, INDUSTRIES
 from ..threat_library import library
 from .actors import open_actor_dialog
 from .campaigns import render_tracked_threats
+from .software import render_software_search
 from .threat_guide import open_guide_dialog
 from .typography import heading, new_tab_link
 from .workspace import Workspace
@@ -105,6 +106,7 @@ def build_threats(ws: Workspace) -> None:
             'Track your own actor', icon='add', on_click=lambda: open_actor_dialog(ws, open_guide)
         ).props('outline no-caps')
     render_tracked_threats(ws)
+    render_software_search(ws)
     _group_search(ws)
     with ui.column().classes('w-full gap-3'):
         profile()

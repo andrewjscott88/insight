@@ -22,6 +22,7 @@ SERVICE_MODULES = sorted((PACKAGE / 'services').glob('*.py'))
 SQL_BUILDERS = {'select', 'insert', 'update', 'delete', 'func', 'or_', 'and_', 'text'}
 ORM_CLASSES = {'Document', 'Entity', 'Observation', 'Note', 'AuditEvent', 'KEVRecord', 'WatchTerm'}
 ORM_CLASSES |= {'SourceRating', 'HuntPackage', 'HuntPackageItem', 'Sighting'}
+ORM_CLASSES |= {'SoftwareDocument'}
 ORM_CLASSES |= {'SourceRun', 'Enrichment', 'ApiKey', 'Job', 'Schedule', 'FetchState', 'EntityAssessment'}
 ORM_CLASSES |= {'DocumentTechnique', 'SourceSwitch', 'LookupFailure'}
 ORM_CLASSES |= {'ThreatActor', 'ActorDocument', 'IndustryClaim', 'DetectionRule', 'RuleLink'}
@@ -140,6 +141,8 @@ TLP_AWARE_SERVICES = {
     'list_hunt_packages', 'create_hunt_package', 'get_hunt_package', 'update_hunt_package',
     'delete_hunt_package', 'add_hunt_package_item', 'remove_hunt_package_item', 'publish_hunt_package',
     'retire_hunt_package', 'export_hunt_package', 'record_sighting', 'list_sightings', 'delete_sighting',
+    'search_software', 'software_detail', 'software_reports', 'link_software_report',
+    'unlink_software_report', 'report_software',
 }  # fmt: skip
 
 

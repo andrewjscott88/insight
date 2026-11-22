@@ -29,6 +29,7 @@ from .messages import tell
 from .mobile import back_to_list_button
 from .report_requirements import render_report_requirements
 from .rules import render_report_rules
+from .software import render_report_software
 from .techniques import render_report_techniques
 from .theme import tlp_badge
 from .typography import heading, new_tab_link
@@ -101,6 +102,7 @@ def render_report(ws: Workspace, data: dict[str, Any], actions: ReaderActions) -
         )
     render_report_techniques(ws, data['id'], data.get('techniques', []), actions.refresh)
     render_report_groups(ws, data['id'], actions.refresh)
+    render_report_software(ws, data['id'], actions.refresh)
     render_report_rules(ws, data['id'], data['tlp'], actions.refresh)
     with ui.row().classes('gap-x-6 gap-y-0 items-center'):
         ui.button('Show links', on_click=lambda: open_graph(ws, f'report:{data["id"]}')).props(

@@ -1,5 +1,27 @@
 # Industry threats and threat guides
 
+## Software and report links
+
+In **Investigate > Threat groups**, open **Software library** and search a name or ATT&CK
+software ID such as `S0154`. The public catalog entry shows its type and available context. **Reports that
+name it** lists whole-word name or alias matches from visible current reports. Plain single-word names are
+case-sensitive to avoid ordinary-word matches. At most the newest 5,000 reports are checked; the view says
+when that cap is reached. Publisher-restricted sources show metadata rather than quoted excerpts.
+
+A candidate is not proof of use. Choose **Link this report**, record why, and pick a sharing label. The label
+cannot be lower than the report or a TLP marking in the note. The report reader's **Software links** section
+can link any report, including one with no name match. The software page shows up to 50 linked reports and
+up to 50 candidates; the API pages through additional report links. Remove a link on the software page.
+Every change is audited. Catalog removal does not erase saved names/types or prevent link removal.
+
+To record that an actor or campaign uses software, open **Actors and campaigns you track**, choose the
+record, then select **Software used** in **Link to**. This is a separate, explicit decision. Linking the same
+report to an actor and software never infers use. Up to 50 visible use decisions appear on the software page.
+
+Software associations on selected reports and explicit use links appear in STIX/TAXII exports, within the
+reader's TLP limit. Analyst notes stay out of software objects. See [API](API.md#software) and
+[TAXII](TAXII.md#software-associations).
+
 Insight's **Investigate › Threat groups** tab answers two questions: *which groups target my industry?* and *what do I do
 about this group?* It is TIP roadmap item 2.10 ([ADR 0025](adr/0025-threat-guides.md)); it also brings the
 minimum of item 2.5 (actors you track) and item 2.7 (YARA and Sigma rules as linked artifacts).

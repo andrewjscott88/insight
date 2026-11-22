@@ -1,5 +1,10 @@
 # Insight
 
+Software context (TIP 4.7 part 2): search catalog malware and tools in **Investigate > Threat groups**, link
+reports as explicit analyst decisions, and record software use for tracked actors and campaigns. These
+labelled links appear in STIX and TAXII exports. A name match alone never creates a link. See
+[the software guide](docs/THREAT_GUIDES.md#software-and-report-links).
+
 A single-operator threat-intelligence workbench, run locally or published behind a TLS reverse proxy. Application logic and the interactive GUI are authored in **Python**, using **NiceGUI + FastAPI + SQLAlchemy**. NiceGUI supplies the underlying browser assets; no separate React/Node build is required.
 
 **Version 0.9.0: a single-operator pilot release, not a production multi-user TIP.** Nothing is deployed or connected automatically. Operating it: [docs/RUNBOOK.md](docs/RUNBOOK.md). Scripting against it: [docs/API_GUIDE.md](docs/API_GUIDE.md) (every call, with `curl`). All documentation: [docs/README.md](docs/README.md).

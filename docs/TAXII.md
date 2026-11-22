@@ -6,6 +6,23 @@ can list collections and read objects, but nothing can be written or created.
 
 ## What a client gets
 
+### Software associations
+
+The Reviewed indicators collection also carries explicitly linked catalog software as `malware`
+(`is_family: true`) or `tool`. Selected report/software links become `related-to` relationships. An explicit
+analyst actor/campaign/software link becomes `uses` when its software or subject is selected. Shared report
+mentions never imply use. These projections follow the existing accepted-indicator selection and publisher
+reuse rules; an unrelated report is not pulled into the collection.
+
+Each software projection and relationship carries its own effective TLP marking. A restricted association
+does not add a reference to a less restricted report's `object_refs`. Software IDs depend on its saved
+catalog ID, name, type and label; relationship IDs include their saved link and endpoints. Link timestamps
+contribute to change dates, so a new association to an old report reaches `added_after` clients. Saved
+name/type snapshots keep old links exportable after catalog removal. Notes and candidate matches are not
+exported as associations. Software projections are validated with the rest of the STIX bundle.
+
+### Collections
+
 Three fixed collections. **Reviewed indicators** (ID `5b2f8a7e-4c1d-4e3a-9f6b-0d8c7a1e2f34`):
 
 - every indicator and CVE an analyst **accepted**, as STIX 2.1 `indicator` and `vulnerability` objects;

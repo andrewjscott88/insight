@@ -9,7 +9,7 @@ from sqlalchemy import case, func, literal, select, union_all
 from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from ..attack import technique
-from ..models import ActorDocument, Campaign, Document, Entity, Observation, ThreatActor, ThreatLink
+from ..models import ActorDocument, Campaign, Document, Entity, Observation, ThreatActor, ThreatLink, now
 from ..schemas import (
     TLP_LEVELS,
     ActorLinkInput,
@@ -23,6 +23,7 @@ from ..schemas import (
 from .actors import _check_label, _insert_link, _who, link_report, unlink_report
 from .audit import audit
 from .common import like_pattern
+from .software import _catalog_software
 from .tlp import _visible, visible_levels
 
 
@@ -91,6 +92,9 @@ def _target(db: Session, kind: ThreatTargetKind, ref: str, max_tlp: str | None) 
         found = technique(ref)
         if found:
             return found.id, found.full_name, 'CLEAR'
+    elif kind == 'software':
+        item = _catalog_software(ref)
+        return item.id, item.name, 'CLEAR'
     else:
         rows = db.execute(
             select(Entity.value, Document.tlp)
@@ -109,6 +113,7 @@ _TARGETS = {
     'document': ThreatLink.document_id,
     'indicator': ThreatLink.entity_id,
     'technique': ThreatLink.technique_id,
+    'software': ThreatLink.software_id,
 }
 
 
@@ -129,9 +134,10 @@ def link_threat(
         return ThreatLinkView('document', target_id, name, row.tlp)
     target = _TARGETS[payload.target_kind]
     owner = _owner(kind)
-    created = _insert_link(
-        db, ThreatLink, {owner.key: ref, target.key: target_id, 'tlp': label, 'actor': _who(db)}
-    )
+    values = {owner.key: ref, target.key: target_id, 'tlp': label, 'actor': _who(db)}
+    if payload.target_kind == 'software':
+        values.update(software_name=name, software_type=_catalog_software(target_id).type)
+    created = _insert_link(db, ThreatLink, values)
     if not created:
         existing = db.scalars(
             select(ThreatLink).where(owner == ref, target == target_id).with_for_update()
@@ -142,6 +148,7 @@ def link_threat(
         if label == existing.tlp:
             return ThreatLinkView(payload.target_kind, target_id, name, label)
         existing.tlp = label
+        existing.updated_at = now()
     db.flush()
     audit(db, f'{kind}.link', ref, f'{payload.target_kind} {target_id}')
     return ThreatLinkView(payload.target_kind, target_id, name, label)
@@ -160,7 +167,7 @@ def unlink_threat(
     if kind == 'actor' and target_kind == 'document':
         unlink_report(db, ref, target_id, max_tlp=max_tlp)
         return
-    if target_kind == 'technique':
+    if target_kind in ('technique', 'software'):
         target_id = target_id.strip().upper()  # retired tags can still be removed
     else:
         _target(db, target_kind, target_id, max_tlp)
@@ -229,7 +236,10 @@ def list_threat_links(
             .join(Document)
             .where(*owned, Document.tlp.in_(levels))
         )
-    links = union_all(entities, techniques, docs).subquery()
+    software = select(
+        literal('software'), ThreatLink.software_id, ThreatLink.software_name, ThreatLink.tlp, literal(0)
+    ).where(*owned, ThreatLink.software_id.is_not(None))
+    links = union_all(entities, techniques, docs, software).subquery()
     rows = db.execute(
         select(links).order_by(links.c.kind, links.c.id).offset(max(0, offset)).limit(min(max(1, limit), 200))
     )

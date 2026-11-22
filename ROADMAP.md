@@ -87,6 +87,10 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
 
 ## 1.0: context around the indicators
 
+- [x] **TIP 4.7 part 2: software links.** Search catalog malware/tools, review name-match candidates, save
+      report links and explicit actor/campaign use decisions, and share them through STIX/TAXII. Library
+      expansion and timelines/Navigator remain separate parts of TIP 4.7.
+
 - [x] **TIP 2.5 Actors and campaigns.** Analysts create records and explicitly link them to reports,
       indicators and ATT&CK techniques. STIX exports include the selected, visible links.
 - [x] **TIP 2.10 Industry threat profiles and actor threat guides** (requested by Andrew, 2026-11-21): pick an

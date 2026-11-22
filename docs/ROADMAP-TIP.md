@@ -544,6 +544,11 @@ Manual, approved-per-lookup, metadata-only pivots that land in the link map: RDA
 
 ### 4.7 Adversary library imports
 
+Part 2 adds software search/detail, labelled report decisions, explicit actor/campaign use links, workspace
+controls, and STIX/TAXII projections ([ADR 0038](adr/0038-adversary-library.md)). No link is inferred
+from report co-occurrence. Catalog expansion and actor timelines/software Navigator are separate parts;
+the full item remains open until those parts and their validation are complete.
+
 MITRE ATT&CK groups and software, and the MISP threat-actor galaxy for aliases, as malware and tool entities;
 an activity timeline per actor; ATT&CK Navigator layers per actor and for the landscape.
 
