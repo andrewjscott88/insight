@@ -136,7 +136,14 @@ from .hunts import (
     start_hunt,
     update_hunt,
 )
-from .ip_enrichment import cached_greynoise_context, eligible_greynoise_ip, store_greynoise_context
+from .ip_enrichment import (
+    IP_PROVIDERS,
+    cached_greynoise_context,
+    cached_ip_context,
+    eligible_greynoise_ip,
+    store_greynoise_context,
+    store_ip_context,
+)
 from .jobs import (
     JOB_ACTIVE,
     JOB_BACKOFF,
@@ -267,6 +274,7 @@ __all__ = [
     'CVE_LOOKUP',
     'DEFAULT_ACTOR',
     'DEFAULT_LIFETIME',
+    'IP_PROVIDERS',
     'JOB_ACTIVE',
     'JOB_BACKOFF',
     'KEV_SOURCE',
@@ -347,6 +355,7 @@ __all__ = [
     'build_graph',
     'cached_enrichments',
     'cached_greynoise_context',
+    'cached_ip_context',
     'carry_decisions',
     'case_sensitive',
     'case_timeline',
@@ -482,6 +491,7 @@ __all__ = [
     'start_operator_session',
     'stats',
     'store_greynoise_context',
+    'store_ip_context',
     'store_pdf_report',
     'stricter_limit',
     'summaries',

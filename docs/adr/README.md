@@ -35,3 +35,4 @@ superseded ones are marked, never deleted.
 | [0028](0028-exploit-availability.md) | Exploit-availability context from reports and VulnCheck KEV, metadata only | Accepted |
 | [0029](0029-cases.md) | Lightweight case management | Accepted |
 | [0030](0030-postgres-timestamps-and-feed-cursors.md) | Native PostgreSQL timestamps and resumable OTX syncs | Accepted |
+| [0031](0031-shodan.md) | Optional Shodan exposure context for reviewed IPs | Accepted |

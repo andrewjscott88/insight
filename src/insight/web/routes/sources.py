@@ -8,7 +8,7 @@ from typing import Annotated, Any, Final
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 
-from ... import greynoise, services
+from ... import greynoise, services, shodan
 from ...connectors import (
     ProviderError,
     SourceSwitchedOff,
@@ -163,6 +163,33 @@ def _register_enrichment_route(app: FastAPI, sessions: SessionFactory, require_a
             raise HTTPException(429, str(exc), headers={'Retry-After': str(exc.seconds)}) from None
         except ProviderError as exc:
             raise HTTPException(502, str(exc)) from None
+
+    @app.get('/api/ips/{ip}/shodan', dependencies=[Depends(require_auth)])
+    def shodan_cached(ip: str) -> dict[str, Any]:
+        """The last cached Shodan answer (TIP 3.7), without contacting Shodan."""
+        with sessions() as db:
+            try:
+                record = services.cached_ip_context(db, 'shodan', ip)
+            except LookupError:
+                record = None
+        if record is None:
+            raise HTTPException(404, 'No eligible cached Shodan context')
+        return {**record, 'attribution': shodan.ATTRIBUTION}
+
+    @app.post('/api/enrichment/shodan/{ip}', dependencies=[Depends(require_auth)])
+    async def shodan_lookup(request: Request, ip: str) -> dict[str, Any]:
+        """Approve one Shodan host lookup (TIP 3.7); disabled without ``INSIGHT_SHODAN_KEY``."""
+        try:
+            found = await shodan.lookup(sessions, ip, actor=caller_of(request).actor)
+        except shodan.NotConfigured as exc:
+            raise HTTPException(503, str(exc)) from None
+        except LookupError as exc:
+            raise HTTPException(404, str(exc)) from None
+        except shodan.RateLimited as exc:
+            raise HTTPException(429, str(exc), headers={'Retry-After': str(exc.seconds)}) from None
+        except ProviderError as exc:
+            raise HTTPException(502, str(exc)) from None
+        return {**found, 'attribution': shodan.ATTRIBUTION}
 
     @app.post('/api/enrichment/{provider}/{cve}', dependencies=[Depends(require_auth)])
     async def enrich(provider: str, cve: str) -> dict[str, Any]:
