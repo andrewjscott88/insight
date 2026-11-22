@@ -21,7 +21,7 @@ FRONT_ENDS = [*UI_MODULES, *WEB_MODULES, PACKAGE / 'main.py']
 SERVICE_MODULES = sorted((PACKAGE / 'services').glob('*.py'))
 SQL_BUILDERS = {'select', 'insert', 'update', 'delete', 'func', 'or_', 'and_', 'text'}
 ORM_CLASSES = {'Document', 'Entity', 'Observation', 'Note', 'AuditEvent', 'KEVRecord', 'WatchTerm'}
-ORM_CLASSES |= {'SourceRating'}
+ORM_CLASSES |= {'SourceRating', 'HuntPackage', 'HuntPackageItem'}
 ORM_CLASSES |= {'SourceRun', 'Enrichment', 'ApiKey', 'Job', 'Schedule', 'FetchState', 'EntityAssessment'}
 ORM_CLASSES |= {'DocumentTechnique', 'SourceSwitch', 'LookupFailure'}
 ORM_CLASSES |= {'ThreatActor', 'ActorDocument', 'IndustryClaim', 'DetectionRule', 'RuleLink'}
@@ -53,8 +53,12 @@ def test_services_is_a_package_of_small_domain_modules() -> None:
     assert {'tlp', 'audit', 'documents', 'search', 'entities', 'exports', 'triage', 'jobs', 'access'} <= names
     domain = [p for p in SERVICE_MODULES if p.name != '__init__.py']
     assert all(len(p.read_text().splitlines()) < 400 for p in domain), 'keep service modules small'
-    # __init__ holds no logic, only the re-export of every public name (one per line, twice): its own limit.
-    assert len((PACKAGE / 'services' / '__init__.py').read_text().splitlines()) < 600
+    # __init__ holds no logic: only its docstring, the re-export of every public name, and ``__all__``.
+    for node in ast.parse((PACKAGE / 'services' / '__init__.py').read_text()).body:
+        docstring = isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant)
+        re_export = isinstance(node, ast.ImportFrom) and (node.level == 1 or node.module == '__future__')
+        exported = isinstance(node, ast.Assign) and [ast.unparse(t) for t in node.targets] == ['__all__']
+        assert docstring or re_export or exported, ast.unparse(node)[:80]
 
 
 def test_the_tlp_core_imports_nothing_from_its_siblings() -> None:
@@ -133,6 +137,9 @@ TLP_AWARE_SERVICES = {
     'delete_requirement', 'add_criterion', 'remove_criterion', 'add_evidence', 'remove_evidence',
     'answer_requirement', 'retire_requirement', 'reopen_requirement', 'document_requirements',
     'indicator_confidence', 'set_credibility', 'source_statistics',
+    'list_hunt_packages', 'create_hunt_package', 'get_hunt_package', 'update_hunt_package',
+    'delete_hunt_package', 'add_hunt_package_item', 'remove_hunt_package_item', 'publish_hunt_package',
+    'retire_hunt_package', 'export_hunt_package',
 }  # fmt: skip
 
 

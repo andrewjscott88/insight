@@ -116,7 +116,7 @@ def build_parser() -> argparse.ArgumentParser:
             'exploit-backfill: note public-exploit mentions in reports stored before 0.9.0 | '
             'threat-library-sync: fetch the full pinned threat library | industries | '
             'threat-profile INDUSTRY: the top ten groups | threat-guide REF DEST: write a threat guide | '
-            'rule-add FILE: store a YARA or Sigma rule | '
+            'rule-add FILE: store a YARA, Sigma, Suricata or Snort rule | '
             'misp-export / misp-import: exchange a MISP event (see command --help)'
         ),
     )

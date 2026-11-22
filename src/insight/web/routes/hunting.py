@@ -6,13 +6,13 @@ for each hypothesis. Every change is audited; labels above the caller's or the i
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 
 from ... import services
 from ...models import DetectionRule, Hunt, SessionFactory
-from ...schemas import HuntCheckInput, HuntInput, HuntUpdate, RuleInput, RuleLinkInput, RuleTarget
+from ...schemas import HuntCheckInput, HuntInput, HuntUpdate, RuleInput, RuleKind, RuleLinkInput, RuleTarget
 from ..auth import AuthDependency, acting, reader_limit
 from .threats import write_limit
 
@@ -117,7 +117,7 @@ def _register_hunting_routes(app: FastAPI, sessions: SessionFactory, require_aut
     @app.get('/api/rules', dependencies=[Depends(require_auth)])
     def rules(
         request: Request,
-        kind: Literal['yara', 'sigma'] | None = None,
+        kind: RuleKind | None = None,
         target_kind: RuleTarget | None = None,
         target_id: Annotated[str | None, Query(min_length=1, max_length=36)] = None,
     ) -> list[dict[str, Any]]:

@@ -23,6 +23,8 @@ from insight.schemas import (
     CriterionInput,
     DocumentInput,
     EvidenceInput,
+    HuntPackageInput,
+    HuntPackageItemInput,
     RequirementInput,
 )
 from insight.services import SourceRef
@@ -80,9 +82,19 @@ def world(app: FastAPI) -> dict[str, Any]:
         asked = RequirementInput(kind='pir', question=f'{MARKER}?', tlp='GREEN')
         cited = services.create_requirement(db, asked)
         services.add_evidence(db, cited.id, EvidenceInput(document_id=amber.id))
+        # A published GREEN hunt package that takes the hidden indicator becomes AMBER (TIP 4.3).
+        hunt = services.create_hunt_package(
+            db,
+            HuntPackageInput(
+                title=f'{MARKER} hunt', hypothesis='Beacons.', tlp='GREEN',
+                items=[HuntPackageItemInput(kind='indicator', target_id=hidden_obs['entity_id'])],
+            ),
+        )  # fmt: skip
+        services.publish_hunt_package(db, hunt.id)
         _, token = services.create_api_key(db, name='siem', access='read-write', max_tlp='GREEN')
     return {
         'case': case.id,
+        'hunt_package': hunt.id,
         'requirement': open_req.id,
         'cited': cited.id,
         'green': green.id,
@@ -166,6 +178,10 @@ def test_nothing_hidden_leaks_through_any_read_route(client: TestClient, world: 
         f'/api/requirements/{world["cited"]}',
         f'/api/documents/{world["amber"]}/requirements',
         f'/api/documents/{world["green"]}/requirements',
+        '/api/hunt-packages',
+        f'/api/hunt-packages/{world["hunt_package"]}',
+        f'/api/hunt-packages/{world["hunt_package"]}/stix',
+        '/taxii2/insight/collections/9d3f6b1a-2c4e-4a7b-8e5d-1f0a3c6b9e27/objects/',
         '/api/source-ratings',
         f'/api/entities/{world["shared_entity"]}/confidence',
         f'/api/entities/{world["hidden_entity"]}/confidence',

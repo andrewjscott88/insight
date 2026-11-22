@@ -457,7 +457,7 @@ curl -sS -X PUT "$INSIGHT_URL/api/hunts/$HUNT_ID/checks/T1059.001" -H "Authoriza
 curl -sS -X PUT "$INSIGHT_URL/api/hunts/$HUNT_ID" -H "Authorization: Bearer $INSIGHT_API_KEY" \
   -H 'Content-Type: application/json' -d '{"status": "closed", "summary": "Nothing found in 7 weeks."}'
 curl -sS "$INSIGHT_URL/api/hunts/$HUNT_ID" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq '.checks'
-# Rules: store a Sigma or YARA rule as text (never run), link it to a group or technique, list, read, delete
+# Rules: store a Sigma, YARA, Suricata or Snort rule as text (never run), link it, list, read, delete
 RULE_ID=$(curl -sS -X POST "$INSIGHT_URL/api/rules" -H "Authorization: Bearer $INSIGHT_API_KEY" \
   -H 'Content-Type: application/json' --data-binary @- <<'JSON' | jq -r .id
 {"kind": "sigma", "name": "Encoded PowerShell", "licence": "DRL-1.1", "tlp": "CLEAR",
@@ -472,6 +472,40 @@ curl -sS "$INSIGHT_URL/api/rules?kind=sigma" -H "Authorization: Bearer $INSIGHT_
 curl -sS "$INSIGHT_URL/api/rules/$RULE_ID" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq -r .body
 curl -fsS "$INSIGHT_URL/api/rules/$RULE_ID/export" -H "Authorization: Bearer $INSIGHT_API_KEY" -o rule.zip
 curl -sS -X DELETE "$INSIGHT_URL/api/rules/$RULE_ID" -H "Authorization: Bearer $INSIGHT_API_KEY"
+```
+
+### Hunt packages
+
+One hypothesis for a hunt tool, with the ATT&CK techniques, indicators, rules and reports behind it
+([ADR 0034](adr/0034-hunt-packages.md)). Published packages are served in the *Hunt packages* TAXII
+collection; retired ones come back as revoked. A package takes the strictest label of what it holds.
+
+```bash
+# A draft with a group and a technique, then an indicator, a rule and a report for context
+PKG_ID=$(curl -fsS -X POST "$INSIGHT_URL/api/hunt-packages" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d '{"title": "Encoded PowerShell beacons", "group": "G0016", "tlp": "GREEN",
+  "hypothesis": "The crew runs encoded PowerShell, then beacons over HTTPS.",
+  "items": [{"kind": "technique", "target_id": "T1059.001"}]}' | jq -r .id)
+ITEM_ID=$(curl -fsS -X POST "$INSIGHT_URL/api/hunt-packages/$PKG_ID/items" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d "{\"kind\": \"indicator\", \"target_id\": \"$ENTITY_ID\"}" | jq -r .id)
+curl -fsS -X POST "$INSIGHT_URL/api/hunt-packages/$PKG_ID/items" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d "{\"kind\": \"rule\", \"target_id\": \"$RULE_ID\"}"
+curl -fsS -X POST "$INSIGHT_URL/api/hunt-packages/$PKG_ID/items" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d "{\"kind\": \"document\", \"target_id\": \"$DOC_ID\"}"
+# Check the STIX a hunt tool will get, then publish
+curl -fsS "$INSIGHT_URL/api/hunt-packages/$PKG_ID/stix" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  | jq '.objects[] | {type, name, pattern_type}'
+curl -fsS -X POST "$INSIGHT_URL/api/hunt-packages/$PKG_ID/publish" -H "Authorization: Bearer $INSIGHT_API_KEY"
+# Packages with what they hold, and one package
+curl -fsS "$INSIGHT_URL/api/hunt-packages?status=published" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  | jq '.hunt_packages[] | {id, title, techniques, indicators, rules}'
+curl -fsS "$INSIGHT_URL/api/hunt-packages/$PKG_ID" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq '.items[] | {kind, name}'
+# Change the hypothesis, remove an item (the label stays), retire, delete
+curl -fsS -X PATCH "$INSIGHT_URL/api/hunt-packages/$PKG_ID" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d '{"hypothesis": "Encoded PowerShell, then beacons over DNS."}'
+curl -fsS -X DELETE "$INSIGHT_URL/api/hunt-packages/$PKG_ID/items/$ITEM_ID" -H "Authorization: Bearer $INSIGHT_API_KEY"
+curl -fsS -X POST "$INSIGHT_URL/api/hunt-packages/$PKG_ID/retire" -H "Authorization: Bearer $INSIGHT_API_KEY"
+curl -fsS -X DELETE "$INSIGHT_URL/api/hunt-packages/$PKG_ID" -H "Authorization: Bearer $INSIGHT_API_KEY"
 ```
 
 ### Cases

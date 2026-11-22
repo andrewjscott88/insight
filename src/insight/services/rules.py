@@ -1,9 +1,9 @@
-"""YARA and Sigma rules as linked artifacts (TIP 2.7 minimum, for TIP 2.10 threat guides; ADR 0025).
+"""YARA, Sigma, Suricata and Snort rules as linked artifacts (TIP 2.7, 2.10 and 4.3; ADR 0025, 0034).
 
 Insight *carries* detection content: it stores the rule text with its source, licence and SHA-256, links it
 to groups, ATT&CK techniques or reports, and exports it with threat guides. It never compiles, evaluates or
 runs a rule, and the workspace shows rule bodies as plain text. A light shape check catches pasting the wrong
-thing; it is not validation (use ``yara`` or ``sigma-cli`` on your own tooling for that).
+thing; it is not validation (use ``yara``, ``sigma-cli``, ``suricata -T`` or ``snort -T`` for that).
 """
 
 from __future__ import annotations
@@ -23,16 +23,30 @@ from sqlalchemy.orm import Session
 
 from ..attack import technique
 from ..extraction import canonical
-from ..models import DetectionRule, Document, RuleLink, ThreatActor
+from ..models import DetectionRule, Document, HuntPackageItem, RuleLink, ThreatActor
 from ..schemas import RuleInput, RuleLinkInput, most_restrictive
 from .actors import _check_label, _visible_report, _who, is_catalog_ref, resolve_group
 from .audit import audit
+from .hunt_packages import _touch_packages
 from .tlp import tlp_permitted, visible_levels
 
 _YARA: Final = re.compile(
     r'^\s*(?:(?:private|global)\s+)*rule\s+\w+[^{]*\{.*\bcondition\s*:', re.MULTILINE | re.DOTALL
 )
 _SIGMA: Final = (re.compile(r'^title\s*:', re.MULTILINE), re.compile(r'^detection\s*:', re.MULTILINE))
+#: An action, a header, then options with a numeric ``sid``, as in
+#: ``alert tcp any any -> any 80 (msg:"x"; sid:1;)``.
+#: Snort 3 service rules (``alert http (...)``) have no addresses, so the header is not checked further.
+_NETWORK: Final = re.compile(
+    r'^[ \t]*(?:alert|drop|reject|pass|log|sdrop|rewrite|block|react)\b[^(\n]*\(.*?\bsid\s*:\s*\d+\s*;.*?\)',
+    re.MULTILINE | re.DOTALL,
+)
+_RULE_FILES: Final = {
+    'yara': 'rule.yar',
+    'sigma': 'rule.yml',
+    'suricata': 'rule.rules',
+    'snort': 'rule.rules',
+}
 MAX_RULES: Final = 500
 
 
@@ -49,6 +63,9 @@ def rule_shape_problem(kind: str, body: str) -> str | None:
         return 'This does not look like a YARA rule (rule NAME { ... condition: ... }).'
     if kind == 'sigma' and not all(p.search(body) for p in _SIGMA):
         return 'This does not look like a Sigma rule (it needs title: and detection: lines).'
+    if kind in ('suricata', 'snort') and not _NETWORK.search(body):
+        name = kind.capitalize()
+        return f'This does not look like a {name} rule (alert ... (msg:"..."; sid:NUMBER;)).'
     return None
 
 
@@ -65,7 +82,7 @@ def export_rule(db: Session, rule_id: str, *, max_tlp: str | None) -> bytes:
     rule = get_rule(db, rule_id, max_tlp=max_tlp)
     if rule is None:
         raise LookupError('Rule not found')
-    filename = 'rule.yar' if rule.kind == 'yara' else 'rule.yml'
+    filename = _RULE_FILES[rule.kind]
     manifest = {
         'id': rule.id,
         'name': rule.name,
@@ -197,6 +214,7 @@ def delete_rule(db: Session, rule_id: str, *, max_tlp: str | None = None) -> Non
     if rule is None:
         raise LookupError('Rule not found')
     db.execute(delete(RuleLink).where(RuleLink.rule_id == rule.id))
+    _touch_packages(db, HuntPackageItem.rule_id, [rule.id])  # before the database removes the items
     audit(db, 'rule.delete', rule.id, f'{rule.kind} {rule.content_hash[:16]}')
     db.delete(rule)
 

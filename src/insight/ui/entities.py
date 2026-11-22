@@ -16,6 +16,7 @@ from .cases import open_add_to_case
 from .confidence import render_confidence
 from .graph import open_graph
 from .greynoise import open_greynoise
+from .hunt_packages import open_add_to_package
 from .shodan import open_shodan
 from .typography import heading
 from .verdicts import Indicator, flag_badges, load_verdicts, render_verdict
@@ -72,6 +73,10 @@ def build_entities(ws: Workspace) -> None:
                 'Add to case',
                 on_click=lambda: open_add_to_case(ws, 'indicator', target.entity_id, target.value),
             ).props('outline no-caps').mark(f'entity-add-to-case-{target.value}')
+            ui.button(
+                'Add to hunt package',
+                on_click=lambda: open_add_to_package(ws, 'indicator', target.entity_id, target.value),
+            ).props('outline no-caps').mark(f'entity-add-to-hunt-{target.value}')
             if show_greynoise:
                 ui.button(
                     'GreyNoise Community context', on_click=lambda: open_greynoise(ws, target.value)

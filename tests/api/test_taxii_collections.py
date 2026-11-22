@@ -18,7 +18,7 @@ from insight.models import AuditEvent, Document, Entity
 from insight.schemas import ActorInput, CampaignInput, DocumentInput, ThreatLinkInput
 from insight.services.taxii import _dated
 from insight.stix_export import TLP_MARKINGS, stable_id
-from insight.taxii import INDICATORS_COLLECTION, KEV_COLLECTION, TAXII_MEDIA_TYPE
+from insight.taxii import HUNT_PACKAGES_COLLECTION, INDICATORS_COLLECTION, KEV_COLLECTION, TAXII_MEDIA_TYPE
 
 ROOT = '/taxii2/insight/'
 OBJECTS = f'{ROOT}collections/{INDICATORS_COLLECTION}/objects/'
@@ -99,12 +99,13 @@ def by_type(found: list[dict[str, Any]], kind: str) -> list[dict[str, Any]]:
 # --------------------------------------------------------------------------- the collections
 
 
-def test_two_fixed_collections_are_listed(client: TestClient, world: dict[str, Any]) -> None:
+def test_three_fixed_collections_are_listed(client: TestClient, world: dict[str, Any]) -> None:
     listed = client.get(f'{ROOT}collections/', headers=world['full']).json()['collections']
-    assert [c['id'] for c in listed] == [INDICATORS_COLLECTION, KEV_COLLECTION]
-    kev = client.get(f'{ROOT}collections/{KEV_COLLECTION}/', headers=world['full']).json()
-    assert kev['title'] == 'CISA Known Exploited Vulnerabilities'
-    assert (kev['can_read'], kev['can_write']) == (True, False)
+    assert [c['id'] for c in listed] == [INDICATORS_COLLECTION, KEV_COLLECTION, HUNT_PACKAGES_COLLECTION]
+    for collection_id, title in ((KEV_COLLECTION, 'CISA Known Exploited Vulnerabilities'),
+                                 (HUNT_PACKAGES_COLLECTION, 'Hunt packages')):  # fmt: skip
+        found = client.get(f'{ROOT}collections/{collection_id}/', headers=world['full']).json()
+        assert (found['title'], found['can_read'], found['can_write']) == (title, True, False)
 
 
 # --------------------------------------------------------------------------- techniques, actors, campaigns

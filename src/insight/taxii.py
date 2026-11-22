@@ -26,6 +26,7 @@ MAX_MATCH_VALUES: Final = 100
 #: The collections are fixed here: no API key, setting or database row can create one.
 INDICATORS_COLLECTION: Final = '5b2f8a7e-4c1d-4e3a-9f6b-0d8c7a1e2f34'
 KEV_COLLECTION: Final = 'c4e1b7d2-6a35-4f08-8b9e-3d7f2a5c1e60'
+HUNT_PACKAGES_COLLECTION: Final = '9d3f6b1a-2c4e-4a7b-8e5d-1f0a3c6b9e27'
 COLLECTIONS: Final = {
     INDICATORS_COLLECTION: {
         'id': INDICATORS_COLLECTION,
@@ -46,6 +47,18 @@ COLLECTIONS: Final = {
             "Every entry of CISA's Known Exploited Vulnerabilities catalog that Insight has synced, as STIX "
             'vulnerabilities with the dates, required action and ransomware use CISA publishes. Public '
             'data (TLP:CLEAR).'
+        ),
+        'can_read': True,
+        'can_write': False,
+        'media_types': [STIX_MEDIA_TYPE],
+    },
+    HUNT_PACKAGES_COLLECTION: {
+        'id': HUNT_PACKAGES_COLLECTION,
+        'title': 'Hunt packages',
+        'description': (
+            'Hypotheses for a hunt tool to test: for each published package, a STIX grouping with its ATT&CK '
+            'techniques, indicators and detection rules (Sigma, YARA, Suricata and Snort, as indicators of '
+            "those pattern types), up to the API key's TLP limit. Retired packages come back as revoked."
         ),
         'can_read': True,
         'can_write': False,

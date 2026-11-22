@@ -40,6 +40,8 @@ from insight.schemas import (
     EvidenceInput,
     HuntCheckInput,
     HuntInput,
+    HuntPackageInput,
+    HuntPackageItemInput,
     IndustryClaimInput,
     RequirementInput,
     RfiInput,
@@ -175,6 +177,31 @@ def build(path: Path) -> None:
             # 1.0: a source grade and a report credibility (TIP 4.2)
             services.rate_source(db, SourceRatingInput(source_name='Fixture vendor', reliability='B'))
             services.set_credibility(db, manual.id, CredibilityInput(credibility=2))
+            # 1.0: a Suricata rule and a published hunt package (TIP 4.3)
+            network = services.add_rule(
+                db,
+                RuleInput(
+                    kind='suricata',
+                    name='Fixture DNS beacon',
+                    body='alert dns any any -> any any (msg:"Fixture"; content:"example.test"; sid:1;)',
+                    tlp='GREEN',
+                ),
+            )
+            hunt_package = services.create_hunt_package(
+                db,
+                HuntPackageInput(
+                    title='Fixture hunt',
+                    hypothesis='The beacon calls home over DNS.',
+                    tlp='AMBER',
+                    items=[
+                        HuntPackageItemInput(kind='technique', target_id='T1071.004'),
+                        HuntPackageItemInput(kind='indicator', target_id=beacon.id),
+                        HuntPackageItemInput(kind='rule', target_id=network.id),
+                        HuntPackageItemInput(kind='document', target_id=manual.id),
+                    ],
+                ),
+            )
+            services.publish_hunt_package(db, hunt_package.id)
     finally:
         engine.dispose()
 

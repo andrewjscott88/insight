@@ -164,7 +164,7 @@ def _hunt(guide: ThreatGuide) -> list[str]:
         out.append(f'- And {len(data.sweep) - MAX_SWEEP_LINES} more in the sweep export (CSV or JSON).')
     out += ['', '### Detection rules', '']
     if not data.rules:
-        out.append('No YARA or Sigma rule is linked to this group or its techniques.')
+        out.append('No detection rule is linked to this group or its techniques.')
     for r in data.rules:
         source = link('source', r.rule.source_url) if r.rule.source_url else 'no source'
         out.append(

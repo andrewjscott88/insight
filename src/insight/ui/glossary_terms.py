@@ -250,6 +250,10 @@ GLOSSARY: Final[tuple[tuple[str, str], ...]] = (
         'A common file format that other tools can read.',
     ),
     (
+        'TAXII',
+        'A standard way for tools to fetch threat information from a server. Insight runs a TAXII feed.',
+    ),
+    (
         'STIX',
         'A standard format for sharing threat information. You can export a STIX file for other tools.',
     ),

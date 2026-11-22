@@ -1,4 +1,4 @@
-"""YARA and Sigma rules in a threat guide (TIP 2.7 minimum, TIP 2.10; ADR 0025).
+"""YARA, Sigma, Suricata and Snort rules in a threat guide (TIP 2.7, 2.10 and 4.3; ADR 0025).
 
 Insight keeps the text of a rule, where it came from and its licence, and links it to a group or technique.
 It never runs a rule. Rule text is shown as plain text.
@@ -22,7 +22,12 @@ from .typography import heading, new_tab_link
 from .verdicts import suggested_tlp
 from .workspace import Workspace
 
-KINDS: Final = {'sigma': 'Sigma (log searches)', 'yara': 'YARA (file patterns)'}
+KINDS: Final = {
+    'sigma': 'Sigma (log searches)',
+    'yara': 'YARA (file patterns)',
+    'suricata': 'Suricata (network traffic)',
+    'snort': 'Snort (network traffic)',
+}
 
 
 def render_rules(ws: Workspace, guide: ThreatGuide, refresh: Callable[[], Any]) -> None:

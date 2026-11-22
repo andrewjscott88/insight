@@ -61,8 +61,8 @@ Each relationship carries its own sharing label. See the [STIX export guide](IOC
 | Your reports | Linked reports and reports that name the group (up to 50), within your TLP limit |
 | Hunt plan | One starting hypothesis per technique, from ATT&CK detection strategies and data components, with log sources |
 | Indicators to search for | The sweep list (below) |
-| Detection rules | YARA and Sigma rules linked to the group, its techniques or its reports |
-| Hunt records | What was checked for each hypothesis, over which dates, with what result |
+| Detection rules | YARA, Sigma, Suricata and Snort rules linked to the group, its techniques or its reports |
+| Hunt records | What was checked for each hypothesis, over which dates, with what result (kept as they are; see below) |
 | Sources | Library edition, pinned versions and SHA-256, ATT&CK references, the MITRE notice |
 
 Downloads: the guide as Markdown or JSON (`insight-threat-guide-1`), the Navigator layer (format 4.5) and the
@@ -106,7 +106,7 @@ things to search for, not a list of things the group used.
 
 ### Rules
 
-Open **Detection rules** in a report to attach a saved rule or add new YARA or Sigma text. You can also
+Open **Detection rules** in a report to attach a saved rule or add new YARA, Sigma, Suricata or Snort text. You can also
 add a rule from a group guide. The guide includes rules attached to that group, its techniques, and reports
 explicitly linked to the group. Insight displays the text without running it.
 
@@ -120,6 +120,14 @@ and hyphens, and are stored lowercase.
 Keep the two files together. The manifest records the rule’s name, source URL, licence, TLP label and
 SHA-256 of the enclosed UTF-8 file (CRLF is converted to LF). Report and actor links stay in Insight.
 Check the licence and sharing label before sending the file to another team.
+
+## From a guide to a hunt package
+
+A guide is the background; a **hunt package** is what you hand a hunt tool ([ADR 0034](adr/0034-hunt-packages.md)):
+one hypothesis, with the ATT&CK techniques, indicators and rules that test it. Make one in **Share → Hunt
+packages**, or with **Add to hunt package** in the reader or the indicator explorer, then publish it to the
+*Hunt packages* TAXII collection. Hunt records stay as they are, but get no new features: the hunt tool records
+what it ran and found, and reports sightings back.
 
 ## TLP
 

@@ -136,7 +136,8 @@ def threat_guide(
 def rule_add(
     path: Path, kind: str, name: str, links: list[str], tlp: str, licence: str, source_url: str
 ) -> str:
-    """Store a YARA or Sigma rule from a file and link it to groups (``G0016``) or techniques (``T1059``)."""
+    """Store a YARA, Sigma, Suricata or Snort rule from a file and link it to groups (``G0016``) or
+    techniques (``T1059``)."""
     from pydantic import ValidationError
 
     from . import services

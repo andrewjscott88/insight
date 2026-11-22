@@ -81,7 +81,7 @@ def test_discovery_api_root_and_collections(client: TestClient, world: dict[str,
     assert discovery.json()['api_roots'] == ['http://testserver/taxii2/insight/']
     root = client.get(ROOT, headers=world['full']).json()
     assert root['versions'] == [TAXII_MEDIA_TYPE]
-    collection, _kev = client.get(f'{ROOT}collections/', headers=world['full']).json()['collections']
+    collection, _kev, _hunts = client.get(f'{ROOT}collections/', headers=world['full']).json()['collections']
     assert collection['id'] == INDICATORS_COLLECTION
     assert (collection['can_read'], collection['can_write']) == (True, False)
     assert collection['media_types'] == [STIX_MEDIA_TYPE]
