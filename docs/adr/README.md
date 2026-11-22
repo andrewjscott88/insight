@@ -40,3 +40,4 @@ superseded ones are marked, never deleted.
 | [0033](0033-confidence-and-source-reliability.md) | Confidence, source reliability and report credibility | Accepted |
 | [0034](0034-hunt-packages.md) | Hunt packages over TAXII | Accepted |
 | [0035](0035-sightings.md) | Sightings from hunt tools | Accepted |
+| [0039](0039-read-only-mcp.md) | Read-only MCP with API keys and per-key TLP ceilings | Proposed |

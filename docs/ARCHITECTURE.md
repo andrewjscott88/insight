@@ -101,6 +101,13 @@ To add a migration: change `models.py`, then run
 
 ## API
 
+Read-only agent access lives at `POST /mcp` ([ADR 0039](adr/0039-read-only-mcp.md), [MCP.md](MCP.md)).
+`web/routes/mcp.py` handles stateless JSON-RPC, `mcp_transport.py` checks current request metadata/headers,
+`mcp.py` owns the fixed catalog and result bounds, and
+`services/mcp.py` projects the existing TLP-aware domain reads. The only permission exception is read-key
+access to this exact read-only transport POST. It uses the existing key verifier and audit actor, a separate
+rate policy, and no browser-session fallback, SDK, schema migration or external calls.
+
 JSON routes live under `/api`. Each is reachable with the browser session (cookie plus `X-CSRF-Token` on writes;
 `/api/session` hands out the token) or the single API key (`Authorization: Bearer`, no CSRF). Contracts are not
 versioned yet; breaking changes are listed in the CHANGELOG. Usage: [API_GUIDE](API_GUIDE.md); fields:
