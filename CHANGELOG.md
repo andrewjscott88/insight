@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Long passive DNS names and answers stay within the phone dialog when a result is expanded.
+
 - Long domains wrap within the pivot title and approval label on phones, including larger text.
 
 ### Added: passive DNS (TIP 4.6 part 3)

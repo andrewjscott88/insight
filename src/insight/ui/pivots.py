@@ -20,13 +20,19 @@ def _render_result(result: dict[str, Any]) -> None:
     if result.get('truncated'):
         ui.label('This is a limited set of records, not a full history.').classes('muted prose')
     for record in result.get('records', []):
-        with ui.expansion(record['name']).classes('w-full break-value'):
-            ui.label(f'Record type: {record["type"]}').classes('break-value')
-            ui.label(f'Answer: {record["answer"]}').classes('break-value')
-            ui.label(f'First seen: {record["first_seen"]}').classes('break-value')
-            ui.label(f'Last seen: {record["last_seen"]}').classes('break-value')
+        with ui.expansion(record['name']).classes('w-full min-w-0').style('overflow-wrap:anywhere'):
+            ui.label(f'Record type: {record["type"]}').classes('w-full min-w-0').style(
+                'overflow-wrap:anywhere'
+            )
+            ui.label(f'Answer: {record["answer"]}').classes('w-full min-w-0').style('overflow-wrap:anywhere')
+            ui.label(f'First seen: {record["first_seen"]}').classes('w-full min-w-0').style(
+                'overflow-wrap:anywhere'
+            )
+            ui.label(f'Last seen: {record["last_seen"]}').classes('w-full min-w-0').style(
+                'overflow-wrap:anywhere'
+            )
             count = record['count'] if record['count'] is not None else 'Not supplied'
-            ui.label(f'Count: {count}').classes('break-value')
+            ui.label(f'Count: {count}').classes('w-full min-w-0').style('overflow-wrap:anywhere')
 
 
 def build_pivot_switches(ws: Workspace) -> None:
