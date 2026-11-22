@@ -440,6 +440,28 @@ class AnswerInput(BaseModel):
     answer: str = Field(min_length=1, max_length=20_000)
 
 
+Reliability = Literal['A', 'B', 'C', 'D', 'E', 'F']
+
+
+class SourceRatingInput(BaseModel):
+    """``PUT /api/source-ratings``: the analyst's Admiralty reliability grade for a source (by the reports'
+    source name), and optionally how fast its indicators age (``half_life_days``; ``None``: the default)."""
+
+    model_config = ConfigDict(frozen=True, extra='forbid')
+    source_name: str = Field(min_length=1, max_length=160)
+    reliability: Reliability
+    half_life_days: int | None = Field(default=None, ge=1, le=3650)
+    note: str = Field(default='', max_length=2_000)
+
+
+class CredibilityInput(BaseModel):
+    """``PUT /api/documents/{id}/credibility``: the Admiralty credibility of what a report says, 1 (confirmed)
+    to 6 (cannot be judged)."""
+
+    model_config = ConfigDict(frozen=True, extra='forbid')
+    credibility: int = Field(ge=1, le=6)
+
+
 class ActorLinkInput(BaseModel):
     """``POST /api/actors/{id}/documents``: link a report to a group or actor (the analyst's decision)."""
 

@@ -17,6 +17,7 @@ from sqlalchemy import (
     Engine,
     ForeignKey,
     Index,
+    Integer,
     String,
     Text,
     TypeDecorator,
@@ -129,6 +130,10 @@ class Document(Base):
     search_text: Mapped[str] = mapped_column(Text, default='', server_default='')
     #: True when a connector had to shorten the publisher's text (e.g. RSS summaries are capped at 500 chars).
     truncated: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    #: The analyst's Admiralty credibility grade for what this report says (TIP 4.2, ADR 0033): 1 confirmed,
+    #: 2 probably true, 3 possibly true, 4 doubtful, 5 improbable, 6 cannot be judged (the default). A new
+    #: revision starts again at 6: the grade was about the old text.
+    credibility: Mapped[int] = mapped_column(Integer, default=6, server_default='6')
 
 
 class DocumentAttachment(Base):
@@ -567,6 +572,27 @@ class CaseItem(Base):
     note: Mapped[str] = mapped_column(Text, default='')
     tlp: Mapped[str] = mapped_column(String(20), default='AMBER')
     added_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
+    actor: Mapped[str] = mapped_column(String(80), default='')
+
+
+class SourceRating(Base):
+    """The analyst's Admiralty reliability grade for a source (TIP 4.2, ADR 0033), keyed by the reports'
+    source name: A completely reliable, B usually reliable, C fairly reliable, D not usually reliable, E
+    unreliable, F cannot be judged. An unrated source counts as F. ``half_life_days`` overrides how fast
+    indicators from it age (``None``: the indicator type's default)."""
+
+    __tablename__ = 'source_ratings'
+    __table_args__ = (
+        CheckConstraint("reliability IN ('A', 'B', 'C', 'D', 'E', 'F')", name='source_reliability'),
+        CheckConstraint(
+            'half_life_days IS NULL OR half_life_days BETWEEN 1 AND 3650', name='source_half_life'
+        ),
+    )
+    source_name: Mapped[str] = mapped_column(String(160), primary_key=True)
+    reliability: Mapped[str] = mapped_column(String(1), default='F')
+    half_life_days: Mapped[int | None] = mapped_column(Integer, default=None)
+    note: Mapped[str] = mapped_column(Text, default='')
+    updated_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
     actor: Mapped[str] = mapped_column(String(80), default='')
 
 

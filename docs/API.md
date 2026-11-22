@@ -410,7 +410,7 @@ API keys only (`Authorization: Bearer <key>`); a signed-in browser gets `403`. R
 | Route | Parameters | Result |
 | --- | --- | --- |
 | `GET /api/entities` | `q` | Up to 200 `{id, kind, value, document_count}` sorted by kind and value |
-| `GET /api/entities/{id}` | `offset` (0), `limit` (100, at most 200) | `{id, kind, value, flags, assessment, first_seen_at, last_seen_at, document_count, offset, documents: [summaries]}`, newest first, paginated. `assessment` is `null` or `{verdict, reason, tlp, valid_until, decided_at, actor}`; a TLP-limited key sees it only within its limit. `exploit` is the CVE's exploit context as in `GET /api/cves` (`null` for other kinds, or when nothing is known). `first_seen_at` / `last_seen_at`: when the oldest and newest report **you can see** that mentions it was added |
+| `GET /api/entities/{id}` | `offset` (0), `limit` (100, at most 200) | `{id, kind, value, flags, assessment, first_seen_at, last_seen_at, document_count, offset, documents: [summaries]}`, newest first, paginated. `assessment` is `null` or `{verdict, reason, tlp, valid_until, decided_at, actor}`; a TLP-limited key sees it only within its limit. `exploit` is the CVE's exploit context as in `GET /api/cves` (`null` for other kinds, or when nothing is known). `first_seen_at` / `last_seen_at`: when the oldest and newest report **you can see** that mentions it was added. `confidence`: see [Confidence and source reliability](#confidence-and-source-reliability) |
 | `POST /api/entities/{id}/assessment` | JSON `{verdict, reason, tlp, valid_until}`: `verdict` `unknown` (clears) / `benign` / `suspicious` / `malicious`; `reason` up to 2,000 characters; `tlp` (default `AMBER`) labels the reason; `valid_until` a date, today or later, or omitted | The recorded assessment, or `{"verdict": "unknown"}`. Audited as `entity.assess`. `404` if you cannot see the entity; `403` if a TLP-limited key would set, or replace, a verdict above its limit |
 
 ## ATT&CK techniques
@@ -519,6 +519,18 @@ your limit; `403`: a label above your limit; `409`: retired, or a PIR with IRs u
 | `POST /api/requirements/{id}/retire` | - | The retired requirement (it refuses changes until reopened). Audited as `requirement.retire` |
 | `POST /api/requirements/{id}/reopen` | - | The open requirement. Audited as `requirement.reopen` |
 | `GET /api/documents/{id}/requirements` | - | `{requirements: [{id, kind, question, priority, because}]}`: the open requirements that report addresses, high priority first. Empty for a report you cannot see |
+
+## Confidence and source reliability
+
+How far each source and report can be trusted, and how well the reports back up an indicator
+([ADR 0033](adr/0033-confidence-and-source-reliability.md)). Scores use only reports the caller may see.
+
+| Route | Input | Returns |
+| --- | --- | --- |
+| `GET /api/source-ratings` | - | `{sources: [{source_name, reliability, reliability_label, half_life_days, note, reports, indicators, unique_indicators, reviewed, rejected, last_report_at}], reliability, credibility}`: one row per source with visible reports (unlimited callers also see rated sources with none). `unique_indicators` counts indicators no other source reported; `reviewed` and `rejected` count reviewed mentions. `reliability` and `credibility` map each grade to its meaning |
+| `PUT /api/source-ratings` | `{source_name, reliability, half_life_days?, note?}`: `reliability` `A`–`F`; `half_life_days` 1–3650 or `null` for the default ageing | The rating with `updated_at, updated_by`. `403` for TLP-limited keys. Audited as `source.rate` |
+| `PUT /api/documents/{id}/credibility` | `{credibility}`: 1–6 | `{id, credibility}`; `404` for a report the caller may not see. Audited as `document.credibility` |
+| `GET /api/entities/{id}/confidence` | - | `{score, band, half_life_days, sources: [{source_name, reliability, reliability_label, reports, newest_at, weight}]}`: `score` 0–100, `band` `high`, `medium`, `low` or `none`, `half_life_days` `null` for kinds that do not age; sources strongest first. The same object is `confidence` in `GET /api/entities/{id}` |
 
 ## Sources and enrichment
 

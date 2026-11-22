@@ -100,6 +100,7 @@ def summaries(db: Session, docs: Sequence[Document]) -> list[dict[str, Any]]:
             'entity_count': counts.get(doc.id, 0),
             'is_current': doc.is_current,
             'truncated': doc.truncated,
+            'credibility': doc.credibility,
         }
         for doc in docs
     ]

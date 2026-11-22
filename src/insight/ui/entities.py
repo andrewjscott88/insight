@@ -13,6 +13,7 @@ from nicegui import ui
 
 from .. import greynoise, services, shodan
 from .cases import open_add_to_case
+from .confidence import render_confidence
 from .graph import open_graph
 from .greynoise import open_greynoise
 from .shodan import open_shodan
@@ -57,6 +58,7 @@ def build_entities(ws: Workspace) -> None:
         with ws.read() as db:
             verdict = load_verdicts(db, [target.entity_id]).get(target.entity_id)
             first, last = services.entity_seen(db, target.entity_id)
+            confidence = services.indicator_confidence(db, target.entity_id)
             eligible = target.kind == 'ip' and bool(services.eligible_greynoise_ip(db, target.value))
             show_greynoise = eligible and greynoise.configured()
             show_shodan = eligible and shodan.configured()
@@ -80,6 +82,7 @@ def build_entities(ws: Workspace) -> None:
                 ).mark(f'entity-shodan-{target.value}')
             if first and last:
                 ui.label(f'In reports added from {first[:10]} to {last[:10]}').classes('muted text-sm')
+            render_confidence(confidence)
             render_verdict(ws, target, verdict, on_saved=lambda: render_about(box, target))
 
     @ui.refreshable

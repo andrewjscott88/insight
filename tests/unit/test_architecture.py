@@ -21,6 +21,7 @@ FRONT_ENDS = [*UI_MODULES, *WEB_MODULES, PACKAGE / 'main.py']
 SERVICE_MODULES = sorted((PACKAGE / 'services').glob('*.py'))
 SQL_BUILDERS = {'select', 'insert', 'update', 'delete', 'func', 'or_', 'and_', 'text'}
 ORM_CLASSES = {'Document', 'Entity', 'Observation', 'Note', 'AuditEvent', 'KEVRecord', 'WatchTerm'}
+ORM_CLASSES |= {'SourceRating'}
 ORM_CLASSES |= {'SourceRun', 'Enrichment', 'ApiKey', 'Job', 'Schedule', 'FetchState', 'EntityAssessment'}
 ORM_CLASSES |= {'DocumentTechnique', 'SourceSwitch', 'LookupFailure'}
 ORM_CLASSES |= {'ThreatActor', 'ActorDocument', 'IndustryClaim', 'DetectionRule', 'RuleLink'}
@@ -131,6 +132,7 @@ TLP_AWARE_SERVICES = {
     'list_requirements', 'create_requirement', 'file_rfi', 'get_requirement', 'update_requirement',
     'delete_requirement', 'add_criterion', 'remove_criterion', 'add_evidence', 'remove_evidence',
     'answer_requirement', 'retire_requirement', 'reopen_requirement', 'document_requirements',
+    'indicator_confidence', 'set_credibility', 'source_statistics',
 }  # fmt: skip
 
 
