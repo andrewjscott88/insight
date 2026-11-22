@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Long certificate names and issuer text stay within the phone dialog when a result is expanded.
+
 - Long domains wrap within the pivot title and approval label on phones, including larger text.
 
 ### Added: certificate transparency (TIP 4.6 part 2)

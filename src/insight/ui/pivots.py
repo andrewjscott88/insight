@@ -20,10 +20,14 @@ def _render_result(result: dict[str, Any]) -> None:
     if result.get('truncated'):
         ui.label('This is a limited set of names, not a full history.').classes('muted prose')
     for record in result.get('certificates', []):
-        with ui.expansion(record['name']).classes('w-full break-value'):
-            ui.label(f'Issuer: {record["issuer"]}').classes('break-value')
-            ui.label(f'Valid from: {record["not_before"]}').classes('break-value')
-            ui.label(f'Valid until: {record["not_after"]}').classes('break-value')
+        with ui.expansion(record['name']).classes('w-full min-w-0').style('overflow-wrap:anywhere'):
+            ui.label(f'Issuer: {record["issuer"]}').classes('w-full min-w-0').style('overflow-wrap:anywhere')
+            ui.label(f'Valid from: {record["not_before"]}').classes('w-full min-w-0').style(
+                'overflow-wrap:anywhere'
+            )
+            ui.label(f'Valid until: {record["not_after"]}').classes('w-full min-w-0').style(
+                'overflow-wrap:anywhere'
+            )
 
 
 def build_pivot_switches(ws: Workspace) -> None:
