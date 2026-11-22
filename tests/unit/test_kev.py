@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from insight.connectors import (
     KEV_INBOX_LIMIT,
+    KEV_NEW_ENTRY_LIMIT,
     MAX_BYTES,
     MAX_KEV_FIELD,
     MAX_KEV_ROWS,
@@ -134,6 +135,53 @@ def test_inbox_documents_are_the_newest_entries(db: Session) -> None:
     titles = set(db.scalars(select(Document.title)))
     assert any(t.startswith('CVE-2024-99999') for t in titles)
     assert len(titles) == KEV_INBOX_LIMIT
+
+
+# --------------------------------------------------------------------------- TIP 1.1 inbox policy
+
+
+def titles(db: Session) -> set[str]:
+    return {t.split(' ')[0] for t in db.scalars(select(Document.title))}
+
+
+def test_the_first_sync_reports_only_the_newest_entries(db: Session) -> None:
+    """The whole catalog is background on the first sync: it must not flood the inbox."""
+    rows = [kev_row(10000 + i, dateAdded=f'2021-{1 + i % 12:02d}-{1 + i % 28:02d}') for i in range(300)]
+    assert import_kev(db, payload(*rows)) == (300, KEV_INBOX_LIMIT)
+
+
+def test_a_later_addition_with_an_older_date_still_becomes_a_report(db: Session) -> None:
+    newest = [kev_row(20000 + i, dateAdded='2030-01-01') for i in range(KEV_INBOX_LIMIT)]
+    import_kev(db, payload(*newest))
+    backdated = kev_row(30000, dateAdded='2019-06-01')  # added by CISA now, dated outside the newest 100
+    assert import_kev(db, payload(*newest, backdated)) == (KEV_INBOX_LIMIT + 1, 1)
+    assert 'CVE-2024-30000' in titles(db)
+
+
+def test_more_than_the_limit_added_between_syncs_all_become_reports(db: Session) -> None:
+    import_kev(db, payload(kev_row(1000, dateAdded='2020-01-01')))
+    added = [kev_row(40000 + i, dateAdded=f'2025-{1 + i % 12:02d}-{1 + i % 28:02d}') for i in range(150)]
+    count, made = import_kev(db, payload(kev_row(1000, dateAdded='2020-01-01'), *added))
+    assert (count, made) == (151, 150)
+    assert db.scalar(select(func.count()).select_from(Document)) == 151
+
+
+def test_new_entries_per_sync_are_capped(db: Session) -> None:
+    import_kev(db, payload(kev_row(1000, dateAdded='2020-01-01')))
+    flood = [kev_row(50000 + i, dateAdded=f'20{30 + i // 336:02d}-{1 + i // 28 % 12:02d}-{1 + i % 28:02d}')
+             for i in range(KEV_NEW_ENTRY_LIMIT + 50)]  # fmt: skip
+    _, made = import_kev(db, payload(kev_row(1000, dateAdded='2020-01-01'), *flood))
+    assert made == KEV_NEW_ENTRY_LIMIT  # the newest 100 are among the newest 500 new entries
+    newest_first = sorted(flood, key=lambda r: r['dateAdded'], reverse=True)
+    assert newest_first[0]['cveID'] in titles(db)
+    assert newest_first[-1]['cveID'] not in titles(db)
+
+
+def test_resyncing_never_remakes_reports(db: Session) -> None:
+    rows = [kev_row(60000 + i, dateAdded='2026-01-01') for i in range(3)]
+    import_kev(db, payload(*rows))
+    assert import_kev(db, payload(*rows, kev_row(60010, dateAdded='2018-01-01'))) == (4, 1)
+    assert import_kev(db, payload(*rows, kev_row(60010, dateAdded='2018-01-01'))) == (4, 0)
 
 
 # --------------------------------------------------------------------------- TIP 1.1 fields (for TIP 1.3)

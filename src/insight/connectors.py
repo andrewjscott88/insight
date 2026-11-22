@@ -45,7 +45,11 @@ DOWNLOAD_DEADLINE: Final = 120.0
 MAX_FEED_SUMMARY: Final = 500
 MAX_KEV_ROWS: Final = 20_000
 MAX_KEV_FIELD: Final = 10_000
+#: KEV inbox policy (TIP 1.1, RUNBOOK section 8). Every sync reports the newest entries by date added...
 KEV_INBOX_LIMIT: Final = 100
+#: ...and, after the first sync, every CVE added since the last one, up to this many per sync. Older entries
+#: stay catalog-only; they still annotate CVEs in the reader, the brief and the CVE view.
+KEV_NEW_ENTRY_LIMIT: Final = 500
 MAX_CSAF_INDEX_ROWS: Final = 50_000
 MAX_CSAF_VULNERABILITIES: Final = 100
 MAX_CSAF_NOTE: Final = 4_000
@@ -543,7 +547,12 @@ def _validate_kev_rows(payload: bytes) -> list[dict[str, str]]:
 
 
 def import_kev(db: Session, payload: bytes) -> tuple[int, int]:
-    """Upsert the full KEV catalog and add inbox documents for the newest entries.
+    """Upsert the full KEV catalog and add inbox documents under the KEV inbox policy (TIP 1.1).
+
+    Reports are made for the newest ``KEV_INBOX_LIMIT`` entries by date added, and, after the first import,
+    for every CVE new to the catalog since the last one (newest first, at most ``KEV_NEW_ENTRY_LIMIT``), so
+    a CISA addition is never missed because more than the limit arrived between syncs or it carries an
+    older date. The first import treats the whole catalog as background, not news.
 
     The payload is fully validated before any write, so malformed input never causes a partial import.
     Returns ``(records_validated, documents_created)``.
@@ -551,6 +560,7 @@ def import_kev(db: Session, payload: bytes) -> tuple[int, int]:
     validated = _validate_kev_rows(payload)
     imported_at = now()
     known = known_kev(db)  # Empty on the first import: the whole catalog is not news.
+    fresh: list[dict[str, str]] = []
     if known:
         fresh = [r for r in validated if r['cveID'] not in known]
         queue_kev_alerts(db, [(r['cveID'], r['vendorProject'], r['product']) for r in fresh])
@@ -570,8 +580,11 @@ def import_kev(db: Session, payload: bytes) -> tuple[int, int]:
         record.cwes = row['cwes']
         record.imported_at = imported_at
     added = 0
-    newest = sorted(validated, key=lambda r: r['dateAdded'], reverse=True)[:KEV_INBOX_LIMIT]
-    for row in newest:
+    by_date = sorted(validated, key=lambda r: r['dateAdded'], reverse=True)
+    reported = {r['cveID']: r for r in by_date[:KEV_INBOX_LIMIT]}
+    for row in sorted(fresh, key=lambda r: r['dateAdded'], reverse=True)[:KEV_NEW_ENTRY_LIMIT]:
+        reported.setdefault(row['cveID'], row)
+    for row in reported.values():
         title = f'{row["cveID"]} · {row["vendorProject"]} {row["product"]}'[:300]
         body = (
             f'{title}\n\n{row["shortDescription"]}\n\nRequired action: {row["requiredAction"]}\n'
@@ -663,7 +676,8 @@ def _store_source(session_factory: SessionFactory, source: Source, fetched: Fetc
         if source.kind == 'kev':
             count, added = import_kev(db, payload)
             message = (
-                f'Updated {count} KEV records; {added} new reports from the latest {KEV_INBOX_LIMIT} entries.'
+                f'Updated {count} KEV records; {added} new reports '
+                f'(the newest {KEV_INBOX_LIMIT} entries and any added since the last sync).'
             )
         else:
             docs = parse_abusech(payload, source) if source.kind == 'abusech' else parse_feed(payload, source)

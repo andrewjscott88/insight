@@ -399,6 +399,20 @@ Public GET feeds use the publisher's cache validators (`If-None-Match`, `If-Modi
 response bytes with the last successful import. An unchanged feed records `Unchanged since the last
 sync.` and nothing else. After an upgrade, every source is read once in full.
 
+**KEV inbox policy** (TIP 1.1). Every CISA KEV sync stores the whole catalog in `kev_records`, but only some
+entries become inbox reports:
+
+- **First sync:** reports for the newest 100 entries by date added. The rest of the catalog is background,
+  not news, so it does not flood the inbox (and sends no alerts).
+- **Every later sync:** reports for the newest 100 entries, plus every CVE CISA added since the last sync
+  (newest first, up to 500 per sync), even if it carries an older date or more than 100 arrived in between.
+  These are also the entries that trigger KEV alerts.
+- **Older entries stay catalog-only.** They still mark every CVE they cover: the reader's CISA KEV line, the
+  brief's *Exploited now* and *Used in ransomware attacks*, and the Prioritised CVEs tab all read
+  `kev_records`, not the reports.
+- Nothing is deleted when an entry falls out of the newest 100, and an entry missing from a later catalog is
+  kept: absence is not evidence that CISA removed it. Reports already made are never re-made.
+
 **abuse.ch indicator feeds.** Get an abuse.ch Auth-Key from [the account portal](https://auth.abuse.ch/),
 set `INSIGHT_ABUSECH_AUTH_KEY` in the server environment and recreate the container. In **Sources → Indicator
 feeds**, switch on the feeds you use and choose **Sync now**. Each sync makes one request for recent metadata.
