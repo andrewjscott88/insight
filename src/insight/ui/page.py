@@ -1,6 +1,6 @@
 """Page assembly: authentication gate, the side menu and its sections.
 
-The workspace is organised around an analyst's day (Today, Triage, Investigate, Cases, Share, Settings).
+The workspace is organised around an analyst's day (Today, Triage, Investigate, Products, Share, Settings).
 The side menu is a vertical tab list, so keyboard and screen-reader users get the usual tab semantics; on a
 phone it wraps into rows above the content.
 """
@@ -52,7 +52,7 @@ SECTIONS: Final = (
     ('requirements', 'Requirements'),
     ('triage', 'Triage'),
     ('investigate', 'Investigate'),
-    ('cases', 'Cases'),
+    ('cases', 'Products'),
     ('share', 'Share'),
     ('settings', 'Settings'),
 )

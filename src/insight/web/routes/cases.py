@@ -1,4 +1,5 @@
-"""Cases: one investigation's reports, indicators, actors, campaigns and notes (TIP 3.8, ADR 0029)."""
+"""Cases: intelligence products in progress, with their evidence and notes (TIP 3.8 and 4.4, ADR 0029 and
+0036). The product routes (judgements, gaps, publishing, exports) are in ``products``."""
 
 from __future__ import annotations
 
@@ -31,6 +32,11 @@ def _row(row: Case) -> dict[str, Any]:
         'closed_at': row.closed_at,
         'close_note': row.close_note,
         'created_by': row.actor,
+        'product_type': row.product_type,
+        'audience': row.audience,
+        'bluf': row.bluf,
+        'version': row.version,
+        'published_at': row.published_at,
     }
 
 
@@ -71,7 +77,8 @@ def _register_case_routes(app: FastAPI, sessions: SessionFactory, require_auth: 
     @router.get('/api/cases/{case_id}')
     def one(request: Request, case_id: str) -> dict[str, Any]:
         with _errors(), sessions() as db:
-            return asdict(services.get_case(db, case_id, max_tlp=limit_of(request)))
+            case = asdict(services.get_case(db, case_id, max_tlp=limit_of(request)))
+            return case | asdict(services.product_parts(db, case_id, max_tlp=limit_of(request)))
 
     @router.patch('/api/cases/{case_id}')
     def update(request: Request, case_id: str, payload: CaseUpdate) -> dict[str, Any]:

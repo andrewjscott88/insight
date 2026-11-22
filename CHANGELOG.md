@@ -12,6 +12,23 @@
   existing data.
 - Migration `0027` adds the `sightings` table, and renames API keys with the unreleased `read-rfi` access to
   `read-feedback`.
+- Migration `0028` adds product fields to cases (kind, audience, bottom line up front, version) and the
+  `case_judgements`, `case_judgement_items`, `case_gaps` and `case_versions` tables. Existing cases become
+  unpublished assessments. It runs at start-up.
+
+### Added: finished intelligence products (TIP 4.4)
+
+- **Cases are now Products**, written where the evidence is: a bottom line up front, key judgements in ICD
+  203's estimative language (almost no chance to almost certain) with the analyst's confidence and the evidence
+  behind each, the analysis, and intelligence gaps ([ADR 0036](docs/adr/0036-intelligence-products.md)).
+- A gap can be asked as a request for information in one click.
+- **Publish** keeps the product exactly as it is as a numbered version. It needs a bottom line and at least one
+  key judgement, each with evidence. The label is never below the strictest source, judgement or gap it holds.
+- Download the draft or any version as **Markdown** (the label first and last) or as a **STIX 2.1** report with
+  a note per key judgement and gap; cited reports go out as references, never their text. Sources show their
+  Admiralty grade, and indicators their confidence.
+- `/api/cases/{id}/judgements`, `/gaps`, `/gaps/{id}/rfi`, `/publish`, `/product` and `/export`; the case
+  routes take and return the product fields. The API keeps the name `cases`.
 
 ### Added: sightings from hunt tools (TIP 4.2)
 

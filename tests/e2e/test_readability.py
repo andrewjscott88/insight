@@ -187,7 +187,7 @@ def screens(page: Any) -> Iterator[str]:
         ('Investigate', 'CVEs'),
         ('Investigate', 'ATT&CK techniques'),
         ('Investigate', 'Threat groups'),
-        ('Cases', None),
+        ('Products', None),
         ('Share', None),
         ('Settings', None),
     ):

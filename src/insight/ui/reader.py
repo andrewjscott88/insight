@@ -107,7 +107,7 @@ def render_report(ws: Workspace, data: dict[str, Any], actions: ReaderActions) -
             'outline no-caps'
         ).mark('report-links')
         ui.button(
-            'Add to case', on_click=lambda: open_add_to_case(ws, 'document', data['id'], data['title'])
+            'Add to product', on_click=lambda: open_add_to_case(ws, 'document', data['id'], data['title'])
         ).props('outline no-caps').mark('report-add-to-case')
         ui.button(
             'Add to hunt package',

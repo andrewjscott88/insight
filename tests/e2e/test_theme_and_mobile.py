@@ -25,7 +25,7 @@ __all__ = ['browser']  # the fixture is used by name
 pytestmark = pytest.mark.e2e
 
 PAGE_BACKGROUND = {'light': 'rgb(246, 244, 250)', 'dark': 'rgb(5, 4, 7)'}
-SECTIONS = ('Today', 'Requirements', 'Triage', 'Investigate', 'Cases', 'Share', 'Settings')
+SECTIONS = ('Today', 'Requirements', 'Triage', 'Investigate', 'Products', 'Share', 'Settings')
 INVESTIGATE = ('Indicators', 'CVEs', 'ATT&CK techniques', 'Threat groups')
 DEMO_TITLE = 'Training scenario: edge appliance activity'
 #: Playwright's descriptors for these phones (pinned: a second Playwright instance cannot run beside the

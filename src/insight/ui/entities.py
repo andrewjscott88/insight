@@ -70,7 +70,7 @@ def build_entities(ws: Workspace) -> None:
                 'outline no-caps'
             ).mark(f'entity-links-{target.value}')
             ui.button(
-                'Add to case',
+                'Add to product',
                 on_click=lambda: open_add_to_case(ws, 'indicator', target.entity_id, target.value),
             ).props('outline no-caps').mark(f'entity-add-to-case-{target.value}')
             ui.button(

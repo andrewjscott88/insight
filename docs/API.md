@@ -509,24 +509,37 @@ limit, and only for an indicator a report within its limit mentions.
 | `GET /api/sightings` | `entity_id`, `hunt_package_id`, `limit` (1-500, default 200) | `{sightings: [{id, entity_id, kind, value, hunt_package_id, first_seen, last_seen, count, where, observer, note, external_ref, tlp, created_at, created_by}]}`, most recently seen first |
 | `DELETE /api/sightings/{id}` | - | `{deleted}`, for a sighting reported by mistake. Audited as `sighting.delete` on the indicator |
 
-## Cases
+## Products (cases)
 
-[ADR 0029](adr/0029-cases.md). A case's `tlp` is the strictest of its items, its text and its notes, and
-removing an item does not lower it. A caller sees and changes only cases within its limit (the stricter of the
-instance and key limits), and can only add what it can see. Every change is audited on the case. `404`:
-unknown or above your limit; `403`: a label above your limit; `409`: the case is closed.
+[ADR 0029](adr/0029-cases.md), [ADR 0036](adr/0036-intelligence-products.md). The workspace calls a case a
+**product**: an intelligence product in progress, with its evidence (items), working notes, and the product
+itself: a bottom line up front (`bluf`), key judgements, the analysis (`summary`) and intelligence gaps.
+Publishing stores the product exactly as it is as the next numbered version, in the `insight-product-1` shape
+the exports render. A case's `tlp` is the strictest of its items, judgements, gaps and text, and removing one
+does not lower it. A caller sees and changes only cases within its limit (the stricter of the instance and key
+limits), and can only add what it can see. Every change is audited on the case. `404`: unknown or above your
+limit; `403`: a label above your limit; `409`: the case is archived (closed), or not ready to publish.
 
 | Route | Input | Returns |
 | --- | --- | --- |
-| `GET /api/cases` | `status` (`open`, `closed` or `all`; default `open`), `offset`, `limit` (1–200) | `{cases: [{id, title, status, tlp, items, created_at, updated_at, closed_at}]}`, most recently changed first; `items` leaves notes out |
-| `POST /api/cases` | `{title, summary?, tlp?}` (default AMBER; TLP markings in the text raise it) | `201` and the case `{id, title, summary, status, tlp, created_at, updated_at, closed_at, close_note, created_by}`. Audited as `case.open` |
-| `GET /api/cases/{id}` | - | The case with `items: [{id, kind, target_id, name, note, tlp, added_at, added_by}]`; `kind` is `document`, `indicator`, `actor`, `campaign` or `note` |
-| `PATCH /api/cases/{id}` | Any of `{title, summary, tlp}` | The case. A lower `tlp` stops at the strictest item or marking. Audited as `case.update` |
-| `DELETE /api/cases/{id}` | - | `{deleted}`; items and notes go with it, their targets stay. Audited as `case.delete` |
+| `GET /api/cases` | `status` (`open`, `closed` or `all`; default `open`), `offset`, `limit` (1–200) | `{cases: [{id, title, status, tlp, items, created_at, updated_at, closed_at, product_type, version, published_at}]}`, most recently changed first; `items` counts evidence, not notes |
+| `POST /api/cases` | `{title, summary?, tlp?, product_type?, audience?, bluf?}` (`tlp` default AMBER; TLP markings in the text raise it; `product_type` `assessment` (default), `alert`, `profile` or `summary`; `summary` is the analysis, up to 30,000 characters; `bluf` up to 2,000) | `201` and the case `{id, title, summary, status, tlp, created_at, updated_at, closed_at, close_note, created_by, product_type, audience, bluf, version, published_at}`. Audited as `case.open` |
+| `GET /api/cases/{id}` | - | The case with `items: [{id, kind, target_id, name, note, tlp, added_at, added_by}]` (`kind` is `document`, `indicator`, `actor`, `campaign` or `note`), `judgements: [{id, position, statement, likelihood, confidence, evidence, tlp, created_at, updated_at, created_by}]` (`evidence` lists item IDs), `gaps: [{id, question, requirement_id, tlp, created_at, created_by}]` and `versions: [{version, tlp, published_at, published_by}]` (newest first, within your limit) |
+| `PATCH /api/cases/{id}` | Any of `{title, summary, tlp, product_type, audience, bluf}` | The case. A lower `tlp` stops at the strictest item, judgement, gap or marking. Audited as `case.update` |
+| `DELETE /api/cases/{id}` | - | `{deleted}`; items, notes, judgements, gaps and versions go with it, their targets stay. Audited as `case.delete` |
 | `POST /api/cases/{id}/items` | `{kind, target_id, tlp?}`: `document` (report ID), `indicator` (entity ID), `actor` (actor ID) or `campaign` (campaign ID) | `201` and the item. Labelled at least like its target; raises the case. Adding it again changes nothing. Audited as `case.item.add` |
 | `DELETE /api/cases/{id}/items/{item_id}` | - | `{removed}`. Audited as `case.item.remove` |
 | `POST /api/cases/{id}/notes` | `{text, tlp?}` (default: the case's label) | `201` and the note item. Audited as `case.note` |
-| `POST /api/cases/{id}/close` | `{note}` | The closed case. Audited as `case.close` |
+| `POST /api/cases/{id}/judgements` | `{statement, likelihood, confidence, evidence?, tlp?}`: `statement` up to 1,000 characters; `likelihood` one of ICD 203's expressions, `almost-no-chance` (1-5%), `very-unlikely` (5-20%), `unlikely` (20-45%), `roughly-even-chance` (45-55%), `likely` (55-80%), `very-likely` (80-95%) or `almost-certain` (95-99%); `confidence` `low`, `moderate` or `high`; `evidence` item IDs of this case (not notes), at most 50 | `201` and the judgement, last in order. Labelled like the case unless `tlp` says otherwise; markings in the statement raise it, and the case with it. At most 50. Audited as `case.judgement.add` |
+| `PATCH /api/cases/{id}/judgements/{judgement_id}` | Any of `{statement, likelihood, confidence, evidence, position}`; `evidence` replaces the list; `position` moves it (1 is first) | The judgement. Audited as `case.judgement.update` |
+| `DELETE /api/cases/{id}/judgements/{judgement_id}` | - | `{removed}`; the case keeps its label. Audited as `case.judgement.remove` |
+| `POST /api/cases/{id}/gaps` | `{question, tlp?}`: 5–300 characters | `201` and the gap, labelled like a judgement. At most 50. Audited as `case.gap.add` |
+| `DELETE /api/cases/{id}/gaps/{gap_id}` | - | `{removed}` (an RFI asked from it stays). Audited as `case.gap.remove` |
+| `POST /api/cases/{id}/gaps/{gap_id}/rfi` | - | `201` and `{id, kind, question, status, tlp}`: the gap filed as a request for information with the gap's label (TIP 4.1), linked to the gap; asking again returns the same one. Audited as `case.gap.rfi` (and `requirement.rfi`) |
+| `POST /api/cases/{id}/publish` | - | `{version, tlp, published_at, published_by}`: the product as it is now, stored as the next version. `409` without a bottom line up front, without a key judgement, or with a judgement that cites no evidence, and for an archived case. The case stays open for the next version. Audited as `case.publish` |
+| `GET /api/cases/{id}/product` | `version` (optional) | The product in the `insight-product-1` shape: `{format, id, title, product_type, audience, tlp, version, published_at, author, generated_at, bluf, judgements: [{statement, likelihood, confidence, sources}], analysis, gaps: [{question, rfi}], sources: [{n, kind, id, name, tlp, ...}]}`: the draft, or exactly what that version published. `sources` are the evidence numbered in order (reports with `source_name`, `url`, `added_at`, `reliability` and `credibility`; indicators with `indicator_kind`, `confidence` and `band`, scored from the reports within the product's label; actors and campaigns by name); a judgement's `sources` are those numbers. Working notes are never part of a product |
+| `GET /api/cases/{id}/export` | `format` (`md` or `stix`; default `md`), `version` (optional) | An attachment `insight-product-{id}-v{n}` (or `-draft`): Markdown with the TLP label first and last, or a validated STIX 2.1 bundle: a `report` (the title, the bottom line and the analysis; cited reports as external references, never their text), a `note` per key judgement (`confidence` 15, 50 or 85 for low, moderate or high; `x_insight_likelihood`; `object_refs` the report and the cited objects) and per gap, and an object per cited indicator, CVE, actor or campaign. A published version's STIX IDs are the same on every export. `422` for a STIX export with nothing in it. Audited as `case.export` |
+| `POST /api/cases/{id}/close` | `{note}` | The archived (closed) case: it refuses changes until reopened. Audited as `case.close` |
 | `POST /api/cases/{id}/reopen` | - | The open case. Audited as `case.reopen` |
 | `GET /api/cases/{id}/timeline` | - | `{events: [{at, action, actor, detail}]}`, oldest first (at most 1,000) |
 

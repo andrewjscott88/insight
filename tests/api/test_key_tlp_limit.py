@@ -26,6 +26,7 @@ from insight.schemas import (
     EvidenceInput,
     HuntPackageInput,
     HuntPackageItemInput,
+    JudgementInput,
     RequirementInput,
     SightingInput,
 )
@@ -72,8 +73,19 @@ def world(app: FastAPI) -> dict[str, Any]:
         nvd = {'vulnerabilities': [{'cve': {'descriptions': [{'lang': 'en', 'value': MARKER}]}}]}
         db.add(Enrichment(cve='CVE-2024-11111', provider='nvd', payload=json.dumps(nvd)))
         # A case that holds the AMBER report is AMBER too (TIP 3.8): its title and items stay hidden.
-        case = services.create_case(db, CaseInput(title=f'{MARKER} case', tlp='GREEN'))
-        services.add_case_item(db, case.id, CaseItemInput(kind='document', target_id=amber.id))
+        case = services.create_case(db, CaseInput(title=f'{MARKER} case', tlp='GREEN', bluf=MARKER))
+        evidence_item = services.add_case_item(
+            db, case.id, CaseItemInput(kind='document', target_id=amber.id)
+        )
+        # ...and so is the product it holds (TIP 4.4): its judgements, its draft and its published version.
+        services.add_judgement(
+            db,
+            case.id,
+            JudgementInput(
+                statement=MARKER, likelihood='likely', confidence='low', evidence=[evidence_item.id]
+            ),
+        )
+        services.publish_product(db, case.id)
         # A GREEN requirement whose criterion matches only the AMBER report (TIP 4.1): the key sees the
         # requirement but must not see, or count, the match. One that cites the AMBER report becomes AMBER.
         wiper = RequirementInput(
@@ -182,6 +194,10 @@ def test_nothing_hidden_leaks_through_any_read_route(client: TestClient, world: 
         '/api/cases?status=all',
         f'/api/cases/{world["case"]}',
         f'/api/cases/{world["case"]}/timeline',
+        f'/api/cases/{world["case"]}/product',
+        f'/api/cases/{world["case"]}/product?version=1',
+        f'/api/cases/{world["case"]}/export?format=md',
+        f'/api/cases/{world["case"]}/export?format=stix&version=1',
         '/api/requirements?status=all',
         f'/api/requirements/{world["requirement"]}',
         f'/api/requirements/{world["cited"]}',

@@ -1,10 +1,11 @@
-"""Lightweight case management (TIP 3.8, ADR 0029): one investigation's reports, indicators, actors,
-campaigns and notes, opened and closed by the operator. Not a SOAR: nothing runs by itself.
+"""Cases, which are intelligence products in progress (TIP 3.8 and 4.4, ADR 0029 and 0036): the evidence
+(reports, indicators, actors, campaigns) and working notes, opened and closed by the operator. The product
+itself (judgements, gaps, publishing) is in ``products``. Not a SOAR: nothing runs by itself.
 
 TLP: a case carries the most restrictive label of everything ever added to it, and of its own text. Removing
-an item never lowers the label (the title, summary and notes may have been written with it in view); only an
-explicit change can, and never below the items still in the case. A reader limited to a TLP level sees a
-case only within that limit, and then every item in it.
+an item never lowers the label (the text may have been written with that item in view); only an explicit
+change can, and never below the items, judgements and gaps still in the case. A reader limited to a TLP level
+sees a case only within that limit, and then every item in it.
 """
 
 from __future__ import annotations
@@ -17,7 +18,18 @@ from sqlalchemy import case as when
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..models import AuditEvent, Campaign, Case, CaseItem, Document, Entity, ThreatActor, now
+from ..models import (
+    AuditEvent,
+    Campaign,
+    Case,
+    CaseGap,
+    CaseItem,
+    CaseJudgement,
+    Document,
+    Entity,
+    ThreatActor,
+    now,
+)
 from ..schemas import (
     CaseCloseInput,
     CaseInput,
@@ -57,6 +69,9 @@ class CaseSummary:
     created_at: str
     updated_at: str
     closed_at: str | None
+    product_type: str = 'assessment'
+    version: int = 0
+    published_at: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,6 +99,11 @@ class CaseView:
     close_note: str
     created_by: str
     items: tuple[CaseItemView, ...]
+    product_type: str = 'assessment'
+    audience: str = ''
+    bluf: str = ''
+    version: int = 0
+    published_at: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,13 +135,30 @@ def _raise(row: Case, *labels: str) -> None:
 
 
 def _item_labels(db: Session, case_id: str) -> list[str]:
-    return list(db.scalars(select(CaseItem.tlp).where(CaseItem.case_id == case_id).distinct()))
+    """The labels of everything the case holds: items and notes, key judgements and gaps."""
+    labels = set(db.scalars(select(CaseItem.tlp).where(CaseItem.case_id == case_id).distinct()))
+    labels.update(db.scalars(select(CaseJudgement.tlp).where(CaseJudgement.case_id == case_id).distinct()))
+    labels.update(db.scalars(select(CaseGap.tlp).where(CaseGap.case_id == case_id).distinct()))
+    return sorted(labels)
+
+
+def _text(*parts: str) -> str:
+    return '\n'.join(parts)
 
 
 def create_case(db: Session, payload: CaseInput, *, max_tlp: str | None = None) -> Case:
-    label = most_restrictive(payload.tlp, *tlp_markings(f'{payload.title}\n{payload.summary}'))
+    text = _text(payload.title, payload.summary, payload.audience, payload.bluf)
+    label = most_restrictive(payload.tlp, *tlp_markings(text))
     _check_label(label, max_tlp, 'cases')
-    row = Case(title=payload.title.strip(), summary=payload.summary.strip(), tlp=label, actor=_who(db))
+    row = Case(
+        title=payload.title.strip(),
+        summary=payload.summary.strip(),
+        tlp=label,
+        actor=_who(db),
+        product_type=payload.product_type,
+        audience=payload.audience.strip(),
+        bluf=payload.bluf.strip(),
+    )
     db.add(row)
     db.flush()
     audit(db, 'case.open', row.id, row.tlp)
@@ -159,9 +196,12 @@ def list_cases(
         kind, target_id = holding
         stmt = stmt.where(Case.id.in_(select(CaseItem.case_id).where(_TARGET_COLUMN[kind] == target_id)))
     return [
-        CaseSummary(c.id, c.title, c.status, c.tlp, int(n), c.created_at, c.updated_at, c.closed_at)
+        CaseSummary(
+            c.id, c.title, c.status, c.tlp, int(n), c.created_at, c.updated_at, c.closed_at, c.product_type,
+            c.version, c.published_at,
+        )
         for c, n in db.execute(stmt)
-    ]
+    ]  # fmt: skip
 
 
 def _names(db: Session, rows: list[CaseItem]) -> dict[str, str]:
@@ -208,6 +248,11 @@ def get_case(db: Session, case_id: str, *, max_tlp: str | None = None) -> CaseVi
         closed_at=row.closed_at,
         close_note=row.close_note,
         created_by=row.actor,
+        product_type=row.product_type,
+        audience=row.audience,
+        bluf=row.bluf,
+        version=row.version,
+        published_at=row.published_at,
         items=tuple(
             CaseItemView(
                 i.id, i.kind, _target_of(i), names.get(_target_of(i), ''), i.note, i.tlp, i.added_at, i.actor
@@ -219,16 +264,24 @@ def get_case(db: Session, case_id: str, *, max_tlp: str | None = None) -> CaseVi
 
 def update_case(db: Session, case_id: str, payload: CaseUpdate, *, max_tlp: str | None = None) -> Case:
     row = _open(db, case_id, max_tlp)
-    title = payload.title.strip() if payload.title is not None else row.title
-    summary = payload.summary.strip() if payload.summary is not None else row.summary
-    # An explicit label may lower the case, but never below its items or the markings in its text.
-    text = f'{title}\n{summary}\n{row.close_note}'
+
+    def given(value: str | None, old: str) -> str:
+        return value.strip() if value is not None else old
+
+    title, summary = given(payload.title, row.title), given(payload.summary, row.summary)
+    audience, bluf = given(payload.audience, row.audience), given(payload.bluf, row.bluf)
+    product_type = payload.product_type or row.product_type
+    # An explicit label may lower the case, but never below what it holds or the markings in its text.
+    text = _text(title, summary, audience, bluf, row.close_note)
     floor = most_restrictive('CLEAR', *_item_labels(db, row.id), *tlp_markings(text))
     label = most_restrictive(payload.tlp if payload.tlp is not None else row.tlp, floor)
     _check_label(label, max_tlp, 'cases')
     changed = {k for k, old, new in (('title', row.title, title), ('summary', row.summary, summary),
+                                     ('audience', row.audience, audience), ('bluf', row.bluf, bluf),
+                                     ('product_type', row.product_type, product_type),
                                      ('tlp', row.tlp, label)) if old != new}  # fmt: skip
     row.title, row.summary, row.tlp, row.updated_at = title, summary, label, now()
+    row.audience, row.bluf, row.product_type = audience, bluf, product_type
     if changed:
         audit(
             db, 'case.update', row.id, json.dumps({'changed': sorted(changed), 'tlp': label}, sort_keys=True)

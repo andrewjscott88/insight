@@ -9,7 +9,7 @@ Read [AGENTS.md](../../AGENTS.md) first: its rules and checklist apply to every 
 | [TIP 4.7 Adversary library imports](tip-4.7-adversary-library-imports.md) | [4.7](../ROADMAP-TIP.md#47-adversary-library-imports) | 0038 |
 | [TIP 4.8 Read-only MCP endpoint](tip-4.8-read-only-mcp-endpoint.md) | [4.8](../ROADMAP-TIP.md#48-read-only-mcp-endpoint) | 0039 |
 
-Reserved for work done elsewhere: 0036 (TIP 4.4, finished intelligence products) and 0040 (TIP 4.5,
+Used or reserved for work done elsewhere: 0036 (TIP 4.4, finished intelligence products) and 0040 (TIP 4.5,
 operator-defined sources).
 
 A prompt that works:

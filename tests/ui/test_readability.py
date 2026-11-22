@@ -46,7 +46,7 @@ async def test_the_workspace_has_one_h1_and_real_section_headings(user: User) ->
         'Requirements',
         'Triage',
         'Investigate',
-        'Cases',
+        'Products',
         'Share',
         'Settings',
     ]

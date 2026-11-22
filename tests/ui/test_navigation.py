@@ -25,7 +25,7 @@ def tabs(user: User) -> tuple[ui.tabs, ui.tabs]:
 
 
 def test_the_sections_follow_an_analysts_day() -> None:
-    labels = ['Today', 'Requirements', 'Triage', 'Investigate', 'Cases', 'Share', 'Settings']
+    labels = ['Today', 'Requirements', 'Triage', 'Investigate', 'Products', 'Share', 'Settings']
     assert [label for _, label in SECTIONS] == labels
     assert [label for _, label in INVESTIGATE] == ['Indicators', 'CVEs', 'ATT&CK techniques', 'Threat groups']
 

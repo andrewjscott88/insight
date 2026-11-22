@@ -516,10 +516,12 @@ class Campaign(Base):
 
 
 class Case(Base):
-    """One investigation the operator opens and closes (TIP 3.8, ADR 0029).
+    """An intelligence product in progress (TIP 3.8, 4.4; ADR 0029, 0036): its evidence (reports, indicators,
+    actors, campaigns), working notes, and the product itself: a bottom line up front, key judgements, the
+    analysis (``summary``) and intelligence gaps. Publishing stores a numbered version (``CaseVersion``).
 
-    ``tlp`` is at least as restrictive as every item ever added; removing an item never lowers it, because
-    the title, summary and notes may have been written with that item in view.
+    ``tlp`` is at least as restrictive as every item, judgement and gap ever added; removing one never lowers
+    it, because the text may have been written with it in view.
     """
 
     __tablename__ = 'cases'
@@ -534,6 +536,14 @@ class Case(Base):
     closed_at: Mapped[str | None] = mapped_column(UtcTimestamp())
     close_note: Mapped[str] = mapped_column(Text, default='')
     actor: Mapped[str] = mapped_column(String(80), default='')
+    #: ``assessment``, ``alert``, ``profile`` or ``summary`` (TIP 4.4).
+    product_type: Mapped[str] = mapped_column(String(12), default='assessment', server_default='assessment')
+    audience: Mapped[str] = mapped_column(String(200), default='', server_default='')
+    #: Bottom line up front: the answer, in a few sentences, before anything else.
+    bluf: Mapped[str] = mapped_column(Text, default='', server_default='')
+    #: How many times it was published; the latest is ``version``.
+    version: Mapped[int] = mapped_column(Integer, default=0, server_default='0')
+    published_at: Mapped[str | None] = mapped_column(UtcTimestamp(), default=None)
 
 
 class CaseItem(Base):
@@ -594,6 +604,72 @@ class SourceRating(Base):
     note: Mapped[str] = mapped_column(Text, default='')
     updated_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
     actor: Mapped[str] = mapped_column(String(80), default='')
+
+
+class CaseJudgement(Base):
+    """A key judgement of a product (TIP 4.4, ADR 0036): a statement, how likely it is in ICD 203's estimative
+    terms, the analyst's confidence, and the evidence in the product that supports it."""
+
+    __tablename__ = 'case_judgements'
+    __table_args__ = (
+        CheckConstraint(
+            "likelihood IN ('almost-no-chance', 'very-unlikely', 'unlikely', 'roughly-even-chance', "
+            "'likely', 'very-likely', 'almost-certain')",
+            name='judgement_likelihood',
+        ),
+        CheckConstraint("confidence IN ('low', 'moderate', 'high')", name='judgement_confidence'),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    case_id: Mapped[str] = mapped_column(ForeignKey('cases.id', ondelete='CASCADE'), index=True)
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    statement: Mapped[str] = mapped_column(Text)
+    likelihood: Mapped[str] = mapped_column(String(20))
+    confidence: Mapped[str] = mapped_column(String(10))
+    tlp: Mapped[str] = mapped_column(String(20), default='AMBER')
+    created_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
+    updated_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
+    actor: Mapped[str] = mapped_column(String(80), default='')
+
+
+class CaseJudgementItem(Base):
+    """One piece of the product's evidence (a case item) that supports a key judgement."""
+
+    __tablename__ = 'case_judgement_items'
+    __table_args__ = (UniqueConstraint('judgement_id', 'item_id'),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    judgement_id: Mapped[str] = mapped_column(
+        ForeignKey('case_judgements.id', ondelete='CASCADE'), index=True
+    )
+    item_id: Mapped[str] = mapped_column(ForeignKey('case_items.id', ondelete='CASCADE'), index=True)
+
+
+class CaseGap(Base):
+    """An intelligence gap: a question the product cannot answer yet, optionally asked as an RFI."""
+
+    __tablename__ = 'case_gaps'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    case_id: Mapped[str] = mapped_column(ForeignKey('cases.id', ondelete='CASCADE'), index=True)
+    question: Mapped[str] = mapped_column(Text)
+    requirement_id: Mapped[str | None] = mapped_column(
+        ForeignKey('requirements.id', ondelete='SET NULL'), index=True, default=None
+    )
+    tlp: Mapped[str] = mapped_column(String(20), default='AMBER')
+    created_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
+    actor: Mapped[str] = mapped_column(String(80), default='')
+
+
+class CaseVersion(Base):
+    """A published version of a product: exactly what was issued, kept as it was (``insight-product-1``)."""
+
+    __tablename__ = 'case_versions'
+    __table_args__ = (UniqueConstraint('case_id', 'version'),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    case_id: Mapped[str] = mapped_column(ForeignKey('cases.id', ondelete='CASCADE'), index=True)
+    version: Mapped[int] = mapped_column(Integer)
+    tlp: Mapped[str] = mapped_column(String(20))
+    published_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
+    actor: Mapped[str] = mapped_column(String(80), default='')
+    snapshot: Mapped[str] = mapped_column(Text)
 
 
 class Requirement(Base):
