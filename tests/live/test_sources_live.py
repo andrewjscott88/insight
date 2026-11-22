@@ -16,9 +16,11 @@ import pytest
 
 from insight import connectors
 from insight.abusech import parse_abusech
+from insight.cve_scores import summarise_vulncheck
 from insight.otx import parse_pulses
 
 pytestmark = pytest.mark.live
+LOG4SHELL = 'CVE-2021-44228'
 
 if os.environ.get('INSIGHT_LIVE_TESTS') != '1':
     pytest.skip('set INSIGHT_LIVE_TESTS=1 to contact real sources', allow_module_level=True)
@@ -59,8 +61,15 @@ def test_source_is_reachable_and_parsable(key: str) -> None:
 
 @pytest.mark.parametrize('provider', sorted(connectors.PROVIDERS))
 def test_enrichment_provider_contract(provider: str) -> None:
-    url, params = connectors.enrichment_request('CVE-2021-44228', provider)
-    payload = json.loads(asyncio.run(connectors.download(url, params)))
+    if provider in connectors.KEY_REQUIRED and not connectors.provider_key(provider):
+        pytest.skip(f'{provider} needs {connectors.PROVIDER_KEYS[provider]}')
+    url, params = connectors.enrichment_request(LOG4SHELL, provider)
+    headers = connectors.provider_headers(provider)  # Empty unless the operator's key is set.
+    payload = json.loads(asyncio.run(connectors.download(url, params, headers=headers)))
     assert isinstance(payload, dict)
-    expected_key = 'data' if provider == 'epss' else 'vulnerabilities'
+    expected_key = 'vulnerabilities' if provider == 'nvd' else 'data'
     assert payload.get(expected_key), f'{provider} response shape changed: {sorted(payload)[:10]}'
+    if provider == 'vulncheck':
+        summary = summarise_vulncheck(payload, LOG4SHELL)
+        assert summary['listed'], 'VulnCheck KEV no longer lists Log4Shell: its answer shape changed'
+        assert summary['exploit_count'] > 0, 'VulnCheck KEV lists no public exploit for Log4Shell'
