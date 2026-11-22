@@ -80,7 +80,8 @@ Set in `.env` (Compose reads it) or the process environment. Real environment va
 | `INSIGHT_GREYNOISE_KEY` | no | (none) | Enables manual GreyNoise Community IP lookups from Entity explorer and the API. [IP context](#greynoise-community-ip-context) |
 | `INSIGHT_NVD_API_KEY` | no | (none) | A free NIST NVD API key: CVE lookups at NVD every 0.7 s instead of every 6.5 s ([ADR 0023](adr/0023-automatic-cve-lookups.md)). Sent only in NVD's `apiKey` header, never logged |
 | `INSIGHT_VULNCHECK_API_KEY` | no | (none) | Your own VulnCheck community token. Needed for VulnCheck KEV lookups (exploitation reports and public exploit links, [ADR 0028](adr/0028-exploit-availability.md)); without it they do not run. Sent only as a Bearer header, never logged |
-| `INSIGHT_MISP_URL` and `INSIGHT_MISP_KEY` | no | (none) | The trusted public HTTPS instance and its API key, read by host CLI MISP transfers. File exchange also works offline. |
+| `INSIGHT_MISP_URL` and `INSIGHT_MISP_KEY` | no | (none) | The trusted HTTPS instance and its API key, read by host CLI MISP transfers. File exchange also works offline. |
+| `INSIGHT_MISP_PRIVATE_NETWORK` | no | `off` | `on` lets the MISP instance be on a private network; loopback, link-local and reserved addresses stay blocked ([MISP.md](MISP.md)) |
 | `NICEGUI_STORAGE_PATH` | no | `/data/.nicegui` in the image | Must be writable |
 | `INSIGHT_OTX_API_KEY` | no | (none) | The operator's OTX subscription key. Set it on the host and switch on the AlienVault OTX source. |
 

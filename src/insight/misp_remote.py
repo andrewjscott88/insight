@@ -10,7 +10,10 @@ from uuid import UUID
 
 import httpx
 
-from .connectors import download
+from .connectors import NonPublicDestination, download
+
+#: Opt-in for a MISP instance on the operator's own network (off by default; loopback stays blocked).
+PRIVATE_SETTING = 'INSIGHT_MISP_PRIVATE_NETWORK'
 
 
 def _origin() -> tuple[str, str]:
@@ -36,11 +39,20 @@ def _origin() -> tuple[str, str]:
     return raw.rstrip('/'), host
 
 
+def private_network() -> bool:
+    """``INSIGHT_MISP_PRIVATE_NETWORK``: ``on`` lets the MISP host resolve to a private-network address."""
+    value = os.environ.get(PRIVATE_SETTING, '').strip().lower()
+    if value not in ('', 'on', 'off'):
+        raise ValueError(f'{PRIVATE_SETTING} must be "on" or "off"')
+    return value == 'on'
+
+
 async def exchange(
     *, event_uuid: str, body: bytes | None = None, transport: httpx.AsyncBaseTransport | None = None
 ) -> bytes:
     """GET a single UUID, or POST a new event and check MISP's receipt. No redirects or ambient proxy."""
     base, host = _origin()
+    allow_private = private_network()
     key = os.environ.get('INSIGHT_MISP_KEY', '')
     if not re.fullmatch(r'[!-~]{1,512}', key):
         raise ValueError('Set INSIGHT_MISP_KEY to the host-side MISP API key')
@@ -55,8 +67,19 @@ async def exchange(
             body=body,
             headers={'Authorization': key, 'Accept': 'application/json', 'Content-Type': 'application/json'},
             allowed_hosts=frozenset({host}),
+            allow_private=allow_private,
             transport=transport,
         )
+    except NonPublicDestination:
+        if allow_private:
+            raise ValueError(
+                'INSIGHT_MISP_URL resolves to an address Insight never connects to '
+                '(loopback, link-local, multicast or reserved)'
+            ) from None
+        raise ValueError(
+            f'INSIGHT_MISP_URL resolves to a private or local address. For a MISP instance on your own '
+            f'network, set {PRIVATE_SETTING}=on.'
+        ) from None
     except httpx.HTTPStatusError as exc:
         raise ValueError(f'MISP returned HTTP {exc.response.status_code}') from None
     except (httpx.HTTPError, OSError, ValueError):
