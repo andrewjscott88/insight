@@ -20,7 +20,10 @@ def _link_dialog(ws: Workspace, ref: str, doc_id: str, saved: Callable[[], objec
     if not ws.authorized():
         return
     choices, start = _labels(ws)
-    with ui.dialog() as dialog, ui.card().classes('dialog-card w-full'):
+    with (
+        ui.dialog().props('aria-label="Link report to software"') as dialog,
+        ui.card().classes('dialog-card w-full'),
+    ):
         heading('Link report to software', 2)
         ui.label('This is your decision. A shared name alone does not prove use.').classes('muted prose')
         note = ui.textarea('Why this report is about the software').props('outlined maxlength=2000')
@@ -56,7 +59,10 @@ def _link_dialog(ws: Workspace, ref: str, doc_id: str, saved: Callable[[], objec
 def open_software(ws: Workspace, ref: str) -> None:
     if not ws.authorized():
         return
-    with ui.dialog().mark('software-detail') as dialog, ui.card().classes('dialog-card w-full'):
+    with (
+        ui.dialog().props('aria-label="Software details"').mark('software-detail') as dialog,
+        ui.card().classes('dialog-card w-full'),
+    ):
 
         def read_report(document_id: str) -> None:
             dialog.close()

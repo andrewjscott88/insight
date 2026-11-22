@@ -94,6 +94,7 @@ def test_label_raise_is_a_new_taxii_change(db: Session, monkeypatch: pytest.Monk
     services.set_observation_status(db, obs.id, 'accepted')
     link = services.link_software_report(db, 'S0154', SoftwareLinkInput(document_id=doc))
     before = link.updated_at
+    created = link.created_at
     monkeypatch.setattr(software, 'now', lambda: '2099-02-03T00:00:00+00:00')
     services.link_software_report(db, 'S0154', SoftwareLinkInput(document_id=doc, tlp='AMBER'))
     assert link.updated_at > before
@@ -101,6 +102,9 @@ def test_label_raise_is_a_new_taxii_change(db: Session, monkeypatch: pytest.Monk
     software_items = [i for i in items if i.obj['type'] in ('malware', 'tool')]
     assert software_items
     assert all(i.date_added.startswith('2099-02-03') for i in software_items)
+    assert all(i.obj['created'] == created.replace('+00:00', 'Z') for i in software_items)
+    relation = next(i for i in items if i.obj['type'] == 'relationship')
+    assert relation.obj['created'] == created.replace('+00:00', 'Z')
 
 
 def test_explicit_use_label_raise_has_current_taxii_date(
@@ -118,6 +122,8 @@ def test_explicit_use_label_raise_has_current_taxii_date(
     services.link_threat(
         db, 'actor', actor.id, ThreatLinkInput(target_kind='software', target_id='S0154', tlp='CLEAR')
     )
+    first = services.taxii_collection_objects(db, INDICATORS_COLLECTION, max_tlp='AMBER')
+    original = next(i for i in first if i.obj.get('relationship_type') == 'uses')
     monkeypatch.setattr(campaigns, 'now', lambda: '2099-02-04T00:00:00+00:00')
     services.link_threat(
         db, 'actor', actor.id, ThreatLinkInput(target_kind='software', target_id='S0154', tlp='AMBER')
@@ -125,6 +131,7 @@ def test_explicit_use_label_raise_has_current_taxii_date(
     items = services.taxii_collection_objects(db, INDICATORS_COLLECTION, max_tlp='AMBER')
     use = next(i for i in items if i.obj.get('relationship_type') == 'uses')
     assert use.date_added.startswith('2099-02-04')
+    assert use.obj['created'] == original.obj['created']
 
 
 def test_catalog_tool_remains_tool(db: Session) -> None:
@@ -159,3 +166,45 @@ def test_new_use_brings_old_subject_endpoint_at_link_date(db: Session) -> None:
     projected = next(i for i in items if i.obj['type'] == 'threat-actor')
     assert projected.date_added.startswith('2099-02-05')
     assert projected.obj['modified'].startswith('2099-02-05')
+
+
+def test_note_update_preserves_software_and_relationship_creation(
+    db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression: a same-label note update must not change created while retaining a STIX object's ID."""
+    from insight.services import software
+
+    doc = _report(db)
+    observation = db.scalars(select(Observation).where(Observation.document_id == doc)).first()
+    assert observation
+    services.set_observation_status(db, observation.id, 'accepted')
+    services.link_software_report(db, 'S0154', SoftwareLinkInput(document_id=doc, note='First note'))
+    first = services.taxii_collection_objects(db, INDICATORS_COLLECTION, max_tlp='GREEN')
+    before = {item.id: item.obj for item in first if item.obj['type'] in ('malware', 'tool', 'relationship')}
+    monkeypatch.setattr(software, 'now', lambda: '2099-04-01T00:00:00+00:00')
+    services.link_software_report(db, 'S0154', SoftwareLinkInput(document_id=doc, note='Reviewed again'))
+    second = services.taxii_collection_objects(db, INDICATORS_COLLECTION, max_tlp='GREEN')
+    after = {item.id: item.obj for item in second if item.obj['type'] in ('malware', 'tool', 'relationship')}
+    assert before.keys() == after.keys()
+    for identifier, original in before.items():
+        assert after[identifier]['created'] == original['created']
+        assert after[identifier]['modified'] > original['modified']
+    assert 'Reviewed again' not in json.dumps(second, default=str)
+
+
+def test_shared_software_has_min_creation_and_max_change(db: Session) -> None:
+    """Regression: several contributing links must not confuse first creation with their latest change."""
+    first = _report(db, 'Cobalt Strike report one: 192.0.2.91.')
+    second = _report(db, 'Cobalt Strike report two: 192.0.2.92.')
+    for document_id, created, updated in (
+        (first, '2091-01-01T00:00:00+00:00', '2098-01-01T00:00:00+00:00'),
+        (second, '2090-01-01T00:00:00+00:00', '2099-01-01T00:00:00+00:00'),
+    ):
+        link = services.link_software_report(db, 'S0154', SoftwareLinkInput(document_id=document_id))
+        link.created_at, link.updated_at = created, updated
+    db.flush()
+    entry = next(
+        iter(objects(services.export_stix(db, IocExportQuery()), library().software['S0154'].type).values())
+    )
+    assert entry['created'] == '2090-01-01T00:00:00.000000Z'
+    assert entry['modified'] == '2099-01-01T00:00:00.000000Z'

@@ -40,6 +40,13 @@ retains the existing report/indicator selection and publisher reuse policy and v
 TAXII uses the same projection and stable IDs. Software/link dates include the link time, so linking an old
 report is visible to a polling client. The export caps software associations at 100,000; it refuses an
 oversized snapshot instead of silently truncating it. There is no dependency or outbound network addition.
+Creation and modification are separate: a relationship retains its link creation time, and a software
+projection takes the earliest contributing creation and latest contributing update. Same-label note updates
+and label raises do not rewrite the saved creation time.
+These remain current snapshots, as with technique projections. Removing an earliest/latest contributor or
+narrowing the selected reports can shift aggregate software dates under the same projection ID. This part
+does not add a projection-history store or deletion tombstones; clients needing full history must retain
+their received snapshots. Editing a retained link preserves its creation time while modification advances.
 
 Validation covers missing/hidden endpoints, higher link labels, note markings, duplicate writes, retirement,
 retention deletion, explicit versus inferred use, valid malware/tool output, stable TAXII IDs and dates,

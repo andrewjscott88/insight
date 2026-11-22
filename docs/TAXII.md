@@ -21,6 +21,11 @@ contribute to change dates, so a new association to an old report reaches `added
 name/type snapshots keep old links exportable after catalog removal. Notes and candidate matches are not
 exported as associations. Software projections are validated with the rest of the STIX bundle.
 
+These are current snapshots, like the existing technique projections. Editing a retained link preserves
+its creation time while its modification time advances. Aggregate software dates use the earliest creation
+and latest change among the currently selected links; removing those contributors or narrowing the export
+can shift the aggregate dates. This is not a stored publication history and does not emit deletion tombstones.
+
 ### Collections
 
 Three fixed collections. **Reviewed indicators** (ID `5b2f8a7e-4c1d-4e3a-9f6b-0d8c7a1e2f34`):

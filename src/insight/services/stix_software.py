@@ -17,14 +17,16 @@ _MAX_LINKS = 100_000
 _MARKING_LEVEL = {ref: level for level, ref in TLP_MARKINGS.items()}
 
 
-def _software_object(ref: str, name: str, kind: str, label: str, changed: str) -> dict[str, Any]:
+def _software_object(
+    ref: str, name: str, kind: str, label: str, created: str, changed: str
+) -> dict[str, Any]:
     """Snapshot fields make the projection independent of catalog changes and preserve retired software."""
     obj: dict[str, Any] = {
         'type': kind,
         'spec_version': '2.1',
         'id': stable_id(kind, 'insight-software', f'{ref}|{name}|{label}'),
         'name': name,
-        'created': changed,
+        'created': created,
         'modified': changed,
         'object_marking_refs': [TLP_MARKINGS[label]],
         'external_references': [
@@ -62,15 +64,19 @@ def _add_stix_software(db: Session, bundle: dict[str, Any], *, max_tlp: str | No
     labels: set[str] = set()
     count = 0
 
-    def add_software(ref: str, name: str, kind: str, label: str, changed: str) -> dict[str, Any]:
-        obj = _software_object(ref, name, kind, label, changed)
+    def add_software(
+        ref: str, name: str, kind: str, label: str, created: str, changed: str
+    ) -> dict[str, Any]:
+        obj = _software_object(ref, name, kind, label, created, changed)
         old = objects.setdefault(obj['id'], obj)
-        old['created'] = min(old['created'], changed)
+        old['created'] = min(old['created'], created)
         old['modified'] = max(old['modified'], changed)
         selected_software.add(ref)
         return old
 
-    def relate(link_id: str, source: str, target: str, label: str, changed: str, kind: str) -> None:
+    def relate(
+        link_id: str, source: str, target: str, label: str, created: str, changed: str, kind: str
+    ) -> None:
         nonlocal count
         count += 1
         if count > _MAX_LINKS:
@@ -82,7 +88,7 @@ def _add_stix_software(db: Session, bundle: dict[str, Any], *, max_tlp: str | No
             'type': 'relationship',
             'spec_version': '2.1',
             'id': identifier,
-            'created': changed,
+            'created': created,
             'modified': changed,
             'relationship_type': kind,
             'source_ref': source,
@@ -107,10 +113,13 @@ def _add_stix_software(db: Session, bundle: dict[str, Any], *, max_tlp: str | No
         for link in rows:
             report = reports[link.document_id]
             label = most_restrictive(link.tlp, _MARKING_LEVEL[report['object_marking_refs'][0]])
-            changed = max(stix_timestamp(link.updated_at), report['modified'])
-            obj = add_software(link.software_id, link.software_name, link.software_type, label, changed)
+            created = stix_timestamp(link.created_at)
+            changed = max(created, stix_timestamp(link.updated_at), report['modified'])
+            obj = add_software(
+                link.software_id, link.software_name, link.software_type, label, created, changed
+            )
             # Do not append to report.object_refs: a link can be more restricted than its report.
-            relate(link.id, report['id'], obj['id'], label, changed, 'related-to')
+            relate(link.id, report['id'], obj['id'], label, created, changed, 'related-to')
 
     eligible_software = frozenset(selected_software)
     levels = visible_levels(max_tlp)
@@ -160,9 +169,12 @@ def _add_stix_software(db: Session, bundle: dict[str, Any], *, max_tlp: str | No
             ):
                 continue
             label = most_restrictive(row['subject_tlp'], row['link_tlp'])
-            changed = max(stix_timestamp(row['link_updated']), stix_timestamp(row['subject_updated']))
+            created = stix_timestamp(row['link_created'])
+            changed = max(
+                created, stix_timestamp(row['link_updated']), stix_timestamp(row['subject_updated'])
+            )
             software = add_software(
-                row['software_id'], row['software_name'], row['software_type'], label, changed
+                row['software_id'], row['software_name'], row['software_type'], label, created, changed
             )
             key = (kind, row['subject_id'], TLP_MARKINGS[label])
             actor = subject_objects.get(key)
@@ -173,7 +185,7 @@ def _add_stix_software(db: Session, bundle: dict[str, Any], *, max_tlp: str | No
             # A new link can first expose an old subject, or change an existing projection. Keep one
             # version per identity/label and use the latest contributing change, independent of row order.
             actor['modified'] = max(actor['modified'], changed)
-            relate(row['link_id'], actor['id'], software['id'], label, changed, 'uses')
+            relate(row['link_id'], actor['id'], software['id'], label, created, changed, 'uses')
     for label in labels:
         if TLP_MARKINGS[label] not in existing:
             objects[TLP_MARKINGS[label]] = tlp_marking(label)

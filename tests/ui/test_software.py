@@ -17,7 +17,7 @@ pytestmark = pytest.mark.ui
 
 
 async def test_software_candidate_and_explicit_link(user: User, ui_env: SimpleNamespace) -> None:
-    """Regression: opening software evidence must close its dialog and switch to the correct Triage report."""
+    """Regression: software dialogs need names, and opening evidence must reveal the correct Triage report."""
     add_report(ui_env, 'Synthetic software note', 'Cobalt Strike used 192.0.2.81.')
     await user.open('/')
     menu, investigate = tabs(user)
@@ -35,6 +35,10 @@ async def test_software_candidate_and_explicit_link(user: User, ui_env: SimpleNa
         assert services.software_reports(db, 'S0154') == []
     user.find(kind=ui.button, content='Link this report').click()
     await user.should_see('Why this report is about the software')
+    assert any(
+        dialog.props.get('aria-label') == 'Link report to software' and dialog.value
+        for dialog in user.find(kind=ui.dialog).elements
+    )
     user.find(kind=ui.textarea, content='Why this report is about the software').type('Reviewed the report.')
     user.find(kind=ui.button, content='Save software link').click()
     await user.should_see('Reviewed the report.')
@@ -43,6 +47,7 @@ async def test_software_candidate_and_explicit_link(user: User, ui_env: SimpleNa
     await user.should_see('No saved report links.')
     software_dialog = user.find(marker='software-detail').elements.pop()
     assert isinstance(software_dialog, ui.dialog)
+    assert software_dialog.props['aria-label'] == 'Software details'
     with user.scope(marker='software-detail'):
         user.find(kind=ui.button, content='Synthetic software note').click()
     with user.scope(marker='document-detail'):
