@@ -4,7 +4,7 @@ and the TLP rules for criteria that point at an analyst's own records."""
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from insight import services
@@ -95,7 +95,7 @@ def test_superseded_revisions_and_hidden_reports_never_count(db: Session) -> Non
     assert matched(db, rid, max_tlp='GREEN') == set()
     summary = services.get_requirement(db, rid, max_tlp='GREEN').summary
     assert (summary.recent_matches, summary.quiet) == (0, True)
-    db.execute(Document.__table__.update().values(is_current=False))
+    db.execute(update(Document).values(is_current=False))
     assert matched(db, rid) == set()
 
 
