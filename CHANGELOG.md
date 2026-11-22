@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Long domains wrap within the pivot title and approval label on phones, including larger text.
+
 ### Added: certificate transparency (TIP 4.6 part 2)
 
 - Optional crt.sh pivots show up to 500 distinct certificate names, issuer and validity dates from a reviewed

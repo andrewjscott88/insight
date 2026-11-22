@@ -67,7 +67,7 @@ def open_pivots(ws: Workspace, value: str) -> None:
         ui.dialog().props('aria-label="Infrastructure pivots"') as dialog,
         ui.card().classes('panel dialog-card gap-3'),
     ):
-        heading(f'Infrastructure around {value}', 2)
+        heading(f'Infrastructure around {value}', 2).classes('w-full min-w-0').style('overflow-wrap:anywhere')
         ui.label(
             'These results describe infrastructure. They do not prove harm. '
             'Insight does not add them as indicators.'
@@ -89,7 +89,11 @@ def open_pivots(ws: Workspace, value: str) -> None:
             if not enabled[provider] or kind not in pivot_data.PROVIDER_KINDS[provider]:
                 continue
             with ui.column().classes('w-full gap-2'):
-                consent = ui.checkbox(f'I approve sending {value} to {name}.')
+                consent = (
+                    ui.checkbox(f'I approve sending {value} to {name}.')
+                    .classes('w-full min-w-0')
+                    .style('overflow-wrap:anywhere')
+                )
                 ui.label(
                     'The value leaves Insight. This provider can see your interest in it. '
                     'A fresh cached answer needs no new request.'
