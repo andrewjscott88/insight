@@ -309,3 +309,7 @@ Add adapters in `connectors.py` only after reviewing their destinations, size li
 Insight is released under the [MIT License](LICENSE). Copyright (c) 2026 Andrew Scott and the Insight contributors.
 Third-party data and dependencies keep their own licences; see [NOTICE](NOTICE). The MIT License covers this
 software, not the intelligence you store in it: source reports keep their publishers' terms and TLP labels.
+
+Actor guides also include a bounded, reader-filtered [activity timeline](docs/THREAT_GUIDES.md#activity-timeline-and-software-layers-tip-47-part-3),
+with explicit campaign associations and distinct source/collection/action dates. Software Navigator layers
+show catalog techniques; software-only actor context never changes existing scores or hunt hypotheses.

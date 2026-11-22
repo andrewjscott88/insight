@@ -837,3 +837,22 @@ print('read budget left:', client.get('/api/stats').headers['ratelimit'])
 | `429` | Budget used up | Wait `Retry-After` seconds (recipe 5.5). Sign-in: a wrong password after 30 failures per minute (the right one still signs in) |
 | `502` | The external source or provider failed | Retry later; `GET /api/sources` shows the recorded error |
 | `503` on sign-in | MFA on, no authenticator app paired | `make mfa-enable` (pairs it) or `make mfa-disable` |
+
+## Actor activity and software Navigator
+
+Use a real campaign ID from your workspace. Linking is a deliberate, audited decision and may raise the
+campaign's sharing label permanently. These examples need your own values; the timeline never infers links.
+
+```bash
+GROUP_REF=G0016
+CAMPAIGN_ID=replace-with-your-campaign-id
+curl -sS "$INSIGHT_URL/api/actors/$GROUP_REF/timeline?days=365&limit=100" -H "Authorization: Bearer $INSIGHT_API_KEY"
+curl -sS "$INSIGHT_URL/api/actors/$GROUP_REF/campaigns" -H "Authorization: Bearer $INSIGHT_API_KEY"
+curl -sS -X POST "$INSIGHT_URL/api/actors/$GROUP_REF/campaigns" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d "{\"campaign_id\":\"$CAMPAIGN_ID\",\"note\":\"Analyst reviewed association\",\"tlp\":\"GREEN\"}"
+curl -sS -X DELETE "$INSIGHT_URL/api/actors/$GROUP_REF/campaigns/$CAMPAIGN_ID" -H "Authorization: Bearer $INSIGHT_API_KEY"
+curl -sS -OJ "$INSIGHT_URL/api/software/S0154/navigator" -H "Authorization: Bearer $INSIGHT_API_KEY"
+```
+
+The guide JSON and Markdown downloads include the same timeline. Software layers are catalog context;
+actor software-only techniques have zero score, leaving existing group/report scores unchanged.

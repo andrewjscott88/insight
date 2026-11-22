@@ -156,3 +156,8 @@ globally throttled for the single operator.
 4. Add asset inventory relevance, investigations and watchlist notifications.
 5. Add structured import/export and source-specific licensing/retention controls.
 6. Add opt-in LLM enrichment behind the independent contract, only after evaluations and routing policies.
+
+Actor activity is read through `services/actor_timeline.py`, with shared bounded report references in
+`actor_reports.py` and explicit, audited campaign associations in `actor_campaigns.py`. The guide, JSON API,
+Markdown export and narrow-screen UI share event DTOs. `software_navigator.py` is a pure projection and does
+not change direct group techniques or hunt hypotheses. Campaign label raises advance `updated_at` for TAXII.

@@ -165,3 +165,9 @@ automated adversary attribution, and any always-on cloud AI.
       `release` environment with a required reviewer, GHCR image visibility.
 - [x] [#8](https://github.com/andrewjscott88/insight/issues/8) **Fix:** a refused CVE-enrichment request no longer
       starts the enrichment window.
+
+### TIP 4.7 part 3 implementation
+
+Actor timelines, explicit campaign associations and software Navigator projections are implemented in this
+part. The complete 4.7 milestone remains open until the catalog and software link/export parts are integrated,
+all required checks pass and the maintainer reviews the complete result. No release or deployment is implied.

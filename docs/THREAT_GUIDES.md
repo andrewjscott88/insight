@@ -195,3 +195,36 @@ Files are created owner-only (0600) and never overwritten; every export and chan
 * **Hypotheses are generic.** They come from ATT&CK detection strategies, not from your environment.
 * **Rules are not validated or run.** Test them in your own tooling.
 * **Only Enterprise ATT&CK.** Mobile and ICS groups are not included.
+
+## Activity timeline and software layers (TIP 4.7, part 3)
+
+The guide's **Activity timeline** uses the same reader-filtered events as its JSON and Markdown downloads.
+Dates have explicit meanings: ATT&CK campaign first/last activity; the date a current report entered Insight;
+the date an analyst linked a campaign; the package's latest publication or retirement; and an indicator's
+reported first/last sighting. A report that only names a group is labelled as a mention, not attribution.
+Sightings require an accepted indicator in a current, explicitly linked report. They do not prove the actor
+caused the activity. No report excerpts are copied into the timeline.
+
+Use **Link a campaign** in the guide to record evidence for an association. Nothing associates campaigns
+from shared reports, indicators, software or techniques. The link label includes the actor, campaign and note
+markings. The campaign keeps that label after unlinking. Hidden actors, campaigns and links appear missing.
+Group references are exact: catalog groups and separately tracked analyst actors do not silently merge.
+
+The API defaults to ten years and 100 events; `days` accepts 1–36,500 and `limit` accepts 1–200. Results are
+newest first with deterministic ties, within the inclusive UTC period. Missing or invalid source dates are
+omitted; they are never replaced with today. Report collection is bounded to 200 current linked reports and
+50 named reports from the newest 5,000 visible reports. Campaign and package scans stop at 201; sighting
+support stops at 5,000 accepted report/indicator associations and sightings at 201. `truncated` means a visible
+source or output cap was reached. The timeline label includes every in-period event that influences this
+flag, even if the output limit omits it. If a source scan is capped, the flag is conservatively marked at the
+reader ceiling (RED for an unlimited reader). The guide label includes its timeline. Hidden events never
+influence a limited reader's counts or flags.
+
+Hunt packages retain only the latest publication timestamp and the current retirement timestamp. Republished
+packages therefore do not show earlier cycles. This view is not a complete activity or audit history.
+
+`GET /api/software/{software_id}/navigator` exports Navigator layer format 4.5 with explicit ATT&CK software
+techniques, source attribution and TLP:CLEAR. Legacy libraries with no software technique context return an
+empty layer. The actor layer keeps every existing direct-group/report score. Techniques available only through
+catalog group/software links or visible explicit analyst software links have score zero and an explanatory
+comment. They never become direct group techniques, change hunt hypotheses or infer attribution.

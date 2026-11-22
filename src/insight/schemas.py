@@ -569,6 +569,15 @@ class ActorLinkInput(BaseModel):
     tlp: TLP = 'CLEAR'
 
 
+class ActorCampaignInput(BaseModel):
+    """An explicit association, not an attribution inferred from shared reports."""
+
+    model_config = ConfigDict(frozen=True, extra='forbid')
+    campaign_id: DocumentId
+    note: str = Field(default='', max_length=2_000)
+    tlp: TLP = 'CLEAR'
+
+
 class IndustryClaimInput(BaseModel):
     """``POST /api/actors/{id}/industries``: add an industry with a citation, or remove a catalog claim.
 

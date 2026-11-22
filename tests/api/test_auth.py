@@ -36,6 +36,11 @@ def csrf_from(html: str) -> str:
 
 
 PROTECTED = [
+    ('GET', '/api/actors/x/timeline'),
+    ('GET', '/api/actors/x/campaigns'),
+    ('POST', '/api/actors/x/campaigns'),
+    ('DELETE', '/api/actors/x/campaigns/x'),
+    ('GET', '/api/software/x/navigator'),
     ('GET', '/api/session'),
     ('GET', '/api/documents'),
     ('GET', '/api/documents/x'),

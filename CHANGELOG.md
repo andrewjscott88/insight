@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Added: actor activity timelines and software Navigator (TIP 4.7, part 3)
+
+- Threat guides, JSON and Markdown include a dated timeline: public ATT&CK campaigns, explicitly associated
+  analyst campaigns, current reports linked to or naming the group, the latest hunt package publication and
+  retirement, and sightings of accepted indicators in current linked reports. Every event states its source,
+  date meaning and sharing label. This is not inferred attribution or a complete historical archive.
+- `GET /api/actors/{ref}/timeline` and explicit campaign association APIs/editor; campaign labels retain the
+  strictest association label after removal. Software Navigator layers use only catalog techniques; actor
+  layers add software-only context at score zero without changing existing scores or hunt hypotheses.
+- Migration `0028` adds `actor_campaigns` and `campaigns.updated_at` (backfilled from creation time). A campaign
+  label raise advances its STIX/TAXII modification time so incremental polling sees the changed marking.
+
 ### Upgrade notes
 
 - Migration `0024` adds the `requirements`, `requirement_criteria` and `requirement_evidence` tables. It runs

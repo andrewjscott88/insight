@@ -31,6 +31,7 @@ from .auth import (
     session_checker,
 )
 from .boundary import BoundaryMiddleware
+from .routes.actor_activity import _register_actor_activity_routes
 from .routes.campaigns import _register_campaign_routes
 from .routes.cases import _register_case_routes
 from .routes.confidence import _register_confidence_routes
@@ -209,6 +210,7 @@ def create_app(settings: Settings | None = None, *, with_ui: bool = True) -> Fas
         _register_sighting_routes,
         _register_technique_routes,
         _register_threat_routes,
+        _register_actor_activity_routes,
         _register_campaign_routes,
         _register_case_routes,
         _register_requirement_routes,

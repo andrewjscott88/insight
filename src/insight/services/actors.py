@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from ..industries import BY_KEY
 from ..models import (
+    ActorCampaign,
     ActorDocument,
     CaseItem,
     Document,
@@ -159,6 +160,7 @@ def _visible_report(db: Session, document_id: str, max_tlp: str | None) -> Docum
 def _insert_link(
     db: Session,
     model: type[ActorDocument]
+    | type[ActorCampaign]
     | type[ThreatLink]
     | type[CaseItem]
     | type[RequirementCriterion]
@@ -225,7 +227,7 @@ def unlink_report(db: Session, ref: str, document_id: str, *, max_tlp: str | Non
 
 
 def linked_reports(
-    db: Session, ref: str, *, max_tlp: str | None = None
+    db: Session, ref: str, *, max_tlp: str | None = None, current_only: bool = False
 ) -> list[tuple[Document, ActorDocument]]:
     """Reports the analyst linked to ``ref`` that the reader may see, newest first."""
     resolve_group(db, ref, max_tlp=max_tlp)
@@ -238,6 +240,8 @@ def linked_reports(
         .order_by(Document.created_at.desc(), Document.id)
         .limit(MAX_LINKED_REPORTS)
     )
+    if current_only:
+        stmt = stmt.where(Document.is_current.is_(True))
     return [(doc, link) for doc, link in db.execute(stmt)]
 
 

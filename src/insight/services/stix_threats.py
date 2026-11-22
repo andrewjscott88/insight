@@ -80,7 +80,7 @@ def _add_stix_threats(
     for subject, link, owner, endpoint, targets in selections:
         ids = list(targets)
         kind = 'threat-actor' if subject is ThreatActor else 'campaign'
-        updated = ThreatActor.updated_at if subject is ThreatActor else Campaign.created_at
+        updated = subject.updated_at
         stmt = (
             select(
                 subject.id.label('subject_id'),
@@ -130,7 +130,11 @@ def _add_stix_threats(
                         )
                     else:
                         relationship_id = f'relationship--{uuid4()}'
-                    changed = max(created, target['modified']) if stable else max(modified, created)
+                    changed = (
+                        max(created, target['modified'], stix_timestamp(row['subject_updated']))
+                        if stable
+                        else max(modified, created)
+                    )
                     bundle['objects'].append(
                         {
                             'type': 'relationship',

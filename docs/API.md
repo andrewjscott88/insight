@@ -675,3 +675,24 @@ Audit actions:
 - `document.revision.supersede`, `document.revision.reactivate`;
 - `observation.review`, `note.add`, `watch_term.create`, `watch_term.remove`;
 - `document.delete` (manual procedure, RUNBOOK §9).
+
+## Actor activity and software Navigator
+
+| Method | Route | Meaning |
+| --- | --- | --- |
+| GET | `/api/actors/{ref}/timeline` | Dated source and local events; `days=3650` (1–36,500), `limit=100` (1–200). |
+| GET | `/api/actors/{ref}/campaigns` | Up to 200 visible explicit campaign associations. |
+| POST | `/api/actors/{ref}/campaigns` | Explicit association: `campaign_id`, optional `note` (2,000 characters), `tlp` (CLEAR default). Returns 201. |
+| DELETE | `/api/actors/{ref}/campaigns/{campaign_id}` | Remove the visible association; campaign label stays raised. |
+| GET | `/api/software/{software_id}/navigator` | Public catalog software techniques as a Navigator 4.5 JSON attachment. |
+
+Normal authentication applies. Writes require write access and browser CSRF/Origin checks, and respect both
+instance and caller TLP ceilings. Unknown and hidden associations return 404. Payloads reject extra fields.
+Audit actions: `actor.campaign.link`, `actor.campaign.unlink`, `software.navigator`.
+
+Timeline format `insight-actor-timeline-1`: `ref`, `since`, `until`, `tlp`, `limit`, `truncated`, and `events`.
+Each event has `id`, `at` (UTC), `kind`, `title`, `source`, `source_ref`, `relation`, `tlp`, `detail`, `url`.
+Kinds include campaign first/last seen, campaign linked, report added, hunt published/retired and sighting
+first/last seen. The date meaning is explicit; a name match or indicator sighting is not actor attribution.
+Guide format `insight-threat-guide-1` gains an additive `timeline` field; existing fields remain unchanged.
+See [collection limits and historical coverage](THREAT_GUIDES.md#activity-timeline-and-software-layers-tip-47-part-3).

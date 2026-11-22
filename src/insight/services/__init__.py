@@ -27,6 +27,8 @@ from .access import (
     verify_api_key,
     verify_mfa_code,
 )
+from .actor_campaigns import ActorCampaignView, actor_campaigns, link_actor_campaign, unlink_actor_campaign
+from .actor_timeline import ActorTimeline, TimelineEvent, actor_timeline, timeline_json
 from .actors import (
     GroupSubject,
     actor_aliases,
@@ -366,6 +368,8 @@ __all__ = [
     'SESSION_TTL',
     'SOURCE_SYNC',
     'SUMMARY_LENGTH',
+    'ActorCampaignView',
+    'ActorTimeline',
     'AlertReport',
     'BlocklistEntry',
     'BriefData',
@@ -420,9 +424,12 @@ __all__ = [
     'TechniqueCount',
     'TechniqueTag',
     'ThreatLinkView',
+    'TimelineEvent',
     'TlpNotPermitted',
     'active_api_key',
     'actor_aliases',
+    'actor_campaigns',
+    'actor_timeline',
     'add_case_item',
     'add_case_note',
     'add_criterion',
@@ -526,6 +533,7 @@ __all__ = [
     'known_kev',
     'landscape_data',
     'like_pattern',
+    'link_actor_campaign',
     'link_report',
     'link_rule',
     'link_threat',
@@ -621,7 +629,9 @@ __all__ = [
     'technique_labels',
     'technique_summary',
     'time_of_day',
+    'timeline_json',
     'tlp_permitted',
+    'unlink_actor_campaign',
     'unlink_report',
     'unlink_rule',
     'unlink_threat',

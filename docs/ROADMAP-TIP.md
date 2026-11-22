@@ -547,6 +547,10 @@ Manual, approved-per-lookup, metadata-only pivots that land in the link map: RDA
 MITRE ATT&CK groups and software, and the MISP threat-actor galaxy for aliases, as malware and tool entities;
 an activity timeline per actor; ATT&CK Navigator layers per actor and for the landscape.
 
+Part 3 adds bounded, TLP-filtered timelines, explicit analyst campaign associations and software Navigator
+layers. Software-only actor techniques keep score zero and never change direct techniques or hunt hypotheses.
+The full item remains unchecked pending integration of all three parts, validation and maintainer review.
+
 ### 4.8 Read-only MCP endpoint
 
 Model Context Protocol access for AI agents, using API keys and their TLP ceilings. Insight itself still
