@@ -1,5 +1,11 @@
 # Insight
 
+TIP 4.6 part 1 adds optional RDAP and RIPEstat infrastructure context in the indicator explorer and link map.
+Enable a provider in Settings, then approve each uncached lookup of a reviewed TLP:CLEAR indicator. Contact
+details are dropped and results never become indicators by themselves. Validation and security review are
+pending; certificate transparency and passive DNS remain planned. See
+[ADR 0037](docs/adr/0037-infrastructure-pivots.md).
+
 A single-operator threat-intelligence workbench, run locally or published behind a TLS reverse proxy. Application logic and the interactive GUI are authored in **Python**, using **NiceGUI + FastAPI + SQLAlchemy**. NiceGUI supplies the underlying browser assets; no separate React/Node build is required.
 
 **Version 0.9.0: a single-operator pilot release, not a production multi-user TIP.** Nothing is deployed or connected automatically. Operating it: [docs/RUNBOOK.md](docs/RUNBOOK.md). Scripting against it: [docs/API_GUIDE.md](docs/API_GUIDE.md) (every call, with `curl`). All documentation: [docs/README.md](docs/README.md).

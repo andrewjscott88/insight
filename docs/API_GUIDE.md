@@ -1,5 +1,24 @@
 # API guide: every call, with curl
 
+## Optional infrastructure lookups
+
+Enable RDAP or RIPEstat under **Settings › Sources › Infrastructure lookups**. Review a matching indicator
+in a current TLP:CLEAR report first. These examples use an unlimited read-write key and explicitly approve
+sending the value to the named provider. Read-only or TLP-limited keys may read an eligible cache only.
+
+```bash
+curl -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  "$INSIGHT_URL/api/pivots?value=example.com"
+curl -X POST -H "Authorization: Bearer $INSIGHT_API_KEY" -H 'Content-Type: application/json' \
+  -d '{"value":"example.com","approved":true}' "$INSIGHT_URL/api/pivots/rdap"
+curl -X POST -H "Authorization: Bearer $INSIGHT_API_KEY" -H 'Content-Type: application/json' \
+  -d '{"value":"8.8.8.8","approved":true}' "$INSIGHT_URL/api/pivots/asn"
+```
+
+A cached read never sends a value out. Missing or newly ineligible subjects return `404`; a fresh eligible
+subject with no cached answer returns `[]`. Follow `Retry-After` on `429`. See [ADR 0037](adr/0037-infrastructure-pivots.md)
+for the privacy policy and provider terms. Certificate and passive DNS providers are planned later parts.
+
 A practical companion to the [API reference](API.md): how to authenticate, how limits and errors behave, and a
 `curl` command for every route. Every `sh` block in this guide runs as written, in order, against a running
 instance (they were executed end to end before this guide was published); `bash` blocks need your own values.

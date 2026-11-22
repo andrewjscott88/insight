@@ -1,1 +1,3 @@
 tests/fixtures/*.pdf binary
+# Pinned upstream bytes are verified by SHA-256; never rewrite their line endings.
+src/insight/data/rdap-*.json -text

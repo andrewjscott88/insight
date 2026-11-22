@@ -118,7 +118,8 @@ tools over TAXII and STIX; sightings and requests for information come back
       *Done (unreleased):* [ADR 0034](docs/adr/0034-hunt-packages.md).
 - [ ] **TIP 4.4 Finished intelligence products,** replacing incident-style cases.
 - [ ] **TIP 4.5–4.8** Operator-defined sources, infrastructure pivots, ATT&CK and MISP-galaxy imports, and a
-      read-only MCP endpoint.
+  read-only MCP endpoint.
+  TIP 4.6 part 1 adds RDAP/RIPEstat and graph context; validation and the other providers remain pending.
 
 ## Later
 

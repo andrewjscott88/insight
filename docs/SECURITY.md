@@ -1,5 +1,26 @@
 # Security posture
 
+## Manual infrastructure connections
+
+TIP 4.6 part 1 adds RDAP and RIPEstat, each off by default with an audited Settings switch. An uncached
+lookup needs one explicit operator approval and an accepted observation in a current TLP:CLEAR report.
+Sessions and unlimited read-write keys can request lookups; limited keys can only read eligible cached data.
+
+RDAP connects only to HTTPS servers present in the pinned IANA DNS/IPv4/IPv6 bootstrap files. HTTP-only
+servers are unsupported. No returned URL, referral or redirect is followed. `scripts/update_rdap_bootstrap.py`
+manually fetches updated bootstrap files from `data.iana.org`; review host changes and commit the SHA-256 pins
+together with the files. RIPEstat connects only to `stat.ripe.net` over HTTPS, using network-info and
+prefix-overview. Both requests consume the same provider throttle. No DNS-based enrichment is used.
+
+Every request uses `connectors.download` and checked public destination addresses, a 30-second total deadline
+and a two-megabyte cap. Returned subjects/prefixes must match the requested value. Cache reads expire after
+24 hours and recheck eligibility. Personal RDAP contact details are never persisted. Errors contain no raw
+provider text or credentials. Graph nodes remain provider context and cannot create observations or verdicts.
+
+The operator must comply with each registry's terms and
+[RIPEstat's terms](https://stat.ripe.net/docs/getting-started/what-is-ripestat), including its commercial-use
+permission requirement. See [ADR 0037](adr/0037-infrastructure-pivots.md).
+
 Insight is a single-operator workbench, not a hardened multi-user service. Docker Compose binds it to loopback. It can be published for its one operator (and that operator's scripts and SIEM) behind a TLS reverse proxy, following the checklist at the end of this page; never expose port 8080 itself.
 
 The normal configuration requires sign-in. The explicit, default-off `INSIGHT_DEV_NO_AUTH` exception is
