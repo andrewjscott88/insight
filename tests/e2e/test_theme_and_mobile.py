@@ -208,7 +208,7 @@ def test_regression_desktop_shows_every_tab_label(browser: Any) -> None:
     show(page, 'Investigate')
     for label in INVESTIGATE:
         expect(page.locator('.evidence-tabs').get_by_role('tab', name=label, exact=True)).to_be_visible()
-    expect(page.get_by_text('Threat intelligence workbench', exact=True)).to_be_visible()
+    expect(page.get_by_text('Cyber Threat Intelligence Platform', exact=True)).to_be_visible()
     expect(page.get_by_role('button', name='Back to list')).to_have_count(0)
     context.close()
 
