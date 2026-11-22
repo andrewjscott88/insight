@@ -17,6 +17,13 @@ images, changelog entry). Credit is given unless you prefer otherwise.
 
 Only the latest release receives fixes. Upgrade using [docs/RUNBOOK.md](docs/RUNBOOK.md) §6.
 
+## Optional infrastructure providers
+
+CIRCL passive DNS requires the operator's approved access and host credentials, an off-by-default switch,
+and approval for each uncached lookup of a reviewed value in a current CLEAR report. Basic credentials go
+only to its fixed HTTPS endpoint, never URLs or stored context. Active queries are explicitly disabled.
+[Provider conditions and controls](docs/INFRASTRUCTURE_PIVOTS.md).
+
 ## Scope and posture
 
 Insight is a single-operator workbench. By default it listens on loopback only; it can be published behind a TLS

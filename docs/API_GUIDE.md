@@ -632,6 +632,23 @@ curl -fsS "$INSIGHT_URL/api/entities/$ENTITY_ID/confidence" -H "Authorization: B
   | jq '{score, band, sources: [.sources[] | {source_name, reliability, weight}]}'
 ```
 
+### Infrastructure pivots (explicit outbound approval)
+
+Configure your approved CIRCL credentials on the host and enable **Use CIRCL passive DNS** in Settings.
+This synthetic domain must already have an accepted indicator in a current CLEAR report. POST requires an
+unlimited read-write key; GET also accepts read-only or limited keys. Never send provider credentials to
+these routes. The POST explicitly approves sharing this value with CIRCL; active resolution is disabled.
+
+```sh
+curl -sS -X POST "$INSIGHT_URL/api/pivots/circl" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d '{"value":"example.com","approved":true}'
+curl -sS -G "$INSIGHT_URL/api/pivots" --data-urlencode 'value=example.com' \
+  -H "Authorization: Bearer $INSIGHT_API_KEY"
+```
+
+Both routes recheck current accepted CLEAR evidence. GET never contacts the provider.
+[Operator guide, settings and provider conditions](INFRASTRUCTURE_PIVOTS.md).
+
 ### Sources and enrichment (outbound internet)
 
 These are the only routes that make Insight contact other servers. Sync imports a curated public feed; enrichment

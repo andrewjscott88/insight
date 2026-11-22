@@ -92,6 +92,7 @@ THROTTLES: Final[dict[str, Throttle]] = {
     'vulncheck': Throttle(VULNCHECK_INTERVAL),
     'greynoise': Throttle(1.0),
     'shodan': Throttle(1.0),  # Shodan: one request per second on every plan
+    'circl': Throttle(5.0),  # A deliberately slow local limit for the public certificate search.
 }
 
 

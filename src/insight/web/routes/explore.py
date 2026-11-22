@@ -74,7 +74,7 @@ def _register_explore_routes(app: FastAPI, sessions: SessionFactory, require_aut
     @app.get('/api/graph', dependencies=[Depends(require_auth)])
     def graph(
         request: Request,
-        node: Annotated[str, Query(min_length=3, max_length=60, pattern=r'^[a-z]+:[A-Za-z0-9._-]+$')],
+        node: Annotated[str, Query(min_length=3, max_length=96, pattern=r'^[a-z_]+:[A-Za-z0-9._:-]+$')],
         depth: Annotated[int, Query(ge=1, le=MAX_DEPTH)] = 1,
     ) -> dict[str, Any]:
         """Links around one node: ``report:<id>``, ``indicator:<entity id>``, ``technique:T1059``,

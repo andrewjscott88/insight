@@ -539,6 +539,10 @@ redistribution rule (review J3).
 
 ### 4.6 Infrastructure pivots
 
+Part 3 (CIRCL passive DNS) is implemented for review, including shared consent/cache/graph support.
+RDAP/ASN and certificate transparency remain separate parts; the full milestone is not yet complete.
+[Operator guide](INFRASTRUCTURE_PIVOTS.md) · [ADR 0037](adr/0037-infrastructure-pivots.md).
+
 Manual, approved-per-lookup, metadata-only pivots that land in the link map: RDAP, certificate transparency
 (crt.sh), IP-to-ASN, and passive DNS where the operator has access (for example CIRCL for vetted users).
 
@@ -629,7 +633,7 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
 - [x] **4.3** Hunt packages (Sigma, YARA, Suricata, Snort as STIX indicators) in a TAXII collection (ADR 0034)
 - [ ] **4.4** Finished intelligence products (key judgements, estimative language, PDF/Markdown/STIX)
 - [ ] **4.5** Operator-defined RSS/Atom and TAXII sources
-- [ ] **4.6** Infrastructure pivots: RDAP, certificate transparency, ASN, passive DNS
+- [ ] **4.6** Infrastructure pivots: passive DNS part 3 implemented for review; RDAP/ASN and certificate transparency are separate parts
 - [ ] **4.7** ATT&CK groups and software, MISP threat-actor galaxy, actor timelines, Navigator layers
 - [ ] **4.8** Read-only MCP endpoint for AI agents
 

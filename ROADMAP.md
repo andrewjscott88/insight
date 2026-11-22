@@ -141,6 +141,9 @@ tools over TAXII and STIX; sightings and requests for information come back
 - [x] **TIP 3.7 Optional Shodan enrichment** with the operator's own key ([ADR 0031](docs/adr/0031-shodan.md));
       Censys waits for its Platform API transition.
 
+- [ ] **TIP 4.6 Infrastructure pivots:** passive DNS (part 3) is implemented for review;
+      RDAP/ASN and certificate transparency are companion parts. [ADR 0037](docs/adr/0037-infrastructure-pivots.md).
+
 **Out of scope on purpose:** cloning CrowdStrike, Mandiant or Recorded Future collection, a malware sandbox,
 automated adversary attribution, and any always-on cloud AI.
 

@@ -17,6 +17,7 @@ from .confidence import render_confidence
 from .graph import open_graph
 from .greynoise import open_greynoise
 from .hunt_packages import open_add_to_package
+from .pivots import open_pivots
 from .shodan import open_shodan
 from .typography import heading
 from .verdicts import Indicator, flag_badges, load_verdicts, render_verdict
@@ -63,6 +64,7 @@ def build_entities(ws: Workspace) -> None:
             eligible = target.kind == 'ip' and bool(services.eligible_greynoise_ip(db, target.value))
             show_greynoise = eligible and greynoise.configured()
             show_shodan = eligible and shodan.configured()
+            show_pivot = bool(services.eligible_pivot(db, target.value, max_tlp=None))
         box.clear()
         with box:
             flag_badges(target.kind, target.value)
@@ -81,6 +83,8 @@ def build_entities(ws: Workspace) -> None:
                 ui.button(
                     'GreyNoise Community context', on_click=lambda: open_greynoise(ws, target.value)
                 ).props('outline no-caps')
+            if show_pivot:
+                ui.button('Pivot', on_click=lambda: open_pivots(ws, target.value)).props('outline no-caps')
             if show_shodan:
                 ui.button('Shodan exposure context', on_click=lambda: open_shodan(ws, target.value)).props(
                     'outline no-caps'

@@ -120,6 +120,7 @@ def test_ui_does_not_depend_on_the_api_module(path: Path) -> None:
 #: Service functions that read or change reports. Every call from the API must pass the caller's TLP limit
 #: (``max_tlp=``), or a TLP-limited API key could see reports above its limit (ADR 0014).
 TLP_AWARE_SERVICES = {
+    'cached_pivots', 'eligible_pivot', 'store_pivot',
     'DocumentQuery', 'detail', 'list_entities', 'entity_documents', 'count_entity_documents', 'stats',
     'set_document_status', 'set_observation_status', 'add_note', 'ingest', 'brief_data',
     'assess_entity', 'entity_assessment', 'entity_seen', 'blocklist',
@@ -145,7 +146,8 @@ TLP_AWARE_SERVICES = {
 
 def test_api_routes_pass_the_callers_tlp_limit_to_services() -> None:
     tree = ast.Module(
-        body=[node for p in WEB_MODULES for node in ast.parse(p.read_text()).body], type_ignores=[]
+        body=[node for p in [*WEB_MODULES, PACKAGE / 'pivots.py'] for node in ast.parse(p.read_text()).body],
+        type_ignores=[],
     )
     calls = [
         node

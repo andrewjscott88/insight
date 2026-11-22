@@ -36,6 +36,8 @@ def csrf_from(html: str) -> str:
 
 
 PROTECTED = [
+    ('GET', '/api/pivots'),
+    ('POST', '/api/pivots/circl'),
     ('GET', '/api/session'),
     ('GET', '/api/documents'),
     ('GET', '/api/documents/x'),
@@ -466,7 +468,7 @@ def test_failed_sign_ins_are_logged_without_the_password(
         ('longtestpasswor', False),
         ('', False),
         ('longtestpassword!', False),
-        ('ü', False),
+        ('Ã¼', False),
         ('longtestpassword\0', False),
         ('longtestpassword' + 'x' * 400, False),
     ],

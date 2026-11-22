@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Long domains wrap within the pivot title and approval label on phones, including larger text.
+
+### Added: passive DNS (TIP 4.6 part 3)
+
+- With approved CIRCL access and host credentials, an optional manual pivot shows up to 500 DNS history
+  records with dates and counts. Its active resolver is explicitly disabled. The provider starts off and
+  each uncached lookup needs consent for a reviewed value in a current CLEAR report.
+- Shared pivot API, cache, audit, throttle and link-map controls keep provider context separate from
+  reviewed indicators. Companion RDAP/ASN and certificate-transparency parts remain separate.
+  [Guide](docs/INFRASTRUCTURE_PIVOTS.md) · [ADR 0037](docs/adr/0037-infrastructure-pivots.md).
+- Upgrade: no database migration or dependency. No calls without host credentials, Settings opt-in and approval.
+
 ### Upgrade notes
 
 - Migration `0024` adds the `requirements`, `requirement_criteria` and `requirement_evidence` tables. It runs
