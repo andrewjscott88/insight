@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.8.0 - 2026-11-21
+
+### Upgrade notes
+
+- Migrations `0015` to `0018` run at start-up (manual threat links, PDF provenance, MFA seed encryption,
+  review times). **Keep `INSIGHT_SESSION_SECRET` unchanged:** it now also encrypts the authenticator pairing,
+  and `0017` refuses to run, leaving the database as it was, if the secret is missing. Changing it later
+  means pairing the authenticator again.
+- Public deployments: turn on MFA (`make mfa-enable`), then set `INSIGHT_REQUIRE_HARDENED=on`.
+- PDF import needs Linux with libseccomp (the container image has it); elsewhere it is refused, never run
+  unsandboxed.
+
 ### Added: a read-only TAXII 2.1 server (TIP 3.1)
 
 - SIEMs and threat-intelligence platforms can poll `/taxii2/` with the API key (`Authorization: Bearer`).
