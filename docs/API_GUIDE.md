@@ -526,6 +526,9 @@ curl -sS -X POST "$INSIGHT_URL/api/enrichment/epss/CVE-2023-34362" -H "Authoriza
 curl -sS -X POST "$INSIGHT_URL/api/enrichment/greynoise/$IP" -H "Authorization: Bearer $INSIGHT_API_KEY"
 # This GET reads only the cached result and its timestamp.
 curl -sS "$INSIGHT_URL/api/ips/$IP/greynoise" -H "Authorization: Bearer $INSIGHT_API_KEY"
+# Optional, with your own INSIGHT_SHODAN_KEY: send the same reviewed CLEAR address to Shodan (ADR 0031), then read the cache
+curl -sS -X POST "$INSIGHT_URL/api/enrichment/shodan/$IP" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq '{ports, vulns, org, attribution}'
+curl -sS "$INSIGHT_URL/api/ips/$IP/shodan" -H "Authorization: Bearer $INSIGHT_API_KEY"
 # The CVEs in your reports, most urgent first (ransomware, known exploited, likely attacked, critical, high), and why
 curl -sS "$INSIGHT_URL/api/cves?days=30&limit=10" -H "Authorization: Bearer $INSIGHT_API_KEY" \
   | jq '.cves[] | {cve, label, reason, cvss: .cvss.score, epss: .epss.probability}'

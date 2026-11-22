@@ -122,7 +122,8 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
       ([ADR 0030](docs/adr/0030-postgres-timestamps-and-feed-cursors.md)).
 - [x] **TIP 3.8 Lightweight case management** ([ADR 0029](docs/adr/0029-cases.md)).
 - [ ] **TIP 3.6 Opt-in LLM proposals** under the contract in [docs/LLM_EXTENSION.md](docs/LLM_EXTENSION.md).
-- [ ] **TIP 3.7 Optional Shodan or Censys enrichment** with the operator's own keys.
+- [x] **TIP 3.7 Optional Shodan enrichment** with the operator's own key ([ADR 0031](docs/adr/0031-shodan.md));
+      Censys waits for its Platform API transition.
 
 **Out of scope on purpose:** cloning CrowdStrike, Mandiant or Recorded Future collection, a malware sandbox,
 automated adversary attribution, and any always-on cloud AI.

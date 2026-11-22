@@ -1,0 +1,16 @@
+{
+  "ip_str": "8.8.8.8",
+  "ip": 134744072,
+  "ports": [53, 443, 53, 70000, "22"],
+  "hostnames": ["dns.google", "bad host!", "<script>"],
+  "org": "Google LLC",
+  "isp": "Google LLC",
+  "asn": "AS15169",
+  "country_code": "US",
+  "os": null,
+  "tags": ["cdn", "<b>bold</b>"],
+  "vulns": ["CVE-2024-3400", "not-a-cve"],
+  "last_update": "2026-11-20T09:15:00.123456",
+  "data": [{"port": 443, "data": "HTTP/1.1 200 OK\r\nServer: banner text that must never be stored"}],
+  "html": "<html>raw page</html>"
+}

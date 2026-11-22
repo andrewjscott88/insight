@@ -75,6 +75,8 @@ PROTECTED = [
     ('POST', '/api/enrichment/epss/CVE-2024-12345'),
     ('POST', '/api/enrichment/greynoise/8.8.8.8'),
     ('GET', '/api/ips/8.8.8.8/greynoise'),
+    ('POST', '/api/enrichment/shodan/8.8.8.8'),
+    ('GET', '/api/ips/8.8.8.8/shodan'),
     ('GET', '/api/cves/CVE-2024-12345/scores'),
     ('GET', '/api/cves'),
     ('GET', '/api/industries'),

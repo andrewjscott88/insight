@@ -15,6 +15,15 @@
 - `GET /api/cves` has two new groups, so `tier` numbers after *Known exploited* move down by two. Scripts that
   compare tier numbers should use the new numbers or the `label`.
 
+### Added: Shodan exposure context (TIP 3.7)
+
+- With your own `INSIGHT_SHODAN_KEY`, **Shodan exposure context** in Entity explorer looks up a reviewed
+  public IPv4 from a current TLP:CLEAR report after you approve it: open ports, host names, organisation,
+  network, tags and the CVEs Shodan links to the host. No key, no calls; nothing runs on a schedule.
+- Refusals for the key, plan or credits are shown in the dialog. Answers are reused for 24 hours, attributed
+  to Shodan, and banners are never kept. `POST /api/enrichment/shodan/{ip}` and `GET /api/ips/{ip}/shodan`
+  for scripts. Censys waits for its new Platform API. [ADR 0031](docs/adr/0031-shodan.md)
+
 ### Changed: PostgreSQL timestamps and OTX paging (issue #11)
 
 - On PostgreSQL, timestamps are real `timestamptz` columns, so the database compares and indexes moments
