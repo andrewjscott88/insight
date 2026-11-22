@@ -59,3 +59,10 @@ https://github.com/MISP/PyMISP/blob/e929887bd93b79c8bcfa869fe1046d99afd545fa/pym
 
 Third-party Python dependencies are installed from requirements.lock and retain
 their own licences; scripts/check_licenses.py enforces the permitted set.
+
+The offline MCP conformance tests use the unmodified Model Context Protocol
+2026-07-28 schema (Git blob b73fe650e95953edc36f6ca191d4beba22d54022).
+Copyright (c) 2024-2025 Model Context Protocol a Series of LF Projects, LLC.
+Upstream licensing transition notice and Apache-2.0/MIT terms are preserved in
+tests/fixtures/mcp/LICENSE; source and file digest are in the adjacent README.md.
+https://github.com/modelcontextprotocol/modelcontextprotocol

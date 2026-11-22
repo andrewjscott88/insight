@@ -137,3 +137,9 @@ See [API examples](API_GUIDE.md#read-only-mcp), [security](SECURITY.md), and
 [discovery](https://modelcontextprotocol.io/specification/2026-07-28/server/discover),
 [request metadata](https://modelcontextprotocol.io/specification/2026-07-28/basic/index), and
 [legacy lifecycle](https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle).
+
+Modern discovery and tool catalogs declare `cacheScope: "private"` and `ttlMs: 0`;
+HTTP responses also use `Cache-Control: no-store`. Modern protocol errors omit an unknown
+request ID, while legacy errors retain `id: null`. Offline API conformance tests validate
+every supported response shape against the official schema in
+[the test fixture](../tests/fixtures/mcp/README.md).

@@ -21,6 +21,11 @@ missing required metadata uses `-32602`. Modern results carry `resultType: compl
 Unknown modern methods return `404` with `-32601`. Legacy behavior stays selected by the explicit legacy
 revision or initial handshake; unsupported modern metadata never falls back to legacy authorization.
 
+Modern discovery and tool lists include private cache metadata with a zero lifetime. Unknown request IDs
+are omitted from modern errors and remain null for legacy errors. Offline tests validate supported modern
+responses against the unmodified upstream schema, with its licence notice retained under tests/fixtures/mcp.
+They use the existing jsonschema development dependency; no runtime dependency or network lookup is added.
+
 `POST /mcp` requires an Insight bearer API key and has a separate per-key 120/minute budget. This exact
 method/path accepts read-only keys because its fixed registry contains only reads. All other POST permission
 checks remain unchanged. Cookie-only authentication is refused even in development's open-access mode.
