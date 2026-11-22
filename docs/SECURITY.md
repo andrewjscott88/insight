@@ -77,7 +77,7 @@ For one operator reaching their own instance (and their scripts/SIEM) over the i
 | --- | --- | --- |
 | TLS, HSTS | HSTS header when `INSIGHT_SECURE_COOKIES=1` | TLS at the reverse proxy; `INSIGHT_SECURE_COOKIES=1` |
 | Real client addresses, correct `Origin` checks | Trusted proxy headers, validated at start-up | `INSIGHT_TRUSTED_PROXIES`, `INSIGHT_ALLOWED_HOSTS` (RUNBOOK, "Reverse proxy") |
-| Sign-in | Password, throttling, optional TOTP MFA | Keep `INSIGHT_DEV_NO_AUTH=off` for protected access; use a strong password (`make env`); `make mfa-enable` is strongly recommended |
+| Sign-in | Password, throttling, optional TOTP MFA; `INSIGHT_REQUIRE_HARDENED=on` refuses to start without secure cookies and MFA, and an internet-facing instance without them logs a warning | Keep `INSIGHT_DEV_NO_AUTH=off` for protected access; use a strong password (`make env`); `make mfa-enable`, then `INSIGHT_REQUIRE_HARDENED=on` |
 | Automation access | One hashed, expiring, scoped API key; per-key TLP limit; the read-only TAXII server answers API keys only, with accepted indicators within the key's TLP limit and publishers' reuse rules ([ADR 0026](adr/0026-taxii-server.md)) | `make api-key-create` with the least access and lowest `MAX_TLP` that works; rotate before expiry |
 | Abuse and overload | Per-caller rate limits, invalid-key throttling, 2 MB bodies | Optional edge limits at the proxy (connections, request rate) |
 | Data on the server | TLP:RED refused by default (`INSIGHT_MAX_TLP`) | Review reports stored before the limit (start-up logs the count) |

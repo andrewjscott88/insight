@@ -13,6 +13,23 @@
   per hour per key. Nothing can be written.
 - **Upgrade:** migration `0018` records when each mention is reviewed (`observations.reviewed_at`).
 
+### Changed: the KEV inbox policy (TIP 1.1)
+
+- After the first sync, every CVE that CISA adds to KEV becomes an inbox report, even when more than 100
+  arrived between syncs or the entry carries an older date (up to 500 per sync). The first sync still makes
+  reports for only the newest 100 entries. Older entries stay catalog-only and still mark their CVEs in the
+  reader, the brief and the Prioritised CVEs tab. The policy is written down in RUNBOOK section 8.
+
+### Added: a hardened mode for public deployments (TIP 0.3)
+
+- **`INSIGHT_REQUIRE_HARDENED=on`** refuses to start unless `INSIGHT_SECURE_COOKIES=1` and `INSIGHT_MFA=on`,
+  and password-free access is off. The message names each missing setting. Default `off`, so local
+  development is unchanged; anything other than on/off stops start-up. CLI commands still run, so
+  `make mfa-enable` can fix a refusal. [Reverse proxy](docs/RUNBOOK.md#reverse-proxy-public-deployment)
+- **One start-up warning** when an instance answers to a non-local host name or trusts a reverse proxy but
+  secure cookies or MFA are off, or password-free access is on. It replaces the separate secure-cookie
+  warning. Password-only sign-in behind a proxy is now a warning, not a note.
+
 ### Authenticator pairing secrets encrypted at rest (review L2)
 
 - Migration `0017` encrypts existing MFA pairing secrets with a key derived from `INSIGHT_SESSION_SECRET`.
