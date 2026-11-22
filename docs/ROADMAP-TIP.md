@@ -543,9 +543,9 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
 
 ### Phase 3 — Advanced (8)
 
-- [ ] **3.1** Read-only TAXII 2.1 server over STIX collections
-- [ ] **3.2** Ranked search and graph view (`ROADMAP` #17)
-- [ ] **3.3** Exploit-availability signals (metadata only, terms-reviewed sources)
+- [x] **3.1** Read-only TAXII 2.1 server over STIX collections: done, ADR 0026, [TAXII.md](TAXII.md)
+- [x] **3.2** Ranked search and graph view (`ROADMAP` #17): done, ADR 0027
+- [x] **3.3** Exploit-availability signals (metadata only, terms-reviewed sources): done, ADR 0028 (report signals and VulnCheck KEV; Exploit-DB and GitHub not contacted)
 - [ ] **3.4** OIDC and RBAC (`ROADMAP` #14)
 - [ ] **3.5** Shared rate limits for multi-worker deploys (`ROADMAP` #16)
 - [ ] **3.6** Opt-in LLM proposals per `docs/LLM_EXTENSION.md`

@@ -81,7 +81,7 @@ def _queue_due(sessions: SessionFactory, at: datetime) -> None:
         services.set_actor(db, 'schedule')
         services.enqueue_due_schedules(db, at=at)
         services.enqueue_due_alerts(db, at=at)
-        services.enqueue_due_lookups(db, at=at)
+        services.enqueue_due_lookups(db, at=at, unready=lookups.unready_providers())
         services.prune_jobs(db, before=at - KEEP_FINISHED)
 
 

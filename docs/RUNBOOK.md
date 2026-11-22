@@ -79,6 +79,7 @@ Set in `.env` (Compose reads it) or the process environment. Real environment va
 | `INSIGHT_ABUSECH_AUTH_KEY` | no | (none) | Account key for the optional URLhaus, ThreatFox and MalwareBazaar Community APIs. Sent in the `Auth-Key` header to the enabled publisher API. |
 | `INSIGHT_GREYNOISE_KEY` | no | (none) | Enables manual GreyNoise Community IP lookups from Entity explorer and the API. [IP context](#greynoise-community-ip-context) |
 | `INSIGHT_NVD_API_KEY` | no | (none) | A free NIST NVD API key: CVE lookups at NVD every 0.7 s instead of every 6.5 s ([ADR 0023](adr/0023-automatic-cve-lookups.md)). Sent only in NVD's `apiKey` header, never logged |
+| `INSIGHT_VULNCHECK_API_KEY` | no | (none) | Your own VulnCheck community token. Needed for VulnCheck KEV lookups (exploitation reports and public exploit links, [ADR 0028](adr/0028-exploit-availability.md)); without it they do not run. Sent only as a Bearer header, never logged |
 | `INSIGHT_MISP_URL` and `INSIGHT_MISP_KEY` | no | (none) | The trusted public HTTPS instance and its API key, read by host CLI MISP transfers. File exchange also works offline. |
 | `NICEGUI_STORAGE_PATH` | no | `/data/.nicegui` in the image | Must be writable |
 | `INSIGHT_OTX_API_KEY` | no | (none) | The operator's OTX subscription key. Set it on the host and switch on the AlienVault OTX source. |
@@ -462,6 +463,16 @@ from NVD) for one request every 0.7 s, and restart. The key goes only in NVD's `
 logged. A failed lookup job is tried again after 5, 10 and 20 minutes; after the last failure that provider
 pauses for an hour, then tries again by itself.
 
+**VulnCheck KEV** ([ADR 0028](adr/0028-exploit-availability.md)) is a third lookup provider: whether
+exploitation in the wild has been reported, and links to public exploits on VulnCheck's site. It follows the
+same rules (switch, CLEAR/GREEN only, one request every 2 s, answers fresh for 7 days) and needs your own free
+VulnCheck community token in `INSIGHT_VULNCHECK_API_KEY`. Without the token the Sources tab says *waiting for
+INSIGHT_VULNCHECK_API_KEY* and no job runs. Insight keeps only dates, counts and VulnCheck links, never
+descriptions, exploit code or repository addresses. VulnCheck's terms ask for prominent attribution, so every
+screen and API answer with its data names it. Reports also give **exploit signals**: a report that mentions a
+public proof of concept, a Metasploit module or an Exploit-DB entry near a CVE raises that CVE to *Public
+exploit*. After upgrading to 0.9.0, run `make exploit-backfill` once to read older reports (safe to rerun).
+
 | Message (run history / API 502) | Meaning | Action |
 | --- | --- | --- |
 | `HTTPStatusError: … 403/404` | Publisher blocked or moved the feed | Check the URL in a browser; update `SOURCES` in `connectors.py` and ship a release |
@@ -479,7 +490,8 @@ pauses for an hour, then tries again by itself.
 | Lookup `502 … non-JSON` | Provider outage or HTML error page | Retry later |
 | Lookup job `NVD answered HTTP 403/404 (check INSIGHT_NVD_API_KEY)` | NVD refused the key (mistyped, revoked or expired) | Fix or remove `INSIGHT_NVD_API_KEY` and restart; jobs resume within an hour |
 | Lookup job `NVD answered HTTP 403` (no key hint) | NVD's rate limit without a key, often another tool on the same address | It retries by itself; a key avoids it |
-| Lookup job `… request failed: ConnectError` | No network or DNS | Check host egress; allow `services.nvd.nist.gov` and `api.first.org` |
+| Lookup job `… request failed: ConnectError` | No network or DNS | Check host egress; allow `services.nvd.nist.gov`, `api.first.org` and, with VulnCheck on, `api.vulncheck.com` |
+| Lookup job `VULNCHECK answered HTTP 401/403/404 (check INSIGHT_VULNCHECK_API_KEY)` | VulnCheck refused the token | Fix the token and restart; jobs resume within an hour |
 | Lookup job `Looked up N CVEs …; M could not be answered` / Sources tab *could not answer for M CVE(s)* | NVD refused those CVEs (for example a CVE number a report got wrong) | Nothing to do: each is tried again after 1 hour, then 2, 4 … up to 7 days, without holding up the rest |
 
 **CISA Security Advisories** (`cisa-csaf`) reads CISA's machine-readable CSAF 2.0 files from its GitHub

@@ -263,21 +263,21 @@ def test_cached_answers_are_fresh_for_a_week_at_epss_and_a_month_at_nvd(
         later = NOW + timedelta(days=2)
         assert services.cves_to_look_up(db, 'epss', at=later, limit=10) == ['CVE-2024-1111']
         assert services.cves_to_look_up(db, 'nvd', at=later, limit=10) == ['CVE-2024-1111']
-        assert services.lookup_backlog(db, at=later) == {'epss': 1, 'nvd': 1}
+        assert services.lookup_backlog(db, at=later) == {'epss': 1, 'nvd': 1, 'vulncheck': 1}
 
 
 def test_switches_start_off_are_audited_and_refuse_unknown_providers(
     session_factory: sessionmaker[Session],
 ) -> None:
     with session_factory.begin() as db:
-        assert services.lookup_switches(db) == {'epss': False, 'nvd': False}
+        assert services.lookup_switches(db) == {'epss': False, 'nvd': False, 'vulncheck': False}
         services.set_lookup_switch(db, 'nvd', True, at=NOW)
         services.set_lookup_switch(db, 'nvd', False, at=NOW)
         services.set_lookup_switch(db, 'epss', True, at=NOW)
         with pytest.raises(ValueError, match='Unknown provider'):
             services.set_lookup_switch(db, 'shodan', True, at=NOW)
     with session_factory() as db:
-        assert services.lookup_switches(db) == {'epss': True, 'nvd': False}
+        assert services.lookup_switches(db) == {'epss': True, 'nvd': False, 'vulncheck': False}
         actions = sorted((e.action, e.object_id) for e in db.scalars(select(AuditEvent)))
         assert actions == [('lookup.off', 'nvd'), ('lookup.on', 'epss'), ('lookup.on', 'nvd')]
         assert services.source_switches(db) == {}  # Lookup switches are not news sources.
@@ -320,6 +320,87 @@ async def test_the_job_runner_runs_a_lookup(
         (job,) = db.scalars(select(Job).where(Job.kind == CVE_LOOKUP))
         assert (job.key, job.status, job.message) == ('epss', 'succeeded', 'Looked up 1 CVE at FIRST EPSS.')
     assert set(cached(session_factory)) == {('CVE-2024-1111', 'epss')}
+
+
+# --------------------------------------------------------------------------- VulnCheck KEV (TIP 3.3)
+
+
+class FakeVulnCheck:
+    """Answers like VulnCheck's ``/v3/index/vulncheck-kev?cve=`` and records each request."""
+
+    def __init__(self, listed: set[str]) -> None:
+        self.listed = listed
+        self.calls: list[tuple[str, dict[str, str], dict[str, str]]] = []
+
+    async def __call__(self, url: str, params: Any = None, headers: Any = None, **_: Any) -> bytes:
+        self.calls.append((url, dict(params or {}), dict(headers or {})))
+        cve = params['cve']
+        if cve not in self.listed:
+            return json.dumps({'_meta': {'total_documents': 0}, 'data': []}).encode()
+        row = {
+            'cve': [cve],
+            'date_added': '2026-11-02T00:00:00Z',
+            'shortDescription': 'not kept',
+            'vulncheck_xdb': [
+                {
+                    'xdb_id': 'abc123',
+                    'xdb_url': 'https://vulncheck.com/xdb/abc123',
+                    'clone_ssh_url': 'git@github.com:someone/poc.git',
+                }
+            ],
+        }
+        return json.dumps({'_meta': {'total_documents': 1}, 'data': [row]}).encode()
+
+
+async def test_vulncheck_needs_its_key_and_is_skipped_by_the_scheduler_without_it(
+    session_factory: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch, sleeps: list[float]
+) -> None:
+    monkeypatch.delenv('INSIGHT_VULNCHECK_API_KEY', raising=False)
+    report(session_factory, 'CVE-2024-1111')
+    provider = FakeVulnCheck(set())
+    monkeypatch.setattr(connectors, 'download', provider)
+    with pytest.raises(ProviderError, match='VulnCheck KEV needs INSIGHT_VULNCHECK_API_KEY'):
+        await look_up_due(session_factory, 'vulncheck')
+    with pytest.raises(ValueError, match='Set INSIGHT_VULNCHECK_API_KEY'):
+        await request_lookup(session_factory, 'CVE-2024-1111', 'vulncheck')
+    assert provider.calls == []
+    assert lookups.unready_providers() == {'vulncheck'}
+    switch_on(session_factory, 'vulncheck')
+    with session_factory.begin() as db:
+        assert services.enqueue_due_lookups(db, at=NOW, unready=lookups.unready_providers()) == []
+    monkeypatch.setenv('INSIGHT_VULNCHECK_API_KEY', 'vc-key')
+    assert lookups.unready_providers() == frozenset()
+    with session_factory.begin() as db:
+        assert services.enqueue_due_lookups(db, at=NOW, unready=lookups.unready_providers()) == ['vulncheck']
+
+
+async def test_vulncheck_lookups_send_the_bearer_key_and_cache_metadata_only(
+    session_factory: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch, sleeps: list[float]
+) -> None:
+    monkeypatch.setenv('INSIGHT_VULNCHECK_API_KEY', 'vc-key')
+    report(session_factory, 'CVE-2024-1111 CVE-2024-2222')
+    report(session_factory, 'Private CVE-2024-3333', tlp='AMBER')
+    provider = FakeVulnCheck({'CVE-2024-1111'})
+    monkeypatch.setattr(connectors, 'download', provider)
+    assert await look_up_due(session_factory, 'vulncheck') == 'Looked up 2 CVEs at VulnCheck KEV.'
+    assert sorted(params['cve'] for _, params, _ in provider.calls) == ['CVE-2024-1111', 'CVE-2024-2222']
+    assert all(url.startswith('https://api.vulncheck.com/') for url, _, _ in provider.calls)
+    assert [headers for _, _, headers in provider.calls] == [{'Authorization': 'Bearer vc-key'}] * 2
+    stored = cached(session_factory)
+    assert set(stored) == {('CVE-2024-1111', 'vulncheck'), ('CVE-2024-2222', 'vulncheck')}
+    assert stored[('CVE-2024-2222', 'vulncheck')] == {'cve': 'CVE-2024-2222', 'listed': False}
+    listed = stored[('CVE-2024-1111', 'vulncheck')]
+    assert listed['listed'] is True
+    assert listed['exploit_count'] == 1
+    text = json.dumps(list(stored.values()))
+    assert 'git@' not in text
+    assert 'not kept' not in text
+    # A manual lookup returns the same summary, never the raw answer.
+    THROTTLES['vulncheck'].reset()
+    answer = await request_lookup(session_factory, 'CVE-2024-1111', 'vulncheck')
+    assert answer == listed
+    with session_factory() as db:
+        assert services.cves_to_look_up(db, 'vulncheck', at=NOW, limit=10) == []
 
 
 # --------------------------------------------------------------------------- reading scores
@@ -389,7 +470,7 @@ async def test_regression_m2_a_failing_cve_waits_longer_each_time_and_is_forgott
         assert services.cves_to_look_up(db, 'nvd', at=NOW, limit=10) == []  # 1002 cached, 1001 waits
         later = NOW + timedelta(hours=1, minutes=1)
         assert services.cves_to_look_up(db, 'nvd', at=later, limit=10) == ['CVE-2024-1001']
-        assert services.lookup_failures(db, at=NOW) == {'epss': 0, 'nvd': 1}
+        assert services.lookup_failures(db, at=NOW) == {'epss': 0, 'nvd': 1, 'vulncheck': 0}
     second = NOW + timedelta(hours=2)
     with pytest.raises(ProviderError, match='NIST NVD could not answer for any of 1 CVE'):
         await look_up_due(session_factory, 'nvd', clock=lambda: second)
@@ -448,5 +529,5 @@ def test_regression_n2_the_due_list_is_one_query_with_a_real_limit(
         assert 'LIMIT' in statements[0]
         assert due == ['CVE-2024-1016', 'CVE-2024-1017', 'CVE-2024-1018']
         with count_queries(engine) as statements:
-            assert services.lookup_backlog(db, at=NOW) == {'epss': 30, 'nvd': 15}
-        assert len(statements) == 2  # one count per provider
+            assert services.lookup_backlog(db, at=NOW) == {'epss': 30, 'nvd': 15, 'vulncheck': 30}
+        assert len(statements) == 3  # one count per provider

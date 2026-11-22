@@ -100,6 +100,13 @@ from .documents import (
     revisions,
 )
 from .entities import PIVOT_PAGE_SIZE, count_entity_documents, entity_documents, get_entity, list_entities
+from .exploits import (
+    ExploitContext,
+    backfill_exploit_signals,
+    document_exploit_signals,
+    exploit_context,
+    record_exploit_signals,
+)
 from .exports import MAX_EXPORT_MENTIONS, export_iocs, export_stix, ioc_export_counts, ioc_mentions
 from .graph import Graph, GraphEdge, GraphNode, build_graph
 from .hunts import (
@@ -269,6 +276,7 @@ __all__ = [
     'DeletionResult',
     'DocumentQuery',
     'DueAlert',
+    'ExploitContext',
     'Graph',
     'GraphEdge',
     'GraphNode',
@@ -302,6 +310,7 @@ __all__ = [
     'assess_entity',
     'audit',
     'audit_events',
+    'backfill_exploit_signals',
     'backfill_techniques',
     'blocklist',
     'brief_data',
@@ -328,6 +337,7 @@ __all__ = [
     'delete_target',
     'deletion_preview',
     'detail',
+    'document_exploit_signals',
     'document_techniques',
     'due_alerts',
     'eligible_greynoise_ip',
@@ -340,6 +350,7 @@ __all__ = [
     'entity_assessment',
     'entity_documents',
     'entity_seen',
+    'exploit_context',
     'export_iocs',
     'export_rule',
     'export_stix',
@@ -398,6 +409,7 @@ __all__ = [
     'recent_jobs',
     'recent_source_runs',
     'record_check',
+    'record_exploit_signals',
     'record_industry_claim',
     'record_lookup_failure',
     'record_report_techniques',

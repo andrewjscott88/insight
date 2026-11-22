@@ -11,7 +11,15 @@ import json
 from nicegui import ui
 
 from .. import services
-from ..cve_scores import EPSS_CAVEAT, NVD_NOTICE, CveScores, describe_epss, describe_nvd
+from ..cve_scores import (
+    EPSS_CAVEAT,
+    NVD_NOTICE,
+    VULNCHECK_NOTICE,
+    CveScores,
+    describe_epss,
+    describe_nvd,
+    describe_vulncheck,
+)
 from ..lookups import LookupThrottled, request_lookup
 from .messages import problem_area
 from .typography import heading
@@ -34,9 +42,28 @@ def render_scores(found: CveScores) -> None:
         ui.label(EPSS_CAVEAT).classes('muted text-sm prose')
     elif found.epss_checked_at:
         ui.label('FIRST has no EPSS score for this CVE yet.').classes('muted text-sm')
+    if (entry := found.vulncheck) is not None:
+        ui.label(describe_vulncheck(entry)).classes('prose')
+        for exploit in entry.exploits:
+            detail = ' · '.join(p for p in (exploit.exploit_type, exploit.date_added) if p)
+            if exploit.url:
+                ui.link(f'{exploit.xdb_id} {detail}'.strip(), exploit.url, new_tab=True).classes(
+                    'text-sm break-value'
+                )
+        if entry.reported_count:
+            ui.label(f'VulnCheck cites {entry.reported_count} report(s) of exploitation.').classes('text-sm')
+        if entry.ransomware:
+            ui.label('VulnCheck knows of ransomware campaigns that use it.').classes(
+                'text-warn text-sm prose'
+            )
+        ui.label(VULNCHECK_NOTICE).classes('muted text-sm prose')
     checked = ', '.join(
         f'{name} {at[:10]}'
-        for name, at in (('NVD', found.nvd_checked_at), ('EPSS', found.epss_checked_at))
+        for name, at in (
+            ('NVD', found.nvd_checked_at),
+            ('EPSS', found.epss_checked_at),
+            ('VulnCheck', found.vulncheck_checked_at),
+        )
         if at
     )
     if checked:
@@ -59,6 +86,7 @@ def open_enrichment_dialog(ws: Workspace, cve: str) -> None:
         services_offered = {
             'epss': 'FIRST EPSS: how likely an attack is soon',
             'nvd': 'NIST NVD: description and severity',
+            'vulncheck': 'VulnCheck KEV: exploitation and public exploits (needs your key)',
         }
         provider = (
             ui.select(services_offered, value='epss', label='Provider').props('outlined').classes('w-full')

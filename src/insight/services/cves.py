@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from ..cve_scores import CSAF_SCORE_LINE, CveScores
 from ..models import Document, Entity, KEVRecord, Observation
 from .brief import KEV_SOURCE, BriefKev
+from .exploits import ExploitContext, exploit_context
 from .lookups import cve_scores
 from .tlp import _visible
 
@@ -43,6 +44,8 @@ class CveSignal:
     csaf_score: float | None
     kev: BriefKev | None
     scores: CveScores
+    #: Public exploit code and exploitation reported for it (TIP 3.3), within the reader's TLP limit.
+    exploit: ExploitContext | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,6 +96,7 @@ def cve_signals(
     csaf = _csaf_scores(db, csaf_reports)
     kev = _kev(db, list(reports), max_tlp)
     scores = cve_scores(db, list(reports))
+    exploits = exploit_context(db, list(reports), max_tlp=max_tlp)
     signals = []
     for cve, seen in reports.items():
         newest_id, (newest_title, last_seen) = max(seen.items(), key=lambda item: (item[1][1], item[0]))
@@ -108,6 +112,7 @@ def cve_signals(
                 csaf_score=max((s for doc, s in csaf.get(cve, []) if doc in seen), default=None),
                 kev=kev.get(cve),
                 scores=scores.get(cve) or CveScores(cve),
+                exploit=exploits.get(cve),
             )
         )
     return CveSignals(since=since, signals=signals, truncated=truncated)

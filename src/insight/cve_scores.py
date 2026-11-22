@@ -1,4 +1,4 @@
-"""Scores per CVE from the cached NVD and EPSS answers (review C2): parsing and plain wording.
+"""Scores per CVE from the cached NVD, EPSS and VulnCheck KEV answers (review C2, TIP 3.3): parsing, wording.
 
 Insight caches each provider's whole JSON answer (``enrichments``); this module reads the parts analysts use.
 It never raises on an odd answer: a field it cannot read is simply missing. Wording states what each provider
@@ -23,6 +23,12 @@ _METRICS: Final = ('cvssMetricV40', 'cvssMetricV31', 'cvssMetricV30', 'cvssMetri
 _NO_CWE: Final = frozenset({'NVD-CWE-Other', 'NVD-CWE-noinfo'})
 #: NVD's terms ask services that use its API to show this notice (https://nvd.nist.gov/developers).
 NVD_NOTICE: Final = 'This product uses the NVD API but is not endorsed or certified by the NVD.'
+#: VulnCheck's community terms ask for prominent attribution wherever VulnCheck KEV data is shown.
+VULNCHECK_NOTICE: Final = 'Exploitation and exploit data from VulnCheck KEV, provided by VulnCheck.'
+#: Exploit entries kept per CVE from VulnCheck (links to VulnCheck's own pages; never code or clone URLs).
+MAX_VULNCHECK_EXPLOITS: Final = 10
+#: Only links to VulnCheck's own exploit pages are kept and shown (never a repository or clone address).
+_VULNCHECK_URL = re.compile(r'https://(?:[a-z0-9-]+\.)*vulncheck\.com/[^\s"<>\\]{0,300}')
 EPSS_CAVEAT: Final = (
     'EPSS estimates how likely attackers are to try to use a weakness in the next 30 days. It says '
     'nothing about whether you use the product.'
@@ -53,16 +59,43 @@ class EpssScore:
 
 
 @dataclass(frozen=True, slots=True)
+class VulnCheckExploit:
+    xdb_id: str
+    url: str
+    exploit_type: str
+    date_added: str
+
+
+@dataclass(frozen=True, slots=True)
+class VulnCheckEntry:
+    """What VulnCheck KEV says about one CVE (TIP 3.3). ``listed`` is ``False`` when it was looked up and
+    is not in the catalog."""
+
+    listed: bool
+    date_added: str = ''
+    exploits: tuple[VulnCheckExploit, ...] = ()
+    #: All exploit entries VulnCheck lists (``exploits`` keeps at most ``MAX_VULNCHECK_EXPLOITS``).
+    exploit_count: int = 0
+    #: How many public reports of exploitation VulnCheck cites.
+    reported_count: int = 0
+    #: VulnCheck's own honeypots ("canaries") saw exploitation attempts.
+    canaries: bool = False
+    ransomware: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class CveScores:
     cve: str
     nvd: NvdScore | None = None
     epss: EpssScore | None = None
     nvd_checked_at: str = ''
     epss_checked_at: str = ''
+    vulncheck: VulnCheckEntry | None = None
+    vulncheck_checked_at: str = ''
 
     @property
     def checked(self) -> bool:
-        return bool(self.nvd_checked_at or self.epss_checked_at)
+        return bool(self.nvd_checked_at or self.epss_checked_at or self.vulncheck_checked_at)
 
 
 def _number(value: Any) -> float | None:
@@ -137,10 +170,89 @@ def parse_epss(payload: Any, cve: str) -> EpssScore | None:
     )
 
 
+def _day(value: Any) -> str:
+    text = str(value or '')[:10]
+    return text if re.fullmatch(r'\d{4}-\d{2}-\d{2}', text) else ''
+
+
+def _vulncheck_url(value: Any) -> str:
+    url = str(value or '')
+    return url if _VULNCHECK_URL.fullmatch(url) else ''
+
+
+def _cves_of(row: dict[str, Any]) -> list[str]:
+    value = row.get('cve')
+    values = [value] if isinstance(value, str) else value if isinstance(value, list) else []
+    return [c.upper() for c in values if isinstance(c, str)]
+
+
+def summarise_vulncheck(payload: Any, cve: str) -> dict[str, Any]:
+    """The parts of a VulnCheck KEV answer (``/v3/index/vulncheck-kev?cve=``) Insight keeps, before caching.
+
+    Metadata only: the entry's dates, counts and links to VulnCheck's exploit pages. Descriptions, clone URLs
+    and anything else are dropped, so no exploit code or repository address is ever stored (ADR 0028).
+    """
+    rows = _dicts(payload.get('data') if isinstance(payload, dict) else None)
+    row = next((r for r in rows if cve.upper() in _cves_of(r)), None)
+    if row is None:
+        return {'cve': cve, 'listed': False}
+    exploits = _dicts(row.get('vulncheck_xdb'))
+    kept = [
+        {
+            'xdb_id': str(item.get('xdb_id') or '')[:80],
+            'url': _vulncheck_url(item.get('xdb_url')),
+            'exploit_type': str(item.get('exploit_type') or '')[:40],
+            'date_added': _day(item.get('date_added')),
+        }
+        for item in exploits[:MAX_VULNCHECK_EXPLOITS]
+    ]
+    return {
+        'cve': cve,
+        'listed': True,
+        'date_added': _day(row.get('date_added')),
+        'exploits': kept,
+        'exploit_count': len(exploits),
+        'reported_count': len(_dicts(row.get('vulncheck_reported_exploitation'))),
+        'canaries': row.get('reported_exploited_by_vulncheck_canaries') is True,
+        'ransomware': row.get('knownRansomwareCampaignUse') == 'Known',
+    }
+
+
+def parse_vulncheck(stored: Any) -> VulnCheckEntry | None:
+    """A cached :func:`summarise_vulncheck` result; ``None`` if it cannot be read."""
+    if not isinstance(stored, dict) or not isinstance(stored.get('listed'), bool):
+        return None
+    if not stored['listed']:
+        return VulnCheckEntry(listed=False)
+
+    def count(name: str) -> int:
+        value = stored.get(name)
+        return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else 0
+
+    exploits = tuple(
+        VulnCheckExploit(
+            str(e.get('xdb_id', ''))[:80],
+            _vulncheck_url(e.get('url')),
+            str(e.get('exploit_type', ''))[:40],
+            _day(e.get('date_added')),
+        )
+        for e in _dicts(stored.get('exploits'))[:MAX_VULNCHECK_EXPLOITS]
+    )
+    return VulnCheckEntry(
+        listed=True,
+        date_added=_day(stored.get('date_added')),
+        exploits=exploits,
+        exploit_count=max(count('exploit_count'), len(exploits)),
+        reported_count=count('reported_count'),
+        canaries=stored.get('canaries') is True,
+        ransomware=stored.get('ransomware') is True,
+    )
+
+
 def scores(cve: str, cached: list[tuple[str, str, str]]) -> CveScores:
     """``cached`` is ``(provider, payload JSON, fetched_at)`` rows for ``cve``."""
-    nvd = epss = None
-    nvd_at = epss_at = ''
+    nvd = epss = vulncheck = None
+    nvd_at = epss_at = vulncheck_at = ''
     for provider, payload, fetched_at in cached:
         try:
             data = json.loads(payload)
@@ -150,7 +262,9 @@ def scores(cve: str, cached: list[tuple[str, str, str]]) -> CveScores:
             nvd, nvd_at = parse_nvd(data), fetched_at
         elif provider == 'epss':
             epss, epss_at = parse_epss(data, cve), fetched_at
-    return CveScores(cve, nvd, epss, nvd_at, epss_at)
+        elif provider == 'vulncheck':
+            vulncheck, vulncheck_at = parse_vulncheck(data), fetched_at
+    return CveScores(cve, nvd, epss, nvd_at, epss_at, vulncheck, vulncheck_at)
 
 
 # --------------------------------------------------------------------------- plain wording
@@ -182,6 +296,20 @@ def describe_epss(epss: EpssScore) -> str:
     return f'EPSS {percent(epss.probability)} chance of exploitation attempts within 30 days{rank} (FIRST)'
 
 
+def describe_vulncheck(entry: VulnCheckEntry) -> str:
+    """``VulnCheck KEV: exploited, listed 2025-06-07, 3 public exploits`` or ``Not in VulnCheck KEV``."""
+    if not entry.listed:
+        return 'Not in VulnCheck KEV'
+    parts = ['VulnCheck KEV: exploited']
+    if entry.date_added:
+        parts.append(f'listed {entry.date_added}')
+    if entry.exploit_count:
+        parts.append(f'{entry.exploit_count} public exploit{"s" if entry.exploit_count != 1 else ""}')
+    if entry.canaries:
+        parts.append("seen by VulnCheck's sensors")
+    return ', '.join(parts)
+
+
 def summary(found: CveScores) -> str:
     """One line for the reader, such as ``CVSS 9.8 (Critical), NIST NVD · EPSS 97% chance ...``."""
     parts = []
@@ -193,4 +321,6 @@ def summary(found: CveScores) -> str:
         parts.append(describe_epss(found.epss))
     elif found.epss_checked_at:
         parts.append('No EPSS score yet')
+    if found.vulncheck is not None:
+        parts.append(describe_vulncheck(found.vulncheck))
     return ' · '.join(parts)

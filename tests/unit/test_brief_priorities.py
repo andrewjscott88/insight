@@ -34,9 +34,24 @@ def doc(
     return BriefDocument(f'd{n}', title or f'Report {n}', source, key, '2026-11-18T09:00:00+00:00', '', body)
 
 
-def kev(cve: str, *, ransomware: bool = False, document: str = '', added: str = '2026-11-18') -> BriefKev:
+def kev(
+    cve: str,
+    *,
+    ransomware: bool = False,
+    document: str = '',
+    added: str = '2026-11-18',
+    exploit: bool = False,
+) -> BriefKev:
     return BriefKev(
-        cve, 'Acme', 'Gateway', added, '2026-12-09', document, ransomware=ransomware, name='Acme Bug'
+        cve,
+        'Acme',
+        'Gateway',
+        added,
+        '2026-12-09',
+        document,
+        ransomware=ransomware,
+        name='Acme Bug',
+        public_exploit=exploit,
     )
 
 
@@ -90,6 +105,27 @@ def test_without_ransomware_use_nothing_mentions_ransomware() -> None:
     text = ' '.join([*result.summary, *(h.text for h in result.highlights)])
     assert 'ransomware' not in text.lower()
     assert 'Used in ransomware attacks' not in titles(result)
+
+
+def test_public_exploit_code_is_said_and_marked_before_ransomware_use() -> None:
+    """TIP 3.3: a new KEV entry with public exploit code is marked; ransomware entries still sort first."""
+    entries = {
+        'CVE-2026-0001': kev('CVE-2026-0001', exploit=True),
+        'CVE-2026-0002': kev('CVE-2026-0002', ransomware=True, exploit=True),
+        'CVE-2026-0003': kev('CVE-2026-0003'),
+    }
+    result = compose(data(kev=entries), as_of=NOW)
+    assert 'Exploit code is public for 2 of them.' in result.summary
+    exploited = [item.text for item in result.sections[0].items]
+    assert exploited[0] == (
+        'CVE-2026-0002 · Acme Gateway · added 2026-11-18 · exploit code public · used in ransomware'
+    )
+    assert 'CVE-2026-0001 · Acme Gateway · added 2026-11-18 · exploit code public' in exploited
+    assert 'CVE-2026-0003 · Acme Gateway · added 2026-11-18' in exploited
+    single = compose(data(kev={'CVE-2026-0001': kev('CVE-2026-0001', exploit=True)}), as_of=NOW)
+    assert 'Exploit code is public for it.' in single.summary
+    plain = compose(data(kev={'CVE-2026-0003': kev('CVE-2026-0003')}), as_of=NOW)
+    assert not any('Exploit code' in line for line in plain.summary)
 
 
 def test_a_single_new_kev_entry_used_in_ransomware_reads_naturally() -> None:

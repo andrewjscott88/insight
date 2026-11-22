@@ -11,6 +11,7 @@ from fastapi import Depends, FastAPI, Query, Request
 from ... import services
 from ...brief import DEMO
 from ...cve_priority import PrioritisedCve, details, rank
+from ...cve_scores import VULNCHECK_NOTICE
 from ...models import SessionFactory
 from ..auth import AuthDependency, reader_limit
 
@@ -43,6 +44,20 @@ def cve_view(item: PrioritisedCve) -> dict[str, Any]:
         'cvss': {'score': item.cvss, 'source': item.cvss_source or None, 'csaf': signal.csaf_score},
         'nvd': asdict(signal.scores.nvd) if signal.scores.nvd is not None else None,
         'epss': asdict(signal.scores.epss) if signal.scores.epss is not None else None,
+        'exploit': exploit_view(signal.exploit),
+    }
+
+
+def exploit_view(found: services.ExploitContext | None) -> dict[str, Any] | None:
+    """Exploit availability (TIP 3.3): report signals, and VulnCheck KEV with its required attribution."""
+    if found is None:
+        return None
+    return {
+        'public_exploit': found.public_exploit,
+        'reported_exploited': found.reported_exploited,
+        'reports': found.reports,
+        'vulncheck': asdict(found.vulncheck) if found.vulncheck is not None else None,
+        'attribution': VULNCHECK_NOTICE if found.vulncheck is not None else None,
     }
 
 

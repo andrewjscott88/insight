@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 
 from . import __version__, egress, otx
 from .abusech import parse_abusech
+from .cve_scores import summarise_vulncheck
 from .feed_items import MAX_FEED_ITEMS as MAX_FEED_ITEMS
 from .feed_items import FeedItem as FeedItem
 from .models import Enrichment, Entity, KEVRecord, SessionFactory, SourceRun, now
@@ -86,8 +87,17 @@ MAX_KEV_CWES: Final = 20
 PROVIDERS: Final[dict[str, str]] = {
     'epss': 'https://api.first.org/data/v1/epss',
     'nvd': 'https://services.nvd.nist.gov/rest/json/cves/2.0',
+    # TIP 3.3: needs the operator's free VulnCheck community key (INSIGHT_VULNCHECK_API_KEY).
+    'vulncheck': 'https://api.vulncheck.com/v3/index/vulncheck-kev',
 }
-_PROVIDER_PARAM: Final[dict[str, str]] = {'epss': 'cve', 'nvd': 'cveId'}
+_PROVIDER_PARAM: Final[dict[str, str]] = {'epss': 'cve', 'nvd': 'cveId', 'vulncheck': 'cve'}
+#: Each provider's key setting (never logged; only named in error hints).
+PROVIDER_KEYS: Final[dict[str, str]] = {
+    'nvd': 'INSIGHT_NVD_API_KEY',
+    'vulncheck': 'INSIGHT_VULNCHECK_API_KEY',
+}
+#: Providers that cannot be asked at all without their key.
+KEY_REQUIRED: Final = frozenset({'vulncheck'})
 
 
 class ConnectorError(Exception):
@@ -882,6 +892,8 @@ def _cve_is_known(session_factory: SessionFactory, cve: str) -> bool:
 def _store_enrichment(
     session_factory: SessionFactory, cve: str, provider: str, payload: dict[str, Any]
 ) -> None:
+    if provider == 'vulncheck':  # Metadata only: never descriptions, code or clone URLs (ADR 0028).
+        payload = summarise_vulncheck(payload, cve)
     with session_factory.begin() as db:
         record = db.scalar(select(Enrichment).where(Enrichment.cve == cve, Enrichment.provider == provider))
         if record is None:
@@ -894,14 +906,24 @@ async def validate_enrichment(session_factory: SessionFactory, cve: str, provide
     """Raise ``ValueError`` unless :func:`enrich_cve` would send this request (valid CVE and provider, and a
     report mentions the CVE). Callers check this before consuming the enrichment throttle window."""
     enrichment_request(cve, provider)
+    if provider in KEY_REQUIRED and not provider_key(provider):
+        raise ValueError(f'Set {PROVIDER_KEYS[provider]} to look CVEs up at this provider')
     if not await asyncio.to_thread(_cve_is_known, session_factory, cve):
         raise ValueError('Import a report mentioning this CVE first')
 
 
+def provider_key(provider: str) -> str:
+    """The operator's key for ``provider`` from its setting, or ``''``."""
+    setting = PROVIDER_KEYS.get(provider)
+    return os.environ.get(setting, '').strip() if setting else ''
+
+
 def provider_headers(provider: str) -> dict[str, str]:
-    """Headers for ``provider``: the NVD ``apiKey`` if ``INSIGHT_NVD_API_KEY`` is set (never logged)."""
-    key = os.environ.get('INSIGHT_NVD_API_KEY', '').strip() if provider == 'nvd' else ''
-    return {'apiKey': key} if key else {}
+    """Headers for ``provider``: NVD's ``apiKey`` or VulnCheck's Bearer token, when set (never logged)."""
+    key = provider_key(provider)
+    if not key:
+        return {}
+    return {'Authorization': f'Bearer {key}'} if provider == 'vulncheck' else {'apiKey': key}
 
 
 async def fetch_provider_json(provider: str, params: Mapping[str, str]) -> dict[str, Any]:
@@ -914,8 +936,8 @@ async def fetch_provider_json(provider: str, params: Mapping[str, str]) -> dict[
             raw = await download(PROVIDERS[provider], params)
     except httpx.HTTPStatusError as exc:
         code = exc.response.status_code
-        # NVD refuses a wrong key with a client error, so point at the setting (never at the key itself).
-        hint = ' (check INSIGHT_NVD_API_KEY)' if headers and code in (401, 403, 404) else ''
+        # A provider refuses a wrong key with a client error, so point at the setting (never at the key).
+        hint = f' (check {PROVIDER_KEYS[provider]})' if headers and code in (401, 403, 404) else ''
         wide = code in PROVIDER_WIDE_STATUSES or code >= 500
         raise ProviderError(f'{provider.upper()} answered HTTP {code}{hint}', provider_wide=wide) from exc
     except (httpx.HTTPError, OSError, ValueError) as exc:
@@ -938,7 +960,7 @@ def store_enrichment(
 
 
 async def enrich_cve(session_factory: SessionFactory, cve: str, provider: str) -> dict[str, Any]:
-    """Look up ``cve`` at ``provider`` (``epss`` or ``nvd``) and cache the JSON response, without throttling.
+    """Look up ``cve`` at ``provider`` (``epss``, ``nvd`` or ``vulncheck``) and cache the answer, unthrottled.
 
     People's lookups go through ``insight.lookups.request_lookup``, which applies the shared throttle. Raises
     ``ValueError`` for invalid requests and :class:`ProviderError` for upstream failures.
@@ -947,4 +969,4 @@ async def enrich_cve(session_factory: SessionFactory, cve: str, provider: str) -
     _, params = enrichment_request(cve, provider)
     payload = await fetch_provider_json(provider, params)
     await asyncio.to_thread(_store_enrichment, session_factory, cve, provider, payload)
-    return payload
+    return summarise_vulncheck(payload, cve) if provider == 'vulncheck' else payload

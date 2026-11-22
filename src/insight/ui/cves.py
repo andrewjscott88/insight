@@ -15,6 +15,7 @@ from nicegui import ui
 from .. import services
 from ..brief import DEMO
 from ..cve_priority import TIERS, PrioritisedCve, details, rank
+from ..cve_scores import VULNCHECK_NOTICE
 from .typography import heading
 from .workspace import Workspace
 
@@ -47,6 +48,8 @@ def build_cves(ws: Workspace) -> None:
             ui.label(item.reason).classes('prose')
             for line in details(item):
                 ui.label(line).classes('muted text-sm prose break-value')
+            if item.signal.exploit is not None and item.signal.exploit.vulncheck is not None:
+                ui.label(VULNCHECK_NOTICE).classes('muted text-sm prose')
             with ui.row().classes('gap-x-4 gap-y-0'):
                 ui.button(
                     f'Open the newest report: {item.signal.report_title}',

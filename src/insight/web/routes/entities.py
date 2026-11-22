@@ -11,6 +11,7 @@ from ...flags import flags
 from ...models import EntityAssessment, SessionFactory
 from ...schemas import AssessmentInput
 from ..auth import AuthDependency, acting, reader_limit
+from .cves import exploit_view
 
 
 def assessment_view(assessment: EntityAssessment | None) -> dict[str, Any] | None:
@@ -48,6 +49,12 @@ def _register_entity_routes(app: FastAPI, sessions: SessionFactory, require_auth
                 raise HTTPException(404, 'Entity not found')
             docs = services.entity_documents(db, e.id, offset=offset, limit=limit, max_tlp=max_tlp)
             first_seen, last_seen = services.entity_seen(db, e.id, max_tlp=max_tlp)
+            # TIP 3.3: exploit availability for a CVE, from reports this caller may see and VulnCheck KEV.
+            exploit = (
+                services.exploit_context(db, [e.value], max_tlp=max_tlp).get(e.value)
+                if e.kind == 'cve'
+                else None
+            )
             return {
                 'id': e.id,
                 'kind': e.kind,
@@ -59,6 +66,7 @@ def _register_entity_routes(app: FastAPI, sessions: SessionFactory, require_auth
                 'document_count': count,
                 'offset': max(0, offset),
                 'documents': services.summaries(db, docs),
+                'exploit': exploit_view(exploit),
             }
 
     @app.post('/api/entities/{entity_id}/assessment', dependencies=[Depends(require_auth)])

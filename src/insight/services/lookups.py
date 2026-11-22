@@ -9,7 +9,7 @@ themselves: a lookup tells the provider that someone is interested in the CVE. O
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable
 from datetime import datetime, timedelta
 from typing import Final
 
@@ -25,11 +25,15 @@ from .tlp import _visible
 
 #: The job kind that looks CVEs up; its key is the provider.
 CVE_LOOKUP: Final = 'lookup'
-LOOKUP_PROVIDERS: Final = ('epss', 'nvd')
+LOOKUP_PROVIDERS: Final = ('epss', 'nvd', 'vulncheck')
 #: Labels whose reports may cause an automatic lookup.
 PUBLIC_TLPS: Final = ('CLEAR', 'GREEN')
 #: An answer older than this is looked up again.
-STALE_AFTER: Final[dict[str, timedelta]] = {'epss': timedelta(days=7), 'nvd': timedelta(days=30)}
+STALE_AFTER: Final[dict[str, timedelta]] = {
+    'epss': timedelta(days=7),
+    'nvd': timedelta(days=30),
+    'vulncheck': timedelta(days=7),
+}
 #: After a lookup job fails for good, wait this long before queueing that provider again.
 PAUSE_AFTER_FAILURE: Final = timedelta(hours=1)
 #: A CVE the provider could not answer for waits this long, doubling after each failure up to
@@ -132,10 +136,15 @@ def _paused(db: Session, provider: str, at: datetime) -> bool:
     return failed is not None and failed >= stamp(at - PAUSE_AFTER_FAILURE)
 
 
-def enqueue_due_lookups(db: Session, *, at: datetime) -> list[str]:
-    """Queue a lookup job for each switched-on provider with CVEs due (each tick); returns the providers."""
+def enqueue_due_lookups(db: Session, *, at: datetime, unready: Collection[str] = ()) -> list[str]:
+    """Queue a lookup job for each switched-on provider with CVEs due (each tick); returns the providers.
+
+    ``unready`` names providers that cannot run now (VulnCheck without its key), so no job fails every tick.
+    """
     queued = []
     for provider, on in lookup_switches(db).items():
+        if provider in unready:
+            continue
         if on and not _paused(db, provider, at) and cves_to_look_up(db, provider, at=at, limit=1):
             enqueue_job(db, CVE_LOOKUP, provider, at=at, actor='lookup')
             queued.append(provider)

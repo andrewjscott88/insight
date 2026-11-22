@@ -126,6 +126,7 @@ def build_inbox(ws: Workspace) -> None:
                 data['techniques'] = services.document_techniques(db, data['id'])
                 cves = [o['value'] for o in data['observations'] if o['kind'] == 'cve']
                 data['cve_scores'] = {c: summary(s) for c, s in services.cve_scores(db, cves).items()}
+                data['exploit_signals'] = services.document_exploit_signals(db, data['id'])
         if data:
             render_report(ws, data, actions)
         else:
