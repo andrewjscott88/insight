@@ -6,7 +6,9 @@ CIRCL passive DNS is optional and restricted to approved partners. Obtain your o
 [CIRCL's access conditions](https://www.circl.lu/services/passive-dns/). Insight neither supplies access nor
 grants redistribution rights. Follow the conditions agreed with the provider when retaining or sharing data.
 
-Set `INSIGHT_CIRCL_PDNS_USER` and `INSIGHT_CIRCL_PDNS_PASSWORD` on the server, then restart Insight. Credentials
+Set `INSIGHT_CIRCL_PDNS_USER` and `INSIGHT_CIRCL_PDNS_PASSWORD` in the server environment. Restart a directly
+run process. For Docker Compose, edit the host `.env` and recreate the Insight container with
+`docker compose up -d --force-recreate insight`; a plain restart keeps the old environment. Credentials
 must be nonempty printable ASCII, at most 1,024 characters each; a username cannot contain a colon. Never put
 real credentials in a report, API body or repository. Settings shows only whether they are configured.
 Without valid settings the provider is unavailable, even if an earlier switch setting was on.
