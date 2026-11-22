@@ -22,7 +22,6 @@ from insight.models import Alert, AlertTarget, AuditEvent, Job
 from insight.schemas import DocumentInput
 from insight.services import SourceRef, ingest
 
-NOW = datetime(2026, 11, 21, 12, 0, tzinfo=UTC)
 HOOK = 'https://hooks.example.org/services/T0/B0/secret-token'
 
 
@@ -237,8 +236,9 @@ async def test_json_webhooks_are_signed(
         secret = target(db, 'json').secret
         report(db, 'Acme <b>&</b> friends', 'Acme.')
     transport, requests = capture()
+    later = datetime.now(UTC) + timedelta(days=1)  # Alerts are queued at the real time, so count from it.
     summary = await alerts.deliver_due(
-        session_factory, settings=AlertSettings(), transport=transport, clock=lambda: NOW + timedelta(days=1)
+        session_factory, settings=AlertSettings(), transport=transport, clock=lambda: later
     )
     assert summary == 'Sent 1 alert(s); 0 failed.'
     (request,) = requests
@@ -304,8 +304,9 @@ async def test_failed_sends_are_retried_then_marked_failed(
         target(db)
         report(db, 'Acme', 'Acme.')
     transport, _ = capture(500)
+    start = datetime.now(UTC)  # Alerts are queued at the real time, so count from it.
     for attempt in range(1, 4):
-        at = NOW + timedelta(days=1, hours=attempt)  # each retry is due by then
+        at = start + timedelta(days=1, hours=attempt)  # each retry is due by then
 
         def clock(at: datetime = at) -> datetime:
             return at
