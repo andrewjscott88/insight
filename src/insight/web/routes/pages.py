@@ -35,7 +35,9 @@ def _register_page_routes(app: FastAPI, templates: Jinja2Templates) -> None:
             # regular signed, stored session, same-origin checks, CSRF checks and rate limits.
             start_session(app, request, time.time())
             log.info('Password-free browser session started (temporary development access)')
-            return RedirectResponse('/', status_code=303)
+            # Finish this navigation before continuing: browsers withhold SameSite=Strict cookies for an
+            # entire cross-site HTTP redirect chain, including a cookie just set by this response.
+            return templates.TemplateResponse(request=request, name='continue.html')
         request.session.setdefault('csrf', secrets.token_urlsafe(32))
         mfa: bool = app.state.settings.mfa
         locked = mfa and not _mfa_paired(app.state.session_factory)

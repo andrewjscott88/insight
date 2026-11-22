@@ -7,6 +7,13 @@
 - The workspace, browser title, and sign-in and sign-out pages now use **Cyber Threat Intelligence Platform**
   as the descriptor. The **Insight** name and symbol stay the same.
 
+### Fixed
+
+- Opening a link from another site no longer loops between the workspace and sign-in page when temporary
+  password-free access is on. A same-origin page confirms the session before continuing, with a link for
+  browsers that block scripts. Session cookies remain `SameSite=Strict`, secure where configured, and
+  HTTP-only; password, MFA, origin and CSRF checks are unchanged.
+
 ### Upgrade notes
 
 - Migration `0024` adds the `requirements`, `requirement_criteria` and `requirement_evidence` tables. It runs

@@ -52,7 +52,9 @@ password and signing secret remain required. Enabling this mode together with `I
 so it cannot silently bypass an enabled second factor.
 
 While enabled, `GET /login` issues the existing expiring, revocable operator session and a fresh CSRF token,
-then redirects to the workspace. Signed HttpOnly SameSite=Strict cookies, secure-cookie configuration,
+then returns a same-origin page that confirms the session before continuing to the workspace. This ends a
+cross-site redirect chain without relaxing cookie policy; a fixed link works when scripts are blocked.
+Signed HttpOnly SameSite=Strict cookies, secure-cookie configuration,
 CSRF for writes, Host/Origin/socket checks, API-key permissions and request limits still apply. API requests
 without a session or valid key still receive `401`. These controls do not make the open workspace private:
 any visitor can obtain a session, read the reports and use operator editing, export and synchronization

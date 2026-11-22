@@ -23,7 +23,10 @@ page is the field-by-field reference.
 4. `POST /logout` (form field `csrf_token`) revokes the session server-side.
 
 **Temporary password-free mode:** with the explicit default-off `INSIGHT_DEV_NO_AUTH=on`, `GET /login`
-creates the normal operator session and CSRF token, then returns `303` to `/` instead of a password form.
+creates the normal operator session and CSRF token, then returns a `200` continuation page instead of a
+password form. The page checks `/api/session` before navigating to `/`, with a fixed link as a fallback.
+Ending the HTTP redirect chain lets the browser send its `SameSite=Strict` cookie after a cross-site entry.
+An already authenticated `GET /login` still returns `303` to `/`.
 Anyone who can reach the site can obtain this full-access session. Direct API calls without a valid session
 or key still return `401`, and session-authenticated writes still require `X-CSRF-Token`; API-key behavior
 is unchanged. Enabling MFA and this mode together is rejected. Turning the mode off and restarting with
