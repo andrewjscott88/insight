@@ -632,6 +632,22 @@ curl -fsS "$INSIGHT_URL/api/entities/$ENTITY_ID/confidence" -H "Authorization: B
   | jq '{score, band, sources: [.sources[] | {source_name, reliability, weight}]}'
 ```
 
+### Infrastructure pivots (explicit outbound approval)
+
+Enable **Use crt.sh** in Settings first. This synthetic domain must already have an accepted indicator in a
+current CLEAR report. Use an unlimited read-write key for POST; GET also accepts read-only or limited keys.
+The POST explicitly approves sharing the domain with crt.sh. A fresh cache is reused for 24 hours.
+
+```sh
+curl -sS -X POST "$INSIGHT_URL/api/pivots/crtsh" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d '{"value":"example.com","approved":true}'
+curl -sS -G "$INSIGHT_URL/api/pivots" --data-urlencode 'value=example.com' \
+  -H "Authorization: Bearer $INSIGHT_API_KEY"
+```
+
+Both routes recheck current accepted CLEAR evidence. The GET never contacts a provider.
+[Operator guide and provider limits](INFRASTRUCTURE_PIVOTS.md).
+
 ### Sources and enrichment (outbound internet)
 
 These are the only routes that make Insight contact other servers. Sync imports a curated public feed; enrichment

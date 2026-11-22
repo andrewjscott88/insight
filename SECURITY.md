@@ -17,6 +17,13 @@ images, changelog entry). Credit is given unless you prefer otherwise.
 
 Only the latest release receives fixes. Upgrade using [docs/RUNBOOK.md](docs/RUNBOOK.md) §6.
 
+## Optional infrastructure providers
+
+crt.sh is off by default and receives only a reviewed domain from a current CLEAR report after explicit
+approval for each uncached lookup. Its fixed HTTPS endpoint, metadata limits, audit, cache rules and terms
+references are documented in [Infrastructure pivots](docs/INFRASTRUCTURE_PIVOTS.md). Public certificate
+metadata is context, not a verdict or a blanket grant to redistribute provider data.
+
 ## Scope and posture
 
 Insight is a single-operator workbench. By default it listens on loopback only; it can be published behind a TLS

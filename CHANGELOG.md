@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Added: certificate transparency (TIP 4.6 part 2)
+
+- Optional crt.sh pivots show up to 500 distinct certificate names, issuer and validity dates from a reviewed
+  domain in a current CLEAR report, with provider/date links in the map. Settings starts off; each uncached
+  lookup needs explicit consent. Cache reads recheck eligibility; shared throttling and audit apply.
+- Includes shared infrastructure-pivot API and workspace support. Companion RDAP/ASN and passive DNS parts
+  remain separate. [Operator guide](docs/INFRASTRUCTURE_PIVOTS.md), [ADR 0037](docs/adr/0037-infrastructure-pivots.md).
+- Upgrade: no database migration or new dependency; no outbound calls until enabled and approved.
+
 ### Upgrade notes
 
 - Migration `0024` adds the `requirements`, `requirement_criteria` and `requirement_evidence` tables. It runs

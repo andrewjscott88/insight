@@ -209,6 +209,7 @@ from .lookups import (
     set_lookup_switch,
 )
 from .pdf_reports import PdfReport, import_pdf, prepare_pdf_report, store_pdf_report
+from .pivots import cached_pivots, eligible_pivot, pivot_switches, set_pivot_switch, store_pivot
 from .ranked_search import RankedHit, RankedPage, ranked_search, search_terms
 from .requirement_matches import QUIET_DAYS, MatchView
 from .requirement_views import (
@@ -448,6 +449,7 @@ __all__ = [
     'cached_enrichments',
     'cached_greynoise_context',
     'cached_ip_context',
+    'cached_pivots',
     'carry_decisions',
     'case_sensitive',
     'case_timeline',
@@ -482,6 +484,7 @@ __all__ = [
     'document_techniques',
     'due_alerts',
     'eligible_greynoise_ip',
+    'eligible_pivot',
     'end_all_operator_sessions',
     'end_operator_session',
     'enqueue_due_alerts',
@@ -552,6 +555,7 @@ __all__ = [
     'operator_session_valid',
     'pair_mfa',
     'permitted_tlp_levels',
+    'pivot_switches',
     'prepare_pdf_report',
     'prune_jobs',
     'publish_hunt_package',
@@ -599,6 +603,7 @@ __all__ = [
     'set_document_status',
     'set_lookup_switch',
     'set_observation_status',
+    'set_pivot_switch',
     'set_schedule',
     'set_source_switch',
     'set_target_enabled',
@@ -611,6 +616,7 @@ __all__ = [
     'store_greynoise_context',
     'store_ip_context',
     'store_pdf_report',
+    'store_pivot',
     'stricter_limit',
     'summaries',
     'summary',

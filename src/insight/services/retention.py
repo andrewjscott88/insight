@@ -169,7 +169,8 @@ def delete_document(db: Session, document_id: str, reason: str) -> DeletionResul
         # Deleting the entity first synchronizes with a provider response being saved concurrently.
         db.execute(
             delete(Enrichment).where(
-                Enrichment.provider.in_(('greynoise', 'shodan')), Enrichment.subject.in_(orphans)
+                Enrichment.provider.in_(('greynoise', 'shodan', 'crtsh')),
+                Enrichment.subject.in_(orphans),
             )
         )
     result = DeletionResult(

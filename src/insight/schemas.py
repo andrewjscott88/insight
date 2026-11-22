@@ -60,6 +60,12 @@ def most_restrictive(*levels: str) -> str:
     return max(levels, key=TLP_LEVELS.index)
 
 
+class PivotInput(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    value: str = Field(min_length=1, max_length=253)
+    approved: bool = False
+
+
 class ReportMetadata(BaseModel):
     title: str = Field(min_length=1, max_length=300)
     source_name: str = Field(min_length=1, max_length=160)

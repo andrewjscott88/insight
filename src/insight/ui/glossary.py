@@ -8,10 +8,12 @@ from __future__ import annotations
 
 from nicegui import ui
 
-from .glossary_terms import GLOSSARY
+from .glossary_infrastructure import INFRASTRUCTURE_GLOSSARY
+from .glossary_terms import GLOSSARY as BASE_GLOSSARY
 from .typography import heading
 
 __all__ = ['GLOSSARY', 'open_glossary']
+GLOSSARY = BASE_GLOSSARY + INFRASTRUCTURE_GLOSSARY
 
 
 def open_glossary() -> None:
