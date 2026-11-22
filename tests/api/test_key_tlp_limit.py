@@ -20,6 +20,7 @@ from insight.mcp import TOOL_BY_NAME
 from insight.models import Enrichment
 from insight.schemas import (
     ActorInput,
+    ActorLinkInput,
     AssessmentInput,
     CaseInput,
     CaseItemInput,
@@ -103,6 +104,9 @@ def world(app: FastAPI) -> dict[str, Any]:
         )
         services.record_sighting(db, SightingInput(value=HIDDEN_IP, first_seen=seen, tlp='GREEN'))
         hidden_actor = services.create_actor(db, ActorInput(name=f'{MARKER} actor', tlp='AMBER'))
+        # A public catalog profile must hide both an AMBER report and an AMBER link to a GREEN report.
+        services.link_report(db, 'G0016', ActorLinkInput(document_id=amber.id, tlp='AMBER', note=MARKER))
+        services.link_report(db, 'G0016', ActorLinkInput(document_id=green.id, tlp='AMBER', note=MARKER))
         services.create_requirement(
             db, RequirementInput(kind='rfi', question=f'{MARKER} request?', tlp='AMBER')
         )
@@ -176,6 +180,8 @@ def test_every_mcp_tool_keeps_the_green_ceiling(
         assert response.status_code == 200, response.text
         assert response.json()['result']['structuredContent']['sharing_tlp'] == 'GREEN'
         assert all(secret not in response.text for secret in forbidden), (name, response.text)
+        if name == 'get_threat_group' and arguments['id'] == 'G0016':
+            assert response.json()['result']['structuredContent']['linked_reports'] == []
         if arguments.get('id') in (
             world['amber'],
             world['hidden_entity'],
