@@ -22,3 +22,4 @@ junit*.xml
 # Written by `make backup` / `make export-iocs`: database copies and TLP-labelled data.
 /backups/
 /exports/
+screenshots/
