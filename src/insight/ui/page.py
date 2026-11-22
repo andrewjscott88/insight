@@ -38,6 +38,7 @@ from .stats import build_stats
 from .techniques import build_techniques
 from .theme import apply_theme
 from .threats import build_threats
+from .typography import heading
 from .watch_terms import build_watch_terms
 from .workspace import Workspace
 
@@ -123,7 +124,8 @@ def register_ui(app: FastAPI, session_factory: SessionFactory) -> None:
                 with ui.tabs().props('vertical no-caps').classes('side-tabs') as menu:
                     for name, label in SECTIONS:
                         ui.tab(name, label)
-            with ui.element('main').classes('workspace gap-4 sm:gap-6'):
+            # A div: NiceGUI's page is already the one <main> landmark (axe: landmark-no-duplicate-main).
+            with ui.element('div').classes('workspace gap-4 sm:gap-6'):
                 _toolbar(app, ws, ingest_dialog, dark, theme)
                 if app.state.settings.dev_no_auth:
                     with ui.column().classes('panel w-full p-3 sm:p-4 gap-1').mark('open-access-banner'):
@@ -135,15 +137,19 @@ def register_ui(app: FastAPI, session_factory: SessionFactory) -> None:
                     with ui.tab_panel('today').classes('p-0 flex flex-col gap-6'):
                         build_landscape(ws)
                         build_stats(ws)
-                    with ui.tab_panel('triage').classes('p-0'):
+                    # Only the open section is in the page, so each has an h1 (axe: page-has-heading-one).
+                    with ui.tab_panel('triage').classes('p-0 flex flex-col gap-4'):
+                        heading('Triage', 1)
                         build_inbox(ws)
-                    with ui.tab_panel('investigate').classes('p-0'):
+                    with ui.tab_panel('investigate').classes('p-0 flex flex-col gap-4'):
+                        heading('Investigate', 1)
                         investigate = _investigate(ws)
                     with ui.tab_panel('cases').classes('panel p-4 sm:p-5'):
                         build_cases(ws)
                     with ui.tab_panel('share').classes('panel p-4 sm:p-5'):
                         build_share(ws)
                     with ui.tab_panel('settings').classes('p-0 flex flex-col gap-6'):
+                        heading('Settings', 1)
                         with ui.column().classes('panel w-full p-4 sm:p-5'):
                             build_sources(ws)
                         with ui.column().classes('panel w-full p-4 sm:p-5'):

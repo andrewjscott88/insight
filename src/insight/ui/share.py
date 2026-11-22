@@ -25,7 +25,7 @@ def _card(title: str, text: str) -> ui.column:
 
 
 def build_share(ws: Workspace) -> None:
-    heading('Share', 2)
+    heading('Share', 1)
     ui.label(
         'Insight never sends intelligence by itself. Every export keeps its TLP label, and the label decides '
         'who may receive it.'

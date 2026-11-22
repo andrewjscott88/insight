@@ -35,7 +35,8 @@ def _entry(ws: Workspace, rank: int, entry: services.ProfileEntry) -> None:
                 f'outline dense no-caps aria-label="Open the guide for {subject.name}"'
             ).mark(f'guide-{subject.ref}')
         if subject.aliases:
-            ui.label('Also called: ' + ', '.join(subject.aliases[:8])).classes('muted text-sm break-value')
+            aliases = ', '.join(subject.aliases[:8])
+            ui.label(f'Also called: {aliases}').classes('muted text-sm break-value prose')
         with ui.expansion(f'Why it is listed ({len(entry.reasons)})').classes('w-full'):
             for claim in entry.claims:
                 with ui.column().classes('gap-0 w-full'):

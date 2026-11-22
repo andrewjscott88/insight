@@ -74,7 +74,7 @@ def _render(ws: Workspace, guide: ThreatGuide, refresh: Callable[[], Any]) -> No
     if subject.kind == 'analyst':
         ui.label('An actor you track.').classes('muted text-sm')
     if subject.aliases:
-        ui.label('Also called: ' + ', '.join(subject.aliases)).classes('text-sm break-value')
+        ui.label('Also called: ' + ', '.join(subject.aliases)).classes('text-sm break-value prose')
     if subject.description:
         ui.label(subject.description).classes('prose')
     group = subject.catalog

@@ -104,7 +104,7 @@ def build_cases(ws: Workspace) -> None:
                 items = 'item' if case.items == 1 else 'items'
                 ui.label(f'{case.items} {items} · changed {case.updated_at[:10]}').classes('muted text-sm')
 
-    heading('Cases', 2, 'section-title')
+    heading('Cases', 1)
     ui.label(
         'A case groups the reports, indicators, actors and campaigns of one investigation, with your notes. '
         'Its label is the strictest of what it holds. Close it with a note when you are done.'

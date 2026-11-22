@@ -202,7 +202,8 @@ def test_regression_desktop_shows_every_tab_label(browser: Any) -> None:
     for label in SECTIONS:
         expect(page.locator('.side-tabs').get_by_role('tab', name=label, exact=True)).to_be_visible()
     # The menu sits beside the content on a desktop, not above it.
-    nav, main = page.locator('nav.side-nav').bounding_box(), page.locator('main.workspace').bounding_box()
+    nav = page.locator('nav.side-nav').bounding_box()
+    main = page.locator('.app-shell > .workspace').bounding_box()
     assert nav['x'] + nav['width'] <= main['x'] + 1
     show(page, 'Investigate')
     for label in INVESTIGATE:
