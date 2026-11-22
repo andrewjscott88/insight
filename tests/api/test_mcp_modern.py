@@ -12,6 +12,7 @@ from insight import services
 from insight.mcp import MODERN_PROTOCOL_VERSION, SUPPORTED_VERSIONS
 from insight.mcp_transport import CAPABILITIES_FIELD, VERSION_FIELD
 
+from ..mcp_schema import response_conforms
 from .test_mcp import mcp_headers as mcp_headers
 
 
@@ -23,9 +24,11 @@ def modern(
     headers = headers | {'MCP-Protocol-Version': MODERN_PROTOCOL_VERSION, 'Mcp-Method': method}
     if method == 'tools/call':
         headers['Mcp-Name'] = params['name']
-    return client.post(
+    response = client.post(
         '/mcp', headers=headers, json={'jsonrpc': '2.0', 'id': 1, 'method': method, 'params': params}
     )
+    response_conforms(response.json(), method)
+    return response
 
 
 @pytest.mark.parametrize('method', ['server/discover', 'ping', 'tools/list', 'tools/call'])
@@ -102,6 +105,7 @@ def test_current_invalid_metadata_never_dispatches(
         json={'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': params},
     )
     assert response.status_code == 400
+    response_conforms(response.json(), 'tools/call')
     assert response.json()['error']['code'] == code
     if change == 'unsupported-version':
         assert response.json()['error']['data']['supported'] == list(SUPPORTED_VERSIONS)

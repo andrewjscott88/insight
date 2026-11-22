@@ -13,6 +13,7 @@ from starlette.concurrency import run_in_threadpool
 from ... import __version__, services
 from ...mcp import (
     MAX_REQUEST_BYTES,
+    MODERN_PROTOCOL_VERSION,
     PROTOCOL_VERSION,
     SUPPORTED_VERSIONS,
     TOOL_BY_NAME,
@@ -95,7 +96,12 @@ def _dispatch(
         return _call(sessions, request, params)
     if method == 'server/discover' and modern:
         McpEmptyInput.model_validate(params)
-        return {'supportedVersions': list(SUPPORTED_VERSIONS), 'capabilities': {'tools': {}}}
+        return {
+            'supportedVersions': list(SUPPORTED_VERSIONS),
+            'capabilities': {'tools': {}},
+            'cacheScope': 'private',
+            'ttlMs': 0,
+        }
     if method == 'initialize' and not modern:
         info = McpInitializeInput.model_validate(params)
         if not all(isinstance(info.clientInfo.get(key), str) for key in ('name', 'version')):
@@ -112,7 +118,18 @@ def _dispatch(
     McpEmptyInput.model_validate(params)
     if method == 'ping':
         return {}
-    return {'tools': tool_catalog()}
+    result: dict[str, Any] = {'tools': tool_catalog()}
+    if modern:
+        result.update(cacheScope='private', ttlMs=0)
+    return result
+
+
+def _malformed(request: Request, code: int, message: str) -> JSONResponse:
+    error = rpc_error(None, code, message)
+    # Modern errors omit an unknown ID; legacy JSON-RPC explicitly uses null.
+    if request.headers.get('mcp-protocol-version') == MODERN_PROTOCOL_VERSION:
+        del error['id']
+    return JSONResponse(error, status_code=400)
 
 
 def _register_mcp_routes(app: FastAPI, sessions: SessionFactory, require_auth: AuthDependency) -> None:
@@ -135,13 +152,13 @@ def _register_mcp_routes(app: FastAPI, sessions: SessionFactory, require_auth: A
             )
             _check_unicode(raw)
         except (ValueError, UnicodeError, RecursionError):
-            return JSONResponse(rpc_error(None, -32700, 'Parse error'), status_code=400)
+            return _malformed(request, -32700, 'Parse error')
         try:
             message = McpMessage.model_validate(raw)
         except ValidationError:
-            return JSONResponse(rpc_error(None, -32600, 'Invalid Request'), status_code=400)
+            return _malformed(request, -32600, 'Invalid Request')
         if 'id' in message.model_fields_set and message.id is None:
-            return JSONResponse(rpc_error(None, -32600, 'Invalid Request'), status_code=400)
+            return _malformed(request, -32600, 'Invalid Request')
         if 'id' not in message.model_fields_set:
             if (
                 message.method == 'notifications/initialized'
