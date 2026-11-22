@@ -137,6 +137,7 @@ def test_every_mcp_tool_keeps_the_green_ceiling(
     """Every advertised MCP tool is swept in the same planted AMBER world as the REST API."""
     calls = [
         ('search_indicators', {'q': HIDDEN_IP}),
+        ('search_indicators', {'q': SHARED_IP}),
         ('get_report_summary', {'id': world['amber']}),
         ('get_report_summary', {'id': world['old']}),
         ('list_requirements', {}),
@@ -180,6 +181,16 @@ def test_every_mcp_tool_keeps_the_green_ceiling(
         assert response.status_code == 200, response.text
         assert response.json()['result']['structuredContent']['sharing_tlp'] == 'GREEN'
         assert all(secret not in response.text for secret in forbidden), (name, response.text)
+        data = response.json()['result']['structuredContent']
+        if name == 'search_indicators' and arguments['q'] == SHARED_IP:
+            assert data['indicators'][0]['reports'] == 1
+        if name == 'get_landscape_summary':
+            assert data['reports'] == 1
+            assert 'Destructive attacks' not in {trend['name'] for trend in data['threats']}
+        if name == 'list_requirements' and not arguments:
+            requirement = next(row for row in data['requirements'] if row['id'] == world['requirement'])
+            assert requirement['recent_matches'] == 0
+            assert requirement['last_match_at'] is None
         if name == 'get_threat_group' and arguments['id'] == 'G0016':
             assert response.json()['result']['structuredContent']['linked_reports'] == []
         if arguments.get('id') in (
