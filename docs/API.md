@@ -387,7 +387,7 @@ API keys only (`Authorization: Bearer <key>`); a signed-in browser gets `403`. R
 | --- | --- | --- |
 | `GET` | `/taxii2/` | Discovery: the API root |
 | `GET` | `/taxii2/insight/` | API root information |
-| `GET` | `/taxii2/insight/collections/` | The fixed collections (one: *Reviewed indicators*) |
+| `GET` | `/taxii2/insight/collections/` | The fixed collections: *Reviewed indicators* (with ATT&CK techniques, actors and campaigns) and *CISA Known Exploited Vulnerabilities* |
 | `GET` | `/taxii2/insight/collections/{id}/` | One collection |
 | `GET` | `/taxii2/insight/collections/{id}/objects/` | Objects: `added_after`, `limit` (1 to 1,000), `next`, `match[id]`, `match[type]`, `match[version]`, `match[spec_version]`. Audited as `taxii.read` |
 | `GET` | `/taxii2/insight/collections/{id}/manifest/` | The same selection as IDs, `date_added` and versions |

@@ -6,8 +6,19 @@
 
 - Migration `0019` adds the `exploit_signals` table at start-up. Run `make exploit-backfill` once to read
   reports stored before this release (safe to rerun).
+- Migration `0020` records when each KEV entry last changed; existing entries start with their last sync time.
 - `GET /api/cves` has two new groups, so `tier` numbers after *Known exploited* move down by two. Scripts that
   compare tier numbers should use the new numbers or the `label`.
+
+### Added: more in the TAXII server
+
+- **Techniques, actors and campaigns.** The *Reviewed indicators* collection now also serves the ATT&CK
+  techniques tagged on its reports, and your actors and campaigns with their links, within the key's TLP
+  limit. Their IDs are stable, so a polling client updates them instead of storing duplicates, and an old actor
+  you link today reaches the client at its next poll.
+- **A CISA KEV collection.** A second collection serves every synced KEV entry (public, TLP:CLEAR) with its
+  dates, required action and ransomware use. An entry appears again only when CISA changes it.
+  [TAXII.md](docs/TAXII.md)
 
 ### Added: exploit availability (TIP 3.3)
 

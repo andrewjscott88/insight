@@ -203,6 +203,9 @@ class KEVRecord(Base):
     notes: Mapped[str] = mapped_column(Text, default='', server_default='')
     #: Weakness types (``CWE-78``), comma-separated.
     cwes: Mapped[str] = mapped_column(Text, default='', server_default='')
+    #: When the entry was added or any field last changed (``imported_at`` is rewritten at every sync). The
+    #: TAXII KEV collection uses it as the object's version (ADR 0026).
+    changed_at: Mapped[str] = mapped_column(String(40), default=now, server_default='')
 
     @property
     def ransomware(self) -> bool:

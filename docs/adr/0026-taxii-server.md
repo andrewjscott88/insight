@@ -50,9 +50,15 @@ worker; no new dependency unless it can be hash-pinned and trimmed (TIP 3.1).
 - A SIEM can poll Insight with a standard TAXII 2.1 client and a Bearer key, and `added_after` returns only
   what changed, including indicators accepted long after their report arrived.
 - Indicator IDs are stable across polls and keys, so a client never stores duplicates.
-- **Not in v1:** ATT&CK techniques and the actor and campaign objects of the STIX export (their IDs are random
-  per export), a KEV catalog collection, and revocation: an indicator that stops being shareable (rejected, or
-  its report deleted) simply stops appearing; clients that need removals should re-pull the collection.
+- **Not in v1:** revocation: an indicator that stops being shareable (rejected, or its report deleted) simply
+  stops appearing; clients that need removals should re-pull the collection.
+- **Added in 0.9.0:** the indicators collection also serves the ATT&CK techniques, actors, campaigns and
+  relationships of the STIX export, with IDs derived from their content (a technique from the ATT&CK version,
+  technique and markings; a restricted projection of an actor or campaign from its ID and label; a link from
+  the link, its target and label). An actor or campaign is dated no earlier than its first visible
+  relationship, so a newly linked old actor still reaches a polling client. A second fixed collection serves
+  the CISA KEV catalog (TLP:CLEAR) with a real change time per entry (`kev_records.changed_at`, migration
+  0020): a sync that changes nothing changes no version.
 - Mentions reviewed before 0018 have no review time; their report's arrival time stands in. This only matters
   for a client that polled before the upgrade, and none could.
 - Every page rebuilds and validates the snapshot. That is fine for one operator's collection (the export caps

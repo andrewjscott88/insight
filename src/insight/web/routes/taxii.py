@@ -66,7 +66,7 @@ def _register_taxii_routes(app: FastAPI, sessions: SessionFactory, require_auth:
         return _taxii(
             {
                 'title': 'Insight TAXII server',
-                'description': 'Read-only TAXII 2.1 collections of reviewed indicators from Insight.',
+                'description': 'Read-only TAXII 2.1 collections: reviewed indicators and CISA KEV.',
                 'default': root,
                 'api_roots': [root],
             }
@@ -78,7 +78,10 @@ def _register_taxii_routes(app: FastAPI, sessions: SessionFactory, require_auth:
         return _taxii(
             {
                 'title': 'Insight',
-                'description': "Reviewed indicators, CVEs and their reports, within each key's TLP limit.",
+                'description': (
+                    "Reviewed indicators, CVEs and their reports, within each key's TLP limit, and the CISA "
+                    'KEV catalog.'
+                ),
                 'versions': [TAXII_MEDIA_TYPE],
                 'max_content_length': MAX_BODY_BYTES,
             }

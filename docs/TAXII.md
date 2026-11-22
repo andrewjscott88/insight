@@ -1,21 +1,29 @@
 # TAXII 2.1 server
 
-Insight serves its reviewed indicators over TAXII 2.1, so a SIEM or threat-intelligence platform can poll them
+Insight serves its reviewed indicators and the CISA KEV catalog over TAXII 2.1, so a SIEM or threat-intelligence platform can poll them
 on a schedule without a custom script ([ADR 0026](adr/0026-taxii-server.md)). The server is read-only: clients
 can list collections and read objects, but nothing can be written or created.
 
 ## What a client gets
 
-One collection, **Reviewed indicators** (ID `5b2f8a7e-4c1d-4e3a-9f6b-0d8c7a1e2f34`):
+Two fixed collections. **Reviewed indicators** (ID `5b2f8a7e-4c1d-4e3a-9f6b-0d8c7a1e2f34`):
 
 - every indicator and CVE an analyst **accepted**, as STIX 2.1 `indicator` and `vulnerability` objects;
 - the `report` objects that mention them, with publisher text only where the publisher allows it;
+- the ATT&CK techniques tagged on those reports (`attack-pattern`, cited by technique ID);
+- your actors and campaigns (`threat-actor`, `campaign`) and their `relationship` objects, wherever you linked
+  them to one of those reports, indicators or techniques;
 - the TLP 2.0 marking definitions they use.
 
 The same rules as the STIX export apply ([IOC export](IOC_EXPORT.md)): the API key's TLP limit, current report
-revisions only, and the publishers' reuse rules. Unreviewed and rejected mentions are never served.
+revisions only, and the publishers' reuse rules. Unreviewed and rejected mentions are never served, and an
+actor, campaign or link above the key's limit is left out.
 
-ATT&CK techniques, actors and campaigns are not in the collection yet; download them with the STIX export.
+**CISA Known Exploited Vulnerabilities** (ID `c4e1b7d2-6a35-4f08-8b9e-3d7f2a5c1e60`): every KEV entry Insight
+has synced, as a `vulnerability` with CISA's name for the weakness and an `x_insight_kev` property holding
+the vendor, product, date added, due date, required action, ransomware use and CWEs. It is public data
+(TLP:CLEAR), so every key may read it. Its vulnerability IDs differ from the indicators collection's CVE
+objects, which carry different content; relate the two by the `cve` external reference.
 
 ## Connect a client
 
@@ -65,8 +73,11 @@ for page in as_pages(collection.get_objects, per_request=1000, added_after='2026
   accepts it, even in an old report.
 - **Follow `next`.** A page holds up to 1,000 objects (`limit`, default 1,000). While `more` is `true`, send the
   page's `next` value unchanged.
-- **IDs are stable.** The same indicator always has the same STIX ID, whichever report or key it comes from,
-  so clients can update rather than duplicate.
+- **IDs are stable.** The same indicator, technique, actor, campaign, link or KEV entry always has the same
+  STIX ID, whichever report or key it comes from, so clients can update rather than duplicate. A technique's
+  ID includes the ATT&CK version, so an ATT&CK upgrade in Insight brings new technique objects.
+- **Links count as new.** An actor or campaign appears after your last poll when you link it to something the
+  key can see, even if you created it long before. A KEV entry appears again only when CISA changes it.
 - **Removals are not sent.** If an indicator is later rejected, or its report is deleted, it simply stops
   appearing. To drop such indicators, re-pull the whole collection now and then.
 - **Budget.** Collection reads draw on a `taxii` budget of 240 requests per hour per key. A client polling
