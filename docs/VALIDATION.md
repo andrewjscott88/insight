@@ -1,7 +1,36 @@
-# Validation report · 0.7.0
+# Validation report · 0.8.0
 
 What was verified for each release, what was not, and how. Update this file for every release (see
 [RELEASING.md](RELEASING.md)).
+
+## 0.8.0: PDF import, actors and campaigns, YARA and Sigma rules, MFA encryption, hardened mode, TAXII 2.1
+
+Recorded while the work was done (pull requests #67, #69–#71, #74–#77). As for earlier releases, the release
+workflow runs the whole milestone gate on the tagged commit before publishing can be approved; its reports
+(benchmark, performance, backup drill, browser E2E with axe, ZAP, licences, SBOM) are attached to that run, not
+repeated here.
+
+- **Tests:** every pull request merged since 0.7.0 passed Tier 1 on SQLite and PostgreSQL 16 before it merged,
+  and CI and CodeQL are green on the `main` commit this release was prepared from. #67 (which carries #69, #70
+  and #71) and #76 (TAXII) also passed the full milestone gate on their branches, including browser E2E and the
+  signed-in ZAP scan.
+- **Schema:** migrations `0015` to `0018` (manual threat links, PDF provenance, MFA seed encryption,
+  `observations.reviewed_at`) are tested by CI against the 0.1.0, 0.2.0, 0.5.0, 0.6.0 and 0.7.0 release
+  databases. `0017` encrypts an existing authenticator pairing with a key derived from `INSIGHT_SESSION_SECRET`
+  and refuses, leaving the database unchanged, if the secret is missing. The 0.8.0 upgrade fixture was created
+  with the Release fixture workflow on the release branch, so later versions must upgrade it too.
+- **Security review:** every pull request merged on 2026-11-21 was reviewed for parsing of untrusted files
+  (PDF sandbox, STIX and MISP import), outbound requests (MISP, GreyNoise, OTX, abuse.ch: pinned addresses, no
+  redirects, no proxy from the environment), TLP and publisher reuse rules, and the MFA encryption. No security
+  defect was found; two limitations are noted below.
+- **Release metadata:** version, changelog section, this report and the upgrade fixture are checked by
+  `scripts/check_release.py` in the release run.
+
+**Not verified for 0.8.0 before tagging:** no benchmark, performance, ZAP or browser-E2E numbers are recorded
+here; they come from the milestone gate in the release run. The TAXII server was tested with its own HTTP
+tests, not with `taxii2-client` or a real SIEM. Live calls to optional external services were not exercised
+against real accounts. Known limitations: a PDF import holds a database session while it parses (up to 10 s);
+the MISP client applies the public-address egress check, so a MISP instance on a private network is refused.
 
 ## 0.7.0: STIX 2.1 and MISP exchange, ATT&CK techniques, alerts, threat guides, CVE enrichment, more feeds
 
