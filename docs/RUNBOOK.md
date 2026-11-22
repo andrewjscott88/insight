@@ -69,6 +69,7 @@ Set in `.env` (Compose reads it) or the process environment. Real environment va
 | `INSIGHT_TRUSTED_PROXIES` | no | none | Reverse proxy address(es), IPs or CIDRs (`172.18.0.1`, `10.0.0.0/24`). See "Reverse proxy" below. `*` and malformed entries stop start-up. |
 | `INSIGHT_MFA` | no | `off` | `on` requires an authenticator-app code at sign-in (`make mfa-enable` pairs the app and sets it). Anything other than on/off stops start-up. |
 | `INSIGHT_DEV_NO_AUTH` | no | `off` | Temporary password-free operator access. Only `on` enables it; blank or `off` disables it. Invalid values or enabling it with MFA stop start-up. Anyone who can reach the site can enter and use its operator tools. See "Temporary password-free access" in §4. |
+| `INSIGHT_REQUIRE_HARDENED` | no | `off` | `on` refuses to start unless `INSIGHT_SECURE_COOKIES=1` and `INSIGHT_MFA=on` (and `INSIGHT_DEV_NO_AUTH` is off), naming each missing setting. For public deployments; see "Reverse proxy". Anything other than on/off stops start-up. CLI commands still run, so `make mfa-enable` can fix a refusal. |
 | `INSIGHT_MAX_TLP` | no | `AMBER+STRICT` | Most restrictive label stored. Reports at or raised to a higher label (i.e. TLP:RED) are refused on upload. `RED` allows everything. |
 | `INSIGHT_RUN_JOBS` | no | `on` | Run scheduled syncs in this process ([ADR 0018](adr/0018-opt-in-scheduled-syncs.md)). Nothing is scheduled until you choose a schedule (§8). Set `off` in every process but one if you run several. Anything other than on/off stops start-up. |
 | `INSIGHT_THEME` | no | `system` | Colour theme for browsers that have not picked one: `system` (follow each device's light/dark setting), `light` or `dark`. Each browser can override it with the Light/Dark/System buttons in the workspace header (`make theme THEME=dark` sets it). Anything else stops start-up. |
@@ -84,7 +85,7 @@ Set in `.env` (Compose reads it) or the process environment. Real environment va
 
 Never commit `.env`: a pre-commit hook and CI block it. Treat the file like the password it contains.
 
-Invalid values for `INSIGHT_TRUSTED_PROXIES`, `INSIGHT_MAX_TLP`, `INSIGHT_MFA`, `INSIGHT_DEV_NO_AUTH`, `INSIGHT_RUN_JOBS`, `INSIGHT_THEME` or the alert settings stop start-up with a message naming the
+Invalid values for `INSIGHT_TRUSTED_PROXIES`, `INSIGHT_MAX_TLP`, `INSIGHT_MFA`, `INSIGHT_DEV_NO_AUTH`, `INSIGHT_REQUIRE_HARDENED`, `INSIGHT_RUN_JOBS`, `INSIGHT_THEME` or the alert settings stop start-up with a message naming the
 variable, rather than running with a setting that silently does nothing.
 
 ### Reverse proxy (public deployment)
@@ -113,8 +114,14 @@ Compose port stays bound to 127.0.0.1, so only the proxy on the same host can re
        proxy_set_header Connection "upgrade";
    }
    ```
-4. `docker compose up -d`. The log shows `Trusting X-Forwarded-For/-Proto from: …`. Sign in through the
+4. Turn on MFA (`make mfa-enable`), then add `INSIGHT_REQUIRE_HARDENED=on` to `.env`. From then on Insight
+   refuses to start if secure cookies or MFA are off, or password-free access is on, and names what to fix.
+5. `docker compose up -d`. The log shows `Trusting X-Forwarded-For/-Proto from: …`. Sign in through the
    public URL to confirm.
+
+Without `INSIGHT_REQUIRE_HARDENED=on`, an instance that answers to a non-local host name or trusts a proxy logs
+one warning at start-up listing what is not hardened (secure cookies, MFA, password-free access). Loopback-only
+instances, such as `make dev`, stay quiet.
 
 Without step 1, sign-in through an HTTPS proxy fails with `403` (Insight sees `http`, the browser's `Origin`
 says `https`), and every client appears to come from the proxy's address. Forwarded headers from any other

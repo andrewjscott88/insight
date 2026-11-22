@@ -100,8 +100,17 @@ def _log_deployment_warnings(settings: Settings, sessions: SessionFactory) -> No
         )
     if settings.trusted_proxies:
         log.info('Trusting X-Forwarded-For/-Proto from: %s', ', '.join(settings.trusted_proxies))
-        if not settings.secure_cookies:
-            log.warning('Behind an HTTPS proxy, set INSIGHT_SECURE_COOKIES=1 (cookies only over HTTPS)')
+    if settings.require_hardened:
+        log.info('INSIGHT_REQUIRE_HARDENED is on: secure cookies and MFA are required to start')
+    elif settings.internet_facing() and (gaps := settings.hardening_gaps()):
+        hosts = settings.public_hosts()
+        log.warning(
+            'This instance %s, so it may be reachable from the internet, but: %s. Fix these, then set '
+            'INSIGHT_REQUIRE_HARDENED=on so Insight refuses to start without them (docs/RUNBOOK.md, '
+            '"Reverse proxy").',
+            f'answers to {", ".join(hosts)}' if hosts else 'trusts a reverse proxy',
+            '; '.join(gaps),
+        )
     with sessions() as db:
         above = services.count_documents_above(db, settings.max_tlp)
         paired = services.mfa_paired(db)
