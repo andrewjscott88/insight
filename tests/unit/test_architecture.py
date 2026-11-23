@@ -124,6 +124,7 @@ def test_ui_does_not_depend_on_the_api_module(path: Path) -> None:
 #: Service functions that read or change reports. Every call from the API must pass the caller's TLP limit
 #: (``max_tlp=``), or a TLP-limited API key could see reports above its limit (ADR 0014).
 TLP_AWARE_SERVICES = {
+    'hunt_guide', 'hunt_guide_choices',
     'actor_timeline', 'actor_campaigns', 'link_actor_campaign', 'unlink_actor_campaign',
     'mcp_read',
     'cached_pivots', 'eligible_pivot', 'store_pivot',

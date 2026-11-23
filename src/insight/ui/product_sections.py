@@ -159,7 +159,7 @@ def render_gaps(
                     'Ask as a request',
                     on_click=lambda g=gap: write(
                         lambda db: services.ask_gap(db, view.id, g.id, max_tlp=limit),
-                        'Asked. The request is in Requirements.',
+                        'Asked. Find the request in Settings, under Intelligence questions.',
                     ),
                 ).props('flat dense no-caps').mark('product-gap-ask')
             if editable:

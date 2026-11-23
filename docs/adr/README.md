@@ -45,3 +45,4 @@ superseded ones are marked, never deleted.
 | [0038](0038-adversary-library.md) | Adversary library imports | Accepted |
 | [0039](0039-read-only-mcp.md) | Read-only MCP with API keys and per-key TLP ceilings | Accepted |
 | [0040](0040-operator-defined-sources.md) | Operator-defined sources, handling labels and publisher reuse | Accepted |
+| [0041](0041-guided-threat-hunt-workspace.md) | Plain-English intel brief and bounded, read-only threat hunt guides | Proposed |

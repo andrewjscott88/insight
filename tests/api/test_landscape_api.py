@@ -39,7 +39,8 @@ def test_the_landscape_names_trending_threats_and_their_evidence(app: FastAPI, s
     assert {r['text'] for r in ransomware['reports']} == {'Ransom wave · Feed', 'Second wave · Feed'}
     assert all(r['document_id'] for r in ransomware['reports'])
     assert {t['shortname'] for t in body['tactics']} == {'impact', 'initial-access'}
-    assert body['summary'][0] == 'In the last 7 days, 2 new reports came in from 1 source.'
+    assert body['summary'][0] == 'The most reported kind of threat is ransomware, in 2 reports.'
+    assert body['summary'][-1] == 'In the last 7 days, 2 new reports came in from 1 source.'
     assert any('cannot show trends yet' in line for line in body['caveats'])
     assert body['brief']['sections'][0]['title'] == 'Exploited now'
 

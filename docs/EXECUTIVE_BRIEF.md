@@ -14,9 +14,11 @@ terms when those facts exist. Each highlight combines a short explanation, a con
 links to available, visible evidence. **Exploited now** and **Most severe** remain available below the
 summary, alongside watch terms, indicators seen in several sources and vendor mentions.
 
-The brief is part of the **Threat landscape** ([ADR 0020](adr/0020-threat-landscape.md)), the page's main
-heading and first main content, with the 7- or 30-day period chosen beside it. The landscape's **Executive
-summary** (trends compared with earlier periods, then the brief's sentences) sits beside the reporting-window
+The landing section is **Intel Brief**, with the main heading **Intel brief** and the 7- or 30-day period
+chosen beside it ([ADR 0020](adr/0020-threat-landscape.md),
+[ADR 0041](adr/0041-guided-threat-hunt-workspace.md)). Its **Executive summary** leads with known exploited
+products and severe flaws when present; otherwise it leads with the reported threat theme. It explains the
+meaning and next step before report-volume context. The summary sits beside the reporting-window
 counts, last-24-hour receipt count and UTC reference time on wide screens; they stack on smaller screens.
 **About this brief** expands the coverage notes, including how fresh each source in use is (optional sources
 count only once switched on). **What needs attention** contains the highlights and their **Next step** and
@@ -26,6 +28,11 @@ a glance** with the five detail sections, **Exploited now** and **Most severe** 
 workspace follow below, so the overview comes before the working tools. Evidence controls reveal
 the supporting report or relevant workspace tab on both phones and larger screens; scrolling honors the
 reader's reduced-motion preference.
+
+Sharing badges explain the audience, retaining the standard token: **Public · TLP:CLEAR** for public
+disclosure, or a restricted audience for other levels. Copyright and source terms still apply to public
+material. Restricted briefs retain their warning. This wording changes no stored label, access limit or
+publisher reuse rule. Long labels wrap on phones.
 
 Next steps depend on the reader's situation: check whether the product is used, read the relevant advisory,
 then consider the applicable fix or mitigation. Insight does not know the operator's asset inventory,
@@ -51,12 +58,15 @@ counting rules; `src/insight/brief_highlights.py` supplies explanations and cove
 `src/insight/brief_types.py`. The workspace and `GET /api/brief` use the same result. The interface changes its
 presentation without creating a second set of intelligence rules.
 
-Highlights follow a fixed priority: known exploitation, the most-mentioned CVE (or a vendor to check when
-no CVE repeats), the highest reported severity, watch-term relevance, then recent receipts. The recent
+Highlights follow a fixed priority: known ransomware use and other known exploitation, the most-mentioned
+CVE (or a vendor to check when no CVE repeats), stored attack forecasts, the highest reported severity,
+watch-term relevance, then recent receipts. The recent
 receipt highlight also appears for an empty collection. Each highlight has at most five evidence items.
 The severity explanation translates a small set of explicitly named weaknesses into plain English; when
-no precise translation applies, it quotes the source description or directs the reader to the advisory.
-It does not infer an attack technique from a severity number.
+no precise translation applies, the supporting highlight quotes the source description or directs the
+reader to the advisory. The executive summary omits untranslated quotations and sends the reader to the
+source. Exact CVE identifiers and numeric severity scores remain in **Most severe**. The brief does not
+infer an attack technique from a severity number, or current attacks from a historical CISA listing.
 
 ## Time and coverage
 

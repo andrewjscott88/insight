@@ -150,6 +150,8 @@ from .exports import (
     ioc_mentions,
 )
 from .graph import Graph, GraphEdge, GraphNode, build_graph
+from .hunt_guide_subjects import hunt_guide_subject, hunt_guide_subject_choices
+from .hunt_guides import hunt_guide, hunt_guide_choices
 from .hunt_package_stix import MAX_SERVED_HUNT_PACKAGES, export_hunt_package
 from .hunt_package_views import (
     MAX_HUNT_PACKAGES,
@@ -582,6 +584,10 @@ __all__ = [
     'get_rule',
     'guide_data',
     'hunt_checks',
+    'hunt_guide',
+    'hunt_guide_choices',
+    'hunt_guide_subject',
+    'hunt_guide_subject_choices',
     'hunts_for',
     'import_operator_stix',
     'import_pdf',

@@ -38,20 +38,21 @@ async def load_demo_and_open(user: User, title: str) -> None:
 
 async def test_the_workspace_has_one_h1_and_real_section_headings(user: User) -> None:
     """Regression: every heading was a styled ``div``, so assistive technology saw none (WCAG 1.3.1)."""
-    await user.should_see('Threat landscape')
+    await user.should_see('Intel brief')
     found = headings(user)
     # One h1 per section; only the open section is in the browser's page.
     assert [text for tag, text in found if tag == 'h1'] == [
-        'Threat landscape',
-        'Requirements',
+        'Intel brief',
         'Triage',
         'Investigate',
-        'Products',
+        'Threat hunt',
         'Share',
         'Settings',
     ]
     assert ('h2', 'Executive summary') in found
-    assert found.index(('h1', 'Threat landscape')) < found.index(('h2', 'Executive summary'))
+    assert found.index(('h1', 'Intel brief')) < found.index(('h2', 'Executive summary'))
+    assert ('h2', 'Intelligence questions') in found
+    assert ('h2', 'Saved intelligence reports') in found
     assert {'Reports', 'Your intelligence, connected.'} <= {text for tag, text in found if tag == 'h2'}
 
 

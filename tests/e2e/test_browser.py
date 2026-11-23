@@ -60,7 +60,7 @@ def sign_in(page: Any, password: str = PASSWORD) -> None:
 
 
 def show(page: Any, section: str, tab: str | None = None) -> None:
-    """Open a section of the side menu (Today, Triage...) and, in Investigate, one of its tabs."""
+    """Open a section of the side menu (Intel Brief, Triage...) and, in Investigate, one of its tabs."""
     page.locator('.side-tabs').get_by_role('tab', name=section, exact=True).click()
     if tab:
         page.locator('.evidence-tabs').get_by_role('tab', name=tab, exact=True).click()
@@ -204,7 +204,7 @@ def test_analyst_workflow(context: Any) -> None:
     title = f'E2E report {uuid.uuid4().hex[:8]}'
     page = context.new_page()
     sign_in(page)
-    expect(page.get_by_role('heading', name='Threat landscape', exact=True)).to_be_visible()
+    expect(page.get_by_role('heading', name='Intel brief', exact=True)).to_be_visible()
     page.get_by_role('button', name='Add intelligence').click()
     page.get_by_label('Document title').fill(title)
     page.get_by_label('Source name').fill('Browser test')
@@ -233,7 +233,7 @@ def test_search_filters_the_inbox(context: Any) -> None:
 def test_sign_out_revokes_other_tabs(context: Any) -> None:
     workspace = context.new_page()
     sign_in(workspace)
-    expect(workspace.get_by_role('heading', name='Threat landscape', exact=True)).to_be_visible()
+    expect(workspace.get_by_role('heading', name='Intel brief', exact=True)).to_be_visible()
     other = context.new_page()
     other.goto('/logout')
     # exact: the page also has "Sign out everywhere", and Playwright matches names by substring.
@@ -249,13 +249,13 @@ def test_sign_out_everywhere_reaches_another_browser(browser: Any, context: Any)
     """Review B4: a second browser (its own cookies, like another device) signs this one out too."""
     workspace = context.new_page()
     sign_in(workspace)
-    expect(workspace.get_by_role('heading', name='Threat landscape', exact=True)).to_be_visible()
+    expect(workspace.get_by_role('heading', name='Intel brief', exact=True)).to_be_visible()
     other_device = browser.new_context(base_url=BASE_URL)
     other_device.set_default_timeout(TIMEOUT)
     try:
         page = other_device.new_page()
         sign_in(page)
-        expect(page.get_by_role('heading', name='Threat landscape', exact=True)).to_be_visible()
+        expect(page.get_by_role('heading', name='Intel brief', exact=True)).to_be_visible()
         page.goto('/logout')
         page.get_by_role('button', name='Sign out everywhere', exact=True).click()
         expect(page).to_have_url(re.compile(r'/login$'))

@@ -30,7 +30,7 @@ async def test_the_landscape_explains_each_threat_and_opens_its_reports(
     add_report(ui_env, 'Ransom wave', 'A ransomware gang got in by phishing (T1566.001).')
     await user.open('/')
     with user.scope(marker='intel-brief'):
-        await user.should_see('Threat landscape')
+        await user.should_see('Intel brief')
         await user.should_see('Ransomware')
         await user.should_see('No history yet')
         await user.should_see('Why it matters: ' + THEMES_BY_KEY['ransomware'].impact)
@@ -67,3 +67,40 @@ async def test_the_period_can_be_thirty_days(user: User, ui_env: SimpleNamespace
     await user.should_see('In the last 30 days, 1 new report came in from 1 source.')
     with ui_env.app.state.session_factory() as db:
         assert db.query(Document).count() == 1
+
+
+@pytest.mark.parametrize(
+    ('label', 'audience', 'guidance'),
+    [
+        ('CLEAR', 'Public', 'May be shared publicly. Copyright and source terms still apply.'),
+        (
+            'AMBER+STRICT',
+            'Your organization only',
+            'Share only with people who need to know in your organization. Do not share with clients.',
+        ),
+    ],
+)
+async def test_brief_explains_sharing_without_changing_the_source_label(
+    user: User, ui_env: SimpleNamespace, label: str, audience: str, guidance: str
+) -> None:
+    """Regression: public feed content looked restricted, while restricted content still needs a warning."""
+    with ui_env.app.state.session_factory.begin() as db:
+        doc, _ = ingest(
+            db,
+            DocumentInput(title='Source report', body='A report on phishing.', source_name='Feed', tlp=label),
+        )
+        doc_id = doc.id
+    await user.open('/')
+    with user.scope(marker='intel-brief'):
+        await user.should_see(f'{audience} · TLP:{label}')
+        await user.should_see(guidance)
+        await user.should_see('Received in the last 24 hours')
+        await user.should_see('Reports in this brief received in the last 24 hours.')
+        if label == 'CLEAR':
+            await user.should_not_see('This brief has limits on who may read it.')
+        else:
+            await user.should_see('This brief has limits on who may read it. Keep its sharing label.')
+    with ui_env.app.state.session_factory() as db:
+        stored = db.get(Document, doc_id)
+        assert stored is not None
+        assert stored.tlp == label

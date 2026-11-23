@@ -73,7 +73,7 @@ def _new_case(ws: Workspace, saved: Callable[[str], object]) -> None:
     dialog.open()
 
 
-def build_cases(ws: Workspace) -> None:
+def build_cases(ws: Workspace, *, embedded: bool = False) -> None:
     status: dict[str, CaseStatusFilter] = {'value': 'open'}
     # Dialogs live here, not inside the list: refreshing the list would delete an open dialog with it.
     holder = ui.element('div')
@@ -119,7 +119,7 @@ def build_cases(ws: Workspace) -> None:
                     f'{kind} · {published} · {case.items} {items} of evidence · changed {changed}'
                 ).classes('muted text-sm')
 
-    heading('Products', 1)
+    heading('Saved intelligence reports' if embedded else 'Products', 2 if embedded else 1)
     ui.label(
         'A product answers a question for its readers: the bottom line first, then key judgements with how '
         'likely and how sure you are, the evidence behind them, and what you could not find out. Its label '

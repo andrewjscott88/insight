@@ -13,6 +13,14 @@ response and dark-web collection they sell.
 Background: [docs/CI_CD.md](docs/CI_CD.md) (pipeline), [docs/VALIDATION.md](docs/VALIDATION.md) (what is not yet
 verified) and the README's "Scope and known limits".
 
+## Workspace enhancement under review
+
+[ADR 0041](docs/adr/0041-guided-threat-hunt-workspace.md) adds a clearer Intel Brief, an on-demand
+[Threat Hunt guide builder](docs/THREAT_HUNT.md), and plain-language sharing audiences. It brings existing
+packages and saved intelligence reports into Threat Hunt and keeps requirements in advanced Settings.
+This is an enhancement to the existing intelligence workflow, not completion of another TIP milestone.
+It adds no telemetry execution, automatic attribution, AI writing or schema migration.
+
 ## 0.7.0: hardened, with complete vulnerability intelligence
 
 Close the security findings first, then make the vulnerability workflow complete. Intelligence work comes first

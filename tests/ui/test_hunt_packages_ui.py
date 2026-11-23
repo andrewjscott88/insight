@@ -1,5 +1,4 @@
-"""TIP 4.3 in the workspace: write a hunt package in Share, fill it, publish and retire it; add a report to
-one from the reader."""
+"""TIP 4.3 in Threat Hunt: write, fill, publish and retire a hunt package; add a report from the reader."""
 
 from __future__ import annotations
 

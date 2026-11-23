@@ -27,7 +27,7 @@ async def test_a_product_is_started_filled_from_the_reader_noted_and_archived(
 ) -> None:
     add_report(ui_env, 'Gateway advisory', 'Beacon to 203.0.113.70 from the gateway.')
     await user.open('/')
-    await user.should_see('Products')
+    await user.should_see('Saved intelligence reports')
     user.find(marker='case-new').click()
     await user.should_see('Start a product')
     user.find(kind=ui.input, marker='case-title').type('Gateway intrusion')

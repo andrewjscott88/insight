@@ -12,7 +12,7 @@ from .brief_facts import count_of as count_of
 from .brief_facts import is_demo as is_demo
 from .brief_facts import name_list as name_list
 from .brief_facts import published as published
-from .brief_highlights import coverage, highlights
+from .brief_highlights import coverage, highlights, severity_text
 from .brief_types import Brief as Brief
 from .brief_types import BriefHighlight as BriefHighlight
 from .brief_types import BriefItem as BriefItem
@@ -66,7 +66,7 @@ def _nvd_note(data: BriefData, cve: str, score: float, origin: str) -> str:
     return f' · NIST NVD {nvd:g}' if nvd is not None and nvd != score else ''
 
 
-def _summary(facts: _Facts, days: int, today: str, kev_trend: str = '') -> tuple[str, ...]:
+def _summary(facts: _Facts, days: int, today: str, severity: str, kev_trend: str = '') -> tuple[str, ...]:
     period = f'the last {count_of(days, "day")}'
     if not facts.fresh and not facts.kev_added:
         return (f'No recent reports are available for {period}. Check the source status below.',)
@@ -79,17 +79,20 @@ def _summary(facts: _Facts, days: int, today: str, kev_trend: str = '') -> tuple
     else:
         lines = [f'No new reports came in during {period}.']
     if added := facts.kev_added:
-        more = count_of(len(added), 'more weakness', 'more weaknesses')
-        vendors = name_list([k.vendor or k.product for k in added])
+        more = count_of(len(added), 'flaw')
+        products = name_list([_product(k) for k in added])
         lines.append(
-            f'CISA added {more} to its known exploited list'
-            + (f', in products from {vendors}.' if vendors else '.')
+            f'CISA added {more} to its list of flaws used in attacks. Products include {products}. '
+            'Check whether you use an affected product and version.'
         )
         if kev_trend:
             lines.append(kev_trend)
         if ransomware := [k for k in added if k.ransomware]:
             which = 'it' if len(added) == 1 else count_of(len(ransomware), 'of them', 'of them')
-            lines.append(f'CISA knows of ransomware campaigns that use {which}.')
+            lines.append(
+                f'CISA knows of ransomware campaigns that use {which}. '
+                'Ransomware can lock your systems or leak your data.'
+            )
         if public := [k for k in added if k.public_exploit]:
             which = 'it' if len(added) == 1 else count_of(len(public), 'of them', 'of them')
             lines.append(f'Exploit code is public for {which}.')
@@ -97,17 +100,15 @@ def _summary(facts: _Facts, days: int, today: str, kev_trend: str = '') -> tuple
     if mentioned := facts.kev_mentioned:
         verb = 'appears' if len(mentioned) == 1 else 'appear'
         sources_named = name_list([name for m in mentioned for name in m[3]])
+        products = name_list([_product(m[0]) for m in mentioned])
         lines.append(
-            f"{count_of(len(mentioned), 'weakness', 'weaknesses')} already on CISA's list also {verb} in new "
-            f'reports from {sources_named}.'
+            f"{count_of(len(mentioned), 'flaw')} already on CISA's list also {verb} in new "
+            f'reports from {sources_named}. Products include {products}.'
         )
-    if facts.severe:
-        score, cve, title, _, origin = facts.severe[0]
-        if origin == NIST_NVD:
-            lines.append(f'The highest base score is {score:g} out of 10, for {cve} (NIST NVD).')
-        else:
-            product = title.split(' · ', 1)[-1]
-            lines.append(f'The highest listed base score is {score:g} out of 10 for {cve} in {product}.')
+    if facts.kev_added or facts.kev_mentioned:
+        lines.append('These are known attacks, not proof of attacks today or on your systems.')
+    if severity:
+        lines.append(severity)
     if facts.watch is None:
         lines.append(
             'Add watch terms for the products you use, and this summary will say which reports concern you.'
@@ -120,7 +121,8 @@ def _summary(facts: _Facts, days: int, today: str, kev_trend: str = '') -> tuple
         lines.append(f'{count_of(facts.watch_reports, "new report")} {verb} your watch terms: {terms}.')
     if facts.kev_added or facts.kev_mentioned or facts.severe:
         lines.append(
-            'First step: check whether you use any of these products, and fix the ones attackers use first.'
+            'Next step: check the named products and versions with your IT team. '
+            'Prioritize fixes for flaws already used in attacks. Follow the source guidance.'
         )
     return tuple(lines)
 
@@ -164,7 +166,7 @@ def compose(
         for _, value, n, reports in facts.shared
     ]
     vendors = [BriefItem(f'{name} ({n})', search=name) for name, n in facts.vendors]
-    no_terms = 'You have no watch terms yet. Add the products you use in the Watch tab.'
+    no_terms = 'You have no watch terms yet. Add the products you use in Settings.'
     sections = (
         BriefSection(
             'Exploited now',
@@ -196,15 +198,18 @@ def compose(
         (received := _time(doc.created_at)) is not None and end - timedelta(hours=24) <= received <= end
         for doc in facts.fresh
     )
+    findings = highlights(data, facts, end)
     return Brief(
         days=days,
         since=data.since,
-        summary=_summary(facts, days, end.date().isoformat(), kev_trend),
+        summary=_summary(
+            facts, days, end.date().isoformat(), severity_text(data, facts, end, quote=False), kev_trend
+        ),
         sections=sections,
         as_of=end.isoformat(),
         recent_reports=recent,
         report_count=len(facts.fresh),
         source_count=len({_source(doc) for doc in facts.fresh}),
-        highlights=highlights(data, facts, end),
+        highlights=findings,
         coverage=coverage(data, facts, end),
     )

@@ -209,16 +209,20 @@ def test_a_full_week_summary_reads_from_most_to_least_urgent() -> None:
     ]
     watch = {'Jet Admin': {'d1'}, 'Siemens': set()}
     result = compose(data(documents=docs, kev=kevs, mentions=mentions, watch=watch))
-    assert result.summary == (
-        'In the last 7 days, 4 new reports came in from 4 sources.',
-        'CISA added 2 more weaknesses to its known exploited list, in products from Acme and Bolt.',
-        'US federal agencies must fix the next of them by 2026-11-21.',
-        "1 weakness already on CISA's list also appears in new reports from NCSC and SANS.",
-        'The highest listed base score is 9.9 out of 10 for CVE-2026-123965 in '
-        'Jet Admin Cloud Platform Prompt Injection.',
-        '1 new report mentions your watch terms: Jet Admin (1).',
-        'First step: check whether you use any of these products, and fix the ones attackers use first.',
+    assert result.summary[0] == 'In the last 7 days, 4 new reports came in from 4 sources.'
+    assert result.summary[1] == (
+        'CISA added 2 flaws to its list of flaws used in attacks. Products include Acme Gateway and '
+        'Bolt Gateway. Check whether you use an affected product and version.'
     )
+    text = ' '.join(result.summary)
+    assert 'US federal agencies must fix the next of them by 2026-11-21.' in result.summary
+    assert 'reports from NCSC and SANS. Products include Old Gateway.' in text
+    assert 'not proof of attacks today or on your systems' in text
+    assert 'Jet Admin Cloud Platform Prompt Injection' in text
+    assert '1 new report mentions your watch terms: Jet Admin (1).' in result.summary
+    assert result.summary[-1].startswith('Next step: check the named products and versions')
+    assert '9.9 out of 10' not in text
+    assert 'CVE-2026-123965' in result.sections[1].items[0].text
     for sentence in result.summary:
         assert plain.grade(sentence) <= plain.MAX_GRADE, sentence
 

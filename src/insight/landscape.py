@@ -341,8 +341,9 @@ def _trending(threats: list[ThreatTrend], quieter: list[ThreatTrend], days: int)
         lines.append(
             f'The most reported kind of threat is {top.name.lower()}, in {_counted(top.change, days)}.'
         )
-    else:
-        lines.append('None of the new reports name a common kind of threat, such as ransomware or phishing.')
+    if threats:
+        first = hot[0] if hot else threats[0]
+        lines.extend((f'Why it matters: {first.impact}', f'What to check: {first.check}'))
     if quieter:
         lines.append(f'Quieter than usual: {name_list([t.name for t in quieter], limit=2)}.')
     return lines
@@ -351,15 +352,15 @@ def _trending(threats: list[ThreatTrend], quieter: list[ThreatTrend], days: int)
 def _behaviour(tactics: list[TacticTrend], days: int) -> list[str]:
     if rising := [t for t in tactics if t.change.label == RISING][:2]:
         first = rising[0]
-        lines = [f'More reports than usual describe attackers {first.plain} ({first.name}).']
+        lines = [f'More reports than usual describe attackers {first.plain}.']
         if len(rising) == 1:
             lines.append(f'That is {_counted(first.change, days)}.')
         else:
-            lines.append(f'The same goes for {rising[1].plain} ({rising[1].name}).')
+            lines.append(f'The same goes for {rising[1].plain}.')
         return lines
     if tactics:
         top = max(tactics, key=lambda t: (t.change.current, -_ORDER[t.change.label]))
-        return [f'Reports most often describe attackers {top.plain} ({top.name}).']
+        return [f'The reports most often show attackers {top.plain}.']
     return []
 
 
@@ -378,7 +379,7 @@ def _kev_trend(data: LandscapeData, w: _Windows, days: int) -> str:
 
 def _caveats(data: LandscapeData, w: _Windows, days: int, tagged: bool) -> tuple[str, ...]:
     lines = [
-        'These numbers count words and ATT&CK technique IDs in your reports. A rise can mean more reporting, '
+        'Counts come from terms and tagged attack methods in your reports. A rise can mean more reporting, '
         'not more attacks.'
     ]
     if not w.periods:
@@ -414,11 +415,15 @@ def compose(data: LandscapeData, brief_data: BriefData, *, since: str, days: int
     quieter = sorted((t for t in themes if t.change.label == QUIETER), key=lambda t: -(t.change.usual or 0.0))
     tactics = _tactics(data, w)
     sources = len({d.source_name for d in w.now.values()})
+    # Lead with known exploited/severe flaws when present; otherwise lead with the reported threat.
+    # Report volume remains context, not the lead finding. Detail sections retain exact CVEs and scores.
+    urgent = bool(brief.sections[0].items or brief.sections[1].items)
     summary = [
-        _activity(w, days, sources),
+        *(brief.summary[1:] if urgent else ()),
         *_trending(threats, quieter, days),
         *_behaviour(tactics, days),
-        *brief.summary[1:],
+        *(brief.summary[1:] if not urgent else ()),
+        _activity(w, days, sources),
     ]
     if not w.now and not any(k.date_added >= w.since_date for k in data.kev):
         summary = [

@@ -54,6 +54,36 @@ TLP_CLASSES: Final = {
     'RED': 'tlp-red',
 }
 
+# Keep the standard token intact; an audience description does not replace a sharing rule.
+# FIRST TLP 2.0: https://www.first.org/tlp/
+TLP_AUDIENCES: Final = {
+    'CLEAR': 'Public',
+    'GREEN': 'Community only',
+    'AMBER': 'Need to know',
+    'AMBER+STRICT': 'Your organization only',
+    'RED': 'Named recipients only',
+}
+TLP_GUIDANCE: Final = {
+    'CLEAR': 'May be shared publicly. Copyright and source terms still apply.',
+    'GREEN': "Share within the source's community only. Do not post publicly.",
+    'AMBER': 'Share only with people who need to know in your organization and its clients.',
+    'AMBER+STRICT': (
+        'Share only with people who need to know in your organization. Do not share with clients.'
+    ),
+    'RED': 'Only the people who received this may read it. Do not share it further.',
+}
+
+
+def tlp_text(value: str) -> str:
+    """An audience hint beside the exact stored label, never a new classification."""
+    return f'{TLP_AUDIENCES.get(value, "Sharing not confirmed")} · TLP:{value}'
+
+
+def tlp_guidance(value: str) -> str:
+    """Explain who may receive the information, without changing its source terms."""
+    return TLP_GUIDANCE.get(value, 'Do not share this until the source confirms its sharing label.')
+
+
 #: Quasar's own colour variables, mapped onto the tokens so its components follow the theme. ``!important``
 #: because NiceGUI writes its default colours as an inline style on ``<body>``. ``--q-dark`` is Quasar's
 #: *dark-mode surface* (and the colour of its ``text-dark``), so it is only remapped in the dark theme.
@@ -98,5 +128,7 @@ def apply_theme(theme: Theme, text_size: TextSize = 'standard') -> None:
 
 
 def tlp_badge(value: str) -> None:
-    css_class = TLP_CLASSES.get(value, TLP_CLASSES['CLEAR'])
-    ui.label(f'TLP:{value}').classes(f'tlp-badge {css_class} text-xs rounded px-2 py-1')
+    css_class = TLP_CLASSES.get(value, TLP_CLASSES['RED'])
+    ui.label(tlp_text(value)).classes(
+        f'tlp-badge {css_class} text-xs rounded px-2 py-1 max-w-full whitespace-normal break-value shrink-0'
+    ).tooltip(tlp_guidance(value))

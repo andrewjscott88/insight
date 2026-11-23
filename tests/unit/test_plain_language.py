@@ -88,7 +88,7 @@ SENTENCES = [(where, text) for where, text in STRINGS if len(text.split()) >= 8]
 
 def test_the_collector_finds_the_interface_text() -> None:
     assert len(STRINGS) > 120
-    assert ('landscape.py', 'Threat landscape') in STRINGS
+    assert ('landscape.py', 'Intel brief') in STRINGS
     sign_in = [text for where, text in STRINGS if where == 'login.html']
     assert 'Sign in to see what changed and what to check next.' in sign_in
 

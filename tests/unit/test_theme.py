@@ -35,7 +35,32 @@ from insight.appearance import (
 )
 from insight.ui.appearance import theme_color_script
 from insight.ui.styles import QUASAR_OVERRIDES, STYLE, TEXT_SIZE_STYLE
-from insight.ui.theme import PALETTES, TLP_CLASSES, palette_css, theme_head_html
+from insight.ui.theme import PALETTES, TLP_CLASSES, palette_css, theme_head_html, tlp_guidance, tlp_text
+
+
+@pytest.mark.parametrize(
+    ('label', 'audience', 'boundary'),
+    [
+        ('CLEAR', 'Public', 'Copyright and source terms still apply.'),
+        ('GREEN', 'Community only', 'Do not post publicly.'),
+        ('AMBER', 'Need to know', 'your organization and its clients'),
+        ('AMBER+STRICT', 'Your organization only', 'Do not share with clients.'),
+        ('RED', 'Named recipients only', 'Do not share it further.'),
+    ],
+)
+def test_sharing_labels_keep_the_standard_token_and_explain_the_audience(
+    label: str, audience: str, boundary: str
+) -> None:
+    """Regression: a bare colour code gave readers no plain-language sharing guidance."""
+    assert tlp_text(label) == f'{audience} · TLP:{label}'
+    assert boundary in tlp_guidance(label)
+
+
+def test_an_unknown_sharing_label_is_never_described_as_public() -> None:
+    """Regression: an unknown label must not inherit the public badge's appearance or meaning."""
+    assert tlp_text('UNKNOWN') == 'Sharing not confirmed · TLP:UNKNOWN'
+    assert tlp_guidance('UNKNOWN').startswith('Do not share this')
+
 
 APP_CSS = (Path(insight.__file__).parent / 'static' / 'app.css').read_text()
 TEXT_AAA = 7.0  # WCAG 1.4.6 Contrast (Enhanced)

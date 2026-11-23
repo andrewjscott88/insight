@@ -46,6 +46,8 @@ from .test_auth import PROTECTED
 MARKER = 'ZEBRA-MERIDIAN-7731'
 HIDDEN_TECHNIQUE = 'T1490'  # Inhibit System Recovery: written only in the AMBER report
 HIDDEN_IP = '198.51.100.77'
+HIDDEN_CVE = 'CVE-2024-33333'
+HUNT_PUBLIC_CVE = 'CVE-2024-22222'
 HIDDEN_PIVOT_IP = '8.8.4.4'
 HIDDEN_PIVOT_DOMAIN = 'hidden.example.net'
 SHARED_IP = '192.0.2.44'
@@ -61,7 +63,7 @@ def world(app: FastAPI) -> dict[str, Any]:
     revision; and a GREEN-limited read-write key."""
     with app.state.session_factory.begin() as db:
         green, _ = services.ingest(
-            db, report('Public note', f'Scanning from {SHARED_IP} (T1595.001).', 'GREEN')
+            db, report('Public note', f'Scanning from {SHARED_IP} (T1595.001). {HUNT_PUBLIC_CVE}.', 'GREEN')
         )
         amber, _ = services.ingest(
             db,
@@ -69,7 +71,8 @@ def world(app: FastAPI) -> dict[str, Any]:
                 f'{MARKER} briefing',
                 f'{MARKER}: C2 at {HIDDEN_IP}, also {SHARED_IP}, {HIDDEN_PIVOT_IP} '
                 f'and {HIDDEN_PIVOT_DOMAIN}. '
-                f'{HIDDEN_TECHNIQUE}. A wiper followed.',
+                f'{HIDDEN_TECHNIQUE}. A wiper followed. {HIDDEN_CVE}. '
+                f'{HUNT_PUBLIC_CVE} has a public proof of concept.',
                 'AMBER',
             ),
         )
@@ -339,6 +342,27 @@ def test_nothing_hidden_leaks_through_any_read_route(client: TestClient, world: 
         '/api/actors',
         '/api/actors/G0016',
         '/api/actors/G0016/guide',
+        '/api/hunt-guides',
+        '/api/hunt-guides/actor/G0016',
+        '/api/hunt-guides/actor/G0016?format=md',
+        '/api/hunt-guides/actor/G0016?format=pdf',
+        '/api/hunt-guides/theme/wipers',
+        '/api/hunt-guides/theme/wipers?format=md',
+        '/api/hunt-guides/theme/wipers?format=pdf',
+        '/api/hunt-guides/software/S0154',
+        f'/api/hunt-guides/document/{world["amber"]}',
+        f'/api/hunt-guides/document/{world["green"]}?format=md',
+        f'/api/hunt-guides/document/{world["green"]}?format=pdf',
+        f'/api/hunt-guides/cve/{HIDDEN_CVE}',
+        f'/api/hunt-guides/cve/{HUNT_PUBLIC_CVE}',
+        f'/api/hunt-guides/cve/{HUNT_PUBLIC_CVE}?format=md',
+        f'/api/hunt-guides/cve/{HUNT_PUBLIC_CVE}?format=pdf',
+        f'/api/hunt-guides/exploit/{HIDDEN_CVE}',
+        f'/api/hunt-guides/exploit/{HUNT_PUBLIC_CVE}',
+        f'/api/hunt-guides/indicator/{world["hidden_entity"]}',
+        f'/api/hunt-guides/indicator/{world["shared_entity"]}',
+        f'/api/hunt-guides/campaign/{world["actor_campaign"]}',
+        f'/api/hunt-guides/actor/{world["hidden_actor"]}',
         '/api/actors/G0016/timeline',
         '/api/actors/G0016/campaigns',
         '/api/software/S0154/navigator',
@@ -399,12 +423,17 @@ def test_nothing_hidden_leaks_through_any_read_route(client: TestClient, world: 
             '/api/actors/G0016/timeline',
             '/api/actors/G0016/campaigns',
             '/api/software/S0154/navigator',
+            '/api/hunt-guides',
+            '/api/hunt-guides/actor/G0016',
+            '/api/hunt-guides/software/S0154',
+            f'/api/hunt-guides/cve/{HUNT_PUBLIC_CVE}',
         }:
             assert response.status_code == 200, response.text
         body = readable(response)
         for secret in (
             MARKER,
             HIDDEN_IP,
+            HIDDEN_CVE,
             world['amber'],
             world['new'],
             world['hidden_entity'],
@@ -430,12 +459,12 @@ def test_visible_data_is_counted_from_visible_reports_only(client: TestClient, w
     listed = get(client, world, '/api/documents', include_superseded='true').json()
     assert [d['id'] for d in listed] == [world['old'], world['green']]  # not the AMBER current revision
     entities = {e['value']: e['document_count'] for e in get(client, world, '/api/entities').json()}
-    assert entities == {SHARED_IP: 1, 'CVE-2024-11111': 1}
+    assert entities == {SHARED_IP: 1, 'CVE-2024-11111': 1, HUNT_PUBLIC_CVE: 1}
     assert get(client, world, '/api/stats').json() == {
         'documents': 1,  # the current revision of the synced item is AMBER: only the GREEN report counts
-        'entities': 2,
+        'entities': 3,
         'unreviewed': 1,
-        'observations_unreviewed': 1,
+        'observations_unreviewed': 2,
     }
     old = get(client, world, f'/api/documents/{world["old"]}').json()
     assert [r['id'] for r in old['revisions']] == [world['old']]  # the AMBER revision is not listed
@@ -445,7 +474,7 @@ def test_ioc_exports_are_capped_at_the_key_limit(client: TestClient, world: dict
     export = get(client, world, '/api/iocs/export', max_tlp='RED').json()
     assert export['filters']['max_tlp'] == 'GREEN'  # the stricter of the request and the key
     assert export['tlp'] == 'GREEN'
-    assert {ioc['value'] for ioc in export['iocs']} == {SHARED_IP}
+    assert {ioc['value'] for ioc in export['iocs']} == {SHARED_IP, HUNT_PUBLIC_CVE}
 
 
 def test_stix_exports_apply_the_key_and_instance_limits(

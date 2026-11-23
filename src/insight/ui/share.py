@@ -10,7 +10,6 @@ from typing import Final
 
 from nicegui import ui
 
-from .hunt_packages import build_hunt_packages
 from .ioc_export import open_ioc_export_dialog
 from .typography import heading, new_tab_link
 from .workspace import Workspace
@@ -58,4 +57,3 @@ def build_share(ws: Workspace) -> None:
             'file or with your MISP instance.',
         ):
             new_tab_link('MISP guide', f'{DOCS}/MISP.md')
-    build_hunt_packages(ws)

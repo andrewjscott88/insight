@@ -779,6 +779,44 @@ for the current report version within the included set, so a received report can
 comparison against a previous period is made in the brief itself (the threat landscape, `GET /api/landscape`,
 makes one), so repeated coverage must not be interpreted as an increase in attacks. Full behavior and interpretation: [Executive brief](EXECUTIVE_BRIEF.md).
 
+## Hunt guide previews and downloads
+
+These authenticated GET routes accept a browser session or any API-key access level that can read.
+They use the normal `read` rate budget and the stricter of the instance and caller TLP ceilings. They
+make no external request, call no model and run no search against organisational telemetry. Guide generation
+only writes its audit event; it saves no guide, package, product or finding.
+
+| Route | Result |
+| --- | --- |
+| `GET /api/hunt-guides?kind=theme&q=ransom` | Choice lists, filtered before the 50-choice cap per kind. `kind` is optional; omit it for all eight lists. `q` defaults to empty and is at most 120 characters. |
+| `GET /api/hunt-guides/{kind}/{ref}?format=json` | Build the guide from then-current visible evidence. `format` is `json` (default), `md` or `pdf`. Markdown/PDF are attachments with `Cache-Control: no-store`. |
+
+Kinds are `theme`, `actor`, `cve`, `document`, `exploit`, `software`, `indicator` and `campaign`.
+Choice JSON maps each requested kind to an array of `[ref, display_name]` pairs. Use the returned `ref` in
+the guide path: a theme key; catalog or analyst actor ID; CVE identifier; document ID; software ID; entity ID
+for an indicator; or campaign ID. For `exploit`, the ref is a CVE with saved exploit/exploitation context.
+`kind` is at most 20 characters and path `ref` at most 128. Unknown kinds, hidden subjects and missing
+subjects return the same `404 Hunt guide choice not found`. Invalid bounds or format return `422`.
+
+Report choices use existing title, source and body search. Other choices search their names, aliases or
+identifiers as applicable. Hidden, rejected-only and superseded-only indicator mentions cannot supply a
+starting subject. Search again to reach a match outside the first 50 choices; no pagination token is returned.
+
+The JSON guide is `{kind, ref, title, summary, tlp, created_at, sections}`. All fields except `sections` are
+strings; `created_at` is the generation time in UTC. A section is `{title, lines: [string]}`. Guides include
+fixed planning steps, library source references and saved metadata, never publisher bodies, summaries or
+private analyst notes. The output retains its aggregate sharing label even if a list or text is shortened.
+PDF repeats TLP on each page. Markdown/PDF defang network indicators and escape untrusted text.
+
+Limits: 20 current reports, 100 eligible reviewed indicators and 12 techniques. Report plans consider up to
+12 CVE references; campaign plans inspect up to 200 visible links and note other indicator/software links
+for separate review. Section text is capped at 40,000 characters, with per-line/section bounds and visible
+limit notes. See [Threat Hunt](THREAT_HUNT.md) for selection, attribution and copyright rules.
+
+Successful generation is audited as `hunt.guide`, with `object_id=ref`, caller actor and detail containing
+kind, format and TLP. UI previews record the same action with format `preview`; choice listing is not audited.
+These reads never create actor attribution or establish that an indicator is malicious.
+
 ## Workspace
 
 | Route | Result |

@@ -181,13 +181,12 @@ def screens(page: Any) -> Iterator[str]:
         page.get_by_role('dialog', name=dialog).get_by_role('button', name=close).click()
         expect(page.get_by_role('dialog', name=dialog)).to_have_count(0)
     for section, tab in (
-        ('Today', None),
-        ('Requirements', None),
+        ('Intel Brief', None),
         ('Investigate', 'Indicators'),
         ('Investigate', 'CVEs'),
         ('Investigate', 'ATT&CK techniques'),
         ('Investigate', 'Threat groups'),
-        ('Products', None),
+        ('Threat Hunt', None),
         ('Share', None),
         ('Settings', None),
     ):

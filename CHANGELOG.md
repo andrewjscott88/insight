@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Guided threat hunt workspace
+
+- **Intel Brief** leads with affected products, known attacks and plain-English impact and next steps.
+  The 7/30-day choices, last-24-hour receipt count, exact CVE/score evidence and date rules remain.
+- **Threat Hunt** builds a reviewable guide from a threat type, actor, CVE, report/advisory, exploit activity,
+  malware/tool, indicator or campaign. Download metadata-only Markdown or PDF; no AI, network lookup,
+  telemetry search, rule execution or saved intelligence changes. Guide generation is audited.
+- Hunt packages move from Share to Threat Hunt; existing products remain under **Saved intelligence
+  reports**. Requirements remain under **Settings → Intelligence questions (advanced)**, with their APIs
+  and report links intact.
+- Sharing badges explain the audience while retaining standard TLP tokens. **Public · TLP:CLEAR** still
+  carries copyright and source terms; no records or access limits are relabelled.
+- New read endpoints: `GET /api/hunt-guides` and `GET /api/hunt-guides/{kind}/{ref}`. No schema migration or
+  dependency change. See [Threat hunt](docs/THREAT_HUNT.md) and [ADR 0041](docs/adr/0041-guided-threat-hunt-workspace.md).
+
 ## 1.0.0 - 2026-11-23
 
 ### Poll a TAXII 2.1 collection (TIP 4.5, part 2)
