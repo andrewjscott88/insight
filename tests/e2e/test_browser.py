@@ -148,7 +148,7 @@ def test_import_stix_file_in_the_workspace(context: Any) -> None:
     }
     bundle = {'type': 'bundle', 'id': f'bundle--{uuid.uuid4()}', 'objects': [indicator, report]}
     file = {'name': 'partner.json', 'mimeType': 'application/json', 'buffer': json.dumps(bundle).encode()}
-    page.get_by_role('button', name='Add intelligence').click()
+    page.get_by_role('button', name='Import Intel').click()
     dialog = page.get_by_role('dialog', name='Add intelligence')
     dialog.get_by_text('Import a STIX bundle', exact=True).click()
     submit = dialog.get_by_role('button', name='Import bundle')
@@ -158,7 +158,7 @@ def test_import_stix_file_in_the_workspace(context: Any) -> None:
     picker.set_input_files(file)
     submit.click()
     expect(page.get_by_text('Imported 1 new report. Already present: 0.')).to_be_visible()
-    page.get_by_role('button', name='Add intelligence').click()
+    page.get_by_role('button', name='Import Intel').click()
     picker.set_input_files(file)
     submit.click()
     expect(page.get_by_text('Imported 0 new reports. Already present: 1.')).to_be_visible()
@@ -173,7 +173,7 @@ def test_import_pdf_advisory_in_the_workspace(context: Any) -> None:
     data = template.replace(b'Synthetic advisory:', f'Synthetic {key}:'.encode())
     upload = {'name': 'advisory.pdf', 'mimeType': 'application/pdf', 'buffer': data}
     title = f'Partner & Müller <{key}>'
-    page.get_by_role('button', name='Add intelligence').click()
+    page.get_by_role('button', name='Import Intel').click()
     dialog = page.get_by_role('dialog', name='Add intelligence')
     dialog.get_by_label('Document title').fill(title)
     dialog.get_by_label('Source name').fill('Browser fixture')
@@ -205,7 +205,7 @@ def test_analyst_workflow(context: Any) -> None:
     page = context.new_page()
     sign_in(page)
     expect(page.get_by_role('heading', name='Intel brief', exact=True)).to_be_visible()
-    page.get_by_role('button', name='Add intelligence').click()
+    page.get_by_role('button', name='Import Intel').click()
     page.get_by_label('Document title').fill(title)
     page.get_by_label('Source name').fill('Browser test')
     page.get_by_label('Source content').fill('Exploitation of CVE-2024-3400 from 192.0.2.77 was observed.')
@@ -280,7 +280,7 @@ def test_full_length_notional_report(context: Any) -> None:
     requests: list[str] = []
     page.on('request', lambda request: requests.append(request.url))
     sign_in(page)
-    page.get_by_role('button', name='Add intelligence').click()
+    page.get_by_role('button', name='Import Intel').click()
     page.get_by_label('Document title').fill(title)
     page.get_by_label('Source name').fill('Notional CTI Cell')
     page.get_by_label('Source content').fill(text)
@@ -301,7 +301,7 @@ def test_second_notional_report_tlp_and_javascript_offsets(context: Any) -> None
     title = f'SALT MERIDIAN {uuid.uuid4().hex[:8]}'
     page = context.new_page()
     sign_in(page)
-    page.get_by_role('button', name='Add intelligence').click()
+    page.get_by_role('button', name='Import Intel').click()
     page.get_by_label('Document title').fill(title)
     page.get_by_label('Source name').fill('Notional CTI Cell')
     page.get_by_label('Source content').fill(text)

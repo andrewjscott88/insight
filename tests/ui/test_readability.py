@@ -66,7 +66,7 @@ async def test_the_report_reader_is_structured_by_headings(user: User) -> None:
     }
 
 
-@pytest.mark.parametrize(('button', 'title'), [('Add intelligence', 'Add intelligence'),
+@pytest.mark.parametrize(('button', 'title'), [('Import Intel', 'Add intelligence'),
                                                ('Export IOCs', 'Export indicators of compromise (IOCs)'),
                                                ('What the words mean', 'What the words mean')])  # fmt: skip
 async def test_dialogs_have_a_name_and_a_heading(user: User, button: str, title: str) -> None:
