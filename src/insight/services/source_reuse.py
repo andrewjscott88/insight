@@ -16,4 +16,9 @@ def _restricted_reports(db: Session, documents: Sequence[Document]) -> set[str]:
     keys = {doc.source_key for doc in documents if is_operator_source(doc.source_key)}
     stmt = select(OperatorSource.key, OperatorSource.reuse).where(OperatorSource.key.in_(keys))
     rules = dict(db.execute(stmt).all()) if keys else {}
-    return {doc.id for doc in documents if metadata_only(doc.source_key, rules.get(doc.source_key or ''))}
+    return {
+        doc.id
+        for doc in documents
+        if doc.operator_publisher_metadata_only
+        or metadata_only(doc.source_key, rules.get(doc.source_key or ''))
+    }

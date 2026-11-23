@@ -46,7 +46,7 @@ class Source:
     name: str
     #: The feed for ``kev`` and ``rss`` sources. For ``csaf`` sources, the page people open to browse them.
     url: str
-    kind: Literal['kev', 'rss', 'csaf', 'abusech', 'otx']
+    kind: Literal['kev', 'rss', 'csaf', 'abusech', 'otx', 'taxii']
     note: str
     #: Fixed download URLs when ``url`` points to the publisher page people can open in the workspace.
     indexes: tuple[str, ...] = ()

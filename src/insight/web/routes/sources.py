@@ -18,10 +18,12 @@ from ...connectors import (
 )
 from ...lookups import NVD_INTERVAL, LookupThrottled, request_lookup
 from ...models import SessionFactory
+from ...operator_feed import SourceNotConfigured
 from ...schemas import (
     ScheduleInput,
 )
 from ...source_registry import SOURCES, in_use, is_operator_source
+from ...taxii_client import TaxiiNotConfigured
 from ..auth import AuthDependency, acting, caller_of, reader_limit
 from .cves import exploit_view
 from .threats import write_limit
@@ -80,6 +82,8 @@ def _register_source_routes(app: FastAPI, sessions: SessionFactory, require_auth
                     'reuse': row.reuse,
                     'tlp': row.tlp,
                     'in_use': row.enabled,
+                    'kind': row.kind,
+                    'configured': row.configured,
                     'runs': runs(row.key),
                 }
                 for row in services.list_operator_sources(db, max_tlp=limit)
@@ -107,6 +111,8 @@ def _register_source_routes(app: FastAPI, sessions: SessionFactory, require_auth
                 raise HTTPException(404, 'Unknown source') from None
             except SourceSwitchedOff as exc:
                 raise HTTPException(409, str(exc)) from exc
+            except SourceNotConfigured:
+                raise HTTPException(503, 'Source credentials are not configured.') from None
             except SourceSyncError as exc:
                 raise HTTPException(502, str(exc)) from exc
 
@@ -142,8 +148,17 @@ def _register_source_routes(app: FastAPI, sessions: SessionFactory, require_auth
                     ).enabled
                 if body.interval_minutes and not enabled:
                     raise HTTPException(409, 'Source is switched off. Switch it on first.')
-                schedule = services.set_schedule(db, key, body.interval_minutes, at=now, starts_at=starts_at)
+                schedule = services.set_schedule(
+                    db,
+                    key,
+                    body.interval_minutes,
+                    at=now,
+                    starts_at=starts_at,
+                    max_tlp=write_limit(app, request),
+                )
                 return schedule_view(key, schedule)
+        except TaxiiNotConfigured:
+            raise HTTPException(503, 'Source credentials are not configured.') from None
         except LookupError:
             raise HTTPException(404, 'Unknown source') from None
         except ValueError as exc:

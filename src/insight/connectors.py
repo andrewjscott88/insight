@@ -186,6 +186,27 @@ class Validators:
     last_modified: str = ''
 
 
+@dataclass(slots=True)
+class DownloadHeaders:
+    """Only the bounded response fields needed by a TAXII reader; never expose arbitrary response headers."""
+
+    content_type: str = ''
+    date_added_last: str = ''
+
+    def read(self, response: httpx.Response) -> None:
+        def bounded(name: str, limit: int) -> str:
+            values = response.headers.get_list(name)
+            if not values:
+                return ''
+            value = values[0]
+            if len(values) != 1 or not (0 < len(value) <= limit and value.isascii() and value.isprintable()):
+                raise ValueError('Invalid download response headers')
+            return value
+
+        self.content_type = bounded('Content-Type', 256)
+        self.date_added_last = bounded('X-TAXII-Date-Added-Last', 128)
+
+
 class NotModified(Exception):
     """The server answered ``304 Not Modified`` to a request that carried :class:`Validators`."""
 
@@ -201,6 +222,7 @@ async def download(
     *,
     transport: httpx.AsyncBaseTransport | None = None,
     validators: Validators | None = None,
+    response_headers: DownloadHeaders | None = None,
     headers: Mapping[str, str] | None = None,
     body: bytes | None = None,
     max_bytes: int = MAX_BYTES,
@@ -235,7 +257,15 @@ async def download(
         async with asyncio.timeout(DOWNLOAD_DEADLINE):
             addresses = await _public_addresses(parts.hostname, allow_private=allow_private)
             return await _fetch(
-                url, addresses, params, request_headers, validators, transport, body, max_bytes
+                url,
+                addresses,
+                params,
+                request_headers,
+                validators,
+                transport,
+                body,
+                max_bytes,
+                response_headers,
             )
     except TimeoutError as exc:  # The overall deadline (L6); a normal fetch failure, recorded like any other.
         raise TimeoutError(f'The download took longer than {DOWNLOAD_DEADLINE:g} seconds') from exc
@@ -250,6 +280,7 @@ async def _fetch(
     transport: httpx.AsyncBaseTransport | None,
     body: bytes | None,
     max_bytes: int = MAX_BYTES,
+    response_headers: DownloadHeaders | None = None,
 ) -> bytes:
     async with httpx.AsyncClient(
         timeout=httpx.Timeout(25), follow_redirects=False, trust_env=False, transport=transport
@@ -265,7 +296,7 @@ async def _fetch(
                     headers={**request_headers, **target.headers},
                     extensions=target.extensions,
                 ) as response:
-                    return await _read(response, url, validators, max_bytes)
+                    return await _read(response, url, validators, max_bytes, response_headers)
             except httpx.ConnectError:
                 if index == len(addresses) - 1:  # Every checked address refused: report the last error.
                     raise
@@ -273,7 +304,11 @@ async def _fetch(
 
 
 async def _read(
-    response: httpx.Response, url: str, validators: Validators | None, max_bytes: int = MAX_BYTES
+    response: httpx.Response,
+    url: str,
+    validators: Validators | None,
+    max_bytes: int = MAX_BYTES,
+    response_headers: DownloadHeaders | None = None,
 ) -> bytes:
     if response.status_code == 304:
         if validators is not None:
@@ -292,6 +327,8 @@ async def _read(
         data.extend(chunk)
         if len(data) > max_bytes:
             raise ValueError(f'Source exceeds the {max_bytes // 1_000_000} MB payload limit')
+    if response_headers is not None:
+        response_headers.read(response)
     return bytes(data)
 
 

@@ -113,6 +113,9 @@ class Document(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     fingerprint: Mapped[str] = mapped_column(String(64), unique=True)
     reuse_changed_at: Mapped[str | None] = mapped_column(UtcTimestamp(), default=None)
+    operator_publisher_metadata_only: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false()
+    )
     content_hash: Mapped[str] = mapped_column(String(64), index=True)
     title: Mapped[str] = mapped_column(String(300))
     body: Mapped[str] = mapped_column(Text)
@@ -453,6 +456,8 @@ class OperatorSource(Base):
     name: Mapped[str] = mapped_column(String(160))
     kind: Mapped[str] = mapped_column(String(20))
     url: Mapped[str] = mapped_column(Text)
+    collection_id: Mapped[str | None] = mapped_column(String(250), default=None)
+    credential_env: Mapped[str | None] = mapped_column(String(55), default=None)
     tlp: Mapped[str] = mapped_column(String(20))
     reuse: Mapped[str] = mapped_column(String(20))
     revision: Mapped[int] = mapped_column(Integer, default=1)

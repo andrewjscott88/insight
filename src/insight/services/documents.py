@@ -48,11 +48,19 @@ class StructuredObservations:
     technique_ids: frozenset[str] | None = None
 
 
-def fingerprint(item: DocumentInput, *, file_sha256: str | None = None, ref: SourceRef | None = None) -> str:
+def fingerprint(
+    item: DocumentInput,
+    *,
+    file_sha256: str | None = None,
+    ref: SourceRef | None = None,
+    operator_publisher_metadata_only: bool = False,
+) -> str:
     """Content identity, scoped to the source item for operator feeds with independent reuse rules."""
     identity = item.model_dump()
     if ref is not None and is_operator_source(ref.source_key):
         identity.update(source_key=ref.source_key, external_id=ref.external_id)
+        if operator_publisher_metadata_only:
+            identity['operator_publisher_metadata_only'] = True
     if file_sha256 is not None:
         # Preserve distinct files with identical text and the historic identity of pasted reports.
         del identity['body']  # A decoder update can change text ordering for the same immutable file.
@@ -110,6 +118,7 @@ def _create_document(
     *,
     truncated: bool = False,
     document_id: str | None = None,
+    operator_publisher_metadata_only: bool = False,
 ) -> Document:
     doc = Document(
         **item.model_dump(),
@@ -121,6 +130,7 @@ def _create_document(
         external_id=ref.external_id if ref else None,
         search_text=fold(f'{item.title}\n{item.source_name}\n{item.body}'),
         truncated=truncated,
+        operator_publisher_metadata_only=operator_publisher_metadata_only,
     )
     db.add(doc)
     mentions = observations.mentions
@@ -150,6 +160,7 @@ def ingest(
     initial_document_id: str | None = None,
     preserve_source_tlp: bool = False,
     file_sha256: str | None = None,
+    operator_publisher_metadata_only: bool = False,
 ) -> tuple[Document, bool]:
     """Store ``item`` with its extracted observations. Returns ``(document, created)``.
 
@@ -173,9 +184,15 @@ def ingest(
     Operator feeds inherit the previous source item's label when it is stricter. Other imports using
     ``preserve_source_tlp`` reject an attempted downgrade.
     """
+    if operator_publisher_metadata_only and (ref is None or not is_operator_source(ref.source_key)):
+        raise ValueError('A per-document publisher restriction requires an operator source')
     submitted_tlp = item.tlp
     item = apply_tlp_policy(item)
     current = _current_revision(db, ref) if ref is not None else None
+    if current is not None and current.operator_publisher_metadata_only:
+        # Other source formats may reuse the same native ID after the operator changes an endpoint.
+        # Preserve its publisher's restriction even if that format cannot express it.
+        operator_publisher_metadata_only = True
     inherited = False
     if (
         current is not None
@@ -186,7 +203,12 @@ def ingest(
         inherited = True
     if max_tlp is not None:
         _refuse_above(item.tlp if inherited else submitted_tlp, item.tlp, max_tlp)
-    fp = fingerprint(item, file_sha256=file_sha256, ref=ref)
+    fp = fingerprint(
+        item,
+        file_sha256=file_sha256,
+        ref=ref,
+        operator_publisher_metadata_only=operator_publisher_metadata_only,
+    )
     existing = db.scalar(select(Document).where(Document.fingerprint == fp))
     if ref is None:
         if existing is not None:
@@ -236,6 +258,7 @@ def ingest(
         observations,
         truncated=truncated,
         document_id=initial_document_id if current is None else None,
+        operator_publisher_metadata_only=operator_publisher_metadata_only,
     )
     _audit_tlp_raise(db, doc, submitted_tlp, inherited=inherited)
     if current is not None:

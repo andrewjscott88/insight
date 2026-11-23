@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Poll a TAXII 2.1 collection (TIP 4.5, part 2)
+
+- Add a publisher's collection in Settings, with an optional host environment variable for its credential.
+  Poll it once or on a schedule. Each successful import saves the position for next time.
+- Imports enforce the source and publisher sharing rules, including when a report is updated. A failed
+  batch keeps the previous position and reports.
+- Migration `0032` adds TAXII settings and records publisher restrictions on imported reports. Downgrading
+  to `0031` drops TAXII subscriptions and their sync state. It keeps reports and their handling labels,
+  with metadata-only sharing for removed collections. Restore a backup to recover original subscriptions.
+
 ### Operator-defined RSS and Atom sources (TIP 4.5, part 1)
 
 - Add a feed in Settings, give it a TLP label and choose whether its publisher permits sharing the text.

@@ -23,7 +23,7 @@ from .tlp import TlpNotPermitted, tlp_permitted, visible_levels
 class OperatorSourceView:
     key: str
     name: str
-    kind: Literal['rss']
+    kind: Literal['rss', 'taxii']
     url: str
     tlp: TLP
     reuse: Reuse
@@ -32,13 +32,21 @@ class OperatorSourceView:
     created_at: str
     updated_at: str
     actor: str
+    collection_id: str | None = None
+    credential_env: str | None = None
+    configured: bool = True
 
 
 def _view(source: OperatorSource, enabled: bool | None) -> OperatorSourceView:
+    configured = True
+    if source.kind == 'taxii':
+        from ..taxii_client import credentials_configured
+
+        configured = credentials_configured(source.credential_env)
     return OperatorSourceView(
         source.key,
         source.name,
-        cast("Literal['rss']", source.kind),
+        cast("Literal['rss', 'taxii']", source.kind),
         source.url,
         cast('TLP', source.tlp),
         cast('Reuse', source.reuse),
@@ -47,6 +55,9 @@ def _view(source: OperatorSource, enabled: bool | None) -> OperatorSourceView:
         source.created_at,
         source.updated_at,
         source.actor,
+        source.collection_id,
+        source.credential_env,
+        configured,
     )
 
 
@@ -121,7 +132,11 @@ def _changed(db: Session, source: OperatorSource) -> None:
 
 
 def _mark_reuse_change(db: Session, key: str, stamp: str) -> None:
-    db.execute(update(Document).where(Document.source_key == key).values(reuse_changed_at=stamp))
+    db.execute(
+        update(Document)
+        .where(Document.source_key == key, Document.operator_publisher_metadata_only.is_(False))
+        .values(reuse_changed_at=stamp)
+    )
 
 
 def _stop_jobs(db: Session, key: str) -> None:
@@ -151,6 +166,8 @@ def create_operator_source(
         key=OPERATOR_PREFIX + uuid4().hex,
         name=payload.name,
         kind=payload.kind,
+        collection_id=payload.collection_id,
+        credential_env=payload.credential_env,
         url=payload.url,
         tlp=payload.tlp,
         reuse=payload.reuse,
@@ -171,10 +188,10 @@ def update_operator_source(
 ) -> OperatorSourceView:
     source, enabled = _source(db, key, max_tlp, lock=True)
     _check_label(payload.tlp, max_tlp)
-    if (source.name, source.kind, source.url, source.tlp, source.reuse) == (
+    endpoint = (source.kind, source.url, source.collection_id, source.credential_env)
+    new_endpoint = (payload.kind, payload.url, payload.collection_id, payload.credential_env)
+    if endpoint == new_endpoint and (source.name, source.tlp, source.reuse) == (
         payload.name,
-        payload.kind,
-        payload.url,
         payload.tlp,
         payload.reuse,
     ):
@@ -182,7 +199,7 @@ def update_operator_source(
     _changed(db, source)
     if not tlp_permitted(source.tlp, payload.tlp):
         source.history_visible_since = source.updated_at
-    if (source.kind, source.url) != (payload.kind, payload.url):
+    if endpoint != new_endpoint:
         if enabled:
             set_source_switch(db, key, False, at=datetime.now(UTC))
         enabled = False
@@ -190,7 +207,8 @@ def update_operator_source(
         db.execute(delete(Schedule).where(Schedule.source_key == key))
     if source.reuse != payload.reuse:
         _mark_reuse_change(db, key, source.updated_at)
-    source.name, source.kind, source.url = payload.name, payload.kind, payload.url
+    source.name = payload.name
+    source.kind, source.url, source.collection_id, source.credential_env = new_endpoint
     source.tlp, source.reuse = payload.tlp, payload.reuse
     db.execute(delete(FetchState).where(FetchState.url == key))
     audit(db, 'source.update', key)

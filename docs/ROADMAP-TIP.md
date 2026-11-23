@@ -534,8 +534,9 @@ PDF, Markdown and STIX `report`. Peers: EclecticIQ, OpenCTI.
 
 ### 4.5 Operator-defined sources
 
-Operators can add RSS or Atom feeds in Settings with a TLP label and a publisher reuse rule. They start
-switched off. The second part adds TAXII collection polling (review J3).
+Operators can add RSS or Atom feeds and TAXII 2.1 collections in Settings. Each starts switched off with
+a TLP floor and a metadata-only reuse rule. TAXII polls resume from the last complete import and can use
+a credential supplied through the host environment (review J3).
 [ADR 0040](adr/0040-operator-defined-sources.md)
 
 ### 4.6 Infrastructure pivots
@@ -639,7 +640,7 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
 - [x] **4.3** Hunt packages (Sigma, YARA, Suricata, Snort as STIX indicators) in a TAXII collection (ADR 0034)
 - [x] **4.4** Finished intelligence products (key judgements, estimative language, PDF/Markdown/STIX):
   ADR 0036
-- [ ] **4.5** Operator-defined RSS and Atom feeds complete. TAXII collection polling remains.
+- [x] **4.5** Operator-defined RSS, Atom and TAXII 2.1 sources, with per-source handling, opt-in schedules and host-supplied credentials (ADR 0040).
 - [x] **4.6** Infrastructure pivots: RDAP, RIPEstat, certificate transparency and CIRCL passive DNS
 - [x] **4.7** Adversary library imports: sourced group aliases, software links and sharing, actor timelines and Navigator layers (ADR 0038)
 - [x] **4.8** Read-only MCP endpoint for AI agents, with eight tools and per-key sharing ceilings (ADR 0039)

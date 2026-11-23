@@ -679,6 +679,14 @@ How far each source and report can be trusted, and how well the reports back up 
 API keys can read operator-defined feeds up to their sharing ceiling. Creating, editing, switching and
 deleting definitions requires a signed-in browser session and its CSRF token. Submitted URLs must use HTTPS
 on port 443 and omit credentials, query strings and fragments. Saving a definition makes no network request.
+Operator sources may also poll one TAXII 2.1 collection. Send `kind: taxii`, the API root in `url`,
+and the collection identifier in `collection_id`. For authenticated collections, `credential_env` names
+a host variable matching `INSIGHT_SOURCE_[A-Z0-9_]{1,40}`. A missing or unusable value sets `configured`
+to false. An enabled collection then returns `503` on sync or a request to turn on its schedule. An existing
+schedule keeps its setting and resumes automatically when the credentials return. The API returns the
+variable name and availability only. A TAXII sync validates the collection pages and commits the imported
+reports and resume timestamp together. [TAXII guide](TAXII.md)
+
 Source run and job history omit missing or deleted sources. When a source moves to a lower TLP, limited keys
 see only history from the new sharing period. For operator feeds, limited keys receive job and run statuses
 and times with an empty message, since counts and diagnostics can describe more restricted reports.
@@ -686,10 +694,10 @@ and times with an empty message, since counts and diagnostics can describe more 
 | Route | Result |
 | --- | --- |
 | `GET /api/sources` | Curated sources and operator sources visible to the caller, with `key`, `name`, `url`, `note`, `category`, `optional`, `reuse`, `in_use` and the latest five permitted runs. Operator entries have category `operator` and include their `tlp`. |
-| `GET /api/operator-sources` | Visible operator-defined feeds. Each entry includes `key`, `name`, `kind`, `url`, `tlp`, `reuse`, `enabled`, `revision`, creation/update times and the actor. |
+| `GET /api/operator-sources` | Visible operator-defined feeds. Each entry includes `key`, `name`, `kind`, `url`, `tlp`, `reuse`, `enabled`, `revision`, creation/update times, the actor, `collection_id`, `credential_env` and `configured`. |
 | `GET /api/operator-sources/{key}` | One definition. Hidden and missing sources both return `404`. |
 | `POST /api/operator-sources` | Create a feed, switched off, and return its definition with `201`. Send `name` and `url`. Defaults are `kind: rss` (RSS or Atom), `tlp: AMBER` and `reuse: metadata`. Set `reuse: public` only when the publisher permits sharing the text. |
-| `PUT /api/operator-sources/{key}` | Replace the definition using the same fields. Changing the endpoint switches the source and schedule off. Saving a label above the instance ceiling returns `403`. |
+| `PUT /api/operator-sources/{key}` | Replace the definition using the same fields. Changing the endpoint, collection, source kind or credential variable switches the source and schedule off. Saving a label above the instance ceiling returns `403`. |
 | `PUT /api/operator-sources/{key}/switch` | Send `{"enabled": true}` to permit future syncs or `{"enabled": false}` to disable syncs and the schedule. |
 | `DELETE /api/operator-sources/{key}` | Remove the feed definition and its schedule. The reports keep their handling labels and follow metadata-only reuse. Returns `{"deleted": "<key>"}`. |
 | `POST /api/sources/{key}/sync` | Sync one enabled source. Returns `{"message": …}`, `404` for an unknown source, `409` if switched off or another sync is running, and `502` on provider failure. Operator sources require a browser session or an unlimited read-write key. |

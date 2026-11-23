@@ -251,7 +251,8 @@ GLOSSARY: Final[tuple[tuple[str, str], ...]] = (
     ),
     (
         'TAXII',
-        'A standard way for tools to fetch threat information from a server. Insight runs a TAXII feed.',
+        'A standard way for tools to fetch threat information from a server. '
+        'Insight can share its own feed and read a collection.',
     ),
     (
         'STIX',

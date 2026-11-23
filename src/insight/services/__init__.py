@@ -320,7 +320,7 @@ from .sources import (
     set_source_switch,
     source_switches,
 )
-from .stix_imports import import_stix
+from .stix_imports import import_operator_stix, import_stix
 from .taxii import taxii_collection_objects
 from .techniques import (
     TechniqueCount,
@@ -583,6 +583,7 @@ __all__ = [
     'guide_data',
     'hunt_checks',
     'hunts_for',
+    'import_operator_stix',
     'import_pdf',
     'import_stix',
     'indicator_confidence',

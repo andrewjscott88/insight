@@ -14,7 +14,7 @@ def test_0031_rollback_retains_reports_without_exposing_their_text(empty_databas
     engine = create_engine(empty_database_url)
     try:
         migrations.upgrade(engine, '0030')
-        migrations.upgrade(engine, '0031')
+        migrations.upgrade(engine)
         keys: list[str] = []
         ids: list[str] = []
         with Session(engine) as db, db.begin():

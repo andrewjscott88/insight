@@ -11,7 +11,7 @@ from typing import Final
 from nicegui import ui
 
 from .. import services
-from ..source_registry import SOURCES, in_use
+from ..source_registry import SOURCES, in_use, is_operator_source
 from .messages import tell
 from .workspace import Workspace
 
@@ -56,22 +56,21 @@ def _save(ws: Workspace, keys: list[str], minutes: int | None, start: str) -> li
     with ws.write() as db:
         schedules = services.list_schedules(db) if minutes is None else {}
         for key in keys:
-            if key not in SOURCES:
-                try:
-                    source = services.get_operator_source(
-                        db, key, max_tlp=ws.app.state.settings.max_tlp, lock=True
-                    )
-                except LookupError:
-                    continue
-                if not source.enabled:
-                    continue
             interval = minutes
             if interval is None:
                 schedule = schedules.get(key)
                 if schedule is None or not schedule.enabled:
                     continue
                 interval = schedule.interval_minutes
-            services.set_schedule(db, key, interval, at=now, starts_at=starts_at)
+            limit = ws.app.state.settings.max_tlp
+            try:
+                if not interval and is_operator_source(key):
+                    # A disabled schedule still needs a visible source; enabling is checked in set_schedule.
+                    services.get_operator_source(db, key, max_tlp=limit, lock=True)
+                services.set_schedule(db, key, interval, at=now, starts_at=starts_at, max_tlp=limit)
+            except (LookupError, ValueError):
+                # A feed or its credentials can change after the page is shown.
+                continue
             saved.append(key)
     return saved
 
@@ -109,11 +108,16 @@ def build_all_sources_schedule(ws: Workspace, controls: ScheduleControls) -> Non
     def changed(minutes: int | None) -> None:
         if minutes is None or not ws.authorized():
             return
-        for key in _save(ws, _in_use(ws), minutes, controls.start):
+        keys = _in_use(ws)
+        saved = _save(ws, keys, minutes, controls.start)
+        for key in saved:
             # Each source's own control runs nothing new for an unchanged value.
             if select := controls.selects.get(key):
                 select.set_value(minutes)
-        _confirm(ws, 'All sources you use sync', minutes, controls.start, plural=True)
+        if len(saved) == len(keys):
+            _confirm(ws, 'All sources you use sync', minutes, controls.start, plural=True)
+        else:
+            tell('Saved schedules for feeds that are ready. Check settings for the other feeds.', 'warning')
         redraw()
 
     with ui.row().classes('items-center gap-3 flex-wrap'):
@@ -128,7 +132,9 @@ def build_all_sources_schedule(ws: Workspace, controls: ScheduleControls) -> Non
     ).classes('muted text-sm prose')
 
 
-def build_schedule_control(ws: Workspace, key: str, name: str, controls: ScheduleControls) -> ui.select:
+def build_schedule_control(
+    ws: Workspace, key: str, name: str, controls: ScheduleControls, *, configured: bool = True
+) -> ui.select:
     """A source's schedule choice, and when it next syncs by itself."""
     minutes, _ = _interval(ws, key)
 
@@ -146,10 +152,13 @@ def build_schedule_control(ws: Workspace, key: str, name: str, controls: Schedul
             ws.refresh_all()
             tell('This source has changed. Check it before you set a schedule.', 'warning')
             return
+        if not configured and value == 0:
+            select.disable()
         _confirm(ws, name + ' syncs', value, controls.start)
         next_sync.refresh()
 
-    select = ui.select(CHOICES, value=minutes, label='Sync by itself', on_change=lambda e: changed(e.value))
+    choices = CHOICES if configured else {k: v for k, v in CHOICES.items() if k in (0, minutes)}
+    select = ui.select(choices, value=minutes, label='Sync by itself', on_change=lambda e: changed(e.value))
     select.props('outlined dense').classes('min-w-[12rem]')
     next_sync()
     controls.selects[key] = select

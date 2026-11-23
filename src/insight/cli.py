@@ -501,36 +501,53 @@ def schedule(source: str | None, every: str | None, at: str | None = None) -> st
     from datetime import UTC, datetime
 
     from . import services
+    from .config import parse_max_tlp
     from .source_registry import SOURCES, in_use
 
+    ceiling = parse_max_tlp(os.environ.get('INSIGHT_MAX_TLP', ''))
     labels = {minutes: name for name, minutes in SCHEDULE_EVERY.items()}
     with _current_database() as sessions, sessions.begin() as db:
         switches = services.source_switches(db)
         enabled = {s.key: in_use(s, switches) for s in SOURCES.values()}
-        enabled.update({s.key: s.enabled for s in services.list_operator_sources(db, max_tlp=None)})
+        operator = services.list_operator_sources(db, max_tlp=ceiling)
+        enabled.update({s.key: s.enabled for s in operator})
+        unconfigured = {s.key for s in operator if not s.configured}
         if source is not None:
             if every is None:
                 raise ValueError(f'say how often: --every {"|".join(SCHEDULE_EVERY)}')
             if source != 'all' and source not in enabled:
                 raise ValueError(f'unknown source {source!r}; use all or one of: {", ".join(enabled)}')
-            keys = [k for k, on in enabled.items() if on] if source == 'all' else [source]
+            keys = (
+                [
+                    k
+                    for k, on in enabled.items()
+                    if on and (not SCHEDULE_EVERY[every] or k not in unconfigured)
+                ]
+                if source == 'all'
+                else [source]
+            )
             now = datetime.now(UTC)
             starts_at = services.time_of_day(at, now) if at else None
             services.set_actor(db, 'cli')
             for key in keys:
                 is_on = enabled[key]
                 if key.startswith('op-'):
-                    is_on = services.get_operator_source(db, key, lock=True, max_tlp=None).enabled
+                    is_on = services.get_operator_source(db, key, lock=True, max_tlp=ceiling).enabled
                 if SCHEDULE_EVERY[every] and not is_on:
                     if source == 'all':
                         continue
                     raise ValueError(f'{key} is switched off; switch it on in Settings › Sources first')
-                services.set_schedule(db, key, SCHEDULE_EVERY[every], at=now, starts_at=starts_at)
+                services.set_schedule(
+                    db, key, SCHEDULE_EVERY[every], at=now, starts_at=starts_at, max_tlp=ceiling
+                )
         stored = services.list_schedules(db)
         lines = []
         for key, on in enabled.items():
             s = stored.get(key)
-            if s is not None and s.enabled and s.next_run_at:
+            if key in unconfigured:
+                state = f'every {labels[s.interval_minutes]}' if s is not None and s.enabled else 'off'
+                lines.append(f'{key}: {state}; source credentials are not configured')
+            elif s is not None and s.enabled and s.next_run_at:
                 when = s.next_run_at[:16].replace('T', ' ')
                 lines.append(f'{key}: every {labels[s.interval_minutes]}; next sync {when} UTC')
             elif not on:

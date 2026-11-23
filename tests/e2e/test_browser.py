@@ -374,3 +374,36 @@ def test_operator_adds_edits_and_removes_an_offline_feed(context: Any) -> None:
     card.get_by_role('button', name='Delete feed').click()
     page.get_by_role('dialog', name='Delete feed').get_by_role('button', name='Delete feed').click()
     expect(card).to_have_count(0)
+
+
+def test_operator_manages_taxii_collection_without_sending_credentials(context: Any) -> None:
+    page = context.new_page()
+    sign_in(page)
+    show(page, 'Settings')
+    suffix = uuid.uuid4().hex[:8]
+    name = f'Training collection {suffix}'
+    variable = 'INSIGHT_SOURCE_' + suffix.upper()
+    page.get_by_role('button', name='Add a feed', exact=True).click()
+    add = page.get_by_role('dialog', name='Add a feed')
+    add.get_by_role('combobox', name='Source type').click()
+    page.get_by_role('option', name='TAXII 2.1 collection', exact=True).click()
+    add.get_by_label('Feed name', exact=True).fill(name)
+    add.get_by_label('Web address of the TAXII API root').fill('https://example.org/taxii/')
+    add.get_by_label('Collection ID', exact=True).fill('training')
+    add.get_by_label('Host variable name').fill(variable)
+    add.get_by_role('button', name='Save feed').click()
+    card = page.locator('.operator-source-card').filter(
+        has=page.get_by_role('heading', name=name, exact=True)
+    )
+    expect(card.get_by_text('Credentials not configured.', exact=False)).to_be_visible()
+    expect(card.get_by_role('button', name='Sync now')).to_be_disabled()
+    card.get_by_role('button', name='Edit feed').click()
+    edit = page.get_by_role('dialog', name='Edit feed')
+    expect(edit.get_by_label('Host variable name')).to_have_value(variable)
+    edit.get_by_label('Host variable name').fill('')
+    edit.get_by_role('button', name='Save feed').click()
+    expect(card.get_by_text('No credentials will be sent.', exact=True)).to_be_visible()
+    expect(card.get_by_role('switch', name='Use this feed')).not_to_be_checked()
+    card.get_by_role('button', name='Delete feed').click()
+    page.get_by_role('dialog', name='Delete feed').get_by_role('button', name='Delete feed').click()
+    expect(card).to_have_count(0)

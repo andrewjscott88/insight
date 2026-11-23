@@ -90,7 +90,14 @@ off. Its downloader accepts HTTPS on port 443, follows no redirects, and can con
 address of that feed's hostname. Download size and time are bounded. The operator chooses a TLP floor for
 every report and records whether the publisher allows its text to be shared. Exports use the current rule
 and treat unknown or deleted operator sources as metadata-only. Reads through an API key respect its TLP
-ceiling, including source lists and schedules. [ADR 0040](adr/0040-operator-defined-sources.md)
+ceiling, including source lists and schedules.
+
+For TAXII, the database holds the collection ID and the optional name of a host environment variable.
+Insight reads the credential from that variable for the request and sends it in the Authorization header
+to the configured host. A missing or empty variable blocks the request. A pagination token is passed as a
+query value to that same collection. The source settings, run history and audit log omit the credential
+value. Publisher restrictions survive subsequent imports and changes to the source's reuse rule.
+[ADR 0040](adr/0040-operator-defined-sources.md)
 
 Threat guides ([ADR 0025](adr/0025-threat-guides.md)): guides and their exports (JSON, Markdown, Navigator layer, sweep CSV/JSON) carry the most restrictive label of anything they include (sweep rows and their verdicts, and reports behind counts, included) and follow the caller's TLP limit plus an optional stricter `max_tlp`; every export is audited (`actor.guide`). Actors, report links, industry decisions, rules and hunts carry their own labels; labelled writes are refused above the caller's or the instance limit. Sweep CSV cells are protected against spreadsheet formula injection, Markdown links are limited to `http(s)` and escaped, and the CLI writes owner-only files that are never overwritten. YARA, Sigma, Suricata and Snort rules are stored and shown as text only, never compiled or executed. `insight threat-library-sync` contacts only `raw.githubusercontent.com` through the connector allowlist (HTTPS, no redirects, size-capped) and refuses any file whose SHA-256 differs from the pinned release. The sweep list takes indicators only from reports linked to the group unless the caller opts in to reports that merely name it. Above-limit industry decisions, hunts and rules look missing (`404`). Nothing infers attribution.
 
