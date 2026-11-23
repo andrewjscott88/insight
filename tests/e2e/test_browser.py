@@ -364,7 +364,11 @@ def test_operator_adds_edits_and_removes_an_offline_feed(context: Any) -> None:
     expect(card.get_by_text('Share titles, dates and links only.')).to_be_visible()
     card.get_by_role('button', name='Edit feed').click()
     edit = page.get_by_role('dialog', name='Edit feed')
-    edit.get_by_role('checkbox', name='The publisher allows sharing its report text.').check()
+    permission = edit.get_by_role('checkbox', name='The publisher allows sharing its report text.')
+    expect(permission).not_to_be_checked()
+    permission.press('Space')
+    # NiceGUI updates the checkbox state after the server receives the change.
+    expect(permission).to_be_checked()
     edit.get_by_role('button', name='Save feed').click()
     expect(card.get_by_text('The publisher allows sharing its report text.')).to_be_visible()
     card.get_by_role('button', name='Delete feed').click()
