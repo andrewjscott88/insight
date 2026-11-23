@@ -7,7 +7,6 @@ Read [AGENTS.md](../../AGENTS.md) first: its rules and checklist apply to every 
 | --- | --- | --- |
 | [Finish and merge pull requests #102–#111](finish-pull-requests-102-111.md) | 4.6, 4.7, 4.8 | 0037–0039 |
 | [TIP 4.5 Operator-defined sources](tip-4.5-operator-defined-sources.md) | [4.5](../ROADMAP-TIP.md#45-operator-defined-sources) | 0040 |
-| [TIP 4.6 Infrastructure pivots](tip-4.6-infrastructure-pivots.md) | [4.6](../ROADMAP-TIP.md#46-infrastructure-pivots) | 0037 |
 
 Used for work done elsewhere: 0036 (TIP 4.4, finished intelligence products).
 

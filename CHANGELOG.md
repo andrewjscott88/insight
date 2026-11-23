@@ -51,6 +51,18 @@
 - Includes shared infrastructure-pivot API and workspace support. The same boundary applies to RDAP and RIPEstat. [Operator guide](docs/INFRASTRUCTURE_PIVOTS.md), [ADR 0037](docs/adr/0037-infrastructure-pivots.md).
 - Upgrade: no database migration or new dependency; no outbound calls until enabled and approved.
 
+- Long passive DNS names and answers stay within the phone dialog when a result is expanded.
+
+### Added: passive DNS (TIP 4.6 part 3)
+
+- With approved CIRCL access and host credentials, an optional manual pivot shows up to 500 DNS history
+  records with dates and counts. Its active resolver is explicitly disabled. The provider starts off and
+  each uncached lookup needs consent for a reviewed value in a current CLEAR report.
+- Shared pivot API, cache, audit, throttle and link-map controls keep provider context separate from
+  reviewed indicators.
+  [Guide](docs/INFRASTRUCTURE_PIVOTS.md) · [ADR 0037](docs/adr/0037-infrastructure-pivots.md).
+- Upgrade: no database migration or dependency. No CIRCL calls without host credentials, Settings opt-in and approval.
+
 ### Upgrade notes
 
 - The threat library now writes `insight-threat-library-2`. Existing format 1 synced libraries still load;

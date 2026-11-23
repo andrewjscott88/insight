@@ -25,4 +25,10 @@ INFRASTRUCTURE_GLOSSARY: tuple[tuple[str, str], ...] = (
         'Public logs of certificates issued for names on the internet. crt.sh searches these logs. '
         'A listed name does not prove who owns or uses it now.',
     ),
+    (
+        'Passive DNS, CIRCL',
+        'Past records of how internet names point to addresses or other names. '
+        'CIRCL is the Computer Incident Response Center Luxembourg, which shares this history with approved '
+        'users. A past record does not prove who owns or uses a name now.',
+    ),
 )

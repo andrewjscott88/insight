@@ -19,7 +19,7 @@ pytestmark = pytest.mark.e2e
 
 
 @pytest.mark.parametrize(('width', 'theme'), [(320, 'light'), (390, 'dark')])
-@pytest.mark.parametrize('provider_name', ['RDAP', 'crt.sh'])
+@pytest.mark.parametrize('provider_name', ['RDAP', 'crt.sh', 'CIRCL passive DNS'])
 def test_long_domain_confirmation_fits_a_phone(
     context: Any, width: int, theme: str, provider_name: str
 ) -> None:
@@ -53,14 +53,20 @@ def test_long_domain_confirmation_fits_a_phone(
     show(page, 'Settings')
     toggle = page.get_by_role('switch', name=f'Use {provider_name}', exact=True)
     expect(toggle).to_be_visible()
+    configured = toggle.is_enabled()
+    assert configured or provider_name == 'CIRCL passive DNS'
     initially_on = toggle.get_attribute('aria-checked') == 'true'
-    if not initially_on:
+    if configured and not initially_on:
         toggle.click()
         message = page.get_by_role('alert').filter(has_text=f'{provider_name} is on.')
         expect(message).to_be_visible()
         message.get_by_role('button', name='Dismiss', exact=True).click()
         expect(message).to_be_hidden()
-    expect(toggle).to_have_attribute('aria-checked', 'true')
+    if configured:
+        expect(toggle).to_have_attribute('aria-checked', 'true')
+    else:
+        expect(toggle).to_be_disabled()
+        expect(toggle).to_have_attribute('aria-checked', 'false')
     try:
         page.get_by_role('button', name=f'{theme.title()} theme', exact=True).click()
         page.get_by_role('button', name='Larger text', exact=True).click()
@@ -76,23 +82,37 @@ def test_long_domain_confirmation_fits_a_phone(
         page.get_by_role('button', name='Pivot', exact=True).click()
         dialog = page.get_by_role('dialog', name='Infrastructure pivots', exact=True)
         expect(dialog).to_be_visible()
-        expect(dialog.get_by_role('button', name=f'Look up at {provider_name}', exact=True)).to_be_disabled()
-        for element in (
+        if configured:
+            expect(
+                dialog.get_by_role('button', name=f'Look up at {provider_name}', exact=True)
+            ).to_be_disabled()
+        else:
+            expect(
+                dialog.get_by_role(
+                    'checkbox', name=f'I approve sending {domain} to {provider_name}.', exact=True
+                )
+            ).to_have_count(0)
+        elements = [
             dialog.locator('.q-card'),
             dialog.get_by_role('heading', name=f'Infrastructure around {domain}', exact=True),
-            dialog.get_by_role(
-                'checkbox', name=f'I approve sending {domain} to {provider_name}.', exact=True
-            ),
-            dialog.get_by_role(
-                'checkbox', name=f'I approve sending {domain} to {provider_name}.', exact=True
-            ).locator('.q-checkbox__label'),
-        ):
+        ]
+        if configured:
+            # A synthetic-credential test server exercises consent without a provider request.
+            elements += [
+                dialog.get_by_role(
+                    'checkbox', name=f'I approve sending {domain} to {provider_name}.', exact=True
+                ),
+                dialog.get_by_role(
+                    'checkbox', name=f'I approve sending {domain} to {provider_name}.', exact=True
+                ).locator('.q-checkbox__label'),
+            ]
+        for element in elements:
             assert element.evaluate('e => e.scrollWidth <= e.clientWidth + 1')
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
         dialog.get_by_role('button', name='Close', exact=True).click()
     finally:
         page.keyboard.press('Escape')
         show(page, 'Settings')
-        if not initially_on:
+        if configured and not initially_on:
             toggle.click()
             expect(toggle).to_have_attribute('aria-checked', 'false')

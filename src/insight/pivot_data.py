@@ -12,11 +12,12 @@ from . import egress
 
 MAX_BYTES: Final = 2_000_000
 MAX_ROWS: Final = 500
-PROVIDERS: Final = {'rdap': 'RDAP', 'asn': 'RIPEstat', 'crtsh': 'crt.sh'}
+PROVIDERS: Final = {'rdap': 'RDAP', 'asn': 'RIPEstat', 'crtsh': 'crt.sh', 'circl': 'CIRCL passive DNS'}
 PROVIDER_KINDS: Final = {
     'rdap': frozenset({'domain', 'ip'}),
     'asn': frozenset({'ip'}),
     'crtsh': frozenset({'domain'}),
+    'circl': frozenset({'domain', 'ip'}),
 }
 _DOMAIN = re.compile(r'(?=.{1,253}\Z)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,62}')
 

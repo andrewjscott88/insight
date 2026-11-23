@@ -70,11 +70,18 @@ Do not use an Insight API key as an OAuth client secret. Protocol revision and c
 IOC exports (see [IOC_EXPORT.md](IOC_EXPORT.md)) change no reports or review states; each one adds an audit event (`ioc.export`, whose object ID is the `export_id` inside the file). Each file carries the most restrictive TLP of the reports it includes, and `max_tlp` keeps more restrictive reports out of a file entirely. Residual risks the operator must manage: evidence excerpts are raw report text (up to 90 characters either side of a mention) and can carry names, internal host names or indicators an analyst rejected, so exports that leave the team should be made without evidence (`--no-evidence`, `evidence=false`, or the dialog's **Include evidence excerpts**); defanging covers values, titles and evidence (including e-mail domains, CIDR ranges and file-like names) but leaves source URLs as stored; browser and API downloads use the operator's default file permissions, while the CLI writes owner-only files; and an extracted or accepted indicator is not a maliciousness verdict, so exports must not feed blocking controls without review.
 
 Optional infrastructure pivots ([ADR 0037](adr/0037-infrastructure-pivots.md)) use `crt.sh` as an
-outbound destination in this part. The switch is off by default; each uncached request requires consent,
+outbound destination. The switch is off by default; each uncached request requires consent,
 accepted evidence in a current CLEAR report, a shared throttle and audit. Cache reads recheck that evidence.
 The guarded HTTPS downloader enforces the fixed host, public checked addresses, no redirects, 2 MB and
 30 seconds. No certificate blobs, contact fields or new observations are kept. Provider conditions and
 limitations: [Infrastructure pivots](INFRASTRUCTURE_PIVOTS.md).
+
+Optional infrastructure pivots ([ADR 0037](adr/0037-infrastructure-pivots.md)) use `www.circl.lu` as an
+outbound host. CIRCL requires host credentials and an off-by-default switch; each uncached
+request needs consent, current accepted CLEAR evidence, audit and a shared throttle. Basic credentials go
+in a header only; active query resolution is explicitly disabled. Guarded HTTPS pins public checked
+addresses, refuses redirects and caps responses at 2 MB / 30 seconds. No response bodies or credentials
+appear in errors. [Access conditions and metadata limits](INFRASTRUCTURE_PIVOTS.md).
 
 Outbound requests (source syncs, CVE lookups, alert webhooks) resolve the host once, check every address it resolves to, and then connect to one of those checked addresses, with the host name kept for TLS (SNI and the certificate check) and the `Host` header (`insight.egress`, code review L1, TIP 0.4). A DNS answer that changes between the check and the connection (DNS rebinding) can no longer redirect a request to loopback, a private network or a cloud metadata address. IPv4-mapped IPv6 addresses (`::ffff:127.0.0.1`) are judged by the IPv4 address they reach. Two explicit opt-ins relax the public-address rule for one destination each: `INSIGHT_ALERT_PRIVATE_TARGETS=on` for webhooks and `INSIGHT_MISP_PRIVATE_NETWORK=on` for the configured MISP instance. Neither reaches link-local (cloud metadata), multicast or reserved addresses, and the MISP opt-in does not reach loopback either. An outbound network policy remains the backstop and is still recommended. The framework supplies local JS/CSS assets; the GUI uses no application-authored model calls or remote font/CDN assets.
 

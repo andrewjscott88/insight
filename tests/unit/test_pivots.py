@@ -21,11 +21,9 @@ from insight.services.graph import PER_NODE
 ANSWER: dict[str, Any] = {'found': True, 'nodes': [{'type': 'name_server', 'value': 'ns1.example.net'}]}
 
 
-@pytest.mark.parametrize(('provider_key', 'indicator'), [('rdap', IP), ('crtsh', 'example.com')])
-def test_graph_does_not_identify_a_hidden_known_indicator(
-    db: Session, provider_key: str, indicator: str
-) -> None:
+def test_graph_does_not_identify_a_hidden_known_indicator(db: Session, pivot_case: tuple[str, str]) -> None:
     """Regression: a public provider name must not reveal its match to an AMBER-only stored indicator."""
+    provider_key, indicator = pivot_case
     reviewed(db, indicator)
     reviewed(db, 'ns1.example.net', tlp='AMBER')
     db.flush()
@@ -43,15 +41,14 @@ def test_graph_does_not_identify_a_hidden_known_indicator(
 
 
 @pytest.mark.parametrize('change', ['delete', 'reject', 'disable'])
-@pytest.mark.parametrize(('provider_key', 'indicator'), [('rdap', IP), ('crtsh', 'example.com')])
 async def test_in_flight_lookup_cannot_restore_ineligible_cache(
     session_factory: sessionmaker[Session],
     monkeypatch: pytest.MonkeyPatch,
     change: str,
-    provider_key: str,
-    indicator: str,
+    pivot_case: tuple[str, str],
 ) -> None:
     """Regression: an upstream answer arriving after removal or revocation must not resurrect its cache."""
+    provider_key, indicator = pivot_case
     with session_factory.begin() as db:
         document_id = reviewed(db, indicator)
         services.set_pivot_switch(db, provider_key, True)
@@ -76,15 +73,15 @@ async def test_in_flight_lookup_cannot_restore_ineligible_cache(
 
 
 def test_pivot_defaults_and_audited_switch(db: Session) -> None:
-    assert services.pivot_switches(db) == {'rdap': False, 'asn': False, 'crtsh': False}
+    assert services.pivot_switches(db) == {'rdap': False, 'asn': False, 'crtsh': False, 'circl': False}
     services.set_actor(db, 'operator')
     services.set_pivot_switch(db, 'rdap', True)
     assert services.pivot_switches(db)['rdap']
     assert any(e.action == 'pivot.on' for e in services.audit_events(db))
 
 
-@pytest.mark.parametrize(('provider_key', 'indicator'), [('rdap', IP), ('crtsh', 'example.com')])
-def test_cache_eligibility_expiry_and_graph(db: Session, provider_key: str, indicator: str) -> None:
+def test_cache_eligibility_expiry_and_graph(db: Session, pivot_case: tuple[str, str]) -> None:
+    provider_key, indicator = pivot_case
     doc_id = reviewed(db, indicator)
     db.flush()
     entity_id = services.eligible_pivot(db, indicator, max_tlp='GREEN')
@@ -115,10 +112,10 @@ def test_cache_eligibility_expiry_and_graph(db: Session, provider_key: str, indi
     assert services.eligible_pivot(db, indicator, max_tlp=None) is None
 
 
-@pytest.mark.parametrize(('provider_key', 'indicator'), [('rdap', IP), ('crtsh', 'example.com')])
 async def test_off_unapproved_cache_throttle_and_rechecking(
-    session_factory: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch, provider_key: str, indicator: str
+    session_factory: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch, pivot_case: tuple[str, str]
 ) -> None:
+    provider_key, indicator = pivot_case
     calls: list[str] = []
 
     async def fetch(provider: str, value: str) -> dict[str, Any]:
@@ -156,9 +153,9 @@ async def test_off_unapproved_cache_throttle_and_rechecking(
         ('CLEAR', 'accepted', False),
     ],
 )
-@pytest.mark.parametrize(('provider_key', 'indicator'), [('rdap', IP), ('crtsh', 'example.com')])
+@pytest.mark.parametrize('indicator', [IP, 'example.com'])
 def test_only_current_accepted_clear_evidence_grants_pivot_access(
-    db: Session, label: TLP, status: str, current: bool, provider_key: str, indicator: str
+    db: Session, label: TLP, status: str, current: bool, indicator: str
 ) -> None:
     document_id = reviewed(db, indicator, tlp=label, status=status)
     document = db.get(Document, document_id)
@@ -170,10 +167,10 @@ def test_only_current_accepted_clear_evidence_grants_pivot_access(
         services.cached_pivots(db, indicator)
 
 
-@pytest.mark.parametrize(('provider_key', 'indicator'), [('rdap', IP), ('crtsh', 'example.com')])
 async def test_provider_lock_and_audit_actor_are_shared_between_callers(
-    session_factory: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch, provider_key: str, indicator: str
+    session_factory: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch, pivot_case: tuple[str, str]
 ) -> None:
+    provider_key, indicator = pivot_case
     with session_factory.begin() as db:
         reviewed(db, indicator)
         services.set_pivot_switch(db, provider_key, True)
@@ -206,9 +203,9 @@ async def test_provider_lock_and_audit_actor_are_shared_between_callers(
         assert db.scalar(select(func.count()).select_from(Observation)) == 1
 
 
-@pytest.mark.parametrize(('provider_key', 'indicator'), [('rdap', IP), ('crtsh', 'example.com')])
-def test_retention_deletes_orphan_pivot_cache(db: Session, provider_key: str, indicator: str) -> None:
+def test_retention_deletes_orphan_pivot_cache(db: Session, pivot_case: tuple[str, str]) -> None:
     """Regression: cached infrastructure must not outlive its deleted, otherwise unreferenced indicator."""
+    provider_key, indicator = pivot_case
     document_id = reviewed(db, indicator)
     services.set_pivot_switch(db, provider_key, True)
     services.store_pivot(db, provider_key, indicator, ANSWER)
@@ -219,11 +216,11 @@ def test_retention_deletes_orphan_pivot_cache(db: Session, provider_key: str, in
         services.cached_pivots(db, indicator)
 
 
-@pytest.mark.parametrize(('provider_key', 'indicator'), [('rdap', IP), ('crtsh', 'example.com')])
 def test_graph_caps_work_before_resolving_known_indicators(
-    db: Session, monkeypatch: pytest.MonkeyPatch, provider_key: str, indicator: str
+    db: Session, monkeypatch: pytest.MonkeyPatch, pivot_case: tuple[str, str]
 ) -> None:
     """Regression: a large pivot cache must not perform a known-indicator query for every undisplayed row."""
+    provider_key, indicator = pivot_case
     reviewed(db, indicator)
     services.set_pivot_switch(db, provider_key, True)
     services.store_pivot(

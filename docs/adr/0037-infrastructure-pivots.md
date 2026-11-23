@@ -1,6 +1,6 @@
 # 0037: Approved infrastructure pivots
 
-Status: Proposed
+Status: Accepted
 
 ## Decision
 
@@ -53,6 +53,24 @@ Use one fixed HTTPS host through the guarded downloader, no redirects, 2 MB / 30
 60-second shared throttle. Treat malformed, oversized and unrelated answers as failures; never cache them.
 No new dependencies or migration. Provider terms, limitations and the exact metadata fields are in
 [Infrastructure pivots](../INFRASTRUCTURE_PIVOTS.md).
+
+## Passive DNS
+
+CIRCL credentials are host settings, never database rows or API
+inputs. A switch cannot be enabled without them, and removing credentials makes an existing switch
+ineffective. Credentials are checked again before the request. The fixed CIRCL HTTPS endpoint gets a
+Basic Authorization header through the guarded downloader; no redirects, other hosts or URL credentials.
+Always disable the provider's default active resolver with `dribble-disable-active-query`.
+
+Use a five-second shared throttle, one in-flight request, 30 seconds and 2 MB; request 501 rows, retain at
+most 500, never follow cursors. Every bounded NDJSON record must have a query-matching endpoint. Preserve
+provider name/answer direction instead of inferring ownership, and drop unknown fields. Duplicates combine
+the widest observation interval and maximum reported count, never a sum. Missing counts stay unknown.
+
+The graph resolves at most 26 candidate neighbours for its 25-row display cap. It adds no indicators and
+links only reader-visible known values. Cache reads require current accepted CLEAR evidence even when no
+network request occurs. Switching off blocks outbound calls but does not erase eligible cached data.
+No migration or dependency. [Operator and provider conditions](../INFRASTRUCTURE_PIVOTS.md).
 
 ## Provider terms
 

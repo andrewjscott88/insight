@@ -1,6 +1,6 @@
 # Insight
 
-TIP 4.6 adds optional RDAP, RIPEstat and certificate transparency context in the indicator explorer and link map.
+TIP 4.6 adds optional RDAP, RIPEstat, certificate transparency and passive DNS context in the indicator explorer and link map.
 Enable a provider in Settings, then approve each uncached lookup of a reviewed TLP:CLEAR indicator. Contact
 details are dropped and results never become indicators by themselves. See
 [ADR 0037](docs/adr/0037-infrastructure-pivots.md).
@@ -70,6 +70,7 @@ A single-operator threat-intelligence workbench, run locally or published behind
   every other feed, exports carry titles, links, dates and indicators, not the publisher's words.
 - **GreyNoise Community IP context.** With a host key, analysts can approve a passive lookup of a reviewed public IPv4 address from a current TLP:CLEAR report in Entity explorer. [Runbook](docs/RUNBOOK.md#greynoise-community-ip-context)
 - **Certificate transparency (TIP 4.6 part 2).** Optional, approved crt.sh domain lookups show certificate names, issuer and dates in the workspace and link map. [Guide](docs/INFRASTRUCTURE_PIVOTS.md)
+- **Passive DNS (TIP 4.6 part 3).** With approved CIRCL access and your own credentials, manually approved pivots show bounded DNS history and provider/date links. [Guide](docs/INFRASTRUCTURE_PIVOTS.md)
 - **Shodan exposure context (optional, paid).** With your own Shodan key, the same reviewed address can be looked up at Shodan for open ports and exposure. [Runbook](docs/RUNBOOK.md#shodan-exposure-context)
 - **Optional abuse.ch indicator feeds.** Import recent URLs from URLhaus, network indicators and hashes from
   ThreatFox, and file hashes from MalwareBazaar. Set `INSIGHT_ABUSECH_AUTH_KEY` and enable the feeds you use.

@@ -95,6 +95,7 @@ THROTTLES: Final[dict[str, Throttle]] = {
     'rdap': Throttle(2.0),
     'asn': Throttle(2.0),
     'crtsh': Throttle(60.0),  # A deliberately slow local limit for the public certificate search.
+    'circl': Throttle(5.0),
 }
 
 

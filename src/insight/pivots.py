@@ -9,7 +9,7 @@ from typing import Any
 
 import httpx
 
-from . import certificate_transparency, ip_asn, pivot_data, rdap, services
+from . import certificate_transparency, ip_asn, passive_dns, pivot_data, rdap, services
 from .connectors import ProviderError, download
 from .lookups import THROTTLES
 from .models import SessionFactory
@@ -28,11 +28,18 @@ class RateLimited(Exception):
 
 
 async def _request(
-    url: str, provider: str, hosts: frozenset[str], params: dict[str, str] | None = None
+    url: str,
+    provider: str,
+    hosts: frozenset[str],
+    params: dict[str, str] | None = None,
+    *,
+    headers: dict[str, str] | None = None,
 ) -> bytes:
     try:
         async with asyncio.timeout(30):
-            return await download(url, params, allowed_hosts=hosts, max_bytes=pivot_data.MAX_BYTES)
+            return await download(
+                url, params, headers=headers, allowed_hosts=hosts, max_bytes=pivot_data.MAX_BYTES
+            )
     except httpx.HTTPStatusError as exc:
         if exc.response.status_code == 429:
             raw = exc.response.headers.get('Retry-After', '')
@@ -45,7 +52,18 @@ async def _request(
 
 
 async def _fetch(provider: str, value: str) -> dict[str, Any]:
+    pivot_data.subject(value)
+    if provider == 'circl' and not passive_dns.configured():
+        raise NotConfigured('Set the CIRCL passive DNS credentials on the server first.')
     try:
+        if provider == 'circl':
+            raw = await _request(
+                passive_dns.URL + value,
+                provider,
+                frozenset({passive_dns.HOST}),
+                headers=passive_dns.request_headers(),
+            )
+            return passive_dns.parse(raw, value)
         if provider == 'crtsh':
             raw = await _request(
                 certificate_transparency.URL,
@@ -55,7 +73,12 @@ async def _fetch(provider: str, value: str) -> dict[str, Any]:
             )
             return certificate_transparency.parse(raw, value)
         if provider == 'rdap':
-            url, hosts = rdap.destination(value)
+            try:
+                url, hosts = rdap.destination(value)
+            except OSError:
+                raise NotConfigured(
+                    'The pinned registry files are unavailable. Check the installation.'
+                ) from None
             return rdap.parse(await _request(url, provider, hosts), value)
         hosts = frozenset({'stat.ripe.net'})
         raw = await _request(
@@ -74,9 +97,9 @@ async def _fetch(provider: str, value: str) -> dict[str, Any]:
             {'resource': prefix, 'max_related': '0'},
         )
         return ip_asn.overview(raw, prefix, asns)
-    except OSError:
-        raise NotConfigured('The pinned registry files are unavailable. Check the installation.') from None
-    except (KeyError, TypeError, ValueError, RecursionError, OverflowError, AttributeError):
+    except NotConfigured:
+        raise
+    except (KeyError, TypeError, ValueError, RecursionError, OverflowError, OSError, AttributeError):
         raise ProviderError('The provider returned invalid or unrelated infrastructure data.') from None
 
 

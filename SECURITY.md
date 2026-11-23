@@ -37,6 +37,11 @@ approval for each uncached lookup. Its fixed HTTPS endpoint, metadata limits, au
 references are documented in [Infrastructure pivots](docs/INFRASTRUCTURE_PIVOTS.md). Public certificate
 metadata is context, not a verdict or a blanket grant to redistribute provider data.
 
+CIRCL passive DNS requires the operator's approved access and host credentials, an off-by-default switch,
+and approval for each uncached lookup of a reviewed value in a current CLEAR report. Basic credentials go
+only to its fixed HTTPS endpoint, never URLs or stored context. Active queries are explicitly disabled.
+[Provider conditions and controls](docs/INFRASTRUCTURE_PIVOTS.md).
+
 ## Scope and posture
 
 Insight is a single-operator workbench. By default it listens on loopback only; it can be published behind a TLS

@@ -102,6 +102,7 @@ def world(app: FastAPI) -> dict[str, Any]:
             ('rdap', HIDDEN_PIVOT_IP),
             ('asn', HIDDEN_PIVOT_IP),
             ('crtsh', HIDDEN_PIVOT_DOMAIN),
+            ('circl', HIDDEN_PIVOT_DOMAIN),
         ):
             pivot_obs = next(o for o in services.detail(db, amber)['observations'] if o['value'] == value)
             db.add(

@@ -51,6 +51,8 @@ PROTECTED = [
     ('GET', '/api/pivots'),
     ('POST', '/api/pivots/rdap'),
     ('POST', '/api/pivots/crtsh'),
+    ('POST', '/api/pivots/asn'),
+    ('POST', '/api/pivots/circl'),
     ('GET', '/api/session'),
     ('GET', '/api/documents'),
     ('GET', '/api/documents/x'),

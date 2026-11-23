@@ -6,7 +6,7 @@ from typing import Any
 
 from nicegui import ui
 
-from .. import pivot_data, pivots, services
+from .. import passive_dns, pivot_data, pivots, services
 from ..connectors import ProviderError
 from .messages import problem_area, tell
 from .typography import heading
@@ -39,7 +39,7 @@ def _render_result(result: dict[str, Any]) -> None:
     for network in result.get('networks', []):
         ui.label(f'Network number {network["asn"]}: {network["holder"]}').classes('break-value')
     if result.get('truncated'):
-        ui.label('This is a limited set of names, not a full history.').classes('muted prose')
+        ui.label('This is a limited set of records, not a full history.').classes('muted prose')
     for record in result.get('certificates', []):
         with ui.expansion(record['name']).classes('w-full min-w-0').style('overflow-wrap:anywhere'):
             ui.label(f'Issuer: {record["issuer"]}').classes('w-full min-w-0').style('overflow-wrap:anywhere')
@@ -49,6 +49,20 @@ def _render_result(result: dict[str, Any]) -> None:
             ui.label(f'Valid until: {record["not_after"]}').classes('w-full min-w-0').style(
                 'overflow-wrap:anywhere'
             )
+    for record in result.get('records', []):
+        with ui.expansion(record['name']).classes('w-full min-w-0').style('overflow-wrap:anywhere'):
+            ui.label(f'Record type: {record["type"]}').classes('w-full min-w-0').style(
+                'overflow-wrap:anywhere'
+            )
+            ui.label(f'Answer: {record["answer"]}').classes('w-full min-w-0').style('overflow-wrap:anywhere')
+            ui.label(f'First seen: {record["first_seen"]}').classes('w-full min-w-0').style(
+                'overflow-wrap:anywhere'
+            )
+            ui.label(f'Last seen: {record["last_seen"]}').classes('w-full min-w-0').style(
+                'overflow-wrap:anywhere'
+            )
+            count = record['count'] if record['count'] is not None else 'Not supplied'
+            ui.label(f'Count: {count}').classes('w-full min-w-0').style('overflow-wrap:anywhere')
 
 
 def build_pivot_switches(ws: Workspace) -> None:
@@ -61,22 +75,30 @@ def build_pivot_switches(ws: Workspace) -> None:
     def change(provider: str, enabled: bool) -> None:
         if not ws.authorized():
             return
-        with ws.write() as db:
-            services.set_pivot_switch(db, provider, enabled)
+        try:
+            with ws.write() as db:
+                services.set_pivot_switch(db, provider, enabled)
+        except ValueError as exc:
+            tell(str(exc), 'warning')
+            return
         tell(f'{pivot_data.PROVIDERS[provider]} is {"on" if enabled else "off"}.', 'success')
         ws.refresh_all()
 
     with ws.read() as db:
         switches = services.pivot_switches(db)
     for provider, name in pivot_data.PROVIDERS.items():
-        ui.switch(
+        switch = ui.switch(
             f'Use {name}', value=switches[provider], on_change=lambda e, p=provider: change(p, bool(e.value))
         ).mark(f'pivot-switch-{provider}')
+        if provider == 'circl' and not passive_dns.configured():
+            switch.disable()
+    if not passive_dns.configured():
+        ui.label('Set the CIRCL passive DNS credentials on the server first.').classes('muted prose')
     ui.label(
         'RDAP shows registration details without personal contacts. RIPEstat shows which network '
         'announces an address. '
-        'crt.sh shows names on public certificates. A name does not prove ownership or harm. '
-        'Check the provider’s terms before use.'
+        'crt.sh shows names on public certificates. CIRCL shows stored DNS records with active resolution '
+        'disabled. Check each provider’s terms before use.'
     ).classes('muted prose')
 
 

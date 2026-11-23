@@ -1,0 +1,3 @@
+{"rrname":"example.com","rrtype":"A","rdata":"198.51.100.5","time_first":"1704067200","time_last":"1735689600","count":"12","sensor":"DO-NOT-STORE","contact":"DO-NOT-STORE"}
+{"rrname":"198.51.100.6","rrtype":"A","rdata":"example.com","time_first":"1704067200","time_last":"1735689600","count":"4"}
+{"rrname":"example.com","rrtype":"NS","rdata":["ns1.example.net","ns2.example.net"],"time_first":1704067200,"time_last":1735689600}

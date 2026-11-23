@@ -25,6 +25,7 @@ async def test_only_bounded_allowlisted_requests_supply_the_projection(
 
     async def fetch(url: str, params: dict[str, str] | None = None, **options: Any) -> bytes:
         requests.append((url, params))
+        assert options['headers'] is None
         assert options['max_bytes'] == pivot_data.MAX_BYTES
         if provider == 'rdap':
             assert url == 'https://rdap.example/ip/' + IP

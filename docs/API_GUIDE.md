@@ -734,6 +734,18 @@ curl -sS -G "$INSIGHT_URL/api/pivots" --data-urlencode 'value=example.com' \
   -H "Authorization: Bearer $INSIGHT_API_KEY"
 ```
 
+Configure your approved CIRCL credentials on the host and enable **Use CIRCL passive DNS** in Settings.
+This synthetic domain must already have an accepted indicator in a current CLEAR report. POST requires an
+unlimited read-write key; GET also accepts read-only or limited keys. Never send provider credentials to
+these routes. The POST explicitly approves sharing this value with CIRCL; active resolution is disabled.
+
+```sh
+curl -sS -X POST "$INSIGHT_URL/api/pivots/circl" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d '{"value":"example.com","approved":true}'
+curl -sS -G "$INSIGHT_URL/api/pivots" --data-urlencode 'value=example.com' \
+  -H "Authorization: Bearer $INSIGHT_API_KEY"
+```
+
 Both routes recheck current accepted CLEAR evidence. The GET never contacts a provider.
 [Operator guide and provider limits](INFRASTRUCTURE_PIVOTS.md).
 

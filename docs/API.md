@@ -477,7 +477,8 @@ An eligible subject without a fresh cache returns `[]`; a missing, hidden or ine
 `404`. Reads never contact a provider. Results expire after 24 hours and eligibility is rechecked each time.
 
 `POST /api/pivots/{provider}` accepts `{"value":"example.com","approved":true}`. Providers
-are `rdap` (domain or public IP), `asn` (public IP), and `crtsh` (domain). Extra fields are refused. An uncached lookup needs
+are `rdap` (domain or public IP), `asn` (public IP), `crtsh` (domain), and `circl` (domain or public IP).
+Only `circl` requires credentials configured on the host. Extra fields are refused. An uncached lookup needs
 `approved: true`; each provider must be enabled in Settings first. Only an operator session with CSRF or an
 unlimited read-write API key may request it. Limited/read-only keys get `403`, disabled providers `503`,
 missing/ineligible subjects `404`, invalid/unapproved requests `422`, throttled requests `429` with
@@ -495,6 +496,13 @@ strings. `nodes` contains `{type:"certificate_name", value}` graph context. No m
 `found=false`. Renewed names keep their newest validity record. Every provider row must relate to the query.
 Settings switches have no API; they are audited workspace controls. Nothing is scheduled.
 [Limits and provider conditions](INFRASTRUCTURE_PIVOTS.md).
+
+A passive DNS result has `provider`, `value`, `found`, `fetched_at`, `truncated`, `records` and `nodes`.
+`records` holds at most 500 `{name, type, answer, first_seen, last_seen, count}` records; dates are UTC ISO
+strings and unknown counts are null. Name and answer preserve provider orientation. Graph nodes contain
+validated standalone domain/address values only. No matches means empty lists and `found=false`.
+The Settings switch has no API. Credentials stay on the host, outside request bodies and cached metadata.
+[Exact merge rules, passive-only behaviour and provider conditions](INFRASTRUCTURE_PIVOTS.md).
 
 
 ## ATT&CK techniques

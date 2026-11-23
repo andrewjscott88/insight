@@ -9,7 +9,7 @@ from typing import Any
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from .. import pivot_data
+from .. import passive_dns, pivot_data
 from ..models import Document, Enrichment, Entity, Observation, SourceSwitch, now
 from .audit import DEFAULT_ACTOR, audit
 from .tlp import visible_levels
@@ -17,12 +17,16 @@ from .tlp import visible_levels
 
 def pivot_switches(db: Session) -> dict[str, bool]:
     rows = {row.source_key: row.enabled for row in db.scalars(select(SourceSwitch))}
-    return {key: rows.get('pivot:' + key, False) for key in pivot_data.PROVIDERS}
+    switches = {key: rows.get('pivot:' + key, False) for key in pivot_data.PROVIDERS}
+    switches['circl'] = switches['circl'] and passive_dns.configured()
+    return switches
 
 
 def set_pivot_switch(db: Session, provider: str, enabled: bool) -> None:
     if provider not in pivot_data.PROVIDERS:
         raise ValueError('Unknown pivot provider')
+    if provider == 'circl' and enabled and not passive_dns.configured():
+        raise ValueError('Set the CIRCL passive DNS credentials on the server first.')
     key = 'pivot:' + provider
     row = db.get(SourceSwitch, key) or SourceSwitch(source_key=key)
     row.enabled, row.updated_at = enabled, now()

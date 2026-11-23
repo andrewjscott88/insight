@@ -7,16 +7,16 @@ from typing import Any
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from tests.greynoise_fixtures import IP, reviewed
+from tests.greynoise_fixtures import reviewed
 
 from insight import pivots, services
 from insight.lookups import THROTTLES
 
 
-@pytest.mark.parametrize(('provider_key', 'indicator'), [('rdap', IP), ('crtsh', 'example.com')])
 def test_lookup_requires_unlimited_write_access_and_per_lookup_approval(
-    authed: TestClient, app: FastAPI, monkeypatch: pytest.MonkeyPatch, provider_key: str, indicator: str
+    authed: TestClient, app: FastAPI, monkeypatch: pytest.MonkeyPatch, pivot_case: tuple[str, str]
 ) -> None:
+    provider_key, indicator = pivot_case
     with app.state.session_factory.begin() as db:
         reviewed(db, indicator)
         services.set_pivot_switch(db, provider_key, True)

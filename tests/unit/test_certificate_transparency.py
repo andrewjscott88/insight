@@ -113,7 +113,7 @@ async def test_fetch_uses_fixed_https_host_query_and_response_limit(monkeypatch:
         (
             'https://crt.sh/',
             {'q': '%.example.com', 'output': 'json'},
-            {'allowed_hosts': frozenset({'crt.sh'}), 'max_bytes': pivot_data.MAX_BYTES},
+            {'headers': None, 'allowed_hosts': frozenset({'crt.sh'}), 'max_bytes': pivot_data.MAX_BYTES},
         )
     ]
     assert THROTTLES['crtsh'].interval == 60
