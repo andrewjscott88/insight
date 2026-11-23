@@ -555,9 +555,8 @@ software-only techniques in actor layers have score zero. [ADR 0038](adr/0038-ad
 
 Model Context Protocol access for AI agents, using API keys and their TLP ceilings. Insight itself still
 writes nothing with a model ([LLM_EXTENSION.md](LLM_EXTENSION.md); 3.6 stays separate and opt-in).
-The implementation uses stateless `POST /mcp`, two read tools and protocols 2026-07-28 / 2025-11-25. OAuth is out
-of scope. [MCP guide](MCP.md), [ADR 0039](adr/0039-read-only-mcp.md). This branch implements part 1.
-Both parts, combined checks and security review are needed before this item is marked complete.
+Eight read tools share a stateless `POST /mcp` endpoint for protocols 2026-07-28 and 2025-11-25.
+The per-key sharing ceiling applies to each result. [MCP guide](MCP.md), [ADR 0039](adr/0039-read-only-mcp.md).
 
 ---
 
@@ -639,7 +638,7 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
 - [ ] **4.5** Operator-defined RSS/Atom and TAXII sources
 - [ ] **4.6** Infrastructure pivots: RDAP, certificate transparency, ASN, passive DNS
 - [x] **4.7** Adversary library imports: sourced group aliases, software links and sharing, actor timelines and Navigator layers (ADR 0038)
-- [ ] **4.8** Read-only MCP endpoint for AI agents: part 1 implemented; other part and combined checks remain
+- [x] **4.8** Read-only MCP endpoint for AI agents, with eight tools and per-key sharing ceilings (ADR 0039)
 
 **Total: 39 items.** Out of scope on purpose: cloning CrowdStrike/Mandiant/Recorded Future collection, building a malware sandbox, automated adversary attribution, and any always-on cloud AI.
 

@@ -22,6 +22,7 @@ from insight.mcp import TOOL_BY_NAME
 from insight.models import Enrichment
 from insight.schemas import (
     ActorCampaignInput,
+    ActorInput,
     ActorLinkInput,
     AssessmentInput,
     CampaignInput,
@@ -130,10 +131,18 @@ def world(app: FastAPI) -> dict[str, Any]:
             db, SightingInput(value=SHARED_IP, first_seen=seen, note=MARKER, where=MARKER, tlp='AMBER')
         )
         services.record_sighting(db, SightingInput(value=HIDDEN_IP, first_seen=seen, tlp='GREEN'))
+        hidden_actor = services.create_actor(db, ActorInput(name=f'{MARKER} actor', tlp='AMBER'))
+        # A public catalog profile must hide both an AMBER report and an AMBER link to a GREEN report.
+        services.link_report(db, 'G0016', ActorLinkInput(document_id=amber.id, tlp='AMBER', note=MARKER))
+        services.link_report(db, 'G0016', ActorLinkInput(document_id=green.id, tlp='AMBER', note=MARKER))
+        services.create_requirement(
+            db, RequirementInput(kind='rfi', question=f'{MARKER} request?', tlp='AMBER')
+        )
         _, token = services.create_api_key(db, name='siem', access='read-write', max_tlp='GREEN')
     return {
         'actor_campaign': campaign.id,
         'case': case.id,
+        'hidden_actor': hidden_actor.id,
         'hunt_package': hunt.id,
         'requirement': open_req.id,
         'cited': cited.id,
@@ -160,6 +169,16 @@ def test_every_mcp_tool_keeps_the_green_ceiling(
         ('search_reports', {'q': 'CVE-2024-11111'}),
         ('get_indicator', {'id': world['hidden_entity']}),
         ('get_indicator', {'id': world['shared_entity']}),
+        ('search_indicators', {'q': HIDDEN_IP}),
+        ('search_indicators', {'q': SHARED_IP}),
+        ('get_report_summary', {'id': world['amber']}),
+        ('get_report_summary', {'id': world['old']}),
+        ('list_requirements', {}),
+        ('list_requirements', {'kind': 'rfi'}),
+        ('get_hunt_package', {'id': world['hunt_package']}),
+        ('get_threat_group', {'id': world['hidden_actor']}),
+        ('get_threat_group', {'id': 'G0016'}),
+        ('get_landscape_summary', {}),
     ]
     assert {name for name, _ in calls} == set(TOOL_BY_NAME)
     headers = world['headers'] | {
@@ -188,16 +207,30 @@ def test_every_mcp_tool_keeps_the_green_ceiling(
         world['amber'],
         world['new'],
         world['hidden_entity'],
+        world['hidden_actor'],
     ]
     for name, arguments in calls:
         response = request_tool(name, arguments)
         assert response.status_code == 200, response.text
         assert response.json()['result']['structuredContent']['sharing_tlp'] == 'GREEN'
         assert all(secret not in response.text for secret in forbidden), (name, response.text)
+        data = response.json()['result']['structuredContent']
+        if name == 'search_indicators' and arguments['q'] == SHARED_IP:
+            assert data['indicators'][0]['reports'] == 1
+        if name == 'get_landscape_summary':
+            assert data['reports'] == 1
+            assert 'Destructive attacks' not in {trend['name'] for trend in data['threats']}
+        if name == 'list_requirements' and not arguments:
+            requirement = next(row for row in data['requirements'] if row['id'] == world['requirement'])
+            assert requirement['recent_matches'] == 0
+            assert requirement['last_match_at'] is None
+        if name == 'get_threat_group' and arguments['id'] == 'G0016':
+            assert response.json()['result']['structuredContent']['linked_reports'] == []
         if arguments.get('id') in (
             world['amber'],
             world['hidden_entity'],
             world['hunt_package'],
+            world['hidden_actor'],
         ):
             missing = request_tool(name, {'id': 'missing'})
             assert response.json() == missing.json()

@@ -10,7 +10,7 @@ import json
 from dataclasses import dataclass
 from typing import Any, Final
 
-from .schemas import McpIdInput, McpInput, McpSearchInput
+from .schemas import McpIdInput, McpInput, McpLandscapeInput, McpRequirementsInput, McpSearchInput
 
 PROTOCOL_VERSION: Final = '2025-11-25'
 MODERN_PROTOCOL_VERSION: Final = '2026-07-28'
@@ -36,6 +36,28 @@ TOOLS: Final = (
         'get_indicator',
         'Read an indicator by ID: analyst verdict, confidence and first/last seen.',
         McpIdInput,
+    ),
+    Tool(
+        'search_indicators',
+        'Find indicator values by text. A mention does not mean malicious.',
+        McpSearchInput,
+    ),
+    Tool(
+        'get_report_summary',
+        'Read one report summary by ID, with source links and its sharing label.',
+        McpIdInput,
+    ),
+    Tool(
+        'list_requirements',
+        'List open intelligence requirements and requests for information.',
+        McpRequirementsInput,
+    ),
+    Tool('get_hunt_package', 'Read a hunt package by ID. Returns references; never runs rules.', McpIdInput),
+    Tool(
+        'get_threat_group', 'Read a threat group by catalog or analyst ID and its linked reports.', McpIdInput
+    ),
+    Tool(
+        'get_landscape_summary', 'Read a feed-based threat summary for the last 1–30 days.', McpLandscapeInput
     ),
 )
 TOOL_BY_NAME: Final = {tool.name: tool for tool in TOOLS}

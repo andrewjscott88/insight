@@ -58,6 +58,15 @@ class McpIdInput(McpInput):
     id: str = Field(min_length=1, max_length=64)
 
 
+class McpRequirementsInput(McpInput):
+    kind: Literal['pir', 'ir', 'rfi'] | None = None
+    limit: int = Field(default=20, ge=1, le=50)
+
+
+class McpLandscapeInput(McpInput):
+    days: int = Field(default=7, ge=1, le=30)
+
+
 class McpMessage(McpInput):
     jsonrpc: Literal['2.0']
     id: int | Annotated[str, Field(max_length=128)] | None = None

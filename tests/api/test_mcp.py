@@ -57,7 +57,18 @@ def test_initialize_notification_ping_and_catalog(client: TestClient, mcp_header
     assert (notified.status_code, notified.content) == (202, b'')
     assert rpc(client, mcp_headers, 'ping').json()['result'] == {}
     tools = rpc(client, mcp_headers, 'tools/list').json()['result']['tools']
-    assert {tool['name'] for tool in tools} == set(TOOL_BY_NAME)
+    expected = {
+        'search_reports',
+        'search_indicators',
+        'get_report_summary',
+        'get_indicator',
+        'list_requirements',
+        'get_hunt_package',
+        'get_threat_group',
+        'get_landscape_summary',
+    }
+    assert len(tools) == len(expected)
+    assert {tool['name'] for tool in tools} == set(TOOL_BY_NAME) == expected
     assert all(tool['annotations']['readOnlyHint'] for tool in tools)
     assert all(tool['inputSchema']['additionalProperties'] is False for tool in tools)
     assert client.get('/mcp', headers=mcp_headers).status_code == 405
@@ -298,4 +309,20 @@ def test_report_result_has_matching_structured_text(
     result = response.json()['result']
     assert json.loads(result['content'][0]['text']) == result['structuredContent']
     assert result['structuredContent']['reports'][0]['id'] == report.id
+    assert response.headers['cache-control'] == 'no-store'
+
+
+def test_summary_result_has_matching_structured_text(
+    app: FastAPI,
+    client: TestClient,
+    mcp_headers: dict[str, str],
+) -> None:
+    with app.state.session_factory.begin() as db:
+        report, _ = services.ingest(
+            db, DocumentInput(title='Sample', body='Observed 192.0.2.5.', source_name='Lab', tlp='GREEN')
+        )
+    response = rpc(client, mcp_headers, 'tools/call', name='get_report_summary', arguments={'id': report.id})
+    result = response.json()['result']
+    assert json.loads(result['content'][0]['text']) == result['structuredContent']
+    assert result['structuredContent']['id'] == report.id
     assert response.headers['cache-control'] == 'no-store'

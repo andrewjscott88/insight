@@ -6,9 +6,10 @@ A single-operator threat-intelligence workbench, run locally or published behind
 
 ## What works
 
-- **Read-only MCP for agents (TIP 4.8 part 1):** report search and indicator context.
+- **Read-only MCP for agents:** Search reports and indicators, read report summaries, check indicator verdicts
+  and confidence, and retrieve open requirements, hunt packages, group profiles and the threat landscape.
   Uses bearer API keys, TLP ceilings, publisher reuse rules and audited reads. Supports protocols
-  2026-07-28 and 2025-11-25. The other part and combined checks are needed to finish TIP 4.8.
+  2026-07-28 and 2025-11-25.
   Insight calls no model; OAuth is out of scope. [MCP guide](docs/MCP.md)
 
 - **Built for readability, including for people with dyslexia or other reading difficulties** ([ADR 0017](docs/adr/0017-readability-standard.md)): WCAG 2.2 AA plus its reading-related AAA criteria (7:1 contrast, lines of about 70 characters, 1.5 line spacing, plain language), 16 px minimum text, no capitals, real headings, a strong focus outline, messages that stay until you dismiss them, a **Larger text** button and a **What the words mean** glossary. Checked in the test suite with axe-core on every screen.

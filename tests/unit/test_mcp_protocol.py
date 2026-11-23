@@ -20,7 +20,9 @@ from insight.mcp_transport import (
 from insight.schemas import (
     McpIdInput,
     McpInput,
+    McpLandscapeInput,
     McpMessage,
+    McpRequirementsInput,
     McpSearchInput,
 )
 
@@ -34,6 +36,10 @@ from insight.schemas import (
         (McpSearchInput, {'q': 'x', 'limit': True}),
         (McpIdInput, {'id': ''}),
         (McpIdInput, {'id': 'x' * 65}),
+        (McpRequirementsInput, {'kind': 'unknown'}),
+        (McpLandscapeInput, {'days': 31}),
+        (McpLandscapeInput, {'days': 0}),
+        (McpLandscapeInput, {'max_tlp': 'RED'}),
     ],
 )
 def test_arguments_are_strict_and_bounded(schema: type[McpInput], args: dict[str, Any]) -> None:

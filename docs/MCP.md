@@ -1,8 +1,7 @@
 # Read-only MCP access
 
-Insight offers two read tools at `POST /mcp` in TIP 4.8 part 1.
-
-This part provides report search and indicator context. The remaining six tools are a separate part.
+Eight read tools at `POST /mcp` let your client search reports and indicators, read summaries and verdicts,
+and consult requirements, hunt packages, threat groups and the threat landscape.
 Insight calls no model and accepts no model-produced changes.
 
 ## Client and key setup
@@ -30,7 +29,7 @@ Content-Type: application/json
 Accept: application/json, text/event-stream
 MCP-Protocol-Version: 2026-07-28
 Mcp-Method: tools/call
-Mcp-Name: search_reports
+Mcp-Name: search_indicators
 ```
 
 Modern requests include `params._meta` with `io.modelcontextprotocol/protocolVersion` and
@@ -88,8 +87,15 @@ no event stream, server-initiated messages or subscriptions.
 | --- | --- | --- |
 | `search_reports` | `q`, optional `limit` | Ranked current reports with source metadata and permitted summaries |
 | `get_indicator` | `id` | Analyst verdict, confidence, visible report count and first/last seen |
+| `search_indicators` | `q`, optional `limit` | Matching indicator values and visible report counts |
+| `get_report_summary` | `id` | Report title, source/link, label, status, date and permitted short summary |
+| `list_requirements` | optional `kind`, `limit` | Open PIRs, IRs and RFIs; `kind` is `pir`, `ir` or `rfi` |
+| `get_hunt_package` | `id` | Hypothesis, label, status and item references; rule code is not included |
+| `get_threat_group` | `id` | Catalog or analyst group profile, techniques, software IDs and linked reports |
+| `get_landscape_summary` | optional `days` | Feed-based summary, trends, counts and caveats, without watch terms |
 
-Queries are at most 200 characters, IDs at most 64, list limits 1–50 (default 20), and the result arrays are bounded. Unknown arguments, including a caller-supplied `max_tlp`, are refused. `tools/list` publishes
+Queries are at most 200 characters, IDs at most 64, list limits 1–50 (default 20), and landscape periods 1–30
+days (default 7). Unknown arguments, including a caller-supplied `max_tlp`, are refused. `tools/list` publishes
 the exact input schemas. Results contain the same JSON object in `structuredContent` and one text block.
 Every tool result has a conservative `sharing_tlp` equal to the key's ceiling (`RED` for an unlimited key).
 This is a response handling label, not a claim that every source has that classification. Actual per-item

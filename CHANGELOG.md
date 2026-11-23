@@ -24,11 +24,12 @@
   strictest association label after removal. Software Navigator layers use only catalog techniques; actor
   layers add software-only context at score zero without changing existing scores or hunt hypotheses.
 
-### Added: read-only MCP (TIP 4.8 part 1)
+### Added: read-only MCP (TIP 4.8)
 
-- `POST /mcp` exposes two bounded read tools for report search and indicator context.
+- Eight tools at `POST /mcp` search reports and indicators, show report summaries and indicator context,
+  and read open requirements, hunt packages, threat groups and the landscape.
   Supports protocols 2026-07-28 and 2025-11-25, API-key TLP ceilings, publisher reuse rules and a separate
-  per-key rate budget. Browser sessions never authorize it. The other part remains separate.
+  per-key rate budget. Browser sessions never authorize it.
 - Calls are audited as `mcp.call`; no write tools, OAuth, model calls, new dependencies or schema migration.
   See [MCP.md](docs/MCP.md) and [ADR 0039](docs/adr/0039-read-only-mcp.md).
 

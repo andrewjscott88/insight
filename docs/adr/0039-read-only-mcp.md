@@ -1,6 +1,6 @@
 # 0039: Read-only MCP with the existing API-key boundary
 
-Status: Proposed; security review required before merge.
+Status: Accepted.
 
 ## Context
 
@@ -36,7 +36,7 @@ headers, non-JSON media, unsupported version headers, duplicate JSON members, no
 and over-limit bodies. There is no transport session, event stream, notification-driven tool invocation,
 client callback or server-initiated request. No resources, prompts, sampling or elicitation are advertised.
 
-Two tools call `services.mcp_read` with the authenticated ceiling. Projections reuse domain reads rather
+Eight tools call `services.mcp_read` with the authenticated ceiling. Projections reuse domain reads rather
 than making HTTP loopback calls or building SQL in the route. Reports use export publisher rules; brief
 composition drops the private watchlist. Missing and forbidden-by-TLP records produce identical tool errors.
 JSON and text results match; schemas and output budgets bound queries and responses. Every tool result's
@@ -63,11 +63,3 @@ cannot use MCP. Required ruff, strict mypy, SQLite and PostgreSQL gates and main
 References: [MCP guide](../MCP.md), [modern transport](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http),
 [legacy lifecycle](https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle),
 [2026-07-28 versioning](https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning).
-
-## Part 1 and integration
-
-This independent main-based part exposes only `get_indicator`, `search_reports`.
-Both parts repeat the same protocol, authentication, rate and audit support so each is independently testable.
-When integrating, keep one copy of that support and combine the tool registry, projections and tests.
-Do not replace one registry with the other. The whole TIP 4.8 item remains incomplete until both parts
-are integrated and their combined security tests pass. No migration or new dependency is needed.

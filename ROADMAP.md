@@ -123,8 +123,8 @@ tools over TAXII and STIX; sightings and requests for information come back
       aliases. Analysts can link software to reports, actors and campaigns, and share those decisions through
       STIX and TAXII. Actor timelines and software Navigator layers are available in threat guides.
       [ADR 0038](docs/adr/0038-adversary-library.md).
-- [ ] **TIP 4.8 Read-only MCP part 1:** implementation and tests in [MCP.md](docs/MCP.md),
-      [ADR 0039](docs/adr/0039-read-only-mcp.md); completion awaits the other part, combined checks and security review.
+- [x] **TIP 4.8 Read-only MCP endpoint.** Eight read tools apply API-key sharing ceilings and publisher
+      restrictions. [MCP guide](docs/MCP.md), [ADR 0039](docs/adr/0039-read-only-mcp.md).
 
 ## Later
 
