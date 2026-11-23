@@ -144,8 +144,9 @@ def test_missing_ids_are_not_found(db: Session, name: str) -> None:
 def test_unknown_or_mismatched_service_dispatch_is_refused(db: Session) -> None:
     with pytest.raises(ValueError, match='Unknown tool'):
         services.mcp_read(db, 'write', McpInput(), max_tlp='GREEN')
-    with pytest.raises(ValueError, match='Unknown tool'):
-        services.mcp_read(db, 'get_report_summary', McpSearchInput(q='x'), max_tlp='GREEN')
+    for name in ('get_report_summary', 'get_indicator'):
+        with pytest.raises(ValueError, match='Unknown tool'):
+            services.mcp_read(db, name, McpSearchInput(q='x'), max_tlp='GREEN')
 
 
 def test_group_response_preserves_the_stricter_link_label(db: Session) -> None:

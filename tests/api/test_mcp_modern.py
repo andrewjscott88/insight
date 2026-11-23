@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from insight import services
-from insight.mcp import MODERN_PROTOCOL_VERSION, SUPPORTED_VERSIONS
+from insight.mcp import MODERN_PROTOCOL_VERSION, PROTOCOL_VERSION
 from insight.mcp_transport import CAPABILITIES_FIELD, VERSION_FIELD
 
 from ..mcp_schema import response_conforms
@@ -31,13 +31,23 @@ def modern(
     return response
 
 
-@pytest.mark.parametrize('method', ['server/discover', 'ping', 'tools/list', 'tools/call'])
+@pytest.mark.parametrize(
+    ('method', 'tool'),
+    [
+        ('server/discover', None),
+        ('ping', None),
+        ('tools/list', None),
+        ('tools/call', 'search_reports'),
+        ('tools/call', 'search_indicators'),
+    ],
+)
 def test_current_methods_need_no_handshake(
     client: TestClient,
     mcp_headers: dict[str, str],
     method: str,
+    tool: str | None,
 ) -> None:
-    params = {'name': 'search_reports', 'arguments': {'q': 'nothing'}} if method == 'tools/call' else {}
+    params = {'name': tool, 'arguments': {'q': 'nothing'}} if tool else {}
     response = modern(client, mcp_headers, method, params)
     assert response.status_code == 200
     result = response.json()['result']
@@ -45,7 +55,7 @@ def test_current_methods_need_no_handshake(
     assert result['_meta']['io.modelcontextprotocol/serverInfo']['name'] == 'Insight'
     assert 'mcp-session-id' not in response.headers
     if method == 'server/discover':
-        assert result['supportedVersions'] == list(SUPPORTED_VERSIONS)
+        assert result['supportedVersions'] == [MODERN_PROTOCOL_VERSION, PROTOCOL_VERSION]
         assert result['capabilities'] == {'tools': {}}
 
 
@@ -70,20 +80,22 @@ def test_current_unknown_method_and_tool_status(client: TestClient, mcp_headers:
         ('duplicate-header', -32020),
     ],
 )
+@pytest.mark.parametrize('tool', ['search_reports', 'search_indicators'])
 def test_current_invalid_metadata_never_dispatches(
     app: FastAPI,
     client: TestClient,
     mcp_headers: dict[str, str],
     change: str,
     code: int,
+    tool: str,
 ) -> None:
     headers = mcp_headers | {
         'MCP-Protocol-Version': MODERN_PROTOCOL_VERSION,
         'Mcp-Method': 'tools/call',
-        'Mcp-Name': 'search_reports',
+        'Mcp-Name': tool,
     }
     meta = {VERSION_FIELD: MODERN_PROTOCOL_VERSION, CAPABILITIES_FIELD: {}}
-    params: dict[str, Any] = {'name': 'search_reports', 'arguments': {'q': 'nothing'}, '_meta': meta}
+    params: dict[str, Any] = {'name': tool, 'arguments': {'q': 'nothing'}, '_meta': meta}
     if change == 'missing-capabilities':
         del meta[CAPABILITIES_FIELD]
     elif change == 'missing-meta':
@@ -114,7 +126,10 @@ def test_current_invalid_metadata_never_dispatches(
     }
     expected: dict[str, Any] = {'code': code, 'message': messages[code]}
     if change == 'unsupported-version':
-        expected['data'] = {'supported': list(SUPPORTED_VERSIONS), 'requested': '2099-01-01'}
+        expected['data'] = {
+            'supported': [MODERN_PROTOCOL_VERSION, PROTOCOL_VERSION],
+            'requested': '2099-01-01',
+        }
     assert response.json()['error'] == expected
     with app.state.session_factory() as db:
         assert not any(event.action == 'mcp.call' for event in services.audit_events(db))

@@ -492,7 +492,7 @@ def test_failed_sign_ins_are_logged_without_the_password(
         ('longtestpasswor', False),
         ('', False),
         ('longtestpassword!', False),
-        ('Ã¼', False),
+        ('ü', False),
         ('longtestpassword\0', False),
         ('longtestpassword' + 'x' * 400, False),
     ],

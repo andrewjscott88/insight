@@ -72,12 +72,15 @@ async def test_in_flight_lookup_cannot_restore_ineligible_cache(
         assert db.scalar(select(Enrichment).where(Enrichment.provider == provider_key)) is None
 
 
-def test_pivot_defaults_and_audited_switch(db: Session) -> None:
+def test_pivot_defaults_and_audited_switch(db: Session, pivot_case: tuple[str, str]) -> None:
+    provider, _ = pivot_case
     assert services.pivot_switches(db) == {'rdap': False, 'asn': False, 'crtsh': False, 'circl': False}
     services.set_actor(db, 'operator')
-    services.set_pivot_switch(db, 'rdap', True)
-    assert services.pivot_switches(db)['rdap']
-    assert any(e.action == 'pivot.on' for e in services.audit_events(db))
+    services.set_pivot_switch(db, provider, True)
+    assert services.pivot_switches(db)[provider]
+    assert ('pivot.on', provider, 'operator') in {
+        (event.action, event.object_id, event.actor) for event in services.audit_events(db)
+    }
 
 
 def test_cache_eligibility_expiry_and_graph(db: Session, pivot_case: tuple[str, str]) -> None:
@@ -248,19 +251,24 @@ def test_graph_caps_work_before_resolving_known_indicators(
     assert next(node for node in graph.nodes if node.id == graph.seed).truncated
 
 
+@pytest.mark.parametrize('provider', ['rdap', 'crtsh'])
 async def test_unsupported_kinds_are_refused_before_approval_or_provider_access(
-    session_factory: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+    session_factory: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch, provider: str
 ) -> None:
     """Regression: a provider for domains alone must not expose an empty IP pivot workflow."""
-    monkeypatch.setattr(pivot_data, 'PROVIDER_KINDS', {'rdap': frozenset({'domain'})})
+    monkeypatch.setattr(pivot_data, 'PROVIDER_KINDS', {provider: frozenset({'domain'})})
     with session_factory.begin() as db:
         reviewed(db)
-        services.set_pivot_switch(db, 'rdap', True)
+        services.set_pivot_switch(db, provider, True)
         assert services.eligible_pivot(db, IP) is None
     with pytest.raises(ValueError, match='does not support'):
-        await pivots.lookup(session_factory, 'rdap', IP, approved=True, actor='operator')
+        await pivots.lookup(session_factory, provider, IP, approved=True, actor='operator')
 
 
 async def test_certificate_search_rejects_an_ip(session_factory: sessionmaker[Session]) -> None:
+    with session_factory.begin() as db:
+        reviewed(db, IP)
+        services.set_pivot_switch(db, 'crtsh', True)
+        assert services.eligible_pivot(db, IP) is not None
     with pytest.raises(ValueError, match='does not support'):
         await pivots.lookup(session_factory, 'crtsh', IP, approved=True, actor='operator')

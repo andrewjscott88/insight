@@ -75,11 +75,14 @@ def test_initialize_notification_ping_and_catalog(client: TestClient, mcp_header
 
 
 @pytest.mark.parametrize('access', ['read', 'read-feedback', 'read-write'])
-def test_all_key_access_levels_can_use_read_tools(app: FastAPI, client: TestClient, access: str) -> None:
+@pytest.mark.parametrize('tool', ['search_reports', 'search_indicators'])
+def test_all_key_access_levels_can_use_read_tools(
+    app: FastAPI, client: TestClient, access: str, tool: str
+) -> None:
     with app.state.session_factory.begin() as db:
         _, key = services.create_api_key(db, name='test', access=access)
     headers = {'Authorization': f'Bearer {key}', 'Accept': ACCEPT, 'MCP-Protocol-Version': PROTOCOL_VERSION}
-    result = rpc(client, headers, 'tools/call', name='search_reports', arguments={'q': 'nothing'})
+    result = rpc(client, headers, 'tools/call', name=tool, arguments={'q': 'nothing'})
     assert result.status_code == 200
     assert not result.json()['result']['isError']
     assert result.json()['result']['structuredContent']['sharing_tlp'] == 'RED'
@@ -191,9 +194,13 @@ def test_malformed_protocol(client: TestClient, mcp_headers: dict[str, str], bod
         r'{"jsonrpc":"2.0","id":"\ud800","method":"ping"}',
         r'{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search_reports",'
         r'"arguments":{"q":"\udfff"}}}',
+        r'{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search_indicators",'
+        r'"arguments":{"q":"\udfff"}}}',
         r'{"jsonrpc":"2.0","id":1,"method":"ping","params":{"_meta":{"key":"\ud800"}}}',
         r'{"jsonrpc":"2.0","id":1,"method":"ping","params":{"_meta":{"\ud800":"value"}}}',
         r'{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search_reports",'
+        r'"arguments":{"q":"\u0000"}}}',
+        r'{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search_indicators",'
         r'"arguments":{"q":"\u0000"}}}',
     ],
 )
@@ -238,26 +245,25 @@ def test_media_versions_limits_and_unknown_methods(client: TestClient, mcp_heade
     assert unsupported.json()['result']['protocolVersion'] == PROTOCOL_VERSION
 
 
+@pytest.mark.parametrize('tool', ['search_reports', 'search_indicators'])
 def test_tool_arguments_errors_and_audit(
-    app: FastAPI, client: TestClient, mcp_headers: dict[str, str]
+    app: FastAPI, client: TestClient, mcp_headers: dict[str, str], tool: str
 ) -> None:
     hidden_query = 'Never log this query'
     unknown = rpc(client, mcp_headers, 'tools/call', name='write_report', arguments={})
     assert unknown.json()['error']['code'] == -32602
     for args in ({'q': hidden_query, 'limit': 51}, {'q': hidden_query, 'max_tlp': 'RED'}, {'q': 12}):
-        result = rpc(client, mcp_headers, 'tools/call', name='search_reports', arguments=args).json()[
-            'result'
-        ]
+        result = rpc(client, mcp_headers, 'tools/call', name=tool, arguments=args).json()['result']
         assert result['isError']
         assert hidden_query not in json.dumps(result)
-    good = rpc(client, mcp_headers, 'tools/call', name='search_reports', arguments={'q': hidden_query})
+    good = rpc(client, mcp_headers, 'tools/call', name=tool, arguments={'q': hidden_query})
     assert not good.json()['result']['isError']
     with app.state.session_factory() as db:
         events = [event for event in services.audit_events(db) if event.action == 'mcp.call']
     assert len(events) == 5
     assert all(event.actor.startswith('api-key:') for event in events)
     assert all(hidden_query not in event.detail for event in events)
-    assert {json.loads(event.detail)['tool'] for event in events} == {'search_reports', 'write_report'}
+    assert {json.loads(event.detail)['tool'] for event in events} == {tool, 'write_report'}
 
 
 def test_separate_rate_budget_and_read_only_post_exception(

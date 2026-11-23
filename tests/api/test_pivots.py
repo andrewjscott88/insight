@@ -50,3 +50,20 @@ def test_lookup_requires_unlimited_write_access_and_per_lookup_approval(
     assert centred.json()['seed'] == pivot_node['id']
     assert authed.get('/api/pivots', params={'value': 'missing.example'}).status_code == 404
     assert authed.post(path, json={**body, 'extra': True}).status_code == 422
+
+
+def test_missing_credentials_refuse_lookup_without_exposing_settings(
+    authed: TestClient, app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    domain = 'example.com'
+    monkeypatch.setenv('INSIGHT_CIRCL_PDNS_USER', 'synthetic-user')
+    monkeypatch.setenv('INSIGHT_CIRCL_PDNS_PASSWORD', 'synthetic-password')
+    with app.state.session_factory.begin() as db:
+        reviewed(db, domain)
+        services.set_pivot_switch(db, 'circl', True)
+    monkeypatch.delenv('INSIGHT_CIRCL_PDNS_PASSWORD')
+    response = authed.post('/api/pivots/circl', json={'value': domain, 'approved': True})
+    assert response.status_code == 503
+    assert 'synthetic-user' not in response.text
+    assert 'synthetic-password' not in response.text
+    assert authed.get('/api/pivots', params={'value': domain}).json() == []
