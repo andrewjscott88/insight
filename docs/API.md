@@ -680,7 +680,8 @@ API keys can read operator-defined feeds up to their sharing ceiling. Creating, 
 deleting definitions requires a signed-in browser session and its CSRF token. Submitted URLs must use HTTPS
 on port 443 and omit credentials, query strings and fragments. Saving a definition makes no network request.
 Source run and job history omit missing or deleted sources. When a source moves to a lower TLP, limited keys
-see only history from the new sharing period.
+see only history from the new sharing period. For operator feeds, limited keys receive job and run statuses
+and times with an empty message, since counts and diagnostics can describe more restricted reports.
 
 | Route | Result |
 | --- | --- |

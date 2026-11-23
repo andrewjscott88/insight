@@ -124,3 +124,24 @@ async def test_invalid_feed_form_does_not_echo_or_store_the_address(
         await user.should_not_see(kind=ui.label, content='synthetic-marker')
     with ui_env.app.state.session_factory() as db:
         assert not services.list_operator_sources(db)
+
+
+async def test_operator_sync_failure_keeps_provider_details_out_of_the_ui(
+    user: User, ui_env: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from insight.ui import sources
+
+    async def fail(sessions: SessionFactory, key: str, *, max_tlp: str | None = None) -> str:
+        raise OSError('synthetic-provider-detail')
+
+    monkeypatch.setattr(sources, 'sync_source', fail)
+    await add_feed(user)
+    with ui_env.app.state.session_factory() as db:
+        (source,) = services.list_operator_sources(db)
+    with user.scope(marker='feed-' + source.key):
+        user.find(kind=ui.switch, content='Use this feed').click()
+    await user.should_see('Feed is on.')
+    with user.scope(marker='feed-' + source.key):
+        user.find(kind=ui.button, content='Sync now').click()
+    await user.should_see('Sync failed. Check recent sync activity.')
+    await user.should_not_see('synthetic-provider-detail')

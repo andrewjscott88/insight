@@ -15,7 +15,7 @@ from datetime import UTC, date, datetime, timedelta
 from functools import partial
 from html import unescape
 from itertools import islice
-from typing import Any, Final
+from typing import Any, Final, cast
 from urllib.parse import urlsplit
 
 import httpx
@@ -29,7 +29,7 @@ from .cve_scores import summarise_vulncheck
 from .feed_items import MAX_FEED_ITEMS as MAX_FEED_ITEMS
 from .feed_items import FeedItem as FeedItem
 from .models import Enrichment, Entity, KEVRecord, SessionFactory, SourceRun, now
-from .schemas import TLP, DocumentInput
+from .schemas import TLP, DocumentInput, most_restrictive, tlp_markings
 from .services import (
     SourceRef,
     fetch_cursor,
@@ -300,11 +300,14 @@ def text_only(value: str | None) -> str:
     return unescape(re.sub(r'<[^>]*>', ' ', value or '')).strip()
 
 
-def _find_text(item: Any, name: str) -> str:
+def _find_text(item: Any, name: str, *, nested: bool = False) -> str:
     el = item.find(name)
     if el is None:
         el = item.find(ATOM + name)
-    return (el.text or '') if el is not None else ''
+    if el is None:
+        return ''
+    # Atom's XHTML text constructs put the displayed text in child elements.
+    return ' '.join(el.itertext()) if nested and len(el) else (el.text or '')
 
 
 def _atom_link(item: Any) -> str:
@@ -330,14 +333,24 @@ def parse_feed(payload: bytes, source: Source, *, operator_tlp: TLP | None = Non
     items = root.findall('.//item') or root.findall(ATOM + 'entry')
     docs: list[FeedItem] = []
     for item in items[:MAX_FEED_ITEMS]:
-        title = text_only(_find_text(item, 'title'))[:300] or 'Untitled feed item'
+        raw_title = _find_text(item, 'title', nested=operator_tlp is not None)
+        full_title = text_only(raw_title)
+        title = full_title[:300] or 'Untitled feed item'
         link = _find_text(item, 'link').strip() or _atom_link(item)
-        full_summary = text_only(_find_text(item, 'description') or _find_text(item, 'summary'))
+        full_summary = text_only(
+            _find_text(item, 'description', nested=operator_tlp is not None)
+            or _find_text(item, 'summary', nested=operator_tlp is not None)
+        )
         summary = full_summary[:MAX_FEED_SUMMARY]
         body = title + '\n\n' + summary
         guid = (_find_text(item, 'guid') or _find_text(item, 'id')).strip()
         # Curated public feeds are CLEAR. Every operator feed carries its configured floor.
         tlp = operator_tlp or 'CLEAR'
+        if operator_tlp is not None and (len(full_title) > 300 or len(full_summary) > MAX_FEED_SUMMARY):
+            # A publisher's marking in the omitted text still applies to the retained excerpt.
+            tlp = cast(
+                'TLP', most_restrictive(operator_tlp, *tlp_markings(full_title), *tlp_markings(full_summary))
+            )
         try:
             document = DocumentInput(
                 title=title, body=body, source_name=source.name, source_url=link, tlp=tlp
@@ -353,7 +366,7 @@ def parse_feed(payload: bytes, source: Source, *, operator_tlp: TLP | None = Non
                 published = (_find_text(item, 'pubDate') or _find_text(item, 'published')).strip()
                 # Without any publisher identity/date, only exact title+summary redeliveries can be matched.
                 identity_field = ('published', published) if published else ('summary', full_summary)
-                material = json.dumps([_find_text(item, 'title'), *identity_field])
+                material = json.dumps([raw_title, *identity_field])
                 identity = 'fallback:' + hashlib.sha256(material.encode()).hexdigest()
             else:
                 identity = 'publisher:' + hashlib.sha256(identity.encode()).hexdigest()

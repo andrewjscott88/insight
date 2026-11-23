@@ -21,13 +21,18 @@ from ...models import SessionFactory
 from ...schemas import (
     ScheduleInput,
 )
-from ...source_registry import SOURCES, in_use
+from ...source_registry import SOURCES, in_use, is_operator_source
 from ..auth import AuthDependency, acting, caller_of, reader_limit
 from .cves import exploit_view
 from .threats import write_limit
 
 #: The NVD window without an API key (kept for scripts that read it; ``insight.lookups`` owns the throttles).
 ENRICHMENT_INTERVAL_SECONDS: Final = NVD_INTERVAL
+
+
+def _history_message(source_key: str, message: str, max_tlp: str | None) -> str:
+    # One permitted subscription can contain reports above the reader's ceiling.
+    return '' if max_tlp is not None and is_operator_source(source_key) else message
 
 
 def _register_source_routes(app: FastAPI, sessions: SessionFactory, require_auth: AuthDependency) -> None:
@@ -42,7 +47,11 @@ def _register_source_routes(app: FastAPI, sessions: SessionFactory, require_auth
 
             def runs(key: str) -> list[dict[str, str]]:
                 return [
-                    {'status': r.status, 'message': r.message, 'created_at': r.created_at}
+                    {
+                        'status': r.status,
+                        'message': _history_message(key, r.message, limit),
+                        'created_at': r.created_at,
+                    }
                     for r in services.recent_source_runs(db, key, limit=5, max_tlp=limit)
                 ]
 
@@ -154,7 +163,9 @@ def _register_source_routes(app: FastAPI, sessions: SessionFactory, require_auth
                     'run_after': j.run_after,
                     'started_at': j.started_at,
                     'finished_at': j.finished_at,
-                    'message': j.message,
+                    'message': _history_message(j.key, j.message, reader_limit(request))
+                    if j.kind == services.SOURCE_SYNC
+                    else j.message,
                     'actor': j.actor,
                     'created_at': j.created_at,
                 }

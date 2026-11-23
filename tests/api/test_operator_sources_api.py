@@ -134,7 +134,7 @@ def test_history_hides_deleted_sources_and_the_period_before_a_source_label_was_
         db.add(SourceRun(source_key=key, status='success', message='new GREEN sync'))
     rows = authed.get('/api/sources', headers=headers).json()
     source = next(row for row in rows if row['key'] == key)
-    assert [r['message'] for r in source['runs']] == ['new GREEN sync']
+    assert [(r['status'], r['message']) for r in source['runs']] == [('success', '')]
     assert 'old AMBER sync' not in authed.get('/api/jobs', headers=headers).text
     assert authed.delete(f'{CATALOG}/{key}').status_code == 200
     for path in ('/api/sources', '/api/jobs'):
@@ -171,3 +171,35 @@ def test_unlimited_writer_syncs_only_enabled_sources_and_records_its_identity(
         calls = [e for e in services.audit_events(db) if e.action == 'source.sync' and e.object_id == allowed]
         assert len(calls) == 2
         assert all(event.actor.startswith('api-key:') for event in calls)
+
+
+def test_visible_feed_history_withholds_counts_for_reports_above_the_key_ceiling(
+    app: FastAPI, authed: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    key = authed.post(CATALOG, json=FEED | {'tlp': 'GREEN'}).json()['key']
+    assert authed.put(f'{CATALOG}/{key}/switch', json={'enabled': True}).status_code == 200
+    monkeypatch.setattr(app.state, 'settings', replace(app.state.settings, max_tlp='RED'))
+
+    async def download(*args: Any, **kwargs: Any) -> bytes:
+        return (
+            b'<rss><channel><item><title>Partner notice</title><guid>red-1</guid>'
+            b'<description>TLP:RED - Sensitive new activity.</description></item></channel></rss>'
+        )
+
+    monkeypatch.setattr(connectors, 'download', download)
+    response = authed.post(f'/api/sources/{key}/sync')
+    assert response.status_code == 200, response.text
+    run_message = response.json()['message']
+    assert '1 new reports' in run_message
+    with app.state.session_factory.begin() as db:
+        job = services.enqueue_job(db, services.SOURCE_SYNC, key, at=datetime.now(UTC), actor='schedule')
+        job.message = run_message
+    scoped = key_headers(app, ceiling='GREEN')
+    assert authed.get('/api/documents', headers=scoped).json() == []
+    for headers, expected in (({}, run_message), (scoped, '')):
+        rows = authed.get('/api/sources', headers=headers).json()
+        run = next(s for s in rows if s['key'] == key)['runs'][0]
+        job_view = next(j for j in authed.get('/api/jobs', headers=headers).json() if j['key'] == key)
+        assert run['status'] == 'success'
+        assert run['created_at']
+        assert run['message'] == job_view['message'] == expected

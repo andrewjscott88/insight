@@ -136,6 +136,7 @@ def test_endpoint_change_prevents_retry_of_an_in_flight_job(db: Session) -> None
     job = services.enqueue_job(db, services.SOURCE_SYNC, key, at=AT)
     assert services.claim_job(db, at=AT) == job
     services.update_operator_source(db, key, FEED.model_copy(update={'url': 'https://new.example.org/rss'}))
+    assert services.requeue_running_jobs(db) == 0
     result = services.finish_job(db, job.id, ok=False, message='Source changed.', at=AT)
     assert result.status == 'failed'
 

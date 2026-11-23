@@ -55,13 +55,15 @@ def build_sources(ws: Workspace) -> None:
                 ws.refresh_all()
         except Exception as exc:  # Surface any failure to the analyst, never crash the page.
             if ws.authorized():
-                message = (
-                    f'Sync failed: {exc}' if key in SOURCES else 'Sync failed. Check recent sync activity.'
-                )
-                tell(message, 'error')
-                source_history.refresh()
+                if key in SOURCES:
+                    tell(f'Sync failed: {exc}', 'error')
+                    source_history.refresh()
+                else:
+                    tell('Sync failed. Check recent sync activity.', 'error')
+                    ws.refresh_all()
         finally:
-            if not button.is_deleted:
+            # Custom cards redraw from the saved switch, which may have changed during a fetch.
+            if key in SOURCES and not button.is_deleted:
                 button.enable()
 
     def switch(source: Source, on: bool, sync_button: ui.button, schedule: ui.select) -> None:

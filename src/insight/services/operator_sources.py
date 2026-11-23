@@ -127,8 +127,18 @@ def _mark_reuse_change(db: Session, key: str, stamp: str) -> None:
 def _stop_jobs(db: Session, key: str) -> None:
     scope = (Job.kind == SOURCE_SYNC, Job.key == key)
     db.execute(delete(Job).where(*scope, Job.status == 'queued'))
-    # The worker still finishes this row. Its old request must not be retried against a new endpoint.
-    db.execute(update(Job).where(*scope, Job.status == 'running').values(max_attempts=Job.attempts))
+    # The worker can still finish this row; neither its retry path nor recovery after a restart should
+    # enqueue a request which the operator approved for the previous endpoint.
+    db.execute(
+        update(Job)
+        .where(*scope, Job.status == 'running')
+        .values(
+            status='failed',
+            max_attempts=Job.attempts,
+            finished_at=now(),
+            message='Source changed or switched off.',
+        )
+    )
 
 
 def create_operator_source(
