@@ -1,0 +1,6 @@
+<rss version="2.0"><channel>
+  <title>Operator fixture</title>
+  <item><title>Publisher link</title><link>https://example.org/entry</link><description>Visible headline.</description></item>
+  <item><title>Stable GUID</title><guid>stable-guid</guid><description>A second headline.</description></item>
+  <item><title>No publisher ID</title><description>An item without a link or GUID.</description></item>
+</channel></rss>

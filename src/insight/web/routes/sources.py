@@ -21,12 +21,18 @@ from ...models import SessionFactory
 from ...schemas import (
     ScheduleInput,
 )
-from ...source_registry import SOURCES, in_use
+from ...source_registry import SOURCES, in_use, is_operator_source
 from ..auth import AuthDependency, acting, caller_of, reader_limit
 from .cves import exploit_view
+from .threats import write_limit
 
 #: The NVD window without an API key (kept for scripts that read it; ``insight.lookups`` owns the throttles).
 ENRICHMENT_INTERVAL_SECONDS: Final = NVD_INTERVAL
+
+
+def _history_message(source_key: str, message: str, max_tlp: str | None) -> str:
+    # One permitted subscription can contain reports above the reader's ceiling.
+    return '' if max_tlp is not None and is_operator_source(source_key) else message
 
 
 def _register_source_routes(app: FastAPI, sessions: SessionFactory, require_auth: AuthDependency) -> None:
@@ -34,10 +40,22 @@ def _register_source_routes(app: FastAPI, sessions: SessionFactory, require_auth
     requests; schedules make the job runner sync by itself (``insight.jobs``)."""
 
     @app.get('/api/sources', dependencies=[Depends(require_auth)])
-    def sources() -> list[dict[str, Any]]:
+    def sources(request: Request) -> list[dict[str, Any]]:
         with sessions() as db:
             switches = services.source_switches(db)
-            return [
+            limit = reader_limit(request)
+
+            def runs(key: str) -> list[dict[str, str]]:
+                return [
+                    {
+                        'status': r.status,
+                        'message': _history_message(key, r.message, limit),
+                        'created_at': r.created_at,
+                    }
+                    for r in services.recent_source_runs(db, key, limit=5, max_tlp=limit)
+                ]
+
+            curated = [
                 {
                     'key': s.key,
                     'name': s.name,
@@ -47,23 +65,46 @@ def _register_source_routes(app: FastAPI, sessions: SessionFactory, require_auth
                     'optional': s.optional,
                     'reuse': s.reuse,
                     'in_use': in_use(s, switches),
-                    'runs': [
-                        {'status': r.status, 'message': r.message, 'created_at': r.created_at}
-                        for r in services.recent_source_runs(db, s.key, limit=5)
-                    ],
+                    'runs': runs(s.key),
                 }
                 for s in SOURCES.values()
             ]
+            return curated + [
+                {
+                    'key': row.key,
+                    'name': row.name,
+                    'url': row.url,
+                    'note': '',
+                    'category': 'operator',
+                    'optional': True,
+                    'reuse': row.reuse,
+                    'tlp': row.tlp,
+                    'in_use': row.enabled,
+                    'runs': runs(row.key),
+                }
+                for row in services.list_operator_sources(db, max_tlp=limit)
+            ]
 
     @app.post('/api/sources/{key}/sync', dependencies=[Depends(require_auth)])
-    async def sync(key: str) -> dict[str, str]:
+    async def sync(request: Request, key: str) -> dict[str, str]:
         if key not in SOURCES:
-            raise HTTPException(404, 'Unknown source')
+            if reader_limit(request) is not None:
+                raise HTTPException(403, 'A TLP-limited key cannot start operator source syncs')
+            try:
+                with sessions() as db:
+                    services.get_operator_source(db, key, max_tlp=write_limit(app, request))
+            except LookupError:
+                raise HTTPException(404, 'Unknown source') from None
         if app.state.sync_lock.locked():
             raise HTTPException(409, 'Another source job is running')
         async with app.state.sync_lock:
             try:
-                return {'message': await sync_source(sessions, key)}
+                result = await sync_source(
+                    sessions, key, max_tlp=write_limit(app, request), actor=caller_of(request).actor
+                )
+                return {'message': result}
+            except LookupError:
+                raise HTTPException(404, 'Unknown source') from None
             except SourceSwitchedOff as exc:
                 raise HTTPException(409, str(exc)) from exc
             except SourceSyncError as exc:
@@ -79,30 +120,37 @@ def _register_source_routes(app: FastAPI, sessions: SessionFactory, require_auth
         }
 
     @app.get('/api/schedules', dependencies=[Depends(require_auth)])
-    def schedules() -> list[dict[str, Any]]:
+    def schedules(request: Request) -> list[dict[str, Any]]:
         """How often each source syncs by itself (0: only when asked, the default)."""
         with sessions() as db:
             stored = services.list_schedules(db)
-        return [schedule_view(key, stored.get(key)) for key in SOURCES]
+            operator = services.list_operator_sources(db, max_tlp=reader_limit(request))
+            return [schedule_view(key, stored.get(key)) for key in [*SOURCES, *(s.key for s in operator)]]
 
     @app.put('/api/schedules/{key}', dependencies=[Depends(require_auth)])
     def set_schedule(key: str, body: ScheduleInput, request: Request) -> dict[str, Any]:
         """Browser session only (see ``SESSION_ONLY_WRITE_PREFIXES``); audited as ``schedule.update``."""
-        if key not in SOURCES:
-            raise HTTPException(404, 'Unknown source')
         try:
             now = datetime.now(UTC)
             starts_at = services.time_of_day(body.at, now) if body.at else None
             with acting(sessions, request) as db:
-                if body.interval_minutes and not in_use(SOURCES[key], services.source_switches(db)):
-                    raise HTTPException(409, f'{SOURCES[key].name} is switched off. Switch it on first.')
+                if key in SOURCES:
+                    enabled = in_use(SOURCES[key], services.source_switches(db))
+                else:
+                    enabled = services.get_operator_source(
+                        db, key, lock=True, max_tlp=write_limit(app, request)
+                    ).enabled
+                if body.interval_minutes and not enabled:
+                    raise HTTPException(409, 'Source is switched off. Switch it on first.')
                 schedule = services.set_schedule(db, key, body.interval_minutes, at=now, starts_at=starts_at)
                 return schedule_view(key, schedule)
+        except LookupError:
+            raise HTTPException(404, 'Unknown source') from None
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
 
     @app.get('/api/jobs', dependencies=[Depends(require_auth)])
-    def jobs(limit: Annotated[int, Query(ge=1, le=100)] = 20) -> list[dict[str, Any]]:
+    def jobs(request: Request, limit: Annotated[int, Query(ge=1, le=100)] = 20) -> list[dict[str, Any]]:
         """Recent background jobs (scheduled syncs), newest first."""
         with sessions() as db:
             return [
@@ -115,20 +163,26 @@ def _register_source_routes(app: FastAPI, sessions: SessionFactory, require_auth
                     'run_after': j.run_after,
                     'started_at': j.started_at,
                     'finished_at': j.finished_at,
-                    'message': j.message,
+                    'message': _history_message(j.key, j.message, reader_limit(request))
+                    if j.kind == services.SOURCE_SYNC
+                    else j.message,
                     'actor': j.actor,
                     'created_at': j.created_at,
                 }
-                for j in services.recent_jobs(db, limit)
+                for j in services.recent_jobs(db, limit, max_tlp=reader_limit(request))
             ]
 
     @app.post('/api/sources/sync-all', dependencies=[Depends(require_auth)])
-    async def sync_every_source() -> dict[str, list[dict[str, str]]]:
+    async def sync_every_source(request: Request) -> dict[str, list[dict[str, str]]]:
         """Every source in turn; one failing source does not stop the rest (each result says how it went)."""
+        if reader_limit(request) is not None:
+            raise HTTPException(403, 'A TLP-limited key cannot start sync-all')
         if app.state.sync_lock.locked():
             raise HTTPException(409, 'Another source job is running')
         async with app.state.sync_lock:
-            results = await sync_all(sessions)
+            results = await sync_all(
+                sessions, max_tlp=write_limit(app, request), actor=caller_of(request).actor
+            )
         return {
             'results': [
                 {'key': r.key, 'name': r.name, 'status': 'success' if r.ok else 'error', 'message': r.message}

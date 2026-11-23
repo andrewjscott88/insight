@@ -76,6 +76,8 @@ class IocMention:
     metadata_only: bool = False
     #: When the mention was last reviewed ('' if never, or before reviews were timed). TAXII versions use it.
     reviewed_at: str = ''
+    #: When this report's publisher policy last changed; TAXII versions its report independently.
+    reuse_changed_at: str = ''
 
 
 @dataclass(frozen=True)

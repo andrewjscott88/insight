@@ -1,0 +1,5 @@
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Operator fixture</title>
+  <entry><id>urn:fixture:entry</id><title>Analyst notice</title><summary>Publisher summary.</summary></entry>
+  <entry><published>2026-01-04T00:00:00Z</published><title>No ID</title><summary>A dated entry.</summary></entry>
+</feed>

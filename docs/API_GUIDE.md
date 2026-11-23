@@ -751,8 +751,21 @@ Both routes recheck current accepted CLEAR evidence. The GET never contacts a pr
 
 ### Sources and enrichment (outbound internet)
 
-These are the only routes that make Insight contact other servers. Sync imports a curated public feed; enrichment
-sends only the CVE identifier to FIRST EPSS or NIST NVD.
+Sync imports an enabled curated or operator-defined feed. In **Sources → Your sources**, enter the HTTPS
+feed URL, select the TLP label and choose the publisher's reuse rule. The subscription starts off. Switch it
+on before syncing it or setting a schedule. Changing the endpoint requires a fresh switch-on. Each source
+has an `op-` key you can look up with an API key that may see its label.
+
+```sh
+curl -sS "$INSIGHT_URL/api/operator-sources" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  | jq '.[] | {key, name, kind, tlp, reuse, enabled}'
+```
+
+A browser integration can create the same subscription with `POST /api/operator-sources` and a body such as
+`{"name":"Partner advisories","url":"https://partner.example.org/advisories.xml","tlp":"GREEN","reuse":"metadata"}`.
+Use the signed-in session's `X-CSRF-Token` for writes. Scripts with an unlimited read-write key may sync an
+enabled source by its key. A TLP-limited key can read its visible sources, their schedules and permitted
+history. [Source API](API.md#sources-and-enrichment)
 
 ```sh
 # Registry and the last 5 runs of each source: cisa-kev, cisa-csaf, sans-isc, ncsc

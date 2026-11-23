@@ -504,36 +504,39 @@ def schedule(source: str | None, every: str | None, at: str | None = None) -> st
     from .source_registry import SOURCES, in_use
 
     labels = {minutes: name for name, minutes in SCHEDULE_EVERY.items()}
-    with _current_database() as sessions:
+    with _current_database() as sessions, sessions.begin() as db:
+        switches = services.source_switches(db)
+        enabled = {s.key: in_use(s, switches) for s in SOURCES.values()}
+        enabled.update({s.key: s.enabled for s in services.list_operator_sources(db, max_tlp=None)})
         if source is not None:
             if every is None:
                 raise ValueError(f'say how often: --every {"|".join(SCHEDULE_EVERY)}')
-            keys = list(SOURCES) if source == 'all' else [source]
-            if any(key not in SOURCES for key in keys):
-                raise ValueError(f'unknown source {source!r}; use all or one of: {", ".join(SOURCES)}')
+            if source != 'all' and source not in enabled:
+                raise ValueError(f'unknown source {source!r}; use all or one of: {", ".join(enabled)}')
+            keys = [k for k, on in enabled.items() if on] if source == 'all' else [source]
             now = datetime.now(UTC)
             starts_at = services.time_of_day(at, now) if at else None
-            with sessions.begin() as db:
-                services.set_actor(db, 'cli')
-                switches = services.source_switches(db)
-                if source == 'all':  # every source in use; switched-off sources stay off
-                    keys = [key for key in keys if in_use(SOURCES[key], switches)]
-                elif SCHEDULE_EVERY[every] and not in_use(SOURCES[source], switches):
-                    raise ValueError(f'{source} is switched off; switch it on in Settings › Sources first')
-                for key in keys:
-                    services.set_schedule(db, key, SCHEDULE_EVERY[every], at=now, starts_at=starts_at)
-        with sessions() as db:
-            stored = services.list_schedules(db)
-            lines = []
-            for key in SOURCES:
-                s = stored.get(key)
-                if s is not None and s.enabled and s.next_run_at:
-                    when = s.next_run_at[:16].replace('T', ' ')
-                    lines.append(f'{key}: every {labels[s.interval_minutes]}; next sync {when} UTC')
-                elif not in_use(SOURCES[key], services.source_switches(db)):
-                    lines.append(f'{key}: switched off (Insight does not contact it)')
-                else:
-                    lines.append(f'{key}: off (syncs only when asked)')
+            services.set_actor(db, 'cli')
+            for key in keys:
+                is_on = enabled[key]
+                if key.startswith('op-'):
+                    is_on = services.get_operator_source(db, key, lock=True, max_tlp=None).enabled
+                if SCHEDULE_EVERY[every] and not is_on:
+                    if source == 'all':
+                        continue
+                    raise ValueError(f'{key} is switched off; switch it on in Settings › Sources first')
+                services.set_schedule(db, key, SCHEDULE_EVERY[every], at=now, starts_at=starts_at)
+        stored = services.list_schedules(db)
+        lines = []
+        for key, on in enabled.items():
+            s = stored.get(key)
+            if s is not None and s.enabled and s.next_run_at:
+                when = s.next_run_at[:16].replace('T', ' ')
+                lines.append(f'{key}: every {labels[s.interval_minutes]}; next sync {when} UTC')
+            elif not on:
+                lines.append(f'{key}: switched off (Insight does not contact it)')
+            else:
+                lines.append(f'{key}: off (syncs only when asked)')
     lines.append('Scheduled syncs run inside `insight serve` while INSIGHT_RUN_JOBS is on (the default).')
     return '\n'.join(lines)
 

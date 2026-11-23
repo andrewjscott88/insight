@@ -15,6 +15,7 @@ from ..models import (
     Job,
     Schedule,
 )
+from ..source_registry import SOURCES
 from .audit import DEFAULT_ACTOR, audit
 from .common import stamp
 
@@ -177,5 +178,12 @@ def prune_jobs(db: Session, *, before: datetime) -> int:
     return int(result.rowcount)  # type: ignore[attr-defined]
 
 
-def recent_jobs(db: Session, limit: int = 20) -> list[Job]:
-    return list(db.scalars(select(Job).order_by(Job.created_at.desc(), Job.id).limit(limit)))
+def recent_jobs(db: Session, limit: int = 20, *, max_tlp: str | None = None) -> list[Job]:
+    from .operator_sources import _visible_operator_history
+
+    visible = (
+        (Job.kind != SOURCE_SYNC)
+        | Job.key.in_(tuple(SOURCES))
+        | _visible_operator_history(Job.key, Job.created_at, max_tlp)
+    )
+    return list(db.scalars(select(Job).where(visible).order_by(Job.created_at.desc(), Job.id).limit(limit)))

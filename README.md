@@ -133,6 +133,16 @@ A single-operator threat-intelligence workbench, run locally or published behind
 
 The starting connectors access publicly available intelligence without paid subscriptions. This is **open-source intelligence (OSINT)**, not a claim that every publisher grants an open-source content license. Feed imports retain title, source link and up to 500 characters of feed summary; they never crawl full articles. Review each publisher’s terms before retention or redistribution. The registry is intentionally small and explicit, not “every free feed on the internet.”
 
+### Add your own feeds
+
+Open **Settings › Sources › Your sources** to add an RSS or Atom feed. Give it a name, enter its HTTPS URL
+and choose the lowest TLP label its reports should carry. A new feed starts off. Switch it on to sync it
+once, or choose a schedule to fetch updates. Adding a feed alone never contacts the publisher.
+
+Insight shares only metadata by default. Choose public reuse only if the publisher allows its text to be
+shared. Removing a feed keeps its reports and their labels, and limits future exports to metadata.
+[Source settings and schedules](docs/RUNBOOK.md#8-sources-enrichment-and-their-failures)
+
 ## Quick start: Docker Desktop
 
 1. Unzip this project and open a terminal **inside the `insight` folder**.

@@ -45,6 +45,7 @@ from .routes.hunting import _register_hunting_routes
 from .routes.imports import _register_import_routes
 from .routes.landscape import _register_landscape_routes
 from .routes.mcp import _register_mcp_routes
+from .routes.operator_sources import _register_operator_source_routes
 from .routes.pages import _register_page_routes
 from .routes.pivots import _register_pivot_routes
 from .routes.products import _register_product_routes
@@ -169,7 +170,9 @@ def create_app(settings: Settings | None = None, *, with_ui: bool = True) -> Fas
             from ..jobs import JobLocks, run_forever  # Deferred: keeps `import insight.main` light.
 
             locks = JobLocks(sync=application.state.sync_lock)  # Manual syncs share the sync lane (L5).
-            runner = asyncio.create_task(run_forever(sessions, locks, stop))
+            runner = asyncio.create_task(
+                run_forever(sessions, locks, stop, max_tlp=application.state.settings.max_tlp)
+            )
         try:
             yield
         finally:
@@ -222,6 +225,7 @@ def create_app(settings: Settings | None = None, *, with_ui: bool = True) -> Fas
         _register_requirement_routes,
         _register_hunting_routes,
         _register_source_routes,
+        _register_operator_source_routes,
         _register_enrichment_route,
         _register_pivot_routes,
         _register_taxii_routes,

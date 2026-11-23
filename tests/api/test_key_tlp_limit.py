@@ -19,7 +19,7 @@ from fastapi.testclient import TestClient
 
 from insight import services
 from insight.mcp import TOOL_BY_NAME
-from insight.models import Enrichment
+from insight.models import Enrichment, SourceRun
 from insight.schemas import (
     ActorCampaignInput,
     ActorInput,
@@ -34,6 +34,7 @@ from insight.schemas import (
     HuntPackageInput,
     HuntPackageItemInput,
     JudgementInput,
+    OperatorSourceInput,
     RequirementInput,
     SightingInput,
     SoftwareLinkInput,
@@ -158,6 +159,11 @@ def world(app: FastAPI) -> dict[str, Any]:
             db, SightingInput(value=SHARED_IP, first_seen=seen, note=MARKER, where=MARKER, tlp='AMBER')
         )
         services.record_sighting(db, SightingInput(value=HIDDEN_IP, first_seen=seen, tlp='GREEN'))
+        hidden_source = services.create_operator_source(
+            db, OperatorSourceInput(name=MARKER, url='https://source.example.org/feed', tlp='AMBER')
+        )
+        services.enqueue_job(db, services.SOURCE_SYNC, hidden_source.key, at=datetime.now(UTC), actor=MARKER)
+        db.add(SourceRun(source_key=hidden_source.key, status='error', message=MARKER))
         hidden_actor = services.create_actor(db, ActorInput(name=f'{MARKER} actor', tlp='AMBER'))
         services.create_requirement(
             db, RequirementInput(kind='rfi', question=f'{MARKER} request?', tlp='AMBER')
@@ -167,6 +173,7 @@ def world(app: FastAPI) -> dict[str, Any]:
         'actor_campaign': campaign.id,
         'case': case.id,
         'hidden_actor': hidden_actor.id,
+        'hidden_source': hidden_source.key,
         'hunt_package': hunt.id,
         'requirement': open_req.id,
         'cited': cited.id,
@@ -312,6 +319,8 @@ def test_nothing_hidden_leaks_through_any_read_route(client: TestClient, world: 
         '/api/brief?days=30',
         '/api/audit',
         '/api/sources',
+        '/api/operator-sources',
+        f'/api/operator-sources/{world["hidden_source"]}',
         '/api/schedules',
         '/api/jobs',
         '/api/watch-terms',
@@ -400,6 +409,7 @@ def test_nothing_hidden_leaks_through_any_read_route(client: TestClient, world: 
             world['new'],
             world['hidden_entity'],
             world['actor_campaign'],
+            world['hidden_source'],
         ):
             # A value the caller itself sent (e.g. an IOC export echoing its filters) discloses nothing.
             if secret not in path:

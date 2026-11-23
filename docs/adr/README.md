@@ -44,3 +44,4 @@ superseded ones are marked, never deleted.
 | [0037](0037-infrastructure-pivots.md) | Approved infrastructure pivots | Accepted |
 | [0038](0038-adversary-library.md) | Adversary library imports | Accepted |
 | [0039](0039-read-only-mcp.md) | Read-only MCP with API keys and per-key TLP ceilings | Accepted |
+| [0040](0040-operator-defined-sources.md) | Operator-defined sources, handling labels and publisher reuse | Accepted for RSS and Atom |

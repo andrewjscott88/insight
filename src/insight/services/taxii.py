@@ -80,6 +80,9 @@ def _indicator_bundle(db: Session, max_tlp: str | None) -> dict[str, Any]:
         key = (mention.kind, mention.value)
         if changed > indicators.get(key, ''):
             indicators[key] = changed
+        # Only the report carries publisher evidence and its redistribution marking.
+        if mention.reuse_changed_at:
+            changed = max(changed, stix_timestamp(mention.reuse_changed_at))
         if changed > reports.get(mention.document_id, ''):
             reports[mention.document_id] = changed
     entities: dict[str, dict[str, Any]] = {}
