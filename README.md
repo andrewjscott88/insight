@@ -13,10 +13,18 @@ For setup, backups and upgrades, see the [operator runbook](docs/RUNBOOK.md). Fo
 
 ## What works
 
-- **Guided threat hunting:** choose a threat type, actor, flaw, report, exploit activity, malware/tool,
-  indicator or campaign in **Threat Hunt**, then review and download a plan as Markdown or PDF. It uses
-  saved metadata and fixed guidance, with source references and TLP limits. It never runs a hunt or calls
-  an AI service. Existing hunt packages and saved intelligence reports are in the same section.
+- **Focused intelligence briefs:** search the top of **Intel Brief** by **Sector / Industry** or any of
+  the other Threat Hunt types, select a match and choose **Show brief**. The landing page starts with
+  **Last 30 days**; **Last 7 days** remains available. Read concise takeaways and open supporting reports.
+  Sector briefs separate sourced group background, reports mentioning the sector and reports linked to
+  those groups. The period controls keep the chosen focus; **All intelligence** returns to the overview.
+  No AI or source fetch is involved. [Brief behavior](docs/EXECUTIVE_BRIEF.md)
+
+- **Guided threat hunting:** choose a sector/industry, threat type, actor, flaw, report, exploit activity,
+  malware/tool, indicator or campaign in **Threat Hunt**, then download a plan as Markdown or PDF, or choose
+  **Save as hunt package** to keep an editable draft. It uses saved metadata and fixed guidance, with source
+  references and TLP limits. Saving is audited; publication is separate. It never runs a hunt or calls
+  an AI service. **Saved hunt packages** and **Advanced: intelligence reports** hold the existing workflows.
   [Workflow and limits](docs/THREAT_HUNT.md)
 
 - **Read-only MCP for agents:** Search reports and indicators, read report summaries, check indicator verdicts
@@ -45,13 +53,16 @@ For setup, backups and upgrades, see the [operator runbook](docs/RUNBOOK.md). Fo
   example addresses, reserved names, big vendor sites). `GET /api/iocs/blocklist` lists only unexpired malicious
   values with an accepted mention and no warning, for firewalls and SIEMs.
 - **MITRE ATT&CK® techniques** ([ADR 0019](docs/adr/0019-attack-techniques.md)). Reports are tagged with the
-  technique IDs written in them (`T1059.001`), checked against a bundled Enterprise ATT&CK catalog; analysts add
+  technique IDs written in them (`T1059.001`), checked against bundled Enterprise, Mobile and industrial
+  control systems (ICS) ATT&CK catalogs; analysts add
   and remove the rest in the reader, and new revisions keep those decisions. **Investigate › ATT&CK techniques** groups
   the techniques in your reports by tactic over a period you choose, opens the reports behind each one, and
   downloads a layer for ATT&CK Navigator. Never guessed from prose; no attribution. `make attack-backfill` tags
   reports stored before 0.7.0. STIX exports link each included report to its current catalog-backed tags,
   with the report's sharing label and a link to the technique on MITRE's site.
   API: `/api/attack/*` and `/api/documents/{id}/techniques`.
+  Select a domain to browse its offline catalog or export a matching Navigator layer. Existing API calls
+  default to Enterprise. [Domain catalogs](docs/adr/0042-mobile-and-ics-attack-catalogs.md)
 - **Industry threats and threat guides** ([docs/THREAT_GUIDES.md](docs/THREAT_GUIDES.md),
   [ADR 0025](docs/adr/0025-threat-guides.md)): pick an industry and see up to ten threat groups that a cited
   source (MITRE ATT&CK or the MISP galaxy) says target it, each with the quoted evidence. Open one for a threat
@@ -80,6 +91,11 @@ For setup, backups and upgrades, see the [operator runbook](docs/RUNBOOK.md). Fo
 - **Certificate transparency (TIP 4.6 part 2).** Optional, approved crt.sh domain lookups show certificate names, issuer and dates in the workspace and link map. [Guide](docs/INFRASTRUCTURE_PIVOTS.md)
 - **Passive DNS (TIP 4.6 part 3).** With approved CIRCL access and your own credentials, manually approved pivots show bounded DNS history and provider/date links. [Guide](docs/INFRASTRUCTURE_PIVOTS.md)
 - **Shodan exposure context (optional, paid).** With your own Shodan key, the same reviewed address can be looked up at Shodan for open ports and exposure. [Runbook](docs/RUNBOOK.md#shodan-exposure-context)
+- **Censys Platform context (optional).** Approve a lookup of one reviewed public IPv4 or IPv6 address to
+  see observed services, host names and network details. Configure `INSIGHT_CENSYS_PAT` on the host and,
+  when needed, `INSIGHT_CENSYS_ORG_ID`. Censys requires private sign-in and is unavailable during temporary
+  open access. Results stay out of exports and follow your account terms; fresh lookups may use credits.
+  [Censys setup](docs/CENSYS.md)
 - **Optional abuse.ch indicator feeds.** Import recent URLs from URLhaus, network indicators and hashes from
   ThreatFox, and file hashes from MalwareBazaar. Set `INSIGHT_ABUSECH_AUTH_KEY` and enable the feeds you use.
   Each entry links to its record at the publisher. The connector reads only the provider's metadata API.
@@ -295,10 +311,10 @@ After changing dependencies in `pyproject.toml`, run `python scripts/lock.py` (r
 ## Daily workflow
 
 The side menu starts with **Intel Brief**, then **Triage** (reports and review), **Investigate** (indicators,
-CVEs, techniques and threat groups), **Threat Hunt** (guide builder, hunt packages and saved intelligence
-reports), **Share** (IOC export, TAXII, API access and MISP), and **Settings**. Requirements and requests for
-information remain in **Settings → Intelligence questions (advanced)**. Sources, lookups, watch terms and
-alerts remain in Settings too. On a phone the menu sits above the content.
+CVEs, techniques and threat groups), **Threat Hunt** (guide builder, saved hunt packages and advanced
+intelligence reports), **Share** (IOC export, TAXII, API access and MISP), and **Settings**. Requirements and
+requests for information remain in **Settings → Intelligence questions (advanced)**. Sources, lookups,
+watch terms and alerts remain in Settings too. On a phone the menu sits above the content.
 
 1. **Collect:** paste authorized text or explicitly sync a curated feed.
 2. **Read:** search/filter the inbox and read evidence in context.
@@ -306,8 +322,9 @@ alerts remain in Settings too. On a phone the menu sits above the content.
 4. **Correlate:** pivot to other documents that mention the same canonical entity.
 5. **Prioritize:** watch terms identify possible organizational relevance; CISA KEV signals observed exploitation, NVD supplies vulnerability metadata, and EPSS estimates exploitation probability. None proves that your assets are exposed.
 6. **Record:** write an analyst note explaining your judgment.
-7. **Plan:** build a guide in **Threat Hunt** and take it to your own hunt tool. A generated guide is not a
-   saved product or a published hunt package ([docs/THREAT_HUNT.md](docs/THREAT_HUNT.md)).
+7. **Plan:** build a guide in **Threat Hunt**, then download it or **Save as hunt package** to create a draft.
+   Review and edit the draft before explicitly publishing it. Run the hunt in your own tool
+   ([docs/THREAT_HUNT.md](docs/THREAT_HUNT.md)).
 8. **Share:** export the indicators you reviewed (**Export IOCs**), filtered to the TLP you may share at. Check the file's label and evidence before it leaves your hands ([docs/IOC_EXPORT.md](docs/IOC_EXPORT.md)).
 
 The data model separates documents, entities, observations, notes and external enrichments. It intentionally does not invent threat-actor attribution or causal relationships from co-occurrence.

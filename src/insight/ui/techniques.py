@@ -9,12 +9,13 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
-from typing import Any, Final
+from typing import Any, Final, cast
 
 from nicegui import ui
 
 from .. import services
-from ..attack import catalog, search
+from ..attack import DOMAINS, Domain, catalog, search
+from .attack_catalog import build_catalog_browser
 from .messages import tell
 from .typography import heading, new_tab_link
 from .workspace import Workspace
@@ -78,6 +79,8 @@ def _render_tag(
             ui.label(tag.name).classes('flex-1 break-value')
         if tag.tactics:
             ui.label('Tactic: ' + ', '.join(tag.tactics)).classes('muted text-sm')
+        if tag.domain:
+            ui.label(f'ATT&CK domain: {DOMAINS[cast(Domain, tag.domain)]}').classes('muted text-sm')
         if tag.source == 'report':
             ui.label('The report names it here:').classes('muted text-sm')
             ui.label(tag.evidence).classes('evidence text-sm w-full')
@@ -104,6 +107,12 @@ def open_technique_dialog(ws: Workspace, doc_id: str, on_saved: Callable[[], Any
         ui.label('Search by ID, such as T1566, or by a word in the name, such as phishing.').classes(
             'muted prose'
         )
+        domain = (
+            ui.select(DOMAINS, value='enterprise', label='ATT&CK domain')
+            .props('outlined')
+            .classes('w-full')
+            .mark('technique-add-domain')
+        )
         query = (
             ui.input('Technique ID or name')
             .props('outlined autofocus clearable debounce=250 maxlength=100')
@@ -116,7 +125,7 @@ def open_technique_dialog(ws: Workspace, doc_id: str, on_saved: Callable[[], Any
                 return
             try:
                 with ws.write() as db:
-                    services.tag_technique(db, doc_id, technique_id)
+                    services.tag_technique(db, doc_id, technique_id, max_tlp=ws.app.state.settings.max_tlp)
             except LookupError:
                 dialog.close()
                 tell('This item no longer exists.', 'warning')
@@ -135,7 +144,7 @@ def open_technique_dialog(ws: Workspace, doc_id: str, on_saved: Callable[[], Any
                 if not text:
                     ui.label('Start typing to see matching techniques.').classes('muted text-sm')
                     return
-                found = search(text, limit=SEARCH_RESULTS)
+                found = search(text, limit=SEARCH_RESULTS, domain=cast(Domain, domain.value))
                 if not found:
                     ui.label('No technique matches. Try fewer letters.').classes('muted text-sm')
                 for match in found:
@@ -144,6 +153,7 @@ def open_technique_dialog(ws: Workspace, doc_id: str, on_saved: Callable[[], Any
                     ).props('flat no-caps align=left').classes('w-full break-value')
 
         query.on_value_change(lambda event: show(event.value))
+        domain.on_value_change(lambda _: show(query.value))
         show('')
         ui.button('Cancel', on_click=dialog.close).props('flat')
     dialog.open()
@@ -153,12 +163,19 @@ def open_technique_dialog(ws: Workspace, doc_id: str, on_saved: Callable[[], Any
 
 
 def build_techniques(ws: Workspace) -> None:
+    selected_domain: Domain = 'enterprise'
+
     def render_page(container: ui.column, technique_id: str, offset: int, total: int) -> None:
         if not ws.authorized():
             return
         with ws.read() as db:
             docs = services.technique_documents(
-                db, technique_id, since=since(ws.state.technique_days), offset=offset, limit=PIVOT_PAGE
+                db,
+                technique_id,
+                since=since(ws.state.technique_days),
+                offset=offset,
+                limit=PIVOT_PAGE,
+                max_tlp=ws.app.state.settings.max_tlp,
             )
             rows = [(d.id, d.title, d.tlp, d.created_at) for d in docs]
         with container:
@@ -203,14 +220,19 @@ def build_techniques(ws: Workspace) -> None:
             return
         days = ws.state.technique_days
         with ws.read() as db:
-            counts = services.technique_summary(db, since=since(days))
-        new_tab_link('Download a layer for ATT&CK Navigator', f'/api/attack/navigator?days={days}')
+            counts = services.technique_summary(
+                db, since=since(days), domain=selected_domain, max_tlp=ws.app.state.settings.max_tlp
+            )
+        new_tab_link(
+            'Download a layer for ATT&CK Navigator',
+            f'/api/attack/navigator?days={days}&domain={selected_domain}',
+        )
         if not counts:
             ui.label('No report from this time has a technique yet. Open a report to add one.').classes(
                 'muted p-2'
             )
             return
-        known = catalog()
+        known = catalog(selected_domain)
         by_tactic: dict[str, list[services.TechniqueCount]] = {}
         retired: list[services.TechniqueCount] = []
         for count in counts:
@@ -234,6 +256,15 @@ def build_techniques(ws: Workspace) -> None:
         ws.state.technique_days = days
         summary.refresh()
 
+    def choose_domain(value: str) -> None:
+        nonlocal selected_domain
+        selected_domain = cast(Domain, value)
+        version.set_text(
+            f'Uses version {catalog(selected_domain).version} of {DOMAINS[selected_domain]} ATT&CK.'
+        )
+        summary.refresh()
+        refresh_catalog()
+
     ws.on_refresh(summary.refresh)
     heading('ATT&CK techniques', 2)
     ui.label(
@@ -241,7 +272,11 @@ def build_techniques(ws: Workspace) -> None:
         'one. Insight counts the technique IDs written in reports and the ones you add. It never guesses '
         'them from the words.'
     ).classes('muted prose')
-    ui.label(f'Uses version {catalog().version} of Enterprise ATT&CK.').classes('muted text-sm')
+    version = ui.label(f'Uses version {catalog().version} of Enterprise ATT&CK.').classes('muted text-sm')
+    ui.select(
+        DOMAINS, value=selected_domain, label='ATT&CK domain', on_change=lambda e: choose_domain(e.value)
+    ).props('outlined').classes('w-full sm:w-80').mark('technique-domain')
+    refresh_catalog = build_catalog_browser(lambda: selected_domain)
     ui.select(
         PERIODS, value=ws.state.technique_days, label='Reports added in', on_change=lambda e: choose(e.value)
     ).props('outlined').classes('w-60').mark('technique-period')

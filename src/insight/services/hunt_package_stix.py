@@ -21,7 +21,7 @@ from uuid import uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..attack import catalog
+from ..attack import DOMAINS, catalog, technique
 from ..models import DetectionRule, Document, Entity, HuntPackage, HuntPackageItem, RuleLink
 from ..stix_export import TLP_MARKINGS, _pattern, stable_id, stix_timestamp, tlp_marking
 from ..stix_validation import validate_stix_bundle
@@ -55,24 +55,24 @@ def _common(row: HuntPackage, object_type: str, object_id: str, created: str) ->
 
 
 def _technique(row: HuntPackage, item: HuntPackageItem) -> dict[str, Any] | None:
-    source = catalog()
-    found = source.techniques.get(item.technique_id or '')
+    found = technique(item.technique_id or '')
     if found is None:  # retired from the catalog since it was added
         return None
+    source = catalog(found.domain)
     obj = _common(row, 'attack-pattern', _object_id(row, 'attack-pattern', item.id, source.version),
                   stix_timestamp(item.added_at))  # fmt: skip
     obj['name'] = found.full_name
     obj['external_references'] = [
         {'source_name': 'mitre-attack', 'external_id': found.id, 'url': found.url},
         {
-            'source_name': f'MITRE ATT&CK Enterprise {source.version}',
+            'source_name': f'MITRE ATT&CK {DOMAINS[found.domain]} {source.version}',
             'description': source.notice,
             'url': source.terms,
         },
     ]
     if found.tactics:
         obj['kill_chain_phases'] = [
-            {'kill_chain_name': 'mitre-attack', 'phase_name': tactic} for tactic in found.tactics
+            {'kill_chain_name': found.kill_chain, 'phase_name': tactic} for tactic in found.tactics
         ]
     return obj
 

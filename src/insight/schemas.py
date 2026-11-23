@@ -27,6 +27,13 @@ from .operator_endpoints import valid_collection_id
 from .source_registry import Reuse
 
 TLP = Literal['CLEAR', 'GREEN', 'AMBER', 'AMBER+STRICT', 'RED']
+
+
+class CensysLookupInput(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    approved: StrictBool
+
+
 DocumentStatus = Literal['new', 'reviewing', 'reviewed']
 ReviewStatus = Literal['unreviewed', 'accepted', 'rejected']
 #: What an indicator means (Design 1). ``unknown`` is the default: no assessment recorded.

@@ -428,7 +428,7 @@ def compose(data: LandscapeData, brief_data: BriefData, *, since: str, days: int
     if not w.now and not any(k.date_added >= w.since_date for k in data.kev):
         summary = [
             f'No recent reports are available for the last {count_of(days, "day")}. Sync your sources, and '
-            'check their status in About this brief.'
+            'check their status in Settings.'
         ]
     labels = [data.tlp[i] for i in (*w.now, *w.before) if i in data.tlp]
     return Landscape(

@@ -23,6 +23,30 @@ def report(
     return services.ingest(db, item, ref=ref)[0]
 
 
+def test_mobile_and_ics_stix_patterns_keep_their_domain(db: Session) -> None:
+    """Regression: Mobile/ICS patterns must not be omitted or labelled as Enterprise in STIX/TAXII."""
+    doc = report(db, 'Mixed catalog report', '192.0.2.10 with T1398, T0800 and T1486.')
+    for stable in (False, True):
+        exported = services.export_stix(db, IocExportQuery())
+        if stable:
+            # Exercise the stable projection used by TAXII independently of export's random IDs.
+            for obj in exported['objects']:
+                if obj['type'] == 'report':
+                    obj['object_refs'] = [
+                        r for r in obj['object_refs'] if not r.startswith('attack-pattern--')
+                    ]
+            exported['objects'] = [o for o in exported['objects'] if o['type'] != 'attack-pattern']
+            stix_techniques._add_stix_techniques(db, exported, max_tlp='GREEN', stable=True)
+        patterns = tagged_reports(exported)[doc.id]
+        for tid, chain, name in (
+            ('T1398', 'mitre-mobile-attack', 'Mobile'),
+            ('T0800', 'mitre-ics-attack', 'Industrial control systems'),
+            ('T1486', 'mitre-attack', 'Enterprise'),
+        ):
+            assert {p['kill_chain_name'] for p in patterns[tid]['kill_chain_phases']} == {chain}
+            assert any(name in r['source_name'] for r in patterns[tid]['external_references'])
+
+
 def tagged_reports(bundle: dict[str, Any]) -> dict[str, dict[str, dict[str, Any]]]:
     """Find each Report's attack patterns through its object_refs and reject dangling or unused patterns."""
     objects = {obj['id']: obj for obj in bundle.get('objects', [])}

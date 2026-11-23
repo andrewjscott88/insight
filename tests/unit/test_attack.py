@@ -143,3 +143,40 @@ def test_the_updater_refuses_anything_but_an_attack_bundle(tmp_path: Path, conte
 def test_the_committed_catalog_is_in_the_updaters_format() -> None:
     committed = (ROOT / 'src' / 'insight' / 'data' / 'attack-enterprise.json').read_text(encoding='utf-8')
     assert update_attack.render(json.loads(committed)) == committed
+
+
+@pytest.mark.parametrize(('domain', 'identifier', 'count'), [('mobile', 'T1398', 125), ('ics', 'T0800', 104)])
+def test_mobile_and_ics_catalogs_are_complete_pinned_and_domain_specific(
+    domain: attack.Domain,
+    identifier: str,
+    count: int,
+) -> None:
+    """Regression: explicit Mobile and ICS IDs were previously treated as unknown techniques."""
+    known = attack.catalog(domain)
+    assert known.version == attack.catalog().version == '20.1'
+    assert len(known.techniques) == count
+    found = attack.technique(identifier)
+    assert found is not None
+    assert found.domain == domain
+    assert found.kill_chain == f'mitre-{domain}-attack'
+    assert known.tactic_names(found)
+    assert [t.id for t in attack.search(identifier, domain=domain)] == [identifier]
+    assert attack.search(identifier) == []
+    assert [m.technique_id for m in attack.find_techniques(f'Mapped {identifier}.')] == [identifier]
+    raw = json.loads(
+        (ROOT / 'src' / 'insight' / 'data' / f'attack-{domain}.json').read_text(encoding='utf-8')
+    )
+    assert re.fullmatch(r'[0-9a-f]{64}', raw['source_sha256'])
+    assert '/v20.1/' in raw['source']
+    assert all(t.tactics for t in known.techniques.values())
+    assert len(attack.all_techniques()) == sum(len(attack.catalog(d).techniques) for d in attack.DOMAINS)
+
+
+def test_updater_rejects_wrong_domain_and_hash(tmp_path: Path) -> None:
+    """Regression: a bundle from another domain must not silently become an empty or wrongly named catalog."""
+    with pytest.raises(ValueError, match='does not match'):
+        update_attack.compact(bundle(), domain='ics')
+    source, output = tmp_path / 'bundle.json', tmp_path / 'catalog.json'
+    source.write_text(json.dumps(bundle()), encoding='utf-8')
+    assert update_attack.main([str(source), '--output', str(output), '--sha256', '0' * 64]) == 1
+    assert not output.exists()

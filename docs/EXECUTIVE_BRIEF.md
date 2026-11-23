@@ -8,27 +8,83 @@ line is removed.
 
 ## What the brief answers
 
-The default view covers seven days, with a 30-day option. There is no separate last-24-hour receipt card or
+The default workspace view covers 30 days, with a seven-day option. There is no separate last-24-hour receipt card or
 attention highlight. The `recent_reports` API field remains as compatibility metadata. The brief
 explains known exploitation, repeated reporting, serious weaknesses and matches to the operator's watch
 terms when those facts exist. Each highlight combines a short explanation, a conditional next step and
 links to available, visible evidence. **Exploited now** and **Most severe** remain available below the
-summary, alongside watch terms, indicators seen in several sources and vendor mentions.
+summary under **Vulnerabilities to watch**. The separate watch-term, repeated-indicator and vendor detail
+panels are not shown on the landing page.
 
 The landing section is **Intel Brief**, with the main heading **Intel brief** and the 7- or 30-day period
 chosen beside it ([ADR 0020](adr/0020-threat-landscape.md),
-[ADR 0041](adr/0041-guided-threat-hunt-workspace.md)). Its **Executive summary** leads with known exploited
-products and severe flaws when present; otherwise it leads with the reported threat theme. It explains the
-meaning and next step before report-volume context. Report/source counts and the UTC reference time
-remain part of the brief's data contract; the separate receipt section is not shown.
-**About this brief** expands the coverage notes, including how fresh each source in use is (optional sources
-count only once switched on). **What needs attention** contains the highlights and their **Next step** and
-**View evidence** controls. The landscape's trending threats and attacker behaviour follow, then **Evidence at
-a glance** with the five detail sections, **Exploited now** and **Most severe** emphasized and explained.
-**Sync all sources** sits beside the main heading. Analyst actions, inventory counters and the report
-workspace follow below, so the overview comes before the working tools. Evidence controls reveal
+[ADR 0041](adr/0041-guided-threat-hunt-workspace.md)). Its **Executive summary** shows up to three short,
+fact-based takeaways: known attacks and affected products, a leading threat trend or critical severity,
+and a next step. One short note explains the limits of the collection. Sparse evidence produces fewer
+takeaways, without filler or unsupported claims. The summary spans the page; the context sidebar and
+**About this brief** expansion are removed. Report/source counts, the UTC reference time and coverage notes
+remain part of the API data contract. **What needs attention** contains the highlights and their **Next step**
+and **View evidence** controls. **Trending threats** follows, then **Vulnerabilities to watch** with the two
+vulnerability sections. The separate **What attackers are doing** section and the four bottom inventory
+counters are removed. **Sync all sources** sits beside the main heading. The toolbar's **Import Intel**
+button opens the existing intelligence import dialog. Evidence controls reveal
 the supporting report or relevant workspace tab on both phones and larger screens; scrolling honors the
 reader's reduced-motion preference.
+
+## Focus on a subject
+
+The top search bar looks across **All focus types** by default. It shares nine choices with Threat Hunt:
+**Sector / Industry**,
+threat type, threat actor, software flaw (CVE), report or advisory, exploit activity, malware or tool,
+indicator and campaign. Choose a type to narrow the search, or enter a sector, name, alias, identifier, report title
+or source and select **Search**. Select **Choose a match**, then **Show brief**.
+
+The focused view shows the selected subject and period, its sharing label, up to three concise takeaways,
+up to two limits or context notes, and at most five supporting reports. Report buttons open the evidence
+in Triage. For a focused brief, the 7/30-day window uses the dates current reports were added to Insight.
+Catalog information and saved background facts are identified as background, not evidence of activity
+during that window. Changing the query or type clears the previous focus; **All intelligence** returns to
+the general overview.
+
+Actor briefs also show compact profile sections and catalog source links when available: who the group is,
+reported targets, methods in plain English, what to watch for, tools, aliases and catalog update context.
+Methods and watch guidance retain their technique references. Missing fields do not produce empty profile
+headings. A separate coverage section states when no explicitly linked reports were added in the selected
+period; this does not mean the actor has no known background. Industry mappings still respect analyst
+additions, removals and sharing labels. Catalog update dates are not last-seen dates.
+
+Sector briefs use the existing 15 industry categories and their source aliases. Select **Sector / Industry**
+with an empty query to browse them. The brief shows cited groups known to target that sector, their documented
+methods and fixed watch guidance. These are background facts, not a ranking of current attacks. Up to five
+groups are shown, with recent explicitly linked reports first and names breaking ties.
+
+Sector evidence has two separate routes: reports that mention a reviewed sector phrase, and reports explicitly
+linked to a group with a visible target mapping. The report buttons state why they matched. Mentions establish
+relevance only; group links do not prove that a report describes an attack on this sector. Neither route creates
+new links or attribution. A report matching both appears once. At most the latest 500 visible current reports
+in the period are scanned, with up to 100 matching references retained and five displayed. Scan and result caps
+are disclosed. Publisher body text is inspected locally but never copied into the brief. Target additions,
+removals, links and reports preserve their sharing labels. [ADR 0044](adr/0044-sector-intel-briefs.md)
+
+Focused briefs review at most 100 matching current reports and show the latest five, with a note when the
+review cap is reached. Actor, software and campaign report evidence follows explicit visible links;
+a shared name, method or indicator does not establish attribution.
+
+An empty all-types search shows a hint instead of loading every choice; sector and threat-type choices can
+be browsed with no query. All-types results show at most
+five matches per type; a single type shows up to 50. The interface explains these limits so the reader can
+narrow the query. Choices and brief content respect the caller's and instance's sharing limits. The brief
+uses saved intelligence and fixed wording; it is not an AI chat and performs no new source fetch.
+
+The focused view is separate from the general API and briefing export. It does not replace their full
+summaries or expose a general-brief download as though it described the chosen subject.
+
+## Details retained outside the overview
+
+This is a presentation change. API responses and the downloadable Markdown briefing retain their full
+summaries. The brief API also retains all five detail sections and its coverage metadata; the landscape
+API retains its tactic data. The Markdown briefing still includes attacker tactics and all five detail
+sections. Removing these panels does not delete reports, indicators, watch terms or other stored intelligence.
 
 Sharing badges explain the audience, retaining the standard token: **Public · TLP:CLEAR** for public
 disclosure, or a restricted audience for other levels. Copyright and source terms still apply to public
@@ -56,8 +112,11 @@ investigations.
 Database reads remain in `src/insight/services/brief.py`. `src/insight/brief_facts.py` applies the date and
 counting rules; `src/insight/brief_highlights.py` supplies explanations and coverage notes; and
 `src/insight/brief.py` composes the summary and sections, with shared response types in
-`src/insight/brief_types.py`. The workspace and `GET /api/brief` use the same result. The interface changes its
-presentation without creating a second set of intelligence rules.
+`src/insight/brief_types.py`. `src/insight/brief_digest.py` creates the shorter workspace takeaways from the
+already-filtered `BriefData`, using the same `_facts` date and counting rules. It selects facts for a concise
+display rather than clipping the full summary's text. The API and export summary composition is unchanged.
+Focused subject briefs use `services.focused_brief` and the same filtered choice service as Threat Hunt;
+the interface renders the returned facts and report references without composing new claims.
 
 Highlights follow a fixed priority: known ransomware use and other known exploitation, the most-mentioned
 CVE (or a vendor to check when no CVE repeats), stored attack forecasts, the highest reported severity,

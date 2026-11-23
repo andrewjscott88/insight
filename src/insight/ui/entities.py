@@ -13,6 +13,7 @@ from nicegui import ui
 
 from .. import greynoise, services, shodan
 from .cases import open_add_to_case
+from .censys import open_censys
 from .confidence import render_confidence
 from .graph import open_graph
 from .greynoise import open_greynoise
@@ -64,6 +65,13 @@ def build_entities(ws: Workspace) -> None:
             eligible = target.kind == 'ip' and bool(services.eligible_greynoise_ip(db, target.value))
             show_greynoise = eligible and greynoise.configured()
             show_shodan = eligible and shodan.configured()
+            show_censys = target.kind == 'ip' and bool(
+                services.eligible_censys_ip(
+                    db,
+                    target.value,
+                    max_tlp=ws.app.state.settings.max_tlp,
+                )
+            )
             show_pivot = bool(services.eligible_pivot(db, target.value, max_tlp=None))
         box.clear()
         with box:
@@ -89,6 +97,10 @@ def build_entities(ws: Workspace) -> None:
                 ui.button('Shodan exposure context', on_click=lambda: open_shodan(ws, target.value)).props(
                     'outline no-caps'
                 ).mark(f'entity-shodan-{target.value}')
+            if show_censys:
+                ui.button(
+                    'Censys infrastructure context', on_click=lambda: open_censys(ws, target.value)
+                ).props('outline no-caps').mark(f'entity-censys-{target.value}')
             if first and last:
                 ui.label(f'In reports added from {first[:10]} to {last[:10]}').classes('muted text-sm')
             render_confidence(confidence)

@@ -9,7 +9,7 @@ from typing import Annotated, Any
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 
 from ... import services
-from ...attack import Technique, catalog, search, technique
+from ...attack import Domain, Technique, catalog, search, technique
 from ...models import SessionFactory
 from ...schemas import TechniqueInput
 from ..auth import AuthDependency, acting, reader_limit
@@ -21,8 +21,9 @@ def technique_view(found: Technique) -> dict[str, Any]:
     return {
         'id': found.id,
         'name': found.full_name,
-        'tactics': list(catalog().tactic_names(found)),
+        'tactics': list(catalog(found.domain).tactic_names(found)),
         'url': found.url,
+        'domain': found.domain,
     }
 
 
@@ -37,6 +38,7 @@ def tag_view(tag: services.TechniqueTag) -> dict[str, Any]:
         'actor': tag.actor,
         'created_at': tag.created_at,
         'in_catalog': tag.in_catalog,
+        'domain': tag.domain,
     }
 
 
@@ -52,22 +54,35 @@ def _register_technique_routes(app: FastAPI, sessions: SessionFactory, require_a
     """The ATT&CK catalog, per-report technique tags, the technique summary and its pivots."""
 
     @app.get('/api/attack/techniques', dependencies=[Depends(require_auth)])
-    def techniques(q: Annotated[str, Query(max_length=100)] = '', limit: int = 50) -> dict[str, Any]:
-        """Search the bundled Enterprise ATT&CK catalog by ID prefix or name."""
-        found = search(q, limit=min(max(1, limit), 200))
-        return {'version': catalog().version, 'techniques': [technique_view(t) for t in found]}
+    def techniques(
+        q: Annotated[str, Query(max_length=100)] = '', limit: int = 50, domain: Domain = 'enterprise'
+    ) -> dict[str, Any]:
+        """Search one bundled ATT&CK domain by ID prefix or name."""
+        found = search(q, limit=min(max(1, limit), 200), domain=domain)
+        return {
+            'version': catalog(domain).version,
+            'domain': domain,
+            'techniques': [technique_view(t) for t in found],
+        }
 
     @app.get('/api/attack/summary', dependencies=[Depends(require_auth)])
-    def summary(request: Request, days: Days = 30) -> dict[str, Any]:
+    def summary(request: Request, days: Days = 30, domain: Domain = 'enterprise') -> dict[str, Any]:
         """Techniques on current reports the caller may see, most reports first."""
         with sessions() as db:
-            counts = services.technique_summary(db, max_tlp=reader_limit(request), since=since(days))
+            counts = services.technique_summary(
+                db, max_tlp=reader_limit(request), since=since(days), domain=domain
+            )
         rows = []
         for count in counts:
             found = technique(count.technique_id)
             view = technique_view(found) if found else {'id': count.technique_id, 'name': count.technique_id}
             rows.append({**view, 'reports': count.reports, 'last_seen_at': count.last_seen})
-        return {'version': catalog().version, 'period': period(days), 'techniques': rows}
+        return {
+            'version': catalog(domain).version,
+            'domain': domain,
+            'period': period(days),
+            'techniques': rows,
+        }
 
     @app.get('/api/attack/techniques/{technique_id}/documents', dependencies=[Depends(require_auth)])
     def technique_reports(
@@ -88,15 +103,22 @@ def _register_technique_routes(app: FastAPI, sessions: SessionFactory, require_a
             }
 
     @app.get('/api/attack/navigator', dependencies=[Depends(require_auth)])
-    def navigator(request: Request, days: Days = 30) -> Response:
+    def navigator(request: Request, days: Days = 30, domain: Domain = 'enterprise') -> Response:
         """An ATT&CK Navigator layer of the summary (each technique scored by its report count). Audited."""
         limit = reader_limit(request)
         with acting(sessions, request) as db:
-            counts = services.technique_summary(db, max_tlp=limit, since=since(days))
-            layer = services.navigator_layer(counts, period=period(days))
-            detail = {'days': days, 'techniques': len(layer['techniques']), 'max_tlp': limit}
+            counts = services.technique_summary(db, max_tlp=limit, since=since(days), domain=domain)
+            layer = services.navigator_layer(counts, period=period(days), domain=domain)
+            detail = {
+                'days': days,
+                'techniques': len(layer['techniques']),
+                'max_tlp': limit,
+                'domain': domain,
+            }
             services.audit(db, 'attack.navigator', 'techniques', json.dumps(detail, sort_keys=True))
         filename = f'insight-attack-layer-{days or "all"}d.json' if days else 'insight-attack-layer-all.json'
+        if domain != 'enterprise':
+            filename = filename.replace('attack-layer', f'attack-{domain}-layer')
         return Response(
             json.dumps(layer, indent=2),
             media_type='application/json',

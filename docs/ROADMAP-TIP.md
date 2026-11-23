@@ -13,11 +13,17 @@ Existing project issues are cited where they already exist (`ROADMAP.md`). Sched
 
 The [guided Threat Hunt workspace](THREAT_HUNT.md), proposed in
 [ADR 0041](adr/0041-guided-threat-hunt-workspace.md), brings existing evidence into bounded, on-demand
-plans from eight starting kinds. It also makes Intel Brief's meaning and next steps clearer, explains TLP
+plans from nine starting kinds. It also makes Intel Brief's meaning and next steps clearer, explains TLP
 audiences, moves packages and saved intelligence reports into Threat Hunt, and keeps requirements in
 advanced Settings. This does not mark a new milestone complete or expand Insight into telemetry hunting.
 The plans use saved metadata and fixed guidance; they make no network request, run no rule and save no
 new intelligence. Existing API contracts and the milestone checklist below remain in place.
+
+The unreleased Intel Brief extension adds **Sector / Industry** focus and a **Last 30 days** default.
+It separates catalog targeting history, reports mentioning sector terms and analyst-linked group reports.
+The seven-day option remains available ([ADR 0044](adr/0044-sector-intel-briefs.md)).
+The same sector categories also build Threat Hunt guides, Markdown/PDF downloads and audited draft
+packages ([ADR 0045](adr/0045-sector-threat-hunt-guides.md)).
 
 ## 1. Current state versus premium TIPs
 
@@ -277,6 +283,10 @@ session secret is deliberately changed. [Upgrade, backup and recovery](RUNBOOK.m
 
 ### 2.3 ATT&CK mapping
 
+Current implementation: Enterprise, Mobile and ICS technique catalogs are bundled. The unreleased domain
+extension adds a workspace selector, offline browsing, domain-filtered API and Navigator output, and
+explicit-ID tagging across all three catalogs ([ADR 0042](adr/0042-mobile-and-ics-attack-catalogs.md)).
+
 - **What to build:** Store MITRE ATT&CK technique (and tactic) IDs on reports or as first-class entities, with manual tagging plus conservative auto-suggest from explicit technique IDs in text.
 - **Why / which TIP capability:** ATT&CK mapping, present in Google TI, Microsoft Threat analytics, MISP galaxies, and OpenCTI. Do **not** auto-assign a threat actor.
 - **Implementation notes:** Load the official ATT&CK STIX dataset at build or via an opt-in "sync ATT&CK catalog" source (version-pin the dataset). New tables `attack_patterns` (id `T1059`, name, tactics, stix_id, domain) and `document_attack_patterns` (document_id, technique_id, method=`manual|extracted`, evidence offsets). Service module `src/insight/services/attack.py`. Extractor: only `T####` / `T####.###` tokens already in the report body (precision-first). UI: tag picker in the reader (`src/insight/ui/reader.py`), filters in the inbox, brief section "Techniques seen." Export in STIX as `attack-pattern` + `uses`/`indicates` relationships. CLI `insight attack-sync` to refresh the catalog.
@@ -412,6 +422,11 @@ session secret is deliberately changed. [Upgrade, backup and recovery](RUNBOOK.m
 - **Acceptance criteria:** Default installs make zero model calls (tested). A proposal cannot change verdicts or ingest without an analyst click. TLP policy is enforced before any outbound prompt. Evaluation notes are checked in or linked.
 
 ### 3.7 Optional Shodan or Censys enrichment (operator-supplied keys)
+
+Current implementation: Shodan and the Censys Platform host endpoint are supported. The unreleased Censys
+addition uses a host token, explicit per-lookup approval, private access and a bounded metadata cache.
+Account terms apply; data is not redistributed through intelligence exports
+([ADR 0043](adr/0043-censys-platform-enrichment.md)).
 
 - **What to build:** Optional exposure context for IPs/domains, clearly labelled as a paid/optional API.
 - **Why / which TIP capability:** Attack-surface context. Recorded Future sells this as a separate capability; Insight should only offer it if the operator already has a key.
@@ -622,7 +637,8 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
 
 - [x] **2.1** STIX 2.1 export, validated (`ROADMAP` #12)
 - [x] **2.2** STIX 2.1 import with TLP enforcement
-- [x] **2.3** ATT&CK catalog, report and analyst tags, and TLP-marked technique references in STIX Reports
+- [x] **2.3** Enterprise, Mobile and ICS ATT&CK catalogs, report and analyst tags, domain-specific Navigator
+  output, and TLP-marked technique references in STIX Reports. Domain extension unreleased (ADR 0042).
 - [x] **2.4** MISP export/import (host CLI). [Event files and trusted instance exchange](MISP.md)
 - [x] **2.5** Manual actors and campaigns with TLP-marked report, indicator and technique links in STIX exports
 - [x] **2.6** Optional GreyNoise community IP enrichment
@@ -639,7 +655,8 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
 - [ ] **3.4** OIDC and RBAC (`ROADMAP` #14)
 - [ ] **3.5** Shared rate limits for multi-worker deploys (`ROADMAP` #16)
 - [ ] **3.6** Opt-in LLM proposals per `docs/LLM_EXTENSION.md`
-- [x] **3.7** Optional Shodan/Censys enrichment (operator keys; vendor-priced): Shodan done, ADR 0031; Censys deferred
+- [x] **3.7** Optional Shodan/Censys enrichment (operator credentials; vendor-priced): Shodan, ADR 0031;
+  Censys Platform host context implemented, unreleased, ADR 0043.
 - [x] **3.8** Lightweight case management: done, ADR 0029 (no webhook on open)
 
 ### Phase 4 — An intelligence program (8)

@@ -1,4 +1,4 @@
-"""Hunt packages in Share (TIP 4.3, ADR 0034): a hypothesis with the ATT&CK techniques, indicators, rules and
+"""Saved hunt packages (TIP 4.3, ADR 0034): a hypothesis with the ATT&CK techniques, indicators, rules and
 reports a hunt tool needs. Published packages go out in the Hunt packages TAXII collection.
 
 "Add to hunt package" in the reader and the indicator explorer opens :func:`open_add_to_package`.
@@ -85,7 +85,7 @@ def _new_package(ws: Workspace, saved: Callable[[str], object]) -> None:
     dialog.open()
 
 
-def build_hunt_packages(ws: Workspace) -> None:
+def build_hunt_packages(ws: Workspace, *, embedded: bool = False) -> Callable[[str], None]:
     status: dict[str, HuntPackageStatusFilter] = {'value': 'all'}
     # Dialogs live here, not inside the list: refreshing the list would delete an open dialog with it.
     holder = ui.element('div')
@@ -96,6 +96,8 @@ def build_hunt_packages(ws: Workspace) -> None:
             open_hunt_package_dialog(ws, package_id, changed=ws.refresh_all)
 
     def created(package_id: str) -> None:
+        status['value'] = 'all'
+        status_picker.set_value('all')
         listing.refresh()
         show(package_id)
 
@@ -128,20 +130,26 @@ def build_hunt_packages(ws: Workspace) -> None:
                     f'changed {package.updated_at[:10]}'
                 ).classes('muted text-sm')
 
-    heading('Hunt packages', 2, 'subsection-title mt-6')
+    if not embedded:
+        heading('Hunt packages', 2, 'subsection-title mt-6')
     ui.label(
-        'A hunt package is one idea to test in your own logs: what to look for and why, with the attack '
-        'techniques, indicators and rules that help. Hunt tools fetch published packages from the TAXII '
-        'feed. They run the hunt and send back what they saw.'
+        'Packages you save from the guide builder appear here. Open one to review its plan and evidence. '
+        'Publish it when you want connected hunt tools to receive it. Or start a blank package.'
     ).classes('muted prose')
     with ui.row().classes('items-center gap-4'):
-        ui.button('＋ New hunt package', on_click=lambda: _new_package(ws, created)).mark('hunt-new')
-        ui.select(STATUSES, value='all', label='Show', on_change=lambda e: choose(e.value)).props(
-            'outlined dense'
-        ).classes('min-w-40').mark('hunt-status')
+        ui.button('Start a blank package', icon='add', on_click=lambda: _new_package(ws, created)).props(
+            'outline'
+        ).mark('hunt-new')
+        status_picker = (
+            ui.select(STATUSES, value='all', label='Show', on_change=lambda e: choose(e.value))
+            .props('outlined dense')
+            .classes('min-w-40')
+            .mark('hunt-status')
+        )
     ws.on_refresh(listing.refresh)
     with ui.column().classes('w-full gap-2 mt-2'):
         listing()
+    return created
 
 
 def open_add_to_package(ws: Workspace, kind: HuntPackageItemKind, target_id: str, name: str) -> None:

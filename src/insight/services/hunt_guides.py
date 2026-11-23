@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from ..hunt_guide import GuideSection, HuntGuide, bounded
 from ..hunt_guide_plan import planning_sections
+from ..industry_brief import industry_choices
 from ..models import Document, DocumentTechnique, Entity, Observation, SoftwareDocument, ThreatActor
 from ..schemas import most_restrictive
 from ..themes import THEMES, THEMES_BY_KEY, Theme
@@ -19,10 +20,10 @@ from .actors import actor_aliases, linked_reports, resolve_group
 from .assessments import visible_assessments
 from .common import fold, like_pattern
 from .techniques import TAGGED
-from .threat_guides import SWEEP_KINDS, GuideData, sweep_list
+from .threat_guides import SWEEP_KINDS, GuideData, SweepEntry, sweep_list
 from .tlp import _visible, visible_levels
 
-_KINDS = ('theme', 'actor', 'software', 'cve', 'document', 'exploit', 'indicator', 'campaign')
+_KINDS = ('theme', 'actor', 'software', 'cve', 'document', 'exploit', 'indicator', 'campaign', 'industry')
 _MAX_REPORTS = 20
 _MAX_INDICATORS = 100
 _MAX_TEXT = 1_200
@@ -40,6 +41,8 @@ def _label(name: str, ref: str, aliases: tuple[str, ...] = ()) -> str:
 
 def _choices(db: Session, kind: str, q: str, max_tlp: str | None) -> list[tuple[str, str]]:
     lib, query = library(), q.casefold()
+    if kind == 'industry':
+        return industry_choices(q)
     if kind == 'theme':
         return [(t.key, t.name) for t in THEMES if query in f'{t.name} {t.key}'.casefold()]
     if kind == 'software':
@@ -133,9 +136,9 @@ def _software_reports(db: Session, ref: str, max_tlp: str | None) -> list[Report
 
 def _evidence(
     db: Session, reports: list[ReportRef], max_tlp: str | None, now: datetime
-) -> tuple[tuple[GuideSection, ...], str]:
+) -> tuple[tuple[GuideSection, ...], str, tuple[SweepEntry, ...]]:
     shown = reports[:_MAX_REPORTS]
-    sweep, truncated = sweep_list(db, shown, max_tlp=max_tlp, now=now)
+    sweep, truncated = sweep_list(db, shown, max_tlp=max_tlp, now=now, apply_default_lifetimes=True)
     # A verdict can remove an indicator (benign or expired), affecting the list and its cap notice.
     # Its sharing label still contributes even when the indicator is absent from the returned sweep.
     considered = db.scalars(
@@ -195,6 +198,7 @@ def _evidence(
             *(e.tlp for e in sweep),
             *(a.tlp for a in assessments.values()),
         ),
+        tuple(sweep[:_MAX_INDICATORS]),
     )
 
 
@@ -247,11 +251,16 @@ def _actor(
     )
 
 
-def hunt_guide(
+def _guide_parts(
     db: Session, kind: str, ref: str, *, max_tlp: str | None = None, now: datetime | None = None
-) -> HuntGuide:
-    """Build a bounded plan, without saving a hunt, product, finding or attribution."""
+) -> tuple[HuntGuide, list[ReportRef], tuple[str, ...], tuple[SweepEntry, ...]]:
+    """Build the display and its structured evidence together; callers never parse guide text."""
     when = now or datetime.now(UTC)
+    if kind == 'industry':
+        from .hunt_guide_industries import _industry_parts
+
+        guide, reports, techniques, sweep = _industry_parts(db, ref, max_tlp=max_tlp, now=when)
+        return bounded(guide), reports, techniques, sweep
     if kind == 'actor':
         ref, name, label, why, reports, techniques = _actor(db, ref, max_tlp, when)
     elif kind == 'theme':
@@ -276,12 +285,13 @@ def hunt_guide(
         ]
         reports, techniques = _software_reports(db, ref, max_tlp), item.techniques
     elif kind in _KINDS:
-        from .hunt_guide_subjects import hunt_guide_subject
+        from .hunt_guide_subjects import _subject_parts
 
-        return bounded(hunt_guide_subject(db, kind, ref, max_tlp=max_tlp, now=when))
+        guide, reports, techniques, sweep = _subject_parts(db, kind, ref, max_tlp=max_tlp, now=when)
+        return bounded(guide), reports, techniques, sweep
     else:
         raise LookupError('Hunt guide choice not found')
-    evidence, evidence_label = _evidence(db, reports, max_tlp, when)
+    evidence, evidence_label, sweep = _evidence(db, reports, max_tlp, when)
     sections = (
         GuideSection('Why this hunt matters', tuple(_text(line) for line in why)),
         *planning_sections(techniques),
@@ -301,7 +311,7 @@ def hunt_guide(
             ),
         ),
     )
-    return bounded(
+    guide = bounded(
         HuntGuide(
             kind,
             ref,
@@ -312,3 +322,11 @@ def hunt_guide(
             sections,
         )
     )
+    return guide, reports, techniques, sweep
+
+
+def hunt_guide(
+    db: Session, kind: str, ref: str, *, max_tlp: str | None = None, now: datetime | None = None
+) -> HuntGuide:
+    """Build a bounded plan, without saving a hunt, product, finding or attribution."""
+    return _guide_parts(db, kind, ref, max_tlp=max_tlp, now=now)[0]

@@ -35,7 +35,6 @@ from .landscape import build_landscape
 from .requirements import build_requirements
 from .share import build_share
 from .sources import build_sources
-from .stats import build_stats
 from .techniques import build_techniques
 from .theme import apply_theme
 from .threat_hunt import build_threat_hunt
@@ -91,7 +90,7 @@ def _investigate(ws: Workspace) -> ui.tabs:
 def _toolbar(app: FastAPI, ws: Workspace, ingest_dialog: ui.dialog, dark: ui.dark_mode, theme: Theme) -> None:
     with ui.row().classes('workspace-toolbar w-full justify-between items-center gap-3'):
         with ui.row().classes('items-center gap-3'):
-            ui.button('＋ Add intelligence', on_click=ingest_dialog.open).classes('flex-1 sm:flex-none')
+            ui.button('Import Intel', icon='add', on_click=ingest_dialog.open).classes('flex-1 sm:flex-none')
             ui.button('Export IOCs', on_click=lambda: open_ioc_export_dialog(ws)).props('outline').classes(
                 'flex-1 sm:flex-none'
             )
@@ -138,7 +137,6 @@ def register_ui(app: FastAPI, session_factory: SessionFactory) -> None:
                 with ui.tab_panels(menu, value='today').classes('w-full bg-transparent p-0'):
                     with ui.tab_panel('today').classes('p-0 flex flex-col gap-6'):
                         build_landscape(ws)
-                        build_stats(ws)
                     # Only the open section is in the page, so each has an h1 (axe: page-has-heading-one).
                     with ui.tab_panel('triage').classes('p-0 flex flex-col gap-4'):
                         heading('Triage', 1)

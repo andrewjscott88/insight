@@ -17,13 +17,14 @@ Keep the existing date rules and 7/30-day choices. Remove the visible last-24-ho
 attention highlight; retain the existing `recent_reports` API field as compatibility metadata. No model
 writes text.
 
-Replace the Products menu entry with **Threat Hunt**. It contains an on-demand guide builder, existing hunt
-packages and an expandable **Saved intelligence reports** area for the existing products. Move requirements
-to **Settings → Intelligence questions (advanced)** without removing their APIs or cross-links. Keep Share's
-other export and integration controls.
+Replace the Products menu entry with **Threat Hunt**. It contains an on-demand guide builder, a collapsed
+**Saved hunt packages** area and a separate **Advanced: intelligence reports** area for existing products.
+Move requirements to **Settings → Intelligence questions (advanced)** without removing their APIs or
+cross-links. Keep Share's other export and integration controls.
 
-`services/hunt_guides.py` and `hunt_guide_subjects.py` gather visible evidence for eight starting kinds:
-`theme`, `actor`, `cve`, `document`, `exploit`, `software`, `indicator` and `campaign`. Pure `hunt_guide_plan.py`
+`services/hunt_guides.py`, `hunt_guide_subjects.py` and `hunt_guide_industries.py` gather visible evidence for
+nine starting kinds: `theme`, `actor`, `cve`, `document`, `exploit`, `software`, `indicator`, `campaign` and
+`industry` ([ADR 0045](0045-sector-threat-hunt-guides.md)). Pure `hunt_guide_plan.py`
 supplies fixed planning steps and pinned-library source references. `hunt_guide.py` bounds the result and
 renders Markdown or PDF through the existing PDF writer. The UI and authenticated GET routes share these
 services. No new dependency, table or migration is needed.
@@ -39,10 +40,20 @@ catalog context and fixed guidance leave in a guide: no publisher body, summary 
 normal publisher terms still apply to source material. Plain audience badges retain the exact TLP token;
 `Public · TLP:CLEAR` does not mean a work has no copyright. Unknown labels are not presented as public.
 
-Guide generation is read-only except for actor-attributed `hunt.guide` audit entries for previews and API
-formats. It creates no persistent guide, package, product, finding or attribution. It makes no network call,
-queries no organisational telemetry and runs no rule or exploit. A download is rebuilt from then-current
-visible data, rather than an immutable copy of the earlier preview.
+Guide previews and downloads are read-only except for actor-attributed `hunt.guide` audit entries. A download
+is rebuilt from then-current visible data, rather than an immutable copy of the earlier preview.
+
+Offer a separate **Save as hunt package** action after a guide is built. The service
+`create_hunt_package_from_guide` creates an audited draft using the selected focus, generated guidance and
+eligible facts, enforcing the same evidence and TLP boundaries. It rebuilds from currently visible evidence
+at save time. The guidance becomes the hypothesis, capped at 10,000 characters with a shortening notice;
+structured items retain the guide's technique, report and eligible-indicator caps. Only actor selections
+set a group reference. Existing package audit events record creation and item writes;
+`hunt_package.from_guide` records the starting kind and reference. Saving opens the draft editor. The button
+then opens that saved package, preventing another save from the same built preview. Existing package
+editing and publication remain explicit actions; **Start a blank package** remains available for manual
+authoring. No guide action makes a network call, queries organisational telemetry, runs a rule or exploit,
+or records a finding or inferred attribution.
 
 ## Consequences and validation
 
