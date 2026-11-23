@@ -63,5 +63,6 @@ worker; no new dependency unless it can be hash-pinned and trimmed (TIP 3.1).
   for a client that polled before the upgrade, and none could.
 - Every page rebuilds and validates the snapshot. That is fine for one operator's collection (the export caps
   at 100,000 mentions; past that a read answers `413`), but not for a shared, high-volume feed.
-- `taxii2-client` is not in the hash-pinned locks yet, so the tests exercise the HTTP protocol directly; adding
-  the client to `requirements-dev.lock` through the lock workflow would let CI use it as well.
+- CI runs the hash-pinned OASIS Python client against a loopback Insight server. It checks discovery,
+  unauthenticated access, paging, and agreement with the STIX export for a GREEN-limited key. The development and
+  browser-test lock files pin the client.

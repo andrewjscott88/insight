@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+import socket
+import threading
+from collections.abc import Iterator
+from itertools import islice
 from typing import Any
 
 import pytest
+import requests
+import uvicorn
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
+from taxii2client.v21 import Server, as_pages
 
 from insight import services
 from insight.models import AuditEvent, Document
@@ -69,6 +76,68 @@ def objects(client: TestClient, headers: dict[str, str], **params: Any) -> dict[
 
 def names(body: dict[str, Any]) -> set[str]:
     return {o['name'] for o in body['objects'] if o['type'] in ('indicator', 'vulnerability')}
+
+
+@pytest.fixture
+def discovery_url(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
+    """Serve the same fixture app over real HTTP so the OASIS reader uses its own request and paging code."""
+    monkeypatch.setenv('no_proxy', '127.0.0.1')
+    listening = threading.Event()
+
+    class LocalServer(uvicorn.Server):
+        async def startup(self, sockets: list[socket.socket] | None = None) -> None:
+            await super().startup(sockets)
+            listening.set()
+
+    with socket.socket() as listener:
+        listener.bind(('127.0.0.1', 0))
+        port = listener.getsockname()[1]
+        server = LocalServer(
+            uvicorn.Config(app, log_config=None, access_log=False, ws='none', lifespan='off')
+        )
+        thread = threading.Thread(target=server.run, kwargs={'sockets': [listener]}, daemon=True)
+        thread.start()
+        try:
+            assert listening.wait(10), 'Loopback TAXII server did not start'
+            yield f'http://127.0.0.1:{port}/taxii2/'
+        finally:
+            server.should_exit = True
+            thread.join(10)
+            assert not thread.is_alive(), 'Loopback TAXII server did not stop'
+
+
+def test_oasis_client_discovers_and_pages_the_green_stix_projection(
+    discovery_url: str, client: TestClient, world: dict[str, Any], app: FastAPI
+) -> None:
+    with Server(discovery_url) as anonymous, pytest.raises(requests.HTTPError) as denied:
+        _ = anonymous.api_roots
+    assert denied.value.response is not None
+    assert denied.value.response.status_code == 401
+
+    headers = green_only(app)
+
+    def bearer(request: requests.PreparedRequest) -> requests.PreparedRequest:
+        request.headers['Authorization'] = headers['Authorization']
+        return request
+
+    with Server(discovery_url, auth=bearer) as partner:
+        collection = next(c for c in partner.api_roots[0].collections if c.id == INDICATORS_COLLECTION)
+        pages = list(islice(as_pages(collection.get_objects, per_request=1), 32))
+    assert len(pages) > 1
+    assert all(len(page['objects']) == 1 for page in pages)
+    assert [page['more'] for page in pages] == [True] * (len(pages) - 1) + [False]
+    received = [record for page in pages for record in page['objects']]
+    assert len({record['id'] for record in received}) == len(received)
+
+    response = client.get('/api/iocs/stix', headers=headers, params={'review_status': 'accepted'})
+    assert response.status_code == 200
+    exported = response.json()['objects']
+    for records in (received, exported):
+        assert names({'objects': records}) == {GREEN_IP, 'CVE-2024-3400'}
+        assert {r['id'] for r in records if r['type'] == 'report'} == {f'report--{world["green"]}'}
+    assert {r['pattern'] for r in received if r['type'] == 'indicator'} == {
+        r['pattern'] for r in exported if r['type'] == 'indicator'
+    }
 
 
 # --------------------------------------------------------------------------- discovery and access

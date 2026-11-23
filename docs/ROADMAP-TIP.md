@@ -593,14 +593,14 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
 
 - [ ] **0.1** Live deployment: anonymous `/` is 303 `/login`; public `.env` uses secure cookies, allowed hosts, trusted proxies, preferably MFA
 - [x] **0.2** Fix `README.md:74` and `:212`, `docs/ARCHITECTURE.md:130-132`, and mark roadmap #10 done
-- [ ] **0.3** Stronger startup warnings / optional `INSIGHT_REQUIRE_HARDENED` for internet-facing installs
+- [x] **0.3** Stronger startup warnings and optional `INSIGHT_REQUIRE_HARDENED` for internet-facing installs. [Deployment settings](RUNBOOK.md#reverse-proxy-public-deployment)
 - [x] **0.4** Pin connector connections to DNS addresses already checked as public (code review L1)
 - [x] **0.5** `/health` reports liveness. `/api/session` returns the version after sign-in.
 - [x] **0.6** Encrypt TOTP secrets at rest and migrate existing pairings
 
 ### Phase 1 — Quick wins (7)
 
-- [ ] **1.1** Persist KEV ransomware / vulnerability name / notes / CWEs (done, ADR 0024); document inbox policy (open)
+- [x] **1.1** Store KEV ransomware use, vulnerability names, notes and CWEs (ADR 0024). [First and subsequent syncs](RUNBOOK.md#8-sources-enrichment-and-their-failures) document the inbox limits.
 - [x] **1.2** Auto-enqueue NVD and EPSS lookups for new CVEs (opt-in, throttled): done, ADR 0023, with review B2 and C2
 - [x] **1.3** Brief uses ransomware flag, NVD CVSS, and EPSS (fact-only wording): done, ADR 0024, with a prioritised CVE view
 - [x] **1.4** Webhook/email notifications for watch-term hits and new KEV (`ROADMAP` #15)

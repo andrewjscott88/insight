@@ -1,7 +1,38 @@
-# Validation report · 0.9.0
+# Validation report · 1.0.0
 
 What was verified for each release, what was not, and how. Update this file for every release (see
 [RELEASING.md](RELEASING.md)).
+
+## 1.0.0
+
+The supported deployment has one operator. The previous release, 0.9.0, passed its tagged release
+workflow and was published. [0.9.0 release run](https://github.com/andrewjscott88/insight/actions/runs/45023193485)
+
+- The integrated changes in #115 passed CI, the milestone gate and CodeQL. They include opt-in
+  infrastructure lookups, software and campaign links, actor timelines and read-only MCP access.
+  The milestone gate ran browser and accessibility checks, a signed-in ZAP scan, a backup and restore
+  drill and performance tests on SQLite and PostgreSQL.
+  [CI](https://github.com/andrewjscott88/insight/actions/runs/45105574580) ·
+  [Milestone gate](https://github.com/andrewjscott88/insight/actions/runs/45105570551) ·
+  [CodeQL](https://github.com/andrewjscott88/insight/actions/runs/45105574583)
+- Both operator-source PRs passed CI and the milestone gate. CodeQL reported no new alerts in the changed
+  code for each part. The checks were recorded on their respective merge heads.
+  [PR #116](https://github.com/andrewjscott88/insight/pull/116) · [CI](https://github.com/andrewjscott88/insight/actions/runs/45113883730) · [Milestone gate](https://github.com/andrewjscott88/insight/actions/runs/45113878310) · [CodeQL](https://github.com/andrewjscott88/insight/actions/runs/45113883702)
+  [PR #117](https://github.com/andrewjscott88/insight/pull/117) · [CI](https://github.com/andrewjscott88/insight/actions/runs/45116236353) · [Milestone gate](https://github.com/andrewjscott88/insight/actions/runs/45116235280) · [CodeQL](https://github.com/andrewjscott88/insight/actions/runs/45116236386)
+- On a disposable local instance, Chromium added, edited and deleted an RSS feed and a TAXII collection.
+  Workspace tests checked that new sources start off, turning a source off also stops its schedule, and
+  a missing host credential disables manual sync. The collection editor showed whether the test credential
+  was configured and kept its value out of the page. These checks used synthetic sources.
+- The OASIS `taxii2-client` 2.3.0 read from a disposable Insight server over loopback. With a GREEN-limited
+  key it paged the reviewed collection and received the indicators and reports allowed in the matching
+  STIX export. An unauthenticated request returned `401`. This test runs with the regular API suite.
+- The 1.0.0 SQLite upgrade fixture has schema `0032`, both operator-source kinds and a publisher-restricted
+  report. SQLite integrity and foreign-key checks passed. The release metadata check found matching
+  version, changelog and fixture, and all workflow actions and base images passed the strict pin check.
+- The weekly mutation job now copies both configuration files needed for alert tests. All 38 alert tests
+  passed in a fresh copy. Issue #91 awaits confirmation from the next scheduled run. Interoperability with a live third-party TAXII server
+  and a real SIEM remains unverified. Operator deployment acceptance is pending.
+  [Issue #91](https://github.com/andrewjscott88/insight/issues/91)
 
 ## 0.9.0: exploit signals, cases, ranked search, more TAXII, PostgreSQL timestamps, Shodan
 
@@ -263,7 +294,8 @@ installation.
 ## First-run checklist
 
 1. Generate private credentials; build/start Docker Compose; `docker compose ps` shows `healthy`.
-2. `curl http://localhost:8080/health` reports `"version":"0.2.0"`; the workspace requires sign-in.
+2. Check that `curl http://localhost:8080/health` returns only `{"status":"ok"}`.
+   Sign in and check the installed version at `/api/session`.
 3. Load demo twice: second load adds zero new documents.
 4. Open a demo report; accept/reject/reset an observation; add a note.
 5. Search a CVE/IP (try an accented word too) and pivot to its related documents via the entity explorer.

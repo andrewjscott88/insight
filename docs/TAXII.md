@@ -133,6 +133,9 @@ for page in as_pages(collection.get_objects, per_request=1000, added_after='2026
         ...
 ```
 
+CI exercises the OASIS client against a local test server. It reads one object per page and checks that a
+GREEN-limited key receives the same reviewed indicators and reports as the corresponding STIX export.
+
 ## Polling
 
 - **Ask only for changes.** Save the `X-TAXII-Date-Added-Last` header of the last page, and send it as

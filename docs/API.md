@@ -1,4 +1,4 @@
-# HTTP API (0.9.0)
+# HTTP API (1.0.0)
 
 ## Software
 
