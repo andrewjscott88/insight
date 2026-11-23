@@ -26,6 +26,11 @@ TYPE_NAMES: Final = {
     'group': 'ATT&CK groups',
     'actor': 'Your actors',
     'campaign': 'Campaigns',
+    'domain': 'Domains',
+    'address': 'Addresses',
+    'as': 'Networks',
+    'certificate_name': 'Names on certificates',
+    'name_server': 'Name servers',
 }
 SINGULAR: Final = {
     'report': 'Report',
@@ -34,6 +39,11 @@ SINGULAR: Final = {
     'group': 'ATT&CK group',
     'actor': 'Actor',
     'campaign': 'Campaign',
+    'domain': 'Domain',
+    'address': 'Address',
+    'as': 'Network',
+    'certificate_name': 'Name on a certificate',
+    'name_server': 'Name server',
 }
 EDGE_WORDS: Final = {'mentions': 'mentioned', 'tagged': 'tagged', 'linked': 'linked by an analyst'}
 

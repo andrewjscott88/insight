@@ -33,6 +33,13 @@
 - Calls are audited as `mcp.call`; no write tools, OAuth, model calls, new dependencies or schema migration.
   See [MCP.md](docs/MCP.md) and [ADR 0039](docs/adr/0039-read-only-mcp.md).
 
+### Added
+
+- TIP 4.6 part 1: optional manual RDAP and RIPEstat infrastructure lookups with off-by-default Settings
+  switches, explicit disclosure approval, a 24-hour cache, and provider/date-labelled link-map context.
+  Only reviewed indicators in current TLP:CLEAR reports qualify. RDAP contact data is discarded.
+  No migration is required. Certificate transparency and passive DNS remain planned.
+
 ### Upgrade notes
 
 - The threat library now writes `insight-threat-library-2`. Existing format 1 synced libraries still load;

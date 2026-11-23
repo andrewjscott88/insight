@@ -92,6 +92,8 @@ THROTTLES: Final[dict[str, Throttle]] = {
     'vulncheck': Throttle(VULNCHECK_INTERVAL),
     'greynoise': Throttle(1.0),
     'shodan': Throttle(1.0),  # Shodan: one request per second on every plan
+    'rdap': Throttle(2.0),
+    'asn': Throttle(2.0),
 }
 
 

@@ -45,6 +45,7 @@ from .test_auth import PROTECTED
 MARKER = 'ZEBRA-MERIDIAN-7731'
 HIDDEN_TECHNIQUE = 'T1490'  # Inhibit System Recovery: written only in the AMBER report
 HIDDEN_IP = '198.51.100.77'
+HIDDEN_PIVOT_IP = '8.8.4.4'
 SHARED_IP = '192.0.2.44'
 
 
@@ -64,7 +65,8 @@ def world(app: FastAPI) -> dict[str, Any]:
             db,
             report(
                 f'{MARKER} briefing',
-                f'{MARKER}: C2 at {HIDDEN_IP}, also {SHARED_IP}. {HIDDEN_TECHNIQUE}. A wiper followed.',
+                f'{MARKER}: C2 at {HIDDEN_IP}, also {SHARED_IP} and {HIDDEN_PIVOT_IP}. '
+                f'{HIDDEN_TECHNIQUE}. A wiper followed.',
                 'AMBER',
             ),
         )
@@ -93,6 +95,23 @@ def world(app: FastAPI) -> dict[str, Any]:
         # A cached NVD answer for a CVE only the current AMBER revision mentions.
         nvd = {'vulnerabilities': [{'cve': {'descriptions': [{'lang': 'en', 'value': MARKER}]}}]}
         db.add(Enrichment(cve='CVE-2024-11111', provider='nvd', payload=json.dumps(nvd)))
+        # A pivot cache is not its own access grant: a hidden/ineligible subject remains missing.
+        pivot_obs = next(
+            o for o in services.detail(db, amber)['observations'] if o['value'] == HIDDEN_PIVOT_IP
+        )
+        db.add(
+            Enrichment(
+                subject=pivot_obs['entity_id'],
+                provider='rdap',
+                payload=json.dumps(
+                    {
+                        'found': True,
+                        'network_name': MARKER,
+                        'nodes': [{'type': 'name_server', 'value': 'hidden.example.net'}],
+                    }
+                ),
+            )
+        )
         # A case that holds the AMBER report is AMBER too (TIP 3.8): its title and items stay hidden.
         case = services.create_case(db, CaseInput(title=f'{MARKER} case', tlp='GREEN', bluf=MARKER))
         evidence_item = services.add_case_item(
@@ -261,6 +280,7 @@ def test_nothing_hidden_leaks_through_any_read_route(client: TestClient, world: 
         '/api/software/S0154/documents',
         f'/api/documents/{world["green"]}/software',
         f'/api/documents/{world["amber"]}/software',
+        f'/api/pivots?value={HIDDEN_PIVOT_IP}',
         '/api/documents',
         '/api/documents?include_superseded=true',
         f'/api/documents?q={MARKER}',

@@ -119,6 +119,7 @@ tools over TAXII and STIX; sightings and requests for information come back
 - [x] **TIP 4.4 Finished intelligence products,** replacing incident-style cases: judgements, gaps, versions,
       and PDF, Markdown and STIX exports. *Done (unreleased):* [ADR 0036](docs/adr/0036-intelligence-products.md).
 - [ ] **TIP 4.5–4.6** Operator-defined sources and infrastructure pivots.
+  TIP 4.6 part 1 adds RDAP/RIPEstat and graph context; certificate transparency and passive DNS are separate parts.
 - [x] **TIP 4.7 Adversary library imports.** The pinned catalog includes ATT&CK software and sourced MISP
       aliases. Analysts can link software to reports, actors and campaigns, and share those decisions through
       STIX and TAXII. Actor timelines and software Navigator layers are available in threat guides.
