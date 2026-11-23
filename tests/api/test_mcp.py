@@ -19,6 +19,8 @@ from insight.mcp import MAX_REQUEST_BYTES, PROTOCOL_VERSION, TOOL_BY_NAME
 from insight.ratelimit import MCP, READ, WRITE
 from insight.schemas import DocumentInput
 
+from .test_dev_access import enter
+
 ACCEPT = 'application/json, text/event-stream'
 
 
@@ -82,8 +84,9 @@ def test_session_and_open_browser_mode_never_authorize_mcp(
     with TestClient(
         create_app(replace(settings, dev_no_auth=True), with_ui=False), follow_redirects=False
     ) as opened:
-        assert opened.get('/login').status_code == 303
         assert rpc(opened, {'Accept': ACCEPT}, 'ping').status_code == 401
+        csrf = enter(opened)
+        assert rpc(opened, {'Accept': ACCEPT, 'X-CSRF-Token': csrf}, 'ping').status_code == 401
 
 
 def test_invalid_expired_and_revoked_keys_answer_identically(
