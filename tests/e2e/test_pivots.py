@@ -53,6 +53,10 @@ def test_long_domain_confirmation_fits_a_phone(context: Any, width: int, theme: 
     initially_on = toggle.get_attribute('aria-checked') == 'true'
     if not initially_on:
         toggle.click()
+        notice = page.get_by_role('alert').filter(has_text='RDAP is on.')
+        expect(notice).to_be_visible()
+        notice.get_by_role('button', name='Dismiss', exact=True).click()
+        expect(notice).to_be_hidden()
     expect(toggle).to_have_attribute('aria-checked', 'true')
     try:
         page.get_by_role('button', name=f'{theme.title()} theme', exact=True).click()
@@ -60,7 +64,11 @@ def test_long_domain_confirmation_fits_a_phone(context: Any, width: int, theme: 
         expect(page.locator('html')).to_have_attribute('data-text', 'large')
         page.wait_for_function("getComputedStyle(document.documentElement).fontSize === '19px'")
         show(page, 'Investigate', 'Indicators')
+        # Even a single existing row must be replaced by the debounced search before it is opened.
+        previous_result = page.locator('.q-expansion-item:visible').first.element_handle()
+        assert previous_result is not None
         page.get_by_label('Search entity values', exact=True).fill(domain)
+        page.wait_for_function('element => !element.isConnected', arg=previous_result)
         expect(page.locator('.q-expansion-item:visible')).to_have_count(1)
         page.get_by_role('button', name=re.compile(r'DOMAIN.*' + re.escape(domain))).click()
         page.get_by_role('button', name='Pivot', exact=True).click()
