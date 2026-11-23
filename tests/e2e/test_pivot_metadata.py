@@ -90,10 +90,14 @@ def test_maximum_provider_metadata_fits_phone(
         page.get_by_role('button', name='Pivot', exact=True).click()
         dialog = page.get_by_role('dialog', name='Infrastructure pivots', exact=True)
         expect(dialog).to_be_visible()
-        dialog.get_by_role(
+        consent = dialog.get_by_role(
             'checkbox', name=f'I approve sending example.com to {PROVIDER_NAME}.', exact=True
-        ).check()
+        )
+        consent.click()
+        # NiceGUI commits the checkbox value after a server round trip.
+        expect(consent).to_be_checked()
         button = dialog.get_by_role('button', name=f'Look up at {PROVIDER_NAME}', exact=True)
+        expect(button).to_be_enabled()
         button.click()
         expect(button).to_be_disabled()
         expect(dialog.get_by_text('No fresh cached results.', exact=True)).to_have_count(0)
