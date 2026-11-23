@@ -88,7 +88,8 @@ def pin(url: str, address: IPAddress) -> Pinned:
     literal = f'[{address}]' if address.version == 6 else str(address)
     netloc = literal + (f':{port}' if port else '')
     default = {'https': 443, 'http': 80}.get(parts.scheme)
-    host_header = host + (f':{port}' if port and port != default else '')
+    authority = f'[{host}]' if ':' in host else host
+    host_header = authority + (f':{port}' if port and port != default else '')
     return Pinned(
         url=urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment)),
         headers={'Host': host_header},

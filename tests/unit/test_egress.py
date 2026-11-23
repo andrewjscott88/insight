@@ -114,6 +114,21 @@ def test_pin_keeps_the_host_name_for_tls_and_the_host_header() -> None:
     assert v6.headers == {'Host': 'hooks.example.org:8443'}
 
 
+@pytest.mark.parametrize(
+    ('authority', 'host_header', 'tls_host'),
+    [
+        ('feeds.example.org', 'feeds.example.org', 'feeds.example.org'),
+        ('192.0.2.7:443', '192.0.2.7', '192.0.2.7'),
+        ('[2001:db8::a]:443', '[2001:db8::a]', '2001:db8::a'),
+        ('[2001:db8::a]:8443', '[2001:db8::a]:8443', '2001:db8::a'),
+    ],
+)
+def test_pinned_http_authority_and_tls_host(authority: str, host_header: str, tls_host: str) -> None:
+    target = egress.pin(f'https://{authority}/feed', ipaddress.ip_address('2001:db8::a'))
+    assert target.headers['Host'] == host_header
+    assert target.extensions['sni_hostname'] == tls_host
+
+
 async def test_resolve_lists_ipv4_first_without_duplicates(monkeypatch: pytest.MonkeyPatch) -> None:
     fake, _ = rebinding(['2001:4860:4860::8888', PUBLIC, PUBLIC])
     monkeypatch.setattr(socket, 'getaddrinfo', fake)
