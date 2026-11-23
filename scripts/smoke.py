@@ -94,7 +94,7 @@ def run(client: HttpClient, password: str, *, load_demo: bool = True, ui: bool =
     if ui:
         workspace = client.get('/')
         check(workspace.status_code == 200, f'workspace returned {workspace.status_code}')
-        check('Threat landscape' in workspace.text, 'workspace page did not render')
+        check('Intel brief' in workspace.text, 'workspace page did not render')
     stats: dict[str, Any] = client.get('/api/stats').json()
     if load_demo:
         check(stats['documents'] >= 3, f'demo data missing: {stats}')

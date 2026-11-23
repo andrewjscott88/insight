@@ -171,7 +171,7 @@ def screens(page: Any) -> Iterator[str]:
     page.get_by_role('dialog', name='Verdict on this indicator').get_by_role('button', name='Cancel').click()
     expect(page.get_by_role('dialog', name='Verdict on this indicator')).to_have_count(0)
     for button, dialog, close in (
-        ('Add intelligence', 'Add intelligence', 'Cancel'),
+        ('Import Intel', 'Add intelligence', 'Cancel'),
         ('Export IOCs', 'Export indicators of compromise (IOCs)', 'Cancel'),
         ('What the words mean', 'What the words mean', 'Close'),
     ):
@@ -293,7 +293,7 @@ def test_messages_stay_until_they_are_dismissed(browser: Any) -> None:
 def test_dialog_problems_are_explained_in_the_dialog_and_never_covered(browser: Any) -> None:
     context, page = signed_in(browser, IPHONE_13, 'light')
     page.get_by_role('button', name='Load demo').click()  # a message at the bottom of a phone screen
-    page.get_by_role('button', name='Add intelligence').click()
+    page.get_by_role('button', name='Import Intel').click()
     dialog = page.get_by_role('dialog', name='Add intelligence')
     dialog.get_by_role('button', name='Ingest document').click()
     expect(dialog.get_by_role('alert').filter(has_text='Enter a title for the report')).to_be_visible()
@@ -322,7 +322,7 @@ def test_reduced_motion_turns_animations_off(browser: Any) -> None:
     context = new_context(browser, DESKTOP, reduced_motion='reduce')
     page = context.new_page()
     sign_in(page)
-    duration = page.get_by_role('button', name='Add intelligence').evaluate(
+    duration = page.get_by_role('button', name='Import Intel').evaluate(
         'e => parseFloat(getComputedStyle(e).transitionDuration)'
     )
     assert duration <= 0.001

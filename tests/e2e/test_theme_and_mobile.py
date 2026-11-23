@@ -24,7 +24,7 @@ __all__ = ['browser']  # the fixture is used by name
 
 pytestmark = pytest.mark.e2e
 
-PAGE_BACKGROUND = {'light': 'rgb(246, 244, 250)', 'dark': 'rgb(5, 4, 7)'}
+PAGE_BACKGROUND = {'light': 'rgb(241, 245, 247)', 'dark': 'rgb(8, 12, 16)'}
 SECTIONS = ('Intel Brief', 'Triage', 'Investigate', 'Threat Hunt', 'Share', 'Settings')
 INVESTIGATE = ('Indicators', 'CVEs', 'ATT&CK techniques', 'Threat groups')
 DEMO_TITLE = 'Training scenario: edge appliance activity'
@@ -143,7 +143,7 @@ def test_a_theme_choice_applies_at_once_and_is_remembered_on_this_device_only(br
     page.get_by_role('button', name='Light theme').click()
     expect(page.locator('body.body--light')).to_have_count(1)
     assert background(page) == PAGE_BACKGROUND['light']
-    assert page.eval_on_selector('meta[name=theme-color]', 'm => m.content') == '#f6f4fa'
+    assert page.eval_on_selector('meta[name=theme-color]', 'm => m.content') == '#f1f5f7'
     cookie = next(c for c in context.cookies() if c['name'] == 'insight_theme')
     assert (cookie['value'], cookie['sameSite'], cookie['path']) == ('light', 'Lax', '/')
 
@@ -181,7 +181,7 @@ def test_rendered_text_is_readable(browser: Any, scheme: str) -> None:
     sign_in(page)
     load_demo(page)
     samples = {
-        'filled button': page.get_by_role('button', name='Add intelligence'),
+        'filled button': page.get_by_role('button', name='Import Intel'),
         'outlined button': page.get_by_role('button', name='Export IOCs'),
         'muted label': page.get_by_text(re.compile(r'sources shown · newest first')),
         'TLP badge': page.get_by_text('Community only · TLP:GREEN', exact=True).first,
@@ -272,7 +272,7 @@ def test_phone_workspace_fits_every_tab_and_dialog(phone: Any) -> None:
         show(page, 'Investigate', label)
         assert overflow(page) <= 0, f'Investigate · {label} overflows'
     show(page, 'Triage')
-    for button, close in (('Add intelligence', 'Cancel'), ('Export IOCs', 'Cancel')):
+    for button, close in (('Import Intel', 'Cancel'), ('Export IOCs', 'Cancel')):
         page.get_by_role('button', name=button).click()
         dialog = page.locator('.q-dialog .dialog-card')
         expect(dialog).to_be_visible()
@@ -295,7 +295,7 @@ def test_phone_inputs_are_16px_and_buttons_are_easy_to_tap(phone: Any) -> None:
     assert sizes
     assert min(sizes) >= 16, 'iOS zooms into inputs below 16px'
     open_document(page, DEMO_TITLE)
-    for name in ('Load demo', 'Export IOCs', 'Add intelligence', 'Accept', 'Back to list', 'Light theme'):
+    for name in ('Load demo', 'Export IOCs', 'Import Intel', 'Accept', 'Back to list', 'Light theme'):
         box = page.get_by_role('button', name=name).first.bounding_box()
         assert box['height'] >= 40, f'{name} is {box["height"]}px tall'
 
