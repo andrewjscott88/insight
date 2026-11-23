@@ -22,24 +22,24 @@ def test_restricted_sharing_label_wraps_at_phone_widths(context: Any) -> None:
     page = context.new_page()
     sign_in(page)
     token = context.request.get('/api/session').json()['csrf_token']
-    response = context.request.post(
-        '/api/documents',
-        data={
-            'title': f'Sharing label browser fixture {uuid.uuid4().hex[:8]}',
-            'body': 'Synthetic test only. A report on phishing.',
-            'source_name': 'Sharing label test source',
-            'tlp': 'AMBER+STRICT',
-        },
-        headers={'X-CSRF-Token': token, 'Origin': BASE_URL},
-    )
-    assert response.ok, response.text()
+    title = f'Sharing label browser fixture {uuid.uuid4().hex[:8]}'
+    for label in ('AMBER+STRICT', 'RED'):
+        response = context.request.post(
+            '/api/documents',
+            data={
+                'title': title if label == 'AMBER+STRICT' else f'Other report {uuid.uuid4().hex[:8]}',
+                'body': f'Synthetic test only. A report on phishing. Fixture {uuid.uuid4().hex}.',
+                'source_name': 'Sharing label test source',
+                'tlp': label,
+            },
+            headers={'X-CSRF-Token': token, 'Origin': BASE_URL},
+        )
+        assert response.ok, response.text()
     for width in (320, 390, 1280):
         page.set_viewport_size({'width': width, 'height': 844})
         page.reload()
-        badge = page.locator('.intel-brief .tlp-badge')
-        expect(badge).to_have_text('Your organization only · TLP:AMBER+STRICT')
-        expect(badge).to_be_visible()
-        assert badge.evaluate('(el) => el.scrollWidth <= el.clientWidth')
+        # The aggregate must retain the strictest label, including reports from other browser tests.
+        expect(page.locator('.intel-brief .tlp-badge')).to_have_text('Named recipients only · TLP:RED')
         assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
         expect(page.get_by_text('Received in the last 24 hours', exact=True)).to_have_count(0)
         expect(page.locator('.brief-context')).to_have_count(0)
@@ -49,6 +49,20 @@ def test_restricted_sharing_label_wraps_at_phone_widths(context: Any) -> None:
         assert summary is not None
         assert available is not None
         assert abs(summary['width'] - available['width']) <= 1
+        # Isolate this report through the real focus picker rather than assuming the shared DB has no RED.
+        page.locator('.q-field').filter(has=page.get_by_label('Search by', exact=True)).click()
+        page.get_by_role('option', name='Report or advisory', exact=True).click()
+        page.get_by_label('Find intelligence', exact=True).fill(title)
+        page.get_by_role('button', name='Search', exact=True).click()
+        page.locator('.q-field').filter(has=page.get_by_label('Choose a match', exact=True)).click()
+        page.get_by_role('option', name=f'{title} — Sharing label test source', exact=True).click()
+        page.get_by_role('button', name='Show brief', exact=True).click()
+        expect(page.get_by_role('heading', name=title, exact=True)).to_be_visible()
+        badge = page.locator('.summary-box .tlp-badge')
+        expect(badge).to_have_text('Your organization only · TLP:AMBER+STRICT')
+        expect(badge).to_be_visible()
+        assert badge.evaluate('(el) => el.scrollWidth <= el.clientWidth')
+        assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
 
 
 def test_summary_links_to_its_source_report_on_phone_and_desktop(context: Any) -> None:

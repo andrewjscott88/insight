@@ -2,8 +2,9 @@
 
 * axe-core (Deque): **no violations** of WCAG 2.0-2.2 A, AA and AAA rules, nor of axe's best practices, on
   every screen, in both themes, on a desktop and a phone;
-* the rendered typography: text at least 16 px, line height at least 1.5, lines of at most 80 characters, no
-  capitals or centred paragraphs (WCAG 1.4.8, BDA dyslexia style guide);
+* the rendered typography: text at least 16 px, line height at least 1.5, no capitals or centred paragraphs;
+  bounded text keeps the 80-character target, while workspace prose, reports and evidence fill their panel
+  (the intentional layout exception in ADR 0041); all screens retain word wrapping and overflow checks;
 * a visible 3 px keyboard focus outline on every control (WCAG 2.4.13), messages that stay until dismissed
   (WCAG 2.2.1), "Larger text", reduced motion and the page language.
 """
@@ -55,12 +56,25 @@ TYPOGRAPHY = """() => {
     const width = r.width - parseFloat(s.paddingLeft) - parseFloat(s.paddingRight);
     const inner = r.height - parseFloat(s.paddingTop) - parseFloat(s.paddingBottom);
     const lines = Math.round(inner / (lh * size));
-    out.push({text: own.slice(0, 60), size, lh, lines, cpl: Math.round(width / Math.max(avg, 0.1)),
+    const cpl = Math.min(own.length, Math.round(width / Math.max(avg, 0.1)));
+    out.push({text: own.slice(0, 60), size, lh, lines, cpl,
               transform: s.textTransform, align: s.textAlign, heading: !!el.closest('h1,h2,h3,h4,h5,h6'),
+              wide: !!el.closest('.workspace .prose, .workspace .source-body, .workspace .evidence, ' +
+                                 '.workspace .q-expansion-item .q-item__label'),
               control: !!el.closest('button, a, [role=tab]')});
   }
   return out;
 }"""
+
+#: Workspace explanations, report text and evidence fill their panel; dialogs keep a bounded reading width.
+FULL_WIDTH_PROSE = """() => [...document.querySelectorAll(
+    '.workspace .prose, .workspace .source-body, .workspace .evidence')].flatMap(el => {
+  if (el.closest('.q-field') || !el.getClientRects().length) return [];
+  const r = el.getBoundingClientRect(), parent = el.parentElement, s = getComputedStyle(parent);
+  if (!r.width || !r.height || getComputedStyle(el).visibility === 'hidden') return [];
+  const available = parent.clientWidth - parseFloat(s.paddingLeft) - parseFloat(s.paddingRight);
+  return [{text: el.textContent.slice(0, 60), width: r.width, available}];
+})"""
 
 
 #: True when the focused control (or its field, for inputs) shows a solid outline of at least 2 px.
@@ -237,15 +251,21 @@ def test_rendered_typography_follows_the_readability_guidance(
         page.wait_for_function("getComputedStyle(document.documentElement).fontSize === '19px'")
     for screen in screens(page):
         assert page.evaluate(BROKEN_WORDS) == [], f'{screen}: words split across lines'
+        assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth'), screen
         text = page.evaluate(TYPOGRAPHY)
         assert text, screen
         small = [(t['text'], t['size']) for t in text if t['size'] < 16]
         assert small == [], f'{screen}: text smaller than 16 px'
         blocks = [t for t in text if t['lines'] >= 2 and not t['heading']]
         assert [(t['text'], t['lh']) for t in blocks if t['lh'] < 1.5] == [], f'{screen}: line height < 1.5'
-        assert [(t['text'], t['cpl']) for t in blocks if t['cpl'] > 80] == [], (
+        assert [(t['text'], t['cpl']) for t in blocks if not t['wide'] and t['cpl'] > 80] == [], (
             f'{screen}: lines over 80 characters'
         )
+        if screen in ('Intel Brief', 'Threat Hunt', 'report reader'):
+            full_width = page.evaluate(FULL_WIDTH_PROSE)
+            assert full_width, screen
+            narrow = [t for t in full_width if abs(t['width'] - t['available']) > 1]
+            assert narrow == [], f'{screen}: workspace prose does not fill its panel'
         assert [t['text'] for t in text if t['transform'] == 'uppercase'] == [], f'{screen}: capitals'
         # Blocks of text (WCAG 1.4.8); a button's label may wrap and stay centred like any button.
         paragraphs = [t for t in blocks if not t['control']]

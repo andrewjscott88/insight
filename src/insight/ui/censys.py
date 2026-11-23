@@ -27,9 +27,7 @@ def build_censys_settings(ws: Workspace) -> None:
             'Keep tokens out of this page. Each lookup needs your approval and may use credits.'
         ).classes('prose')
         if ws.app.state.settings.dev_no_auth:
-            ui.label(
-                'Censys is unavailable during temporary open access. Private sign-in is required.'
-            ).classes('prose')
+            ui.label('Censys needs private sign-in. Turn off open access to use it.').classes('prose')
         new_tab_link('Censys account and API setup', 'https://docs.censys.com/reference/get-started')
 
 
@@ -58,7 +56,7 @@ def _render(record: dict[str, Any] | None) -> None:
     else:
         ui.label('Censys returned no accessible host record. This does not prove the address is unused.')
     ui.label(f'Fetched: {record["fetched_at"]}').classes('muted text-sm')
-    ui.label('These are provider observations, not an analyst verdict or a scan run by Insight.').classes(
+    ui.label('Censys saw this data. It is not a verdict on this IP. Insight did not run a scan.').classes(
         'muted prose'
     )
     new_tab_link(censys.ATTRIBUTION, 'https://censys.com')
