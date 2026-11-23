@@ -155,6 +155,7 @@ def ioc_mentions(db: Session, query: IocExportQuery) -> list[IocMention]:
             Document.source_key,
             Document.reuse_changed_at,
             OperatorSource.reuse,
+            Document.operator_publisher_metadata_only,
             KEVRecord,
         )
         .select_from(Observation)
@@ -190,7 +191,7 @@ def ioc_mentions(db: Session, query: IocExportQuery) -> list[IocMention]:
             is_current=is_current,
             kev=_kev_view(kev),
             extractor_version=extractor_version,
-            metadata_only=metadata_only(source_key, operator_reuse),
+            metadata_only=publisher_restricted or metadata_only(source_key, operator_reuse),
             reviewed_at=reviewed_at or '',
             reuse_changed_at=reuse_changed_at or '',
         )
@@ -213,6 +214,7 @@ def ioc_mentions(db: Session, query: IocExportQuery) -> list[IocMention]:
             source_key,
             reuse_changed_at,
             operator_reuse,
+            publisher_restricted,
             kev,
         ) in db.execute(stmt)
     ]

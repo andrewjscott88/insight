@@ -395,6 +395,25 @@ URL and choose a TLP label. Reports from that feed carry at least that label. Ke
 **metadata-only** reuse rule unless the publisher allows you to share its text.
 Use a feed URL without an embedded login, query string or fragment.
 
+For a **TAXII 2.1 collection**, enter the publisher's API root and the collection ID separately. For a
+public collection leave the host variable name empty. For a private collection give the name of a host
+variable starting with `INSIGHT_SOURCE_` and followed by 1 to 40 upper-case letters, digits or underscores.
+Set its value to a bearer token or to a Basic login in the form `user:password`. Enter only the variable
+name in Insight. If the variable is missing or empty, the source shows **Not configured**.
+
+With Docker Compose, pass that single variable to the service. For example, set the variable on the host
+and add the following to `compose.override.yaml`, then recreate the Insight container.
+
+```yaml
+services:
+  insight:
+    environment:
+      - INSIGHT_SOURCE_PARTNER
+```
+
+A successful sync saves the publisher's last date-added value for the next poll. A failed import leaves
+the previous position available for retry. See the [TAXII polling guide](TAXII.md#poll-a-publishers-collection).
+
 Switch the source on, then select **Sync now** to fetch it. To fetch updates automatically, set its schedule.
 Switching the source off also stops its schedule. Removing a source keeps the reports you already collected
 and limits future exports of those reports to metadata. A source inside your private network also requires

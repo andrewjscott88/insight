@@ -761,6 +761,18 @@ curl -sS "$INSIGHT_URL/api/operator-sources" -H "Authorization: Bearer $INSIGHT_
   | jq '.[] | {key, name, kind, tlp, reuse, enabled}'
 ```
 
+For a TAXII 2.1 source, use the server's API root and the exact collection ID. An authenticated server
+can use a host environment variable such as `INSIGHT_SOURCE_PARTNER`, containing a bearer token or
+`user:password`. The request body sent from the signed-in browser contains only the variable name:
+
+```json
+{"kind":"taxii","name":"Partner collection","url":"https://partner.example.org/taxii/","collection_id":"reviewed","credential_env":"INSIGHT_SOURCE_PARTNER","tlp":"GREEN","reuse":"metadata"}
+```
+
+Omit `credential_env` for an anonymous collection. Read `configured` in the definition to check availability.
+Once switched on, a manual or scheduled sync resumes after the last successful import. A failed page leaves
+the previous resume point in place. [TAXII collection polling](TAXII.md)
+
 A browser integration can create the same subscription with `POST /api/operator-sources` and a body such as
 `{"name":"Partner advisories","url":"https://partner.example.org/advisories.xml","tlp":"GREEN","reuse":"metadata"}`.
 Use the signed-in session's `X-CSRF-Token` for writes. Scripts with an unlimited read-write key may sync an

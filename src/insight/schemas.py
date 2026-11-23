@@ -23,6 +23,7 @@ from pydantic import (
 from .egress import effective, never_allowed
 from .extraction import Kind
 from .flags import FLAGS, Flag
+from .operator_endpoints import valid_collection_id
 from .source_registry import Reuse
 
 TLP = Literal['CLEAR', 'GREEN', 'AMBER', 'AMBER+STRICT', 'RED']
@@ -667,14 +668,24 @@ Reliability = Literal['A', 'B', 'C', 'D', 'E', 'F']
 
 
 class OperatorSourceInput(BaseModel):
-    """An RSS or Atom subscription. The caller must explicitly declare public reuse."""
+    """An RSS/Atom feed or TAXII collection. The caller must explicitly declare public reuse."""
 
     model_config = ConfigDict(frozen=True, extra='forbid')
     name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=160)]
-    kind: Literal['rss'] = 'rss'
+    kind: Literal['rss', 'taxii'] = 'rss'
     url: str = Field(min_length=1, max_length=2048)
     tlp: TLP = DEFAULT_TLP
     reuse: Reuse = 'metadata'
+    collection_id: str | None = Field(default=None, min_length=1, max_length=250)
+    credential_env: str | None = Field(default=None, pattern=r'^INSIGHT_SOURCE_[A-Z0-9_]{1,40}$')
+
+    @model_validator(mode='after')
+    def check_collection(self) -> OperatorSourceInput:
+        if self.kind == 'rss' and (self.collection_id is not None or self.credential_env is not None):
+            raise ValueError('Only a TAXII source can have a collection or a credential variable.')
+        if self.kind == 'taxii' and not valid_collection_id(self.collection_id or ''):
+            raise ValueError('Give the TAXII source a collection ID that is one URL path segment.')
+        return self
 
     @field_validator('name')
     @classmethod

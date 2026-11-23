@@ -43,12 +43,12 @@ def corpus(app: FastAPI) -> Corpus:
     with app.state.session_factory.begin() as db:
         case = services.create_case(db, CaseInput(title='Analyst review', tlp='GREEN'))
         for index, condition in enumerate(
-            ('public', 'default', 'tightened', 'deleted', 'unknown', 'curated'), 1
+            ('public', 'default', 'tightened', 'deleted', 'unknown', 'curated', 'publisher'), 1
         ):
             spec = OperatorSourceInput(
                 name=f'Publisher {condition}', url=f'https://{condition}.example/feed', tlp='GREEN'
             )
-            if condition in ('public', 'tightened', 'deleted'):
+            if condition in ('public', 'tightened', 'deleted', 'publisher'):
                 spec = spec.model_copy(update={'reuse': 'public'})
             if condition == 'unknown':
                 source_key = 'op-' + 'a' * 32
@@ -69,6 +69,7 @@ def corpus(app: FastAPI) -> Corpus:
                     tlp='GREEN',
                 ),
                 ref=services.SourceRef(source_key, 'entry-1'),
+                operator_publisher_metadata_only=condition == 'publisher',
             )
             [obs] = services.detail(db, doc)['observations']
             services.set_observation_status(db, obs['id'], 'accepted')

@@ -1,8 +1,27 @@
-# TAXII 2.1 server
+# TAXII 2.1
 
 Insight serves its reviewed indicators, the CISA KEV catalog and your published hunt packages over TAXII 2.1, so a SIEM or threat-intelligence platform can poll them
 on a schedule without a custom script ([ADR 0026](adr/0026-taxii-server.md)). The server is read-only: clients
 can list collections and read objects, but nothing can be written or created.
+
+## Poll a publisher's collection
+
+In **Settings › Sources › Your sources**, choose **TAXII 2.1 collection**. Enter the API root supplied by
+the publisher and its collection ID. Switch the source on, then select **Sync now** or choose a schedule.
+For a collection that requires authentication, supply the name of a host environment variable containing a
+bearer token or a Basic login. [Host and Compose setup](RUNBOOK.md#8-sources-enrichment-and-their-failures)
+
+Insight reads the collection's `objects/` endpoint and follows its pagination tokens on that same endpoint.
+After the whole batch passes STIX validation and its reports are saved, Insight records the exact
+`X-TAXII-Date-Added-Last` timestamp. The next request sends that value as `added_after`. An interrupted or
+rejected batch leaves the reports and the saved timestamp as they were before the attempt.
+
+One sync has a two-minute deadline and budgets of 20 pages, 2,000 objects and 2,000,000 bytes. Choose a
+collection that fits those limits. The importer accepts up to 200 reports, counting each standalone
+observable that becomes a report. Referenced content and creator identities must be resolvable from the
+validated batch. Standard TLP marking IDs are recognized locally. An unresolved reference stops that import. Each report keeps the stricter of its own
+marking and the source label. When a publisher limits redistribution to metadata, that restriction applies even
+when the source is configured for public reuse. [STIX import](API.md#post-apiimportstix)
 
 ## What a client gets
 

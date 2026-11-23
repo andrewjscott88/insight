@@ -138,6 +138,23 @@ def build(path: Path) -> None:
             services.create_operator_source(
                 db, OperatorSourceInput(name='Fixture feed', url='https://feed.example.org/advisories')
             )
+            collection = services.create_operator_source(
+                db,
+                OperatorSourceInput(
+                    name='Fixture collection',
+                    kind='taxii',
+                    url='https://taxii.example.org/api/',
+                    collection_id='alerts',
+                    credential_env='INSIGHT_SOURCE_FIXTURE',
+                    reuse='public',
+                ),
+            )
+            services.ingest(
+                db,
+                DocumentInput(title='Partner notice', body='Training text', source_name=collection.name),
+                ref=services.SourceRef(collection.key, 'report--9e94c8a8-08fb-46ff-bc43-94dab240d044'),
+                operator_publisher_metadata_only=True,
+            )
             services.set_source_switch(db, 'talos', True, at=when)  # 0.7.0: an optional source on
             alert_to = services.add_target(
                 db, name='Team chat', style='chat', address='https://hooks.example.org/x'

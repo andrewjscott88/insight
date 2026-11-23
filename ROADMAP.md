@@ -118,8 +118,8 @@ tools over TAXII and STIX; sightings and requests for information come back
       *Done (unreleased):* [ADR 0034](docs/adr/0034-hunt-packages.md).
 - [x] **TIP 4.4 Finished intelligence products,** replacing incident-style cases: judgements, gaps, versions,
       and PDF, Markdown and STIX exports. *Done (unreleased):* [ADR 0036](docs/adr/0036-intelligence-products.md).
-- [ ] **TIP 4.5** Operator-defined sources. RSS and Atom feeds are available in Settings. TAXII collection
-      polling is the remaining part. [ADR 0040](docs/adr/0040-operator-defined-sources.md)
+- [x] **TIP 4.5 Operator-defined sources.** Add RSS feeds, Atom feeds and TAXII 2.1 collections in Settings.
+      Each has its own switch, schedule, TLP floor and publisher reuse policy. [ADR 0040](docs/adr/0040-operator-defined-sources.md)
 - [x] **TIP 4.6 Infrastructure pivots.** Reviewed indicators support approved RDAP, RIPEstat, certificate
   transparency and credentialed CIRCL passive DNS lookups, with dated graph context. [ADR 0037](docs/adr/0037-infrastructure-pivots.md).
 - [x] **TIP 4.7 Adversary library imports.** The pinned catalog includes ATT&CK software and sourced MISP

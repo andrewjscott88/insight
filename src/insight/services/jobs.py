@@ -15,7 +15,7 @@ from ..models import (
     Job,
     Schedule,
 )
-from ..source_registry import SOURCES
+from ..source_registry import SOURCES, is_operator_source
 from .audit import DEFAULT_ACTOR, audit
 from .common import stamp
 
@@ -49,7 +49,13 @@ def _next_slot(start: datetime, interval: timedelta, at: datetime) -> datetime:
 
 
 def set_schedule(
-    db: Session, source_key: str, interval_minutes: int, *, at: datetime, starts_at: datetime | None = None
+    db: Session,
+    source_key: str,
+    interval_minutes: int,
+    *,
+    at: datetime,
+    starts_at: datetime | None = None,
+    max_tlp: str | None = None,
 ) -> Schedule:
     """Turn a source's schedule on (``interval_minutes`` from :data:`SCHEDULE_INTERVALS`) or off (``0``).
 
@@ -59,6 +65,15 @@ def set_schedule(
     """
     if interval_minutes not in SCHEDULE_INTERVALS:
         raise ValueError(f'Interval must be one of {", ".join(map(str, SCHEDULE_INTERVALS))} minutes')
+    if is_operator_source(source_key):
+        from ..taxii_client import TaxiiNotConfigured
+        from .operator_sources import get_operator_source
+
+        source = get_operator_source(db, source_key, lock=True, max_tlp=max_tlp)
+        if interval_minutes and not source.configured:
+            raise TaxiiNotConfigured('Source credentials are not configured.')
+        if interval_minutes and not source.enabled:
+            raise ValueError('Source is switched off.')
     schedule = db.get(Schedule, source_key) or Schedule(source_key=source_key)
     was = schedule.interval_minutes if schedule.enabled else 0
     schedule.interval_minutes = interval_minutes
@@ -110,6 +125,22 @@ def enqueue_due_schedules(db: Session, *, at: datetime) -> list[Job]:
     ).all()
     jobs = []
     for schedule in due:
+        if is_operator_source(schedule.source_key):
+            from .operator_sources import get_operator_source
+
+            try:
+                # Check availability here. The sync itself enforces the running instance's ceiling.
+                source = get_operator_source(db, schedule.source_key, max_tlp=None, lock=True)
+            except LookupError:
+                continue
+            if not source.enabled or not source.configured:
+                # Keep the due slot during an outage. The next tick after recovery can use it.
+                continue
+            # A schedule edit or endpoint change can finish between the due scan and the source lock.
+            fresh = db.get(Schedule, schedule.source_key, populate_existing=True)
+            if fresh is None or not fresh.enabled or not fresh.next_run_at or fresh.next_run_at > stamp(at):
+                continue
+            schedule = fresh
         jobs.append(enqueue_job(db, SOURCE_SYNC, schedule.source_key, at=at, actor='schedule'))
         interval = timedelta(minutes=schedule.interval_minutes)
         slot = datetime.fromisoformat(schedule.next_run_at or stamp(at))

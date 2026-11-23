@@ -120,6 +120,7 @@ def _scan_mentions(
             Document.source_name,
             Document.source_key,
             OperatorSource.reuse,
+            Document.operator_publisher_metadata_only,
             Document.body,
         )
         .outerjoin(OperatorSource, Document.source_key == OperatorSource.key)
@@ -129,7 +130,17 @@ def _scan_mentions(
     )
     scanned = 0
     labels: set[str] = set()
-    for doc_id, title, tlp, created_at, source_name, source_key, operator_reuse, body in db.execute(stmt):
+    for (
+        doc_id,
+        title,
+        tlp,
+        created_at,
+        source_name,
+        source_key,
+        operator_reuse,
+        publisher_restricted,
+        body,
+    ) in db.execute(stmt):
         labels.add(tlp)
         scanned += 1
         text = f'{title}\n{body}'
@@ -150,7 +161,7 @@ def _scan_mentions(
                         created_at,
                         source_name,
                         name,
-                        '' if metadata_only(source_key, operator_reuse) else evidence,
+                        '' if publisher_restricted or metadata_only(source_key, operator_reuse) else evidence,
                     )
                 )
     return found, scanned, labels

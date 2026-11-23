@@ -6,7 +6,7 @@ import hashlib
 import ipaddress
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Final, cast
 from uuid import NAMESPACE_URL, UUID, uuid5
 
@@ -47,6 +47,15 @@ class ImportedReport:
     mentions: list[Mention]
     metadata_only: bool
     technique_ids: frozenset[str]
+
+    def with_publisher_restriction(self) -> ImportedReport:
+        """Keep the typed values and accurate offsets when a prior version withheld its prose."""
+        values: set[tuple[Kind | None, str]] = {(m.kind, m.value) for m in self.mentions}
+        values.update((None, value) for value in self.technique_ids)
+        body, mentions = _report_text(self.source_id, '', values)
+        return replace(
+            self, item=self.item.model_copy(update={'body': body}), mentions=mentions, metadata_only=True
+        )
 
 
 @dataclass(frozen=True)
@@ -216,6 +225,33 @@ def _labels(objects: dict[str, Object], max_tlp: str) -> dict[str, str]:
     return labels
 
 
+def _report_text(
+    source_id: str, description: str, values: set[tuple[Kind | None, str]]
+) -> tuple[str, list[Mention]]:
+    lines = [f'STIX source: {source_id}']
+    if description:
+        lines.append(description.replace('\r\n', '\n').replace('\r', '\n'))
+    # Keep the end of free-form prose distinct from the start of typed values for revision fingerprints.
+    lines.append('STIX references')
+    offsets: list[tuple[Kind, str, int, int]] = []
+    length = sum(map(len, lines)) + len(lines) - 1
+    for kind, value in sorted(values, key=lambda pair: (pair[0] or '', pair[1])):
+        label = kind or 'ATT&CK technique'
+        start = length + len(label) + 3
+        lines.append(f'{label}: {value}')
+        length = start + len(value)
+        if kind is not None:
+            offsets.append((kind, value, start, length))
+        if length > 200_000 or len(offsets) > MAX_MENTIONS:
+            raise ValueError('STIX report exceeds the document or observation limit')
+    body = '\n'.join(lines)
+    mentions = [
+        Mention(kind, value, start, end, body[max(start - EVIDENCE_CONTEXT, 0) : end + EVIDENCE_CONTEXT])
+        for kind, value, start, end in offsets
+    ]
+    return body, mentions
+
+
 def _render_report(
     report: Object,
     refs: list[str],
@@ -232,27 +268,11 @@ def _render_report(
     marking = most_restrictive(labels.get(source_id, 'CLEAR'), *(labels[r] for r in refs))
     if author:
         marking = most_restrictive(marking, labels[author['id']])
-    lines = [f'STIX source: {source_id}']
     metadata_only = report.get('x_insight_metadata_only', False)
     if not isinstance(metadata_only, bool):
         raise ValueError('Invalid metadata-only handling flag')
-    if report.get('description') and not metadata_only:
-        lines.append(report['description'].replace('\r\n', '\n').replace('\r', '\n'))
-    # Keep the end of free-form prose distinct from the start of typed values for revision fingerprints.
-    lines.append('STIX references')
-    offsets: list[tuple[Kind, str, int, int]] = []
-    length = sum(map(len, lines)) + len(lines) - 1
-    ordered = sorted({values[r] for r in refs}, key=lambda pair: (pair[0] or '', pair[1]))
-    for kind, value in ordered:
-        label = kind or 'ATT&CK technique'
-        start = length + len(label) + 3
-        lines.append(f'{label}: {value}')
-        length = start + len(value)
-        if kind is not None:
-            offsets.append((kind, value, start, length))
-        if length > 200_000 or len(offsets) > MAX_MENTIONS:
-            raise ValueError('STIX report exceeds the document or observation limit')
-    body = '\n'.join(lines)
+    selected = {values[r] for r in refs}
+    body, mentions = _report_text(source_id, '' if metadata_only else report.get('description', ''), selected)
     try:
         item = DocumentInput(
             title=report['name'],
@@ -263,21 +283,17 @@ def _render_report(
         )
     except ValidationError as exc:
         raise ValueError('STIX report metadata exceeds a limit or contains an invalid value') from exc
-    mentions = [
-        Mention(kind, value, start, end, body[max(start - EVIDENCE_CONTEXT, 0) : end + EVIDENCE_CONTEXT])
-        for kind, value, start, end in offsets
-    ]
     return ImportedReport(
         source_id,
         initial_id,
         item,
         mentions,
         metadata_only,
-        frozenset(value for kind, value in ordered if kind is None),
+        frozenset(value for kind, value in selected if kind is None),
     )
 
 
-def parse_stix(data: bytes, max_tlp: str) -> ImportedBundle:
+def parse_stix(data: bytes, max_tlp: str, *, individual_observables: bool = False) -> ImportedBundle:
     """Validate every member and reference before building any database records."""
     bundle = _read(data)
     objects: dict[str, Object] = {}
@@ -359,7 +375,21 @@ def parse_stix(data: bytes, max_tlp: str) -> ImportedBundle:
     orphaned = [key for key in values if key not in used]
     if any(values[key][0] is None for key in orphaned):
         raise ValueError('An ATT&CK technique must be referenced by its report')
-    if orphaned:
+    if individual_observables:
+        # Collection polls can overlap and regroup objects. Use the native object ID for each
+        # standalone observation so a changed value revises that item across transport bundles.
+        if len(reports) + len(orphaned) > MAX_REPORTS:
+            raise ValueError('Too many STIX reports or standalone observations in the collection pull')
+        for key in orphaned:
+            obj = objects[key]
+            standalone = {
+                'id': key,
+                'type': obj['type'],
+                'name': obj.get('name') or 'Imported STIX observation',
+                'created_by_ref': obj.get('created_by_ref'),
+            }
+            reports.append(_render_report(standalone, [key], values, labels, objects))
+    elif orphaned:
         standalone = {'id': bundle['id'], 'name': 'Imported STIX indicators', 'type': 'bundle'}
         reports.append(_render_report(standalone, orphaned, values, labels, objects))
     if objects and not reports:
