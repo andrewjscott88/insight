@@ -38,6 +38,17 @@ def _render_result(result: dict[str, Any]) -> None:
         ui.label(f'{event.capitalize()}: {date[:10]}')
     for network in result.get('networks', []):
         ui.label(f'Network number {network["asn"]}: {network["holder"]}').classes('break-value')
+    if result.get('truncated'):
+        ui.label('This is a limited set of names, not a full history.').classes('muted prose')
+    for record in result.get('certificates', []):
+        with ui.expansion(record['name']).classes('w-full min-w-0').style('overflow-wrap:anywhere'):
+            ui.label(f'Issuer: {record["issuer"]}').classes('w-full min-w-0').style('overflow-wrap:anywhere')
+            ui.label(f'Valid from: {record["not_before"]}').classes('w-full min-w-0').style(
+                'overflow-wrap:anywhere'
+            )
+            ui.label(f'Valid until: {record["not_after"]}').classes('w-full min-w-0').style(
+                'overflow-wrap:anywhere'
+            )
 
 
 def build_pivot_switches(ws: Workspace) -> None:
@@ -63,7 +74,9 @@ def build_pivot_switches(ws: Workspace) -> None:
         ).mark(f'pivot-switch-{provider}')
     ui.label(
         'RDAP shows registration details without personal contacts. RIPEstat shows which network '
-        'announces an address. Check each provider’s terms before use.'
+        'announces an address. '
+        'crt.sh shows names on public certificates. A name does not prove ownership or harm. '
+        'Check the provider’s terms before use.'
     ).classes('muted prose')
 
 

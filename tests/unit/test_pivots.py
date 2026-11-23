@@ -21,16 +21,19 @@ from insight.services.graph import PER_NODE
 ANSWER: dict[str, Any] = {'found': True, 'nodes': [{'type': 'name_server', 'value': 'ns1.example.net'}]}
 
 
-def test_graph_does_not_identify_a_hidden_known_indicator(db: Session) -> None:
+@pytest.mark.parametrize(('provider_key', 'indicator'), [('rdap', IP), ('crtsh', 'example.com')])
+def test_graph_does_not_identify_a_hidden_known_indicator(
+    db: Session, provider_key: str, indicator: str
+) -> None:
     """Regression: a public provider name must not reveal its match to an AMBER-only stored indicator."""
-    reviewed(db)
+    reviewed(db, indicator)
     reviewed(db, 'ns1.example.net', tlp='AMBER')
     db.flush()
     hidden = db.scalar(select(Entity).where(Entity.value == 'ns1.example.net'))
     assert hidden
-    subject = services.eligible_pivot(db, IP, max_tlp='GREEN')
-    services.set_pivot_switch(db, 'rdap', True)
-    services.store_pivot(db, 'rdap', IP, ANSWER, max_tlp='GREEN')
+    subject = services.eligible_pivot(db, indicator, max_tlp='GREEN')
+    services.set_pivot_switch(db, provider_key, True)
+    services.store_pivot(db, provider_key, indicator, ANSWER, max_tlp='GREEN')
     db.flush()
     green = services.build_graph(db, f'indicator:{subject}', max_tlp='GREEN')
     assert all(hidden.id not in node.id for node in green.nodes)
@@ -40,13 +43,18 @@ def test_graph_does_not_identify_a_hidden_known_indicator(db: Session) -> None:
 
 
 @pytest.mark.parametrize('change', ['delete', 'reject', 'disable'])
+@pytest.mark.parametrize(('provider_key', 'indicator'), [('rdap', IP), ('crtsh', 'example.com')])
 async def test_in_flight_lookup_cannot_restore_ineligible_cache(
-    session_factory: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch, change: str
+    session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+    change: str,
+    provider_key: str,
+    indicator: str,
 ) -> None:
     """Regression: an upstream answer arriving after removal or revocation must not resurrect its cache."""
     with session_factory.begin() as db:
-        document_id = reviewed(db)
-        services.set_pivot_switch(db, 'rdap', True)
+        document_id = reviewed(db, indicator)
+        services.set_pivot_switch(db, provider_key, True)
 
     async def fetch(provider: str, value: str) -> dict[str, Any]:
         with session_factory.begin() as db:
@@ -60,41 +68,42 @@ async def test_in_flight_lookup_cannot_restore_ineligible_cache(
         return ANSWER
 
     monkeypatch.setattr(pivots, '_fetch', fetch)
-    THROTTLES['rdap'].reset()
+    THROTTLES[provider_key].reset()
     with pytest.raises((LookupError, ValueError)):
-        await pivots.lookup(session_factory, 'rdap', IP, approved=True, actor='operator')
+        await pivots.lookup(session_factory, provider_key, indicator, approved=True, actor='operator')
     with session_factory() as db:
-        assert db.scalar(select(Enrichment).where(Enrichment.provider == 'rdap')) is None
+        assert db.scalar(select(Enrichment).where(Enrichment.provider == provider_key)) is None
 
 
 def test_pivot_defaults_and_audited_switch(db: Session) -> None:
-    assert services.pivot_switches(db) == {'rdap': False, 'asn': False}
+    assert services.pivot_switches(db) == {'rdap': False, 'asn': False, 'crtsh': False}
     services.set_actor(db, 'operator')
     services.set_pivot_switch(db, 'rdap', True)
     assert services.pivot_switches(db)['rdap']
     assert any(e.action == 'pivot.on' for e in services.audit_events(db))
 
 
-def test_cache_eligibility_expiry_and_graph(db: Session) -> None:
-    doc_id = reviewed(db)
+@pytest.mark.parametrize(('provider_key', 'indicator'), [('rdap', IP), ('crtsh', 'example.com')])
+def test_cache_eligibility_expiry_and_graph(db: Session, provider_key: str, indicator: str) -> None:
+    doc_id = reviewed(db, indicator)
     db.flush()
-    entity_id = services.eligible_pivot(db, IP, max_tlp='GREEN')
+    entity_id = services.eligible_pivot(db, indicator, max_tlp='GREEN')
     assert entity_id
-    services.set_pivot_switch(db, 'rdap', True)
-    services.store_pivot(db, 'rdap', IP, ANSWER, max_tlp='GREEN')
+    services.set_pivot_switch(db, provider_key, True)
+    services.store_pivot(db, provider_key, indicator, ANSWER, max_tlp='GREEN')
     db.flush()
-    result = services.cached_pivots(db, IP, max_tlp='GREEN')
+    result = services.cached_pivots(db, indicator, max_tlp='GREEN')
     assert len(result) == 1
     graph = services.build_graph(db, f'indicator:{entity_id}', depth=2, max_tlp='GREEN')
     pivot_node = next(node for node in graph.nodes if node.type == 'name_server')
     assert pivot_node.label == 'ns1.example.net'
-    assert any(edge.kind.startswith('rdap · ') for edge in graph.edges)
+    assert any(edge.kind.startswith(f'{provider_key} · ') for edge in graph.edges)
     assert services.build_graph(db, pivot_node.id, max_tlp='GREEN').seed == pivot_node.id
-    row = db.scalar(select(Enrichment).where(Enrichment.provider == 'rdap'))
+    row = db.scalar(select(Enrichment).where(Enrichment.provider == provider_key))
     assert row
     row.fetched_at = (datetime.now(UTC) - timedelta(days=2)).isoformat()
     db.flush()
-    assert services.cached_pivots(db, IP, max_tlp='GREEN') == []
+    assert services.cached_pivots(db, indicator, max_tlp='GREEN') == []
     with pytest.raises(LookupError):
         services.build_graph(db, pivot_node.id, max_tlp='GREEN')
     document = db.get(Document, doc_id)
@@ -102,12 +111,13 @@ def test_cache_eligibility_expiry_and_graph(db: Session) -> None:
     document.tlp = 'AMBER'
     db.flush()
     with pytest.raises(LookupError):
-        services.cached_pivots(db, IP, max_tlp='GREEN')
-    assert services.eligible_pivot(db, IP, max_tlp=None) is None
+        services.cached_pivots(db, indicator, max_tlp='GREEN')
+    assert services.eligible_pivot(db, indicator, max_tlp=None) is None
 
 
+@pytest.mark.parametrize(('provider_key', 'indicator'), [('rdap', IP), ('crtsh', 'example.com')])
 async def test_off_unapproved_cache_throttle_and_rechecking(
-    session_factory: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+    session_factory: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch, provider_key: str, indicator: str
 ) -> None:
     calls: list[str] = []
 
@@ -117,24 +127,24 @@ async def test_off_unapproved_cache_throttle_and_rechecking(
 
     monkeypatch.setattr(pivots, '_fetch', fetch)
     with session_factory.begin() as db:
-        reviewed(db)
+        reviewed(db, indicator)
     with pytest.raises(pivots.NotConfigured):
-        await pivots.lookup(session_factory, 'rdap', IP, approved=True, actor='operator')
+        await pivots.lookup(session_factory, provider_key, indicator, approved=True, actor='operator')
     with session_factory.begin() as db:
-        services.set_pivot_switch(db, 'rdap', True)
+        services.set_pivot_switch(db, provider_key, True)
     with pytest.raises(ValueError, match='Approve'):
-        await pivots.lookup(session_factory, 'rdap', IP, approved=False, actor='operator')
+        await pivots.lookup(session_factory, provider_key, indicator, approved=False, actor='operator')
     assert calls == []
-    THROTTLES['rdap'].reset()
-    await pivots.lookup(session_factory, 'rdap', IP, approved=True, actor='operator')
-    await pivots.lookup(session_factory, 'rdap', IP, approved=False, actor='operator')
-    assert calls == [IP]
+    THROTTLES[provider_key].reset()
+    await pivots.lookup(session_factory, provider_key, indicator, approved=True, actor='operator')
+    await pivots.lookup(session_factory, provider_key, indicator, approved=False, actor='operator')
+    assert calls == [indicator]
     with session_factory.begin() as db:
         for obs in db.scalars(select(Observation)):
             obs.review_status = 'rejected'
     with pytest.raises(LookupError):
-        await pivots.lookup(session_factory, 'rdap', IP, approved=True, actor='operator')
-    assert calls == [IP]
+        await pivots.lookup(session_factory, provider_key, indicator, approved=True, actor='operator')
+    assert calls == [indicator]
 
 
 @pytest.mark.parametrize(
@@ -146,25 +156,27 @@ async def test_off_unapproved_cache_throttle_and_rechecking(
         ('CLEAR', 'accepted', False),
     ],
 )
+@pytest.mark.parametrize(('provider_key', 'indicator'), [('rdap', IP), ('crtsh', 'example.com')])
 def test_only_current_accepted_clear_evidence_grants_pivot_access(
-    db: Session, label: TLP, status: str, current: bool
+    db: Session, label: TLP, status: str, current: bool, provider_key: str, indicator: str
 ) -> None:
-    document_id = reviewed(db, tlp=label, status=status)
+    document_id = reviewed(db, indicator, tlp=label, status=status)
     document = db.get(Document, document_id)
     assert document
     document.is_current = current
     db.flush()
-    assert services.eligible_pivot(db, IP) is None
+    assert services.eligible_pivot(db, indicator) is None
     with pytest.raises(LookupError):
-        services.cached_pivots(db, IP)
+        services.cached_pivots(db, indicator)
 
 
+@pytest.mark.parametrize(('provider_key', 'indicator'), [('rdap', IP), ('crtsh', 'example.com')])
 async def test_provider_lock_and_audit_actor_are_shared_between_callers(
-    session_factory: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+    session_factory: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch, provider_key: str, indicator: str
 ) -> None:
     with session_factory.begin() as db:
-        reviewed(db)
-        services.set_pivot_switch(db, 'rdap', True)
+        reviewed(db, indicator)
+        services.set_pivot_switch(db, provider_key, True)
     entered, release = asyncio.Event(), asyncio.Event()
 
     async def fetch(provider: str, value: str) -> dict[str, Any]:
@@ -173,14 +185,14 @@ async def test_provider_lock_and_audit_actor_are_shared_between_callers(
         return ANSWER
 
     monkeypatch.setattr(pivots, '_fetch', fetch)
-    THROTTLES['rdap'].reset()
+    THROTTLES[provider_key].reset()
     first = asyncio.create_task(
-        pivots.lookup(session_factory, 'rdap', IP, approved=True, actor='key:synthetic')
+        pivots.lookup(session_factory, provider_key, indicator, approved=True, actor='key:synthetic')
     )
     try:
         await entered.wait()
         with pytest.raises(pivots.RateLimited):
-            await pivots.lookup(session_factory, 'rdap', IP, approved=True, actor='operator')
+            await pivots.lookup(session_factory, provider_key, indicator, approved=True, actor='operator')
     finally:
         release.set()
         await first
@@ -194,35 +206,37 @@ async def test_provider_lock_and_audit_actor_are_shared_between_callers(
         assert db.scalar(select(func.count()).select_from(Observation)) == 1
 
 
-def test_retention_deletes_orphan_pivot_cache(db: Session) -> None:
+@pytest.mark.parametrize(('provider_key', 'indicator'), [('rdap', IP), ('crtsh', 'example.com')])
+def test_retention_deletes_orphan_pivot_cache(db: Session, provider_key: str, indicator: str) -> None:
     """Regression: cached infrastructure must not outlive its deleted, otherwise unreferenced indicator."""
-    document_id = reviewed(db)
-    services.set_pivot_switch(db, 'rdap', True)
-    services.store_pivot(db, 'rdap', IP, ANSWER)
+    document_id = reviewed(db, indicator)
+    services.set_pivot_switch(db, provider_key, True)
+    services.store_pivot(db, provider_key, indicator, ANSWER)
     db.flush()
     services.delete_document(db, document_id, 'Synthetic retention check')
-    assert db.scalar(select(Enrichment).where(Enrichment.provider == 'rdap')) is None
+    assert db.scalar(select(Enrichment).where(Enrichment.provider == provider_key)) is None
     with pytest.raises(LookupError):
-        services.cached_pivots(db, IP)
+        services.cached_pivots(db, indicator)
 
 
+@pytest.mark.parametrize(('provider_key', 'indicator'), [('rdap', IP), ('crtsh', 'example.com')])
 def test_graph_caps_work_before_resolving_known_indicators(
-    db: Session, monkeypatch: pytest.MonkeyPatch
+    db: Session, monkeypatch: pytest.MonkeyPatch, provider_key: str, indicator: str
 ) -> None:
     """Regression: a large pivot cache must not perform a known-indicator query for every undisplayed row."""
-    reviewed(db)
-    services.set_pivot_switch(db, 'rdap', True)
+    reviewed(db, indicator)
+    services.set_pivot_switch(db, provider_key, True)
     services.store_pivot(
         db,
-        'rdap',
-        IP,
+        provider_key,
+        indicator,
         {
             'found': True,
             'nodes': [{'type': 'name_server', 'value': f'ns{i}.example.net'} for i in range(500)],
         },
     )
     db.flush()
-    subject = services.eligible_pivot(db, IP)
+    subject = services.eligible_pivot(db, indicator)
     calls: list[str] = []
     original = pivot_graph._known
 
@@ -248,3 +262,8 @@ async def test_unsupported_kinds_are_refused_before_approval_or_provider_access(
         assert services.eligible_pivot(db, IP) is None
     with pytest.raises(ValueError, match='does not support'):
         await pivots.lookup(session_factory, 'rdap', IP, approved=True, actor='operator')
+
+
+async def test_certificate_search_rejects_an_ip(session_factory: sessionmaker[Session]) -> None:
+    with pytest.raises(ValueError, match='does not support'):
+        await pivots.lookup(session_factory, 'crtsh', IP, approved=True, actor='operator')

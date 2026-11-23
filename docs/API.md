@@ -469,15 +469,15 @@ API keys only (`Authorization: Bearer <key>`); a signed-in browser gets `403`. R
 | `GET /api/entities/{id}` | `offset` (0), `limit` (100, at most 200) | `{id, kind, value, flags, assessment, first_seen_at, last_seen_at, document_count, offset, documents: [summaries]}`, newest first, paginated. `assessment` is `null` or `{verdict, reason, tlp, valid_until, decided_at, actor}`; a TLP-limited key sees it only within its limit. `exploit` is the CVE's exploit context as in `GET /api/cves` (`null` for other kinds, or when nothing is known). `first_seen_at` / `last_seen_at`: when the oldest and newest report **you can see** that mentions it was added. `confidence`: see [Confidence and source reliability](#confidence-and-source-reliability) |
 | `POST /api/entities/{id}/assessment` | JSON `{verdict, reason, tlp, valid_until}`: `verdict` `unknown` (clears) / `benign` / `suspicious` / `malicious`; `reason` up to 2,000 characters; `tlp` (default `AMBER`) labels the reason; `valid_until` a date, today or later, or omitted | The recorded assessment, or `{"verdict": "unknown"}`. Audited as `entity.assess`. `404` if you cannot see the entity; `403` if a TLP-limited key would set, or replace, a verdict above its limit |
 
-## Infrastructure pivots (TIP 4.6 part 1)
+## Infrastructure pivots (TIP 4.6)
 
 `GET /api/pivots?value=...` returns the fresh cached results for a reviewed indicator in a current
 TLP:CLEAR report. Each result names `provider`, `value`, `fetched_at`, `found` and bounded provider metadata.
 An eligible subject without a fresh cache returns `[]`; a missing, hidden or ineligible subject returns
 `404`. Reads never contact a provider. Results expire after 24 hours and eligibility is rechecked each time.
 
-`POST /api/pivots/{provider}` accepts `{"value":"example.com","approved":true}`. Providers in this part
-are `rdap` (domain or public IP) and `asn` (public IP). Extra fields are refused. An uncached lookup needs
+`POST /api/pivots/{provider}` accepts `{"value":"example.com","approved":true}`. Providers
+are `rdap` (domain or public IP), `asn` (public IP), and `crtsh` (domain). Extra fields are refused. An uncached lookup needs
 `approved: true`; each provider must be enabled in Settings first. Only an operator session with CSRF or an
 unlimited read-write API key may request it. Limited/read-only keys get `403`, disabled providers `503`,
 missing/ineligible subjects `404`, invalid/unapproved requests `422`, throttled requests `429` with
@@ -488,6 +488,14 @@ handle, first/last address and country. No contact data is kept. RIPEstat return
 network numbers and holders. `nodes` describes provider context for the link map, never new observations.
 `GET /api/graph` can include `domain`, `address`, `as`, `certificate_name` and `name_server` node types, with
 provider and fetch date in edge labels. Hidden known indicators are not linked. All graph caps still apply.
+
+A certificate transparency result has `provider`, `value`, `found`, `fetched_at`, `truncated`, `certificates` and `nodes`.
+`certificates` contains at most 500 distinct `{name, issuer, not_before, not_after}` records; dates are UTC ISO
+strings. `nodes` contains `{type:"certificate_name", value}` graph context. No matches means empty lists and
+`found=false`. Renewed names keep their newest validity record. Every provider row must relate to the query.
+Settings switches have no API; they are audited workspace controls. Nothing is scheduled.
+[Limits and provider conditions](INFRASTRUCTURE_PIVOTS.md).
+
 
 ## ATT&CK techniques
 
@@ -676,7 +684,8 @@ How far each source and report can be trusted, and how well the reports back up 
 | `GET /api/cves?days=30&limit=50` | The prioritised CVE view ([ADR 0024](adr/0024-prioritised-cves.md)): the CVEs that current reports received in the last `days` days (1-365) mention, most urgent first, from the reports the caller may see (TLP limit; the demo and rejected mentions left out). `{days, since, total, truncated, cves: [cve]}`; `limit` 1-500 rows. A row is `{cve, tier, label, reason, details: [line], reports, sources, first_seen, last_seen, report: {id, title}, kev: {date_added, due_date, ransomware, name, document_id} \| null, cvss: {score, source, csaf}, nvd, epss, exploit}`. `tier`: 1 used in ransomware (CISA KEV), 2 known exploited (KEV), 3 reported exploited (VulnCheck KEV), 4 public exploit (a report or VulnCheck), 5 likely to be attacked soon (EPSS 10% or more), 6 critical (CVSS 9 or more), 7 high (CVSS 7 or more), 8 no strong signal (tiers 3 and 4 since 0.9.0, [ADR 0028](adr/0028-exploit-availability.md)); within a tier, higher EPSS, higher CVSS, more reports, most recently seen. `details` are plain-English lines; `nvd`/`epss` as in the scores route. `exploit` is `null` or `{public_exploit, reported_exploited, reports: {poc\|metasploit\|exploit-db: count}, vulncheck, attribution}`: `reports` counts current reports the caller may see that mention that kind of public exploit near the CVE; `vulncheck` is VulnCheck KEV's cached answer `{listed, date_added, exploits: [{xdb_id, url, exploit_type, date_added}], exploit_count, reported_count, canaries, ransomware}` or `null`, and `attribution` is the notice VulnCheck's terms require when it is shown. `truncated`: more than 20,000 mentions, older ones left out |
 | `GET /api/cves/{cve}/scores` | The cached scores, read without contacting anyone ([ADR 0023](adr/0023-automatic-cve-lookups.md)): `{cve, nvd, epss, nvd_checked_at, epss_checked_at, vulncheck, vulncheck_checked_at, exploit}` (`vulncheck` and `exploit` as in `GET /api/cves`). `nvd` is `{score, severity, version, vector, status, published, description, cwes}` or `null` (not looked up, or NVD has no record); `score` is the CVSS base score from the newest version NVD has (4.0, 3.1, 3.0, then 2), `null` when NVD has not scored it (`status` says why, such as `Awaiting Analysis` or `Rejected`). `epss` is `{probability, percentile, date}` (both 0-1; probability of exploitation attempts in the next 30 days) or `null`. A `*_checked_at` time with a `null` score means the provider was asked and has none. `404` unless a current report the caller may see mentions the CVE, so TLP-limited keys can use it for their own reports. |
 
-Sync and enrichment are the only routes that cause outbound network traffic. A schedule makes the same syncs happen by
+
+Sync, enrichment and approved infrastructure pivots are the only routes that cause outbound network traffic. A schedule makes the same syncs happen by
 themselves; an unchanged feed is skipped (conditional requests with `If-None-Match` / `If-Modified-Since`, then a
 payload hash), and its run says `Unchanged since the last sync.`
 

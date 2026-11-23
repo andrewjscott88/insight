@@ -94,6 +94,7 @@ THROTTLES: Final[dict[str, Throttle]] = {
     'shodan': Throttle(1.0),  # Shodan: one request per second on every plan
     'rdap': Throttle(2.0),
     'asn': Throttle(2.0),
+    'crtsh': Throttle(60.0),  # A deliberately slow local limit for the public certificate search.
 }
 
 

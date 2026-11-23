@@ -20,4 +20,9 @@ INFRASTRUCTURE_GLOSSARY: tuple[tuple[str, str], ...] = (
         'IANA',
         'Internet Assigned Numbers Authority. It lists the registries that Insight may ask.',
     ),
+    (
+        'Certificate transparency, crt.sh',
+        'Public logs of certificates issued for names on the internet. crt.sh searches these logs. '
+        'A listed name does not prove who owns or uses it now.',
+    ),
 )

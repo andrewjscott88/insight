@@ -1,0 +1,18 @@
+[
+  {
+    "id": 1001,
+    "name_value": "www.example.com\n*.example.com\nco.example.net",
+    "issuer_name": "CN=Synthetic Issuer",
+    "not_before": "2025-01-01T00:00:00",
+    "not_after": "2027-01-01T00:00:00",
+    "common_name": "DO-NOT-STORE-CONTACT",
+    "serial_number": "DO-NOT-STORE-SERIAL"
+  },
+  {
+    "id": 1002,
+    "name_value": "www.example.com",
+    "issuer_name": "CN=Synthetic Renewal",
+    "not_before": "2026-01-01T00:00:00Z",
+    "not_after": "2028-01-01T00:00:00Z"
+  }
+]

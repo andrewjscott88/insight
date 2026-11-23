@@ -38,7 +38,18 @@
 - TIP 4.6 part 1: optional manual RDAP and RIPEstat infrastructure lookups with off-by-default Settings
   switches, explicit disclosure approval, a 24-hour cache, and provider/date-labelled link-map context.
   Only reviewed indicators in current TLP:CLEAR reports qualify. RDAP contact data is discarded.
-  No migration is required. Certificate transparency and passive DNS remain planned.
+  No migration is required.
+- Long certificate names and issuer text stay within the phone dialog when a result is expanded.
+
+- Long domains wrap within the pivot title and approval label on phones, including larger text.
+
+### Added: certificate transparency (TIP 4.6 part 2)
+
+- Optional crt.sh pivots show up to 500 distinct certificate names, issuer and validity dates from a reviewed
+  domain in a current CLEAR report, with provider/date links in the map. Settings starts off; each uncached
+  lookup needs explicit consent. Cache reads recheck eligibility; shared throttling and audit apply.
+- Includes shared infrastructure-pivot API and workspace support. The same boundary applies to RDAP and RIPEstat. [Operator guide](docs/INFRASTRUCTURE_PIVOTS.md), [ADR 0037](docs/adr/0037-infrastructure-pivots.md).
+- Upgrade: no database migration or new dependency; no outbound calls until enabled and approved.
 
 ### Upgrade notes
 

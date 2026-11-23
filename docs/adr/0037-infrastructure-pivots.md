@@ -1,6 +1,6 @@
 # 0037: Approved infrastructure pivots
 
-Status: Proposed (TIP 4.6, part 1; maintainer review pending)
+Status: Proposed
 
 ## Decision
 
@@ -38,8 +38,21 @@ No pivot creates an indicator, observation, verdict or attribution. Stale or new
 are missing. The graph keeps its existing node and depth caps, and bounds known-indicator queries before
 resolving provider neighbours beyond the display limit.
 
-Certificate transparency and passive DNS are subsequent parts of this ADR and remain unimplemented here.
-They must keep the same switches, disclosure rules, TTL, tests and transport boundary.
+## Certificate transparency
+
+The `crtsh` provider accepts domains. Read-only and limited keys can read eligible cached
+context; only a session or unlimited read-write key can request a lookup. Hidden and missing values both
+return 404. Switching off stops new requests; eligible cached context expires after 24 hours.
+
+The adapter keeps only bounded, validated metadata and checks every certificate against the requested
+domain. It deduplicates names and keeps the newest validity record per name. Other names on the same
+certificate are context, not inferred ownership. The graph adds no indicators and links only known values
+visible to the reader. Limit graph rows before resolving known indicators to bound database work.
+
+Use one fixed HTTPS host through the guarded downloader, no redirects, 2 MB / 30 seconds and a conservative
+60-second shared throttle. Treat malformed, oversized and unrelated answers as failures; never cache them.
+No new dependencies or migration. Provider terms, limitations and the exact metadata fields are in
+[Infrastructure pivots](../INFRASTRUCTURE_PIVOTS.md).
 
 ## Provider terms
 

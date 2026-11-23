@@ -539,9 +539,8 @@ redistribution rule (review J3).
 
 ### 4.6 Infrastructure pivots
 
-Part 1 implements RDAP and RIPEstat lookups, shared consent/cache policy, Settings switches and graph views.
-Certificate transparency and passive DNS remain separate planned parts.
-See [ADR 0037](adr/0037-infrastructure-pivots.md). This item stays unchecked until all parts pass their gates.
+RDAP, RIPEstat, and certificate transparency share consent, cache, settings and graph support.
+Passive DNS is the remaining part. [Operator guide](INFRASTRUCTURE_PIVOTS.md) · [ADR 0037](adr/0037-infrastructure-pivots.md).
 
 Manual, approved-per-lookup, metadata-only pivots that land in the link map: RDAP, certificate transparency
 (crt.sh), IP-to-ASN, and passive DNS where the operator has access (for example CIRCL for vetted users).
@@ -640,7 +639,7 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
 - [x] **4.4** Finished intelligence products (key judgements, estimative language, PDF/Markdown/STIX):
   ADR 0036
 - [ ] **4.5** Operator-defined RSS/Atom and TAXII sources
-- [ ] **4.6** Infrastructure pivots: RDAP, certificate transparency, ASN, passive DNS
+- [ ] **4.6** Infrastructure pivots: RDAP, RIPEstat and certificate transparency implemented; passive DNS remains
 - [x] **4.7** Adversary library imports: sourced group aliases, software links and sharing, actor timelines and Navigator layers (ADR 0038)
 - [x] **4.8** Read-only MCP endpoint for AI agents, with eight tools and per-key sharing ceilings (ADR 0039)
 

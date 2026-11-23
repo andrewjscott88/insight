@@ -9,7 +9,7 @@ from typing import Any
 
 import httpx
 
-from . import ip_asn, pivot_data, rdap, services
+from . import certificate_transparency, ip_asn, pivot_data, rdap, services
 from .connectors import ProviderError, download
 from .lookups import THROTTLES
 from .models import SessionFactory
@@ -46,6 +46,14 @@ async def _request(
 
 async def _fetch(provider: str, value: str) -> dict[str, Any]:
     try:
+        if provider == 'crtsh':
+            raw = await _request(
+                certificate_transparency.URL,
+                provider,
+                frozenset({certificate_transparency.HOST}),
+                {'q': '%.' + value, 'output': 'json'},
+            )
+            return certificate_transparency.parse(raw, value)
         if provider == 'rdap':
             url, hosts = rdap.destination(value)
             return rdap.parse(await _request(url, provider, hosts), value)
