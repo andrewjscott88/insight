@@ -6,7 +6,9 @@ optional context. It does not change an indicator verdict, run a scan or add int
 1. Use a Censys account whose terms allow your purpose. API requests can consume credits.
 2. Set `INSIGHT_CENSYS_PAT` on the Insight host. Add `INSIGHT_CENSYS_ORG_ID` for your organization account;
    it is optional for an individual account. Use the Platform personal access token, not a Legacy Search key.
-3. Restart Insight. Settings shows whether the host configuration is ready, without showing any token.
+3. Restart Insight. For Docker Compose, put these settings in the private `.env` file and recreate the
+   container with `docker compose up -d --no-deps insight`. Settings shows whether the host configuration
+   is ready, without showing any token.
 4. Use private sign-in. Censys reads and lookups are unavailable while temporary open access is on.
 5. In **Investigate → Indicators**, expand a public IPv4 or IPv6 address with an accepted observation in a
    current TLP:CLEAR report. Open **Censys infrastructure context** and approve sending that address.
