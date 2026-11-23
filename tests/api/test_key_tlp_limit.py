@@ -70,7 +70,9 @@ def world(app: FastAPI) -> dict[str, Any]:
         )
         # Actor activity must be planted here too: the central GREEN sweep exercises the real
         # timeline/campaign routes against restricted report links and explicit campaign associations.
+        # The public group must hide both the AMBER report and the AMBER link to a GREEN report.
         services.link_report(db, 'G0016', ActorLinkInput(document_id=amber.id, note=MARKER, tlp='AMBER'))
+        services.link_report(db, 'G0016', ActorLinkInput(document_id=green.id, tlp='AMBER', note=MARKER))
         campaign = services.create_campaign(db, CampaignInput(name=f'{MARKER} campaign', tlp='AMBER'))
         services.link_actor_campaign(
             db, 'G0016', ActorCampaignInput(campaign_id=campaign.id, note=MARKER, tlp='AMBER')
@@ -132,9 +134,6 @@ def world(app: FastAPI) -> dict[str, Any]:
         )
         services.record_sighting(db, SightingInput(value=HIDDEN_IP, first_seen=seen, tlp='GREEN'))
         hidden_actor = services.create_actor(db, ActorInput(name=f'{MARKER} actor', tlp='AMBER'))
-        # A public catalog profile must hide both an AMBER report and an AMBER link to a GREEN report.
-        services.link_report(db, 'G0016', ActorLinkInput(document_id=amber.id, tlp='AMBER', note=MARKER))
-        services.link_report(db, 'G0016', ActorLinkInput(document_id=green.id, tlp='AMBER', note=MARKER))
         services.create_requirement(
             db, RequirementInput(kind='rfi', question=f'{MARKER} request?', tlp='AMBER')
         )
