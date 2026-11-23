@@ -52,7 +52,7 @@ async def test_unauthenticated_visitors_are_redirected(ui_env: SimpleNamespace) 
 
 
 async def test_workspace_renders_empty_state(user: User) -> None:
-    await user.should_see('Threat landscape')
+    await user.should_see('Intel brief')
     await user.should_see('Cyber Threat Intelligence Platform')
     await user.should_not_see('Collect. Connect. Understand.')
     await user.should_see('No reports match.')
@@ -503,16 +503,33 @@ async def test_workspace_size_does_not_grow_with_recurring_indicators(
         'utf-8'
     )
     with ui_env.app.state.session_factory.begin() as db:
-        for i in range(100):
+        for i in range(20):
             ingest(
                 db, DocumentInput(title=f'GLASS HARBOR copy {i}', body=text, source_name='Notional CTI Cell')
             )
     await user.open('/')
+    await user.should_see('Intel brief')
+    with user:
+        at_first_page = len(list(ElementFilter(local_scope=False)))
+    await user.should_see(marker='document-list')
+    first_list = user.find(marker='document-list').elements.pop()
+    at_first_page -= len(list(first_list.descendants()))
+    with ui_env.app.state.session_factory.begin() as db:
+        for i in range(20, 100):
+            ingest(
+                db, DocumentInput(title=f'GLASS HARBOR copy {i}', body=text, source_name='Notional CTI Cell')
+            )
+    await user.open('/')
+    await user.should_see('Intel brief')
     with user:
         elements = len(list(ElementFilter(local_scope=False)))
-    # 1,600: the side menu, Share section and clickable counters add a fixed ~20 elements to every page;
-    # the regression this guards (growth with recurring indicators) was ~3,500.
-    assert elements < 1600, f'{elements} UI elements'
+    await user.should_see(marker='document-list')
+    document_list = user.find(marker='document-list').elements.pop()
+    pivot_growth = elements - len(list(document_list.descendants())) - at_first_page
+    # The report list grows on purpose. Outside it, repeated indicators must not render more pivot rows.
+    # The absolute ceiling allows the guide builder and sharing hints, but still catches the old ~3,500.
+    assert pivot_growth <= 20, f'{pivot_growth} extra elements outside the report list'
+    assert elements < 1900, f'{elements} UI elements'
 
 
 async def test_tlp_marking_raises_the_label_and_warns(user: User, ui_env: SimpleNamespace) -> None:
@@ -717,7 +734,7 @@ async def test_sync_all_sources_success_feeds_the_brief(user: User, monkeypatch:
     with user.scope(marker='brief-summary'):
         await user.should_see('In the last 7 days, 4 new reports came in from 4 sources.')
         await user.should_see(
-            'CISA added 1 more weakness to its known exploited list, in products from Acme.'
+            'CISA added 1 flaw to its list of flaws used in attacks. Products include Acme Gateway.'
         )
     with user.scope(marker='brief-section-4'):
         await user.should_see('libumqtt (1)')

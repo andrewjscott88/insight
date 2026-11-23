@@ -17,11 +17,38 @@ __all__ = ['browser', 'context']
 pytestmark = pytest.mark.e2e
 
 
+def test_restricted_sharing_label_wraps_at_phone_widths(context: Any) -> None:
+    """Regression: the plain audience plus a long TLP token must fit without clipping or scrolling."""
+    page = context.new_page()
+    sign_in(page)
+    token = context.request.get('/api/session').json()['csrf_token']
+    response = context.request.post(
+        '/api/documents',
+        data={
+            'title': f'Sharing label browser fixture {uuid.uuid4().hex[:8]}',
+            'body': 'Synthetic test only. A report on phishing.',
+            'source_name': 'Sharing label test source',
+            'tlp': 'AMBER+STRICT',
+        },
+        headers={'X-CSRF-Token': token, 'Origin': BASE_URL},
+    )
+    assert response.ok, response.text()
+    for width in (320, 390):
+        page.set_viewport_size({'width': width, 'height': 844})
+        page.reload()
+        badge = page.locator('.intel-brief .tlp-badge')
+        expect(badge).to_have_text('Your organization only · TLP:AMBER+STRICT')
+        expect(badge).to_be_visible()
+        assert badge.evaluate('(el) => el.scrollWidth <= el.clientWidth')
+        assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
+        expect(page.get_by_text('Received in the last 24 hours', exact=True).first).to_be_visible()
+
+
 def test_summary_links_to_its_source_report_on_phone_and_desktop(context: Any) -> None:
     """Regression: a headline must open its supporting report after the longer brief is rendered."""
     page = context.new_page()
     sign_in(page)
-    expect(page.get_by_role('heading', name='Threat landscape', exact=True)).to_be_visible()
+    expect(page.get_by_role('heading', name='Intel brief', exact=True)).to_be_visible()
     token = context.request.get('/api/session').json()['csrf_token']
     cve = f'CVE-2026-{uuid.uuid4().int % 900_000 + 100_000}'
     titles = {}

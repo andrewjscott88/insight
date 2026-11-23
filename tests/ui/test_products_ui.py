@@ -47,7 +47,7 @@ async def test_a_product_is_written_and_published(user: User, ui_env: SimpleName
     await user.should_see('Gap added.')
     await user.should_see(marker='product-gap-ask')
     user.find(marker='product-gap-ask').click()
-    await user.should_see('Asked. The request is in Requirements.')
+    await user.should_see('Asked. Find the request in Settings, under Intelligence questions.')
 
     await user.should_see(marker='product-publish')
     user.find(marker='product-publish').click()

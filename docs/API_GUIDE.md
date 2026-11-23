@@ -577,9 +577,42 @@ curl -fsS -X POST "$INSIGHT_URL/api/hunt-packages/$PKG_ID/retire" -H "Authorizat
 curl -fsS -X DELETE "$INSIGHT_URL/api/hunt-packages/$PKG_ID" -H "Authorization: Bearer $INSIGHT_API_KEY"
 ```
 
+### Hunt guide previews and downloads
+
+These reads work with a session or any valid key that has read access. They respect both the key and instance
+sharing ceilings. The guide uses saved metadata and fixed advice; it neither contacts a source nor runs a
+hunt. It is not saved as a product or package. Each successful generation records `hunt.guide` in the audit.
+
+Use `INSIGHT_URL` and `INSIGHT_API_KEY` as described above. Search returns up to 50 choices per kind, after
+filtering. Omit `kind` to request all eight lists. Use a returned `ref` for the download; the theme example
+below is built in. For reports, search covers title, source and body.
+
+```bash
+curl -fsS --get "$INSIGHT_URL/api/hunt-guides" \
+  -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  --data-urlencode 'kind=theme' --data-urlencode 'q=ransom'
+curl -fsS --get "$INSIGHT_URL/api/hunt-guides" \
+  -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  --data-urlencode 'kind=document' --data-urlencode 'q=FBI'
+curl -fsS "$INSIGHT_URL/api/hunt-guides/theme/ransomware?format=json" \
+  -H "Authorization: Bearer $INSIGHT_API_KEY"
+curl -fsS -o hunt-guide.md "$INSIGHT_URL/api/hunt-guides/theme/ransomware?format=md" \
+  -H "Authorization: Bearer $INSIGHT_API_KEY"
+curl -fsS -o hunt-guide.pdf "$INSIGHT_URL/api/hunt-guides/theme/ransomware?format=pdf" \
+  -H "Authorization: Bearer $INSIGHT_API_KEY"
+```
+
+The FBI search only finds reports already added to your workspace; it does not add or query a feed. Other
+`kind` values are `actor`, `cve`, `exploit`, `software`, `indicator` and `campaign`. Use IDs from choices, and
+URL-encode a path reference if needed. Hidden/missing subjects return the same `404`; invalid formats or
+oversized inputs return `422`. Refining `q` can find choices outside the first 50. Guide content is bounded
+to 20 reports, 100 eligible indicators and 12 techniques; limit notes explain omitted data. Review the
+sharing label and source terms before passing the file to another person.
+
 ### Products (cases)
 
-The workspace calls a case a product: an intelligence product in progress, with its evidence and working notes
+The workspace keeps products under **Threat Hunt → Saved intelligence reports**: intelligence in progress,
+with evidence and working notes
 ([ADR 0029](adr/0029-cases.md), [ADR 0036](adr/0036-intelligence-products.md)). It takes the strictest label of
 what it holds and keeps it when items are removed. An archived (closed) case answers `409` to changes until it
 is reopened.

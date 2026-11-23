@@ -18,7 +18,7 @@ from ..brief import DEMO, Brief, BriefHighlight, BriefItem, BriefSection, count_
 from ..briefing import LABELS
 from ..landscape import PERIOD_CHOICES, Landscape, TacticTrend, ThreatTrend, compose, period_start, usual_text
 from .sources import build_sync_all_button
-from .theme import tlp_badge
+from .theme import tlp_badge, tlp_guidance
 from .typography import heading, new_tab_link
 from .workspace import Workspace
 
@@ -73,7 +73,7 @@ def build_landscape(ws: Workspace) -> None:
     def context(brief: Brief) -> None:
         """The last 24 hours, what the period covers, and the limits of the data (#39)."""
         with ui.column().classes('brief-context min-w-0 gap-3 p-4 sm:p-5').mark('brief-context'):
-            ui.label('Last 24 hours').classes('eyebrow')
+            ui.label('Received in the last 24 hours').classes('eyebrow')
             ui.label(str(brief.recent_reports)).classes('brief-recent-count')
             ui.label('Reports in this brief received in the last 24 hours.').classes('muted prose')
             with ui.column().classes('brief-scope w-full gap-1'):
@@ -151,9 +151,11 @@ def build_landscape(ws: Workspace) -> None:
         days = result.days
         with ui.row().classes('w-full items-center gap-x-4 gap-y-1'):
             tlp_badge(result.tlp)
-            ui.label(f'Built from reports up to TLP:{result.tlp}. Share it no wider than that.').classes(
-                'muted text-sm prose'
-            )
+            ui.label(tlp_guidance(result.tlp)).classes('muted text-sm prose')
+            if result.tlp != 'CLEAR':
+                ui.label('This brief has limits on who may read it. Keep its sharing label.').classes(
+                    'text-warn text-sm prose'
+                )
             new_tab_link('Download as a briefing to share', f'/api/landscape/briefing?days={days}')
         with ui.element('div').classes('brief-overview w-full'):
             with ui.column().classes('summary-box min-w-0 gap-2 p-4 sm:p-5').mark('brief-summary'):
@@ -224,8 +226,8 @@ def build_landscape(ws: Workspace) -> None:
     with ui.column().classes('intel-brief w-full gap-4 sm:gap-5').mark('intel-brief'):
         with ui.row().classes('brief-heading w-full items-end justify-between gap-3'):
             with ui.column().classes('gap-1'):
-                ui.label('Your intel brief').classes('eyebrow')
-                heading('Threat landscape', 1)
+                ui.label('What matters and what to check next').classes('eyebrow')
+                heading('Intel brief', 1)
             with ui.row().classes('items-center gap-3 w-full sm:w-auto'):
                 ui.toggle(
                     {days: f'Last {days} days' for days in PERIOD_CHOICES},
@@ -234,7 +236,7 @@ def build_landscape(ws: Workspace) -> None:
                 ).props('no-caps unelevated aria-label="Period"')
                 build_sync_all_button(ws)
         ui.label(
-            'What is trending in your reports and why it matters. Built from your reports, not written by '
-            'AI. Choose a report to see where a line comes from.'
+            'What your reports say about current threats, affected products and next steps. '
+            'Built from feed data, with no AI. Open the evidence to check each finding.'
         ).classes('muted text-sm prose')
         landscape()

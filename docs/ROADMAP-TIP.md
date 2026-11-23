@@ -9,6 +9,16 @@ Existing project issues are cited where they already exist (`ROADMAP.md`). Sched
 
 ---
 
+## Workspace enhancement under review
+
+The [guided Threat Hunt workspace](THREAT_HUNT.md), proposed in
+[ADR 0041](adr/0041-guided-threat-hunt-workspace.md), brings existing evidence into bounded, on-demand
+plans from eight starting kinds. It also makes Intel Brief's meaning and next steps clearer, explains TLP
+audiences, moves packages and saved intelligence reports into Threat Hunt, and keeps requirements in
+advanced Settings. This does not mark a new milestone complete or expand Insight into telemetry hunting.
+The plans use saved metadata and fixed guidance; they make no network request, run no rule and save no
+new intelligence. Existing API contracts and the milestone checklist below remain in place.
+
 ## 1. Current state versus premium TIPs
 
 Insight is a MIT-licensed, self-hosted workbench: NiceGUI + FastAPI + SQLAlchemy, SQLite (or PostgreSQL), four curated public connectors, deterministic indicator extraction, TLP policy, analyst verdicts, watch terms, a 7-day fact-based brief, an IOC export (`insight-ioc-v1`, **not STIX**), a blocklist API, one operator password (optional TOTP), one hashed API key, and opt-in scheduled syncs.

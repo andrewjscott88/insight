@@ -124,10 +124,12 @@ def test_a_rising_theme_leads_the_summary_with_why_it_matters() -> None:
     assert top.sources == 1
     assert top.what == THEMES_BY_KEY['ransomware'].what
     assert len(top.reports) == ls.EVIDENCE_REPORTS
-    assert result.summary[0] == (
+    assert result.summary[-1] == (
         'In the last 7 days, 10 new reports came in from 2 sources, more than usual (usually about 4 a week).'
     )
-    assert result.summary[1] == 'Trending: Ransomware (5 reports, usually fewer than 1 a week).'
+    assert result.summary[0] == 'Trending: Ransomware (5 reports, usually fewer than 1 a week).'
+    assert result.summary[1] == 'Why it matters: ' + top.impact
+    assert result.summary[2] == 'What to check: ' + top.check
     assert result.reports == 10
     assert result.compared_periods == 4
 
@@ -147,10 +149,8 @@ def test_without_history_there_are_no_trends_only_counts() -> None:
     result = compose(make(fresh, themes={'phishing': ids(fresh[:3])}, first=f'{FRESH_DAY}T00:00:00+00:00'))
     assert result.compared_since is None
     assert result.threats[0].change.label == ls.NO_HISTORY
-    assert result.summary[:2] == (
-        'In the last 7 days, 4 new reports came in from 1 source.',
-        'The most reported kind of threat is phishing, in 3 reports.',
-    )
+    assert result.summary[0] == 'The most reported kind of threat is phishing, in 3 reports.'
+    assert result.summary[-1] == 'In the last 7 days, 4 new reports came in from 1 source.'
     assert any('cannot show trends yet' in line for line in result.caveats)
 
 
@@ -171,7 +171,7 @@ def test_attacker_behaviour_comes_from_tactics_in_plain_words() -> None:
     first = result.tactics[0]
     assert (first.shortname, first.plain, first.change.label) == ('initial-access', 'getting in', ls.RISING)
     assert first.techniques == (('T1566.001', 'Phishing: Spearphishing Attachment', 4),)
-    assert 'More reports than usual describe attackers getting in (Initial Access).' in result.summary
+    assert 'More reports than usual describe attackers getting in.' in result.summary
     assert 'That is 4 reports, usually fewer than 1 a week.' in result.summary
     # A technique can make a report count towards a theme without any of its words.
     assert {t.key for t in result.threats} >= {'phishing', 'ransomware'}
@@ -206,7 +206,8 @@ def test_kev_growth_is_compared_with_earlier_periods() -> None:
     entries = [kev(i, FRESH_DAY) for i in range(9)] + [kev(100 + i, OLD_DAY) for i in range(8)]
     result = compose(make(reports('n', 1, FRESH_DAY), kev=entries))
     summary = ' '.join(result.summary)
-    assert 'CISA added 9 more weaknesses to its known exploited list, in products from Acme.' in summary
+    assert result.summary[0].startswith('CISA added 9 flaws to its list of flaws used in attacks.')
+    assert 'Products include Acme Gateway.' in summary
     assert 'That is more than usual: CISA added about 2 a week before.' in summary
 
 
@@ -218,6 +219,18 @@ def test_nothing_new_says_so() -> None:
             'status in About this brief.'
         ),
     )
+
+
+def test_known_attacks_lead_even_when_another_threat_has_more_reports() -> None:
+    """Regression: report volume displaced known exploited products from the lead finding."""
+    fresh = reports('n', 5, FRESH_DAY)
+    entry = BriefKev('CVE-2026-1001', 'Example', 'Gateway', FRESH_DAY, '', '')
+    result = compose(make(fresh, themes={'phishing': ids(fresh)}, kev=[entry]))
+    assert result.summary[0].startswith('CISA added 1 flaw to its list of flaws used in attacks.')
+    assert 'Products include Example Gateway.' in result.summary[0]
+    assert any('not proof of attacks today or on your systems' in line for line in result.summary)
+    assert result.summary.index('Trending: Phishing (5 reports, new).') > 0
+    assert result.summary[-1].startswith('In the last 7 days, 5 new reports')
 
 
 def test_a_cut_off_read_is_reported() -> None:
@@ -232,7 +245,7 @@ def test_thirty_day_periods() -> None:
     data, _ = make(fresh + old, themes={'phishing': ids(fresh)})
     result = ls.compose(data, BriefData(since, fresh, [], {}, {}), since=since, days=30)
     assert result.threats[0].change.label == ls.NEW
-    assert result.summary[0].startswith('In the last 30 days, 6 new reports came in from 1 source')
+    assert result.summary[-1].startswith('In the last 30 days, 6 new reports came in from 1 source')
 
 
 def test_every_sentence_is_plain() -> None:

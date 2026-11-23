@@ -26,13 +26,13 @@ from .cve_scores import EPSS_CAVEAT, percent
 from .services import BriefData, BriefDocument
 
 
-def _impact(doc: BriefDocument, cve: str) -> str:
+def _impact(doc: BriefDocument, cve: str, *, quote: bool = True) -> str:
     """Explain an explicitly named weakness, without inferring one from a CVSS number."""
     line = next((line for line in doc.body.splitlines() if line.startswith(f'- {cve}, CVSS ')), '')
-    return _described(line.partition(':')[2].strip())
+    return _described(line.partition(':')[2].strip(), quote=quote)
 
 
-def _described(description: str) -> str:
+def _described(description: str, *, quote: bool = True) -> str:
     """What a stated description (a CISA advisory's or NIST NVD's) says the weakness lets an attacker do."""
     meanings = (
         ('remote code execution', 'let an attacker run code on an affected system'),
@@ -46,14 +46,41 @@ def _described(description: str) -> str:
             description,
             re.I,
         ):
-            return f'The source describes {phrase}. This could {meaning}. '
-    if description:
+            return f'The source says this flaw could {meaning}. '
+    if description and quote:
         # Quote the source when its weakness does not have a precise built-in explanation.
         excerpt = description[:180].rstrip()
         if len(description) > 180:
             excerpt += '…'
         return f'The source describes it as: “{excerpt}” '
     return 'Read the advisory for what the flaw could let an attacker do. '
+
+
+def severity_text(data: BriefData, facts: _Facts, as_of: datetime, *, quote: bool = True) -> str:
+    """Explain the highest-severity source; keep untranslated quotations out of the summary."""
+    if not facts.severe:
+        return ''
+    _, cve, title, doc_id, origin = facts.severe[0]
+    listed = (
+        cve in data.kev and (added := _day(data.kev[cve].date_added)) is not None and added <= as_of.date()
+    )
+    if origin == NIST_NVD:
+        found = data.scores.get(cve)
+        stated = found.nvd.description if found and found.nvd else ''
+        where = f'NIST NVD rates this flaw as critical. Report: {title}. ' + _described(stated, quote=quote)
+    else:
+        doc = next(doc for doc in facts.fresh if doc.id == doc_id)
+        where = f'Advisory: {title.split(" · ", 1)[-1]}. ' + _impact(doc, cve, quote=quote)
+    return (
+        where
+        + 'A high severity score means the flaw could cause serious harm. '
+        + 'It rates the flaw, not the chance of an attack. '
+        + (
+            "It is also on CISA's known exploited list."
+            if listed
+            else 'This brief has no confirmed CISA match; that does not rule out attacks.'
+        )
+    )
 
 
 def _evidence(documents: list[BriefDocument]) -> tuple[BriefItem, ...]:
@@ -101,9 +128,9 @@ def highlights(data: BriefData, facts: _Facts, as_of: datetime) -> tuple[BriefHi
         products = name_list([_product(kev) for kev in known.values()])
         result.append(
             BriefHighlight(
-                'Known exploitation deserves attention',
+                'Flaws already used in attacks',
                 f'{count_of(len(known), "flaw")} in this brief {_verb(len(known), "is", "are")} on '
-                f"CISA's known exploited list. Products include {products}. "
+                f"CISA's list of flaws used in attacks. Products include {products}. "
                 'This is evidence of past or present use by attackers. '
                 'It does not prove an attack on your business.',
                 'If you use these products, ask IT to check exposure. Follow the linked fix guidance first.',
@@ -165,7 +192,7 @@ def highlights(data: BriefData, facts: _Facts, as_of: datetime) -> tuple[BriefHi
         named = name_list([f'{cve} ({percent(p)})' for p, cve, _, _ in top])
         result.append(
             BriefHighlight(
-                'Likely to be attacked soon',
+                'Forecasts worth checking',
                 f'{count_of(len(likely), "flaw")} in this brief {_verb(len(likely), "has", "have")} '
                 f'an EPSS score of {percent(LIKELY)} or more: {named}. ' + EPSS_CAVEAT,
                 'Check whether you use these products. Fix the ones you use before less likely ones.',
@@ -174,29 +201,11 @@ def highlights(data: BriefData, facts: _Facts, as_of: datetime) -> tuple[BriefHi
         )
 
     if facts.severe:
-        score, cve, title, doc_id, origin = facts.severe[0]
-        listed = (
-            cve in data.kev
-            and (added := _day(data.kev[cve].date_added)) is not None
-            and added <= as_of.date()
-        )
-        found = data.scores.get(cve)
-        if origin == NIST_NVD:
-            stated = found.nvd.description if found and found.nvd else ''
-            where = f'NIST NVD rates it, and a new report mentions it: {title}. ' + _described(stated)
-        else:
-            where = f'Advisory: {title.split(" · ", 1)[-1]}. ' + _impact(by_id[doc_id], cve)
+        _, _, title, doc_id, _ = facts.severe[0]
         result.append(
             BriefHighlight(
                 'Highest reported severity',
-                f'{cve} has the highest listed base score: {score:g} out of 10. '
-                + where
-                + 'This score rates the flaw, not the chance of an attack. '
-                + (
-                    "It is also on CISA's known exploited list."
-                    if listed
-                    else 'This brief has no confirmed CISA match; that does not rule out attacks.'
-                ),
+                severity_text(data, facts, as_of),
                 "If the product is in use, ask IT to review the impact and the vendor's fix guidance.",
                 (BriefItem(title, doc_id),),
             )

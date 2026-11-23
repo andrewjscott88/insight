@@ -27,7 +27,7 @@ def test_long_feed_text_fits_a_320px_phone_with_larger_text(context: Any, theme:
         expect(page.get_by_role('link', name='End session', exact=True)).to_be_visible()
     else:
         sign_in(page)
-    expect(page.get_by_role('heading', name='Threat landscape', exact=True)).to_be_visible()
+    expect(page.get_by_role('heading', name='Intel brief', exact=True)).to_be_visible()
     token = context.request.get('/api/session').json()['csrf_token']
     long_url = 'https://example.invalid/' + 'feeditem' * 15 + '/' + uuid.uuid4().hex
     response = context.request.post(
@@ -46,7 +46,7 @@ def test_long_feed_text_fits_a_320px_phone_with_larger_text(context: Any, theme:
     page.get_by_role('button', name='Larger text', exact=True).click()
     expect(page.locator('html')).to_have_attribute('data-text', 'large')
     page.wait_for_function("getComputedStyle(document.documentElement).fontSize === '19px'")
-    page.get_by_role('heading', name='Threat landscape', exact=True).click()
+    page.get_by_role('heading', name='Intel brief', exact=True).click()
     page.mouse.move(0, 0)
     assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
     assert page.locator('.workspace-controls > *').evaluate_all(

@@ -27,7 +27,7 @@ def test_report_title_does_not_overlap_timeline(context: Any, width: int, theme:
         expect(page.get_by_role('link', name='End session', exact=True)).to_be_visible()
     else:
         sign_in(page)
-    expect(page.get_by_role('heading', name='Threat landscape', exact=True)).to_be_visible()
+    expect(page.get_by_role('heading', name='Intel brief', exact=True)).to_be_visible()
     token = context.request.get('/api/session').json()['csrf_token']
     headers = {'X-CSRF-Token': token, 'Origin': BASE_URL}
     title = f'Synthetic activity report with a long narrow phone title {uuid.uuid4().hex[:8]}'

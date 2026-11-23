@@ -13,6 +13,12 @@ For setup, backups and upgrades, see the [operator runbook](docs/RUNBOOK.md). Fo
 
 ## What works
 
+- **Guided threat hunting:** choose a threat type, actor, flaw, report, exploit activity, malware/tool,
+  indicator or campaign in **Threat Hunt**, then review and download a plan as Markdown or PDF. It uses
+  saved metadata and fixed guidance, with source references and TLP limits. It never runs a hunt or calls
+  an AI service. Existing hunt packages and saved intelligence reports are in the same section.
+  [Workflow and limits](docs/THREAT_HUNT.md)
+
 - **Read-only MCP for agents:** Search reports and indicators, read report summaries, check indicator verdicts
   and confidence, and retrieve open requirements, hunt packages, group profiles and the threat landscape.
   Uses bearer API keys, TLP ceilings, publisher reuse rules and audited reads. Supports protocols
@@ -78,20 +84,23 @@ For setup, backups and upgrades, see the [operator runbook](docs/RUNBOOK.md). Fo
   ThreatFox, and file hashes from MalwareBazaar. Set `INSIGHT_ABUSECH_AUTH_KEY` and enable the feeds you use.
   Each entry links to its record at the publisher. The connector reads only the provider's metadata API.
 - Curated connectors: CISA KEV, CISA security advisories (CISA's machine-readable CSAF files), SANS ISC and UK
-  NCSC feeds. **Sync now** per source, **Sync all sources** beside the threat landscape, and **opt-in
+  NCSC feeds. **Sync now** per source, **Sync all sources** beside Intel Brief, and **opt-in
   schedules** (off by default; every hour, 6 hours or day, per source or for all, from a time of day you choose,
   in UTC) so the feeds and the brief stay fresh by themselves. An unchanged feed is not downloaded again (`ETag` / `Last-Modified`). See
   [ADR 0018](docs/adr/0018-opt-in-scheduled-syncs.md).
 - **OTX subscriptions** import public CLEAR/WHITE pulses as reports with their indicators and source links.
   Set your own `INSIGHT_OTX_API_KEY` and turn on the source in the workspace. [Runbook](docs/RUNBOOK.md#8-sources-enrichment-and-their-failures)
-- **Threat landscape** opens the workspace ([ADR 0020](docs/adr/0020-threat-landscape.md)): a plain-English
+- **Intel Brief** opens the workspace ([ADR 0020](docs/adr/0020-threat-landscape.md),
+  [ADR 0041](docs/adr/0041-guided-threat-hunt-workspace.md)): a plain-English
   executive summary of the last 7 or 30 days, compared with the 4 weeks or months before. Which kinds of threat
   are **rising**, **new** or **quieter** (ransomware, phishing, data theft, supply chain, zero-days and 8 more,
   spotted by listed words and ATT&CK techniques), what each one is, **why it matters** and **what to check**,
   what attackers are doing by ATT&CK tactic, and every report behind it. Counted from your reports, not written
-  by AI; marked with the most restrictive TLP it used; **Download as a briefing to share** (Markdown).
+  by AI. Known exploited products or reported threat themes lead, with meaning and next steps before
+  report-volume context. The most restrictive contributing TLP stays attached; **Download as a briefing
+  to share** saves Markdown.
   `GET /api/landscape`, `GET /api/landscape/briefing`.
-- **Intel brief** inside it ([docs/EXECUTIVE_BRIEF.md](docs/EXECUTIVE_BRIEF.md)): what the period adds up to,
+- **Evidence behind the brief** ([docs/EXECUTIVE_BRIEF.md](docs/EXECUTIVE_BRIEF.md)): what the period adds up to,
   built from your reports (no AI). **What needs attention** gives plain findings (known exploitation, a recurring
   topic, the highest severity, your watch terms, the last 24 hours), each with a conditional **next step** and
   its evidence; beside the summary, how many reports came in during the **last 24 hours**, and **About this
@@ -284,11 +293,11 @@ After changing dependencies in `pyproject.toml`, run `python scripts/lock.py` (r
 
 ## Daily workflow
 
-The side menu follows the same day: **Today** (the brief, and counters that open the list behind them),
-**Requirements** (the questions your intelligence work answers, and requests for information from people or
-hunt tools, [ADR 0032](docs/adr/0032-intelligence-requirements.md)), **Triage** (new reports, the reader and review), **Investigate** (indicators, CVEs, ATT&CK techniques and threat
-groups), **Products**, **Share** (IOC export, TAXII, API keys, MISP) and **Settings** (sources, lookups, watch terms
-and alerts). On a phone the menu sits above the content.
+The side menu starts with **Intel Brief**, then **Triage** (reports and review), **Investigate** (indicators,
+CVEs, techniques and threat groups), **Threat Hunt** (guide builder, hunt packages and saved intelligence
+reports), **Share** (IOC export, TAXII, API access and MISP), and **Settings**. Requirements and requests for
+information remain in **Settings → Intelligence questions (advanced)**. Sources, lookups, watch terms and
+alerts remain in Settings too. On a phone the menu sits above the content.
 
 1. **Collect:** paste authorized text or explicitly sync a curated feed.
 2. **Read:** search/filter the inbox and read evidence in context.
@@ -296,13 +305,19 @@ and alerts). On a phone the menu sits above the content.
 4. **Correlate:** pivot to other documents that mention the same canonical entity.
 5. **Prioritize:** watch terms identify possible organizational relevance; CISA KEV signals observed exploitation, NVD supplies vulnerability metadata, and EPSS estimates exploitation probability. None proves that your assets are exposed.
 6. **Record:** write an analyst note explaining your judgment.
-7. **Share:** export the indicators you reviewed (**Export IOCs**), filtered to the TLP you may share at. Check the file's label and evidence before it leaves your hands ([docs/IOC_EXPORT.md](docs/IOC_EXPORT.md)).
+7. **Plan:** build a guide in **Threat Hunt** and take it to your own hunt tool. A generated guide is not a
+   saved product or a published hunt package ([docs/THREAT_HUNT.md](docs/THREAT_HUNT.md)).
+8. **Share:** export the indicators you reviewed (**Export IOCs**), filtered to the TLP you may share at. Check the file's label and evidence before it leaves your hands ([docs/IOC_EXPORT.md](docs/IOC_EXPORT.md)).
 
 The data model separates documents, entities, observations, notes and external enrichments. It intentionally does not invent threat-actor attribution or causal relationships from co-occurrence.
 
 ## Handling sensitive intelligence
 
 TLP:CLEAR/GREEN/AMBER/AMBER+STRICT/RED are preserved as metadata. **This single-user release does not enforce organizational sharing groups or recipient-level TLP access.** Only import material you personally may access and retain. Local JSON exports preserve the label but cannot prevent later disclosure. An IOC export is labelled with the most restrictive TLP of the reports it includes; use `max_tlp` (or **Most restrictive TLP to include**) to keep restricted reports out of a file you intend to share. No external AI provider is called.
+
+Badges explain the intended audience while retaining the standard token, such as **Public · TLP:CLEAR**
+or **Your organization only · TLP:AMBER+STRICT**. Public disclosure under TLP does not waive copyright or
+publisher reuse terms. The presentation does not lower stored labels or access limits.
 
 No automatically fetched article HTML is rendered. Source text is displayed as text; links are HTTP(S) only. Curated connector destinations are fixed and checked for public DNS resolution, redirects are disabled, and payload sizes are bounded. An egress firewall is still advisable: application DNS checks are not a complete DNS-rebinding defense.
 

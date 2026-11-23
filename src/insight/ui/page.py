@@ -1,6 +1,6 @@
 """Page assembly: authentication gate, the side menu and its sections.
 
-The workspace is organised around an analyst's day (Today, Triage, Investigate, Products, Share, Settings).
+The workspace follows an analyst's day (Intel Brief, Triage, Investigate, Threat Hunt, Share, Settings).
 The side menu is a vertical tab list, so keyboard and screen-reader users get the usual tab semantics; on a
 phone it wraps into rows above the content.
 """
@@ -24,7 +24,6 @@ from ..appearance import (
 )
 from ..models import SessionFactory
 from .appearance import TextSizeSwitch, ThemeSwitch
-from .cases import build_cases
 from .confidence import build_source_ratings
 from .cves import build_cves
 from .entities import build_entities
@@ -39,6 +38,7 @@ from .sources import build_sources
 from .stats import build_stats
 from .techniques import build_techniques
 from .theme import apply_theme
+from .threat_hunt import build_threat_hunt
 from .threats import build_threats
 from .typography import heading
 from .watch_terms import build_watch_terms
@@ -48,11 +48,10 @@ RECONNECT_SECONDS: Final = 30.0
 TAGLINE: Final = 'Cyber Threat Intelligence Platform'
 #: The side menu, in the order of an analyst's day: (name, label).
 SECTIONS: Final = (
-    ('today', 'Today'),
-    ('requirements', 'Requirements'),
+    ('today', 'Intel Brief'),
     ('triage', 'Triage'),
     ('investigate', 'Investigate'),
-    ('cases', 'Products'),
+    ('cases', 'Threat Hunt'),
     ('share', 'Share'),
     ('settings', 'Settings'),
 )
@@ -140,8 +139,6 @@ def register_ui(app: FastAPI, session_factory: SessionFactory) -> None:
                     with ui.tab_panel('today').classes('p-0 flex flex-col gap-6'):
                         build_landscape(ws)
                         build_stats(ws)
-                    with ui.tab_panel('requirements').classes('panel p-4 sm:p-5'):
-                        build_requirements(ws)
                     # Only the open section is in the page, so each has an h1 (axe: page-has-heading-one).
                     with ui.tab_panel('triage').classes('p-0 flex flex-col gap-4'):
                         heading('Triage', 1)
@@ -150,7 +147,7 @@ def register_ui(app: FastAPI, session_factory: SessionFactory) -> None:
                         heading('Investigate', 1)
                         investigate = _investigate(ws)
                     with ui.tab_panel('cases').classes('panel p-4 sm:p-5'):
-                        build_cases(ws)
+                        build_threat_hunt(ws)
                     with ui.tab_panel('share').classes('panel p-4 sm:p-5'):
                         build_share(ws)
                     with ui.tab_panel('settings').classes('p-0 flex flex-col gap-6'):
@@ -161,9 +158,18 @@ def register_ui(app: FastAPI, session_factory: SessionFactory) -> None:
                             build_source_ratings(ws)
                         with ui.column().classes('panel w-full p-4 sm:p-5'):
                             build_watch_terms(ws)
+                        with (
+                            ui.expansion('Intelligence questions (advanced)', icon='help_outline')
+                            .classes('panel w-full')
+                            .mark('advanced-requirements') as questions
+                        ):
+                            build_requirements(ws, embedded=True)
 
         def show_section(name: str, tab: str | None = None) -> None:
-            menu.set_value(name)
+            # Existing question and gap links keep working without a main-menu tab.
+            menu.set_value('settings' if name == 'requirements' else name)
+            if name == 'requirements':
+                questions.open()
             if tab:
                 investigate.set_value(tab)
 
@@ -172,7 +178,7 @@ def register_ui(app: FastAPI, session_factory: SessionFactory) -> None:
             ws.find_entity(value)
 
         ws.show_section = show_section
-        open_requirement = ws.show_requirement  # The Requirements section's dialog.
+        open_requirement = ws.show_requirement  # The advanced questions section's dialog.
 
         def show_requirement(requirement_id: str) -> None:
             show_section('requirements')
