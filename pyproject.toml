@@ -46,6 +46,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    # Independent TAXII 2.1 reader for the offline server interoperability check (ADR 0026).
+    "taxii2-client==2.3.0",
     "pytest>=8,<10",
     "pytest-asyncio>=1.0",
     "pytest-cov>=6",
@@ -174,7 +176,7 @@ enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["defusedxml.*", "playwright.*", "jsonschema.*", "stix2validator.*", "yaml", "yaml.*"]
+module = ["defusedxml.*", "playwright.*", "jsonschema.*", "stix2validator.*", "taxii2client.*", "yaml", "yaml.*"]
 ignore_missing_imports = true
 
 # --------------------------------------------------------------------------- mutation testing (nightly)
@@ -184,6 +186,7 @@ ignore_missing_imports = true
 source_paths = ["src/insight/extraction.py", "src/insight/connectors.py", "src/insight/services/"]
 also_copy = [
     "src/insight", "scripts", "benchmarks", "docs", ".github", "CHANGELOG.md", "Dockerfile",
+    "compose.yaml", ".env.example",  # checked together by the alert settings test
     "requirements.lock", "requirements-dev.lock", "requirements-e2e.lock", "requirements-build.lock",
 ]
 pytest_add_cli_args_test_selection = ["tests/unit", "tests/api"]

@@ -106,7 +106,7 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
 
 ### Also required for 1.0: an intelligence program (Andrew, 2026-11-22)
 
-1.0 ships only when these five are done. Insight owns the intelligence cycle and feeds hunt and response
+1.0 ships when all eight items below are complete. Insight owns the intelligence cycle and feeds hunt and response
 tools over TAXII and STIX; sightings and requests for information come back
 ([plan](docs/ROADMAP-TIP.md#phase-4--an-intelligence-program-planned-22-november-2026)).
 

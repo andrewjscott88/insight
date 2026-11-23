@@ -7,7 +7,9 @@ details are dropped and results never become indicators by themselves. See
 
 A single-operator threat-intelligence workbench, run locally or published behind a TLS reverse proxy. Application logic and the interactive GUI are authored in **Python**, using **NiceGUI + FastAPI + SQLAlchemy**. NiceGUI supplies the underlying browser assets; no separate React/Node build is required.
 
-**Version 0.9.0: a single-operator pilot release, not a production multi-user TIP.** Nothing is deployed or connected automatically. Operating it: [docs/RUNBOOK.md](docs/RUNBOOK.md). Scripting against it: [docs/API_GUIDE.md](docs/API_GUIDE.md) (every call, with `curl`). All documentation: [docs/README.md](docs/README.md).
+**Version 1.0.0 supports a single operator.** You choose where to deploy it and which sources to connect.
+For setup, backups and upgrades, see the [operator runbook](docs/RUNBOOK.md). For scripts, see the
+[API guide with `curl` examples](docs/API_GUIDE.md). Browse the [documentation index](docs/README.md).
 
 ## What works
 

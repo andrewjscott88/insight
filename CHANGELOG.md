@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.0.0 - 2026-11-23
 
 ### Poll a TAXII 2.1 collection (TIP 4.5, part 2)
 
