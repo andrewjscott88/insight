@@ -508,32 +508,51 @@ curl -fsS -X POST "$INSIGHT_URL/api/hunt-packages/$PKG_ID/retire" -H "Authorizat
 curl -fsS -X DELETE "$INSIGHT_URL/api/hunt-packages/$PKG_ID" -H "Authorization: Bearer $INSIGHT_API_KEY"
 ```
 
-### Cases
+### Products (cases)
 
-One investigation's reports, indicators, actors, campaigns and notes ([ADR 0029](adr/0029-cases.md)). A case
-takes the strictest label of what it holds and keeps it when items are removed. A closed case answers `409`
-to changes until it is reopened.
+The workspace calls a case a product: an intelligence product in progress, with its evidence and working notes
+([ADR 0029](adr/0029-cases.md), [ADR 0036](adr/0036-intelligence-products.md)). It takes the strictest label of
+what it holds and keeps it when items are removed. An archived (closed) case answers `409` to changes until it
+is reopened.
 
 ```bash
-# Open a case, add a report and an indicator, and note what you asked for
+# Start a product and add its evidence: a report and an indicator; note what you asked for
 CASE_ID=$(curl -fsS -X POST "$INSIGHT_URL/api/cases" -H "Authorization: Bearer $INSIGHT_API_KEY" \
-  -H 'Content-Type: application/json' -d '{"title": "Gateway intrusion", "tlp": "GREEN"}' | jq -r .id)
-curl -fsS -X POST "$INSIGHT_URL/api/cases/$CASE_ID/items" -H "Authorization: Bearer $INSIGHT_API_KEY" \
-  -H 'Content-Type: application/json' -d "{\"kind\": \"document\", \"target_id\": \"$DOC_ID\"}"
+  -H 'Content-Type: application/json' -d '{"title": "Edge appliance exploitation", "tlp": "GREEN",
+  "product_type": "assessment", "audience": "CISO and SOC leads"}' | jq -r .id)
+REPORT_ITEM=$(curl -fsS -X POST "$INSIGHT_URL/api/cases/$CASE_ID/items" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d "{\"kind\": \"document\", \"target_id\": \"$DOC_ID\"}" | jq -r .id)
 ITEM_ID=$(curl -fsS -X POST "$INSIGHT_URL/api/cases/$CASE_ID/items" -H "Authorization: Bearer $INSIGHT_API_KEY" \
   -H 'Content-Type: application/json' -d "{\"kind\": \"indicator\", \"target_id\": \"$ENTITY_ID\"}" | jq -r .id)
 curl -fsS -X POST "$INSIGHT_URL/api/cases/$CASE_ID/notes" -H "Authorization: Bearer $INSIGHT_API_KEY" \
   -H 'Content-Type: application/json' -d '{"text": "Asked the network team for firewall logs."}'
-# Open cases, one case with its items, and what happened to it
-curl -fsS "$INSIGHT_URL/api/cases?status=open" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq '.cases[] | {id, title, tlp, items}'
-curl -fsS "$INSIGHT_URL/api/cases/$CASE_ID" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq '.items[] | {kind, name, tlp}'
-curl -fsS "$INSIGHT_URL/api/cases/$CASE_ID/timeline" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq -r '.events[] | "\(.at)\t\(.action)\t\(.actor)"'
-# Change the summary, remove an item (the label stays), close with a note, reopen, delete
+# Write the product: the bottom line, the analysis, a key judgement with its evidence, and a gap
 curl -fsS -X PATCH "$INSIGHT_URL/api/cases/$CASE_ID" -H "Authorization: Bearer $INSIGHT_API_KEY" \
-  -H 'Content-Type: application/json' -d '{"summary": "Edge appliance compromise."}'
+  -H 'Content-Type: application/json' -d '{"bluf": "Expect more edge appliance exploitation this quarter.",
+  "summary": "Two crews exploited the same gateway flaw in November."}'
+JUDGEMENT_ID=$(curl -fsS -X POST "$INSIGHT_URL/api/cases/$CASE_ID/judgements" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d "{\"statement\": \"The crews will keep exploiting edge appliances.\",
+  \"likelihood\": \"very-likely\", \"confidence\": \"moderate\", \"evidence\": [\"$REPORT_ITEM\", \"$ITEM_ID\"]}" | jq -r .id)
+curl -fsS -X PATCH "$INSIGHT_URL/api/cases/$CASE_ID/judgements/$JUDGEMENT_ID" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d '{"confidence": "high", "position": 1}'
+GAP_ID=$(curl -fsS -X POST "$INSIGHT_URL/api/cases/$CASE_ID/gaps" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d '{"question": "Which of our gateways are exposed?"}' | jq -r .id)
+curl -fsS -X POST "$INSIGHT_URL/api/cases/$CASE_ID/gaps/$GAP_ID/rfi" -H "Authorization: Bearer $INSIGHT_API_KEY"
+# Publish version 1, read it back, and download it as Markdown and STIX
+curl -fsS -X POST "$INSIGHT_URL/api/cases/$CASE_ID/publish" -H "Authorization: Bearer $INSIGHT_API_KEY"
+curl -fsS "$INSIGHT_URL/api/cases/$CASE_ID/product?version=1" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq '{bluf, judgements}'
+curl -fsS -OJ "$INSIGHT_URL/api/cases/$CASE_ID/export?format=md&version=1" -H "Authorization: Bearer $INSIGHT_API_KEY"
+curl -fsS -OJ "$INSIGHT_URL/api/cases/$CASE_ID/export?format=stix&version=1" -H "Authorization: Bearer $INSIGHT_API_KEY"
+# Products in progress, one with its evidence, judgements and versions, and what happened to it
+curl -fsS "$INSIGHT_URL/api/cases?status=open" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq '.cases[] | {id, title, version}'
+curl -fsS "$INSIGHT_URL/api/cases/$CASE_ID" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq '{items, judgements, versions}'
+curl -fsS "$INSIGHT_URL/api/cases/$CASE_ID/timeline" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq -r '.events[] | "\(.at)\t\(.action)\t\(.actor)"'
+# Remove a judgement, a gap or an item (the label stays), archive with a note, reopen, delete
+curl -fsS -X DELETE "$INSIGHT_URL/api/cases/$CASE_ID/judgements/$JUDGEMENT_ID" -H "Authorization: Bearer $INSIGHT_API_KEY"
+curl -fsS -X DELETE "$INSIGHT_URL/api/cases/$CASE_ID/gaps/$GAP_ID" -H "Authorization: Bearer $INSIGHT_API_KEY"
 curl -fsS -X DELETE "$INSIGHT_URL/api/cases/$CASE_ID/items/$ITEM_ID" -H "Authorization: Bearer $INSIGHT_API_KEY"
 curl -fsS -X POST "$INSIGHT_URL/api/cases/$CASE_ID/close" -H "Authorization: Bearer $INSIGHT_API_KEY" \
-  -H 'Content-Type: application/json' -d '{"note": "Contained; the gateway is patched."}'
+  -H 'Content-Type: application/json' -d '{"note": "Published as version 1; no more collection planned."}'
 curl -fsS -X POST "$INSIGHT_URL/api/cases/$CASE_ID/reopen" -H "Authorization: Bearer $INSIGHT_API_KEY"
 curl -fsS -X DELETE "$INSIGHT_URL/api/cases/$CASE_ID" -H "Authorization: Bearer $INSIGHT_API_KEY"
 ```

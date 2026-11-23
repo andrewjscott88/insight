@@ -1,4 +1,5 @@
-"""One case (TIP 3.8, ADR 0029): what it holds, notes, timeline, and closing or reopening it."""
+"""One product (TIP 3.8 and 4.4, ADR 0029 and 0036): the product itself (bottom line, key judgements,
+analysis, gaps, publishing), its evidence, working notes, timeline, and archiving or reopening it."""
 
 from __future__ import annotations
 
@@ -12,30 +13,43 @@ from pydantic import ValidationError
 from .. import services
 from ..schemas import CaseCloseInput, CaseNoteInput
 from .messages import problem_area, tell
+from .product_publish import render_publish
+from .product_sections import KINDS, render_analysis, render_bottom_line, render_gaps, render_judgements
 from .theme import tlp_badge
 from .typography import heading
 from .workspace import Workspace
 
-KINDS: Final = {'document': 'Report', 'indicator': 'Indicator', 'actor': 'Actor', 'campaign': 'Campaign'}
 EVENTS: Final = {
-    'case.open': 'Opened',
-    'case.update': 'Changed the title, summary or label',
+    'case.open': 'Started',
+    'case.update': 'Changed the text, kind or label',
     'case.item.add': 'Added',
     'case.item.remove': 'Removed',
     'case.note': 'Added a note',
-    'case.close': 'Closed',
+    'case.judgement.add': 'Added a key judgement',
+    'case.judgement.update': 'Changed a key judgement',
+    'case.judgement.remove': 'Removed a key judgement',
+    'case.gap.add': 'Added a gap',
+    'case.gap.remove': 'Removed a gap',
+    'case.gap.rfi': 'Asked a gap as a request',
+    'case.publish': 'Published',
+    'case.export': 'Downloaded',
+    'case.close': 'Archived',
     'case.reopen': 'Reopened',
 }
 
 
 def _event_text(action: str, detail: str) -> str:
     words = EVENTS.get(action, action)
+    try:
+        facts = json.loads(detail)
+    except ValueError:
+        facts = {}
+    if not isinstance(facts, dict):
+        facts = {}
     if action in ('case.item.add', 'case.item.remove'):
-        try:
-            kind = json.loads(detail).get('kind', '')
-        except (ValueError, AttributeError):
-            kind = ''
-        words = f'{words} a {KINDS.get(kind, "item").lower()}'
+        words = f'{words} a {KINDS.get(facts.get("kind", ""), "item").lower()}'
+    if action == 'case.publish' and facts.get('version'):
+        words = f'{words} version {facts["version"]}'
     return words
 
 
@@ -43,7 +57,7 @@ def open_case_dialog(ws: Workspace, case_id: str, *, changed: Callable[[], Any])
     if not ws.authorized():
         return
     limit = ws.app.state.settings.max_tlp
-    with ui.dialog().props('aria-label="Case"') as dialog, ui.card().classes('dialog-card w-full'):
+    with ui.dialog().props('aria-label="Product"') as dialog, ui.card().classes('dialog-card w-full'):
 
         def write(action: Callable[[Any], object], done: str) -> None:
             if not ws.authorized():
@@ -51,12 +65,13 @@ def open_case_dialog(ws: Workspace, case_id: str, *, changed: Callable[[], Any])
             try:
                 with ws.write() as db:
                     action(db)
-            except services.CaseClosed as exc:
+            except (services.CaseClosed, services.ProductIncomplete) as exc:
                 error.set_text(str(exc))
                 return
             except (ValidationError, ValueError, LookupError):
-                error.set_text('That could not be saved. Check the text and its sharing label.')
+                error.set_text('That could not be saved. Check the text, the evidence and the sharing label.')
                 return
+            error.set_text('')
             body.refresh()
             changed()
             tell(done, 'success')
@@ -76,22 +91,28 @@ def open_case_dialog(ws: Workspace, case_id: str, *, changed: Callable[[], Any])
             try:
                 with ws.read() as db:
                     view = services.get_case(db, case_id, max_tlp=limit)
+                    parts = services.product_parts(db, case_id, max_tlp=limit)
                     events = services.case_timeline(db, case_id, max_tlp=limit)
             except LookupError:
-                ui.label('This case no longer exists.').classes('muted')
+                ui.label('This product no longer exists.').classes('muted')
                 return
             is_open = view.status == 'open'
             heading(view.title, 2)
             with ui.row().classes('items-center gap-2'):
                 tlp_badge(view.tlp)
-                ui.label('Open' if is_open else f'Closed {(view.closed_at or "")[:10]}').classes('muted')
-            if view.summary:
-                ui.label(view.summary).classes('prose break-value')
+                ui.label('In progress' if is_open else f'Archived {(view.closed_at or "")[:10]}').classes(
+                    'muted'
+                )
+            render_bottom_line(view, write, limit, is_open)
+            render_judgements(view, parts, write, limit, is_open)
+            render_analysis(view, write, limit, is_open)
+            render_gaps(view, parts, write, limit, is_open)
+            render_publish(view, parts, write, limit, is_open)
 
-            heading('In this case', 3)
+            heading('Evidence', 3)
             things = [i for i in view.items if i.kind != 'note']
             if not things:
-                ui.label('Nothing yet. Use "Add to case" on a report or an indicator.').classes('muted')
+                ui.label('Nothing yet. Use "Add to product" on a report or an indicator.').classes('muted')
             for item in things:
                 with ui.row().classes('items-center gap-2 w-full').mark(f'case-item-{item.target_id}'):
                     ui.label(f'{KINDS[item.kind]} · {item.name or item.target_id}').classes('break-value')
@@ -105,11 +126,14 @@ def open_case_dialog(ws: Workspace, case_id: str, *, changed: Callable[[], Any])
                             'Remove',
                             on_click=lambda i=item: write(
                                 lambda db: services.remove_case_item(db, case_id, i.id, max_tlp=limit),
-                                'Removed from the case. The case keeps its label.',
+                                'Removed from the product. It keeps its label.',
                             ),
                         ).props('flat dense no-caps')
 
-            heading('Notes', 3)
+            heading('Working notes', 3)
+            ui.label('Notes stay in Insight. They are never part of a published product.').classes(
+                'muted prose'
+            )
             for note in (i for i in view.items if i.kind == 'note'):
                 with ui.column().classes('gap-0'):
                     ui.label(note.note).classes('prose break-value')
@@ -136,28 +160,28 @@ def open_case_dialog(ws: Workspace, case_id: str, *, changed: Callable[[], Any])
                         'text-sm'
                     )
 
-            heading('Close or reopen', 3)
+            heading('Archive or reopen', 3)
             if is_open:
                 outcome = (
-                    ui.textarea('What did you find or decide?')
+                    ui.textarea('Why is the work finished?')
                     .props('outlined maxlength=10000')
                     .mark('case-close-note')
                 )
                 ui.button(
-                    'Close case',
+                    'Archive',
                     on_click=lambda: write(
                         lambda db: services.close_case(
                             db, case_id, CaseCloseInput(note=outcome.value or ''), max_tlp=limit
                         ),
-                        'Case closed.',
+                        'Archived.',
                     ),
-                ).mark('case-close')
+                ).props('outline').mark('case-close')
             else:
                 ui.label(view.close_note).classes('prose break-value')
                 ui.button(
-                    'Reopen case',
+                    'Reopen',
                     on_click=lambda: write(
-                        lambda db: services.reopen_case(db, case_id, max_tlp=limit), 'Case reopened.'
+                        lambda db: services.reopen_case(db, case_id, max_tlp=limit), 'Reopened.'
                     ),
                 ).props('outline').mark('case-reopen')
 
@@ -172,17 +196,21 @@ def open_case_dialog(ws: Workspace, case_id: str, *, changed: Callable[[], Any])
             confirm.close()
             dialog.close()
             changed()
-            tell('Case deleted. Its reports, indicators, actors and campaigns stay.', 'success')
+            tell('Product deleted. What it held stays in Insight.', 'success')
 
-        with ui.dialog().props('aria-label="Delete case"') as confirm, ui.card().classes('dialog-card'):
-            ui.label('Delete this case and its notes? Its reports and indicators stay.').classes('prose')
+        with ui.dialog().props('aria-label="Delete product"') as confirm, ui.card().classes('dialog-card'):
+            ui.label(
+                'Delete this product, its versions and its notes? Its reports and indicators stay.'
+            ).classes('prose')
             with ui.row():
-                ui.button('Delete case', on_click=delete).props('color=negative').mark('case-delete-confirm')
+                ui.button('Delete product', on_click=delete).props('color=negative').mark(
+                    'case-delete-confirm'
+                )
                 ui.button('Keep it', on_click=confirm.close).props('flat')
 
         body()
         error = problem_area()
         with ui.row():
             ui.button('Done', on_click=dialog.close)
-            ui.button('Delete case…', on_click=confirm.open).props('flat no-caps').mark('case-delete')
+            ui.button('Delete product…', on_click=confirm.open).props('flat no-caps').mark('case-delete')
     dialog.open()

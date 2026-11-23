@@ -34,15 +34,18 @@ from insight.schemas import (
     CaseInput,
     CaseItemInput,
     CaseNoteInput,
+    CaseUpdate,
     CredibilityInput,
     CriterionInput,
     DocumentInput,
     EvidenceInput,
+    GapInput,
     HuntCheckInput,
     HuntInput,
     HuntPackageInput,
     HuntPackageItemInput,
     IndustryClaimInput,
+    JudgementInput,
     RequirementInput,
     RfiInput,
     RuleInput,
@@ -161,8 +164,24 @@ def build(path: Path) -> None:
             # 0.9.0: a case (TIP 3.8) holding the IR paste and the beacon, with a note
             case = services.create_case(db, CaseInput(title='Fixture case', tlp='AMBER'))
             services.add_case_item(db, case.id, CaseItemInput(kind='document', target_id=manual.id))
-            services.add_case_item(db, case.id, CaseItemInput(kind='indicator', target_id=beacon.id))
+            beacon_item = services.add_case_item(
+                db, case.id, CaseItemInput(kind='indicator', target_id=beacon.id)
+            )
             services.add_case_note(db, case.id, CaseNoteInput(text='Waiting for proxy logs.'))
+            # 1.0: the case as a published product (TIP 4.4): a bottom line, a key judgement and a gap
+            services.update_case(db, case.id, CaseUpdate(bluf='The beacon is live command and control.'))
+            services.add_judgement(
+                db,
+                case.id,
+                JudgementInput(
+                    statement='The beacon address is attacker infrastructure.',
+                    likelihood='very-likely',
+                    confidence='moderate',
+                    evidence=[beacon_item.id],
+                ),
+            )
+            services.add_gap(db, case.id, GapInput(question='Which hosts contacted the beacon?'))
+            services.publish_product(db, case.id)
             # 1.0: a PIR (TIP 4.1) with a criterion and a cited report, and an RFI from a hunt tool
             pir = services.create_requirement(
                 db,

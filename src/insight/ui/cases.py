@@ -1,6 +1,7 @@
-"""The Cases tab (TIP 3.8, ADR 0029): open an investigation, collect what belongs to it, close it with a note.
+"""Products (TIP 3.8 and 4.4, ADR 0029 and 0036): start an intelligence product, collect its evidence,
+write and publish it, and archive it when the work is done.
 
-"Add to case" in the reader and the entity explorer opens :func:`open_add_to_case`.
+"Add to product" in the reader and the indicator explorer opens :func:`open_add_to_case`.
 """
 
 from __future__ import annotations
@@ -16,20 +17,25 @@ from ..schemas import CaseInput, CaseItemInput, CaseItemKind, CaseStatusFilter
 from .actors import _labels
 from .case_detail import open_case_dialog
 from .messages import problem_area, tell
+from .product_sections import PRODUCT_TYPES
 from .theme import tlp_badge
 from .typography import heading
 from .workspace import Workspace
 
 STATUSES: Final[dict[CaseStatusFilter, str]] = {
-    'open': 'Open cases',
-    'closed': 'Closed cases',
-    'all': 'All cases',
+    'open': 'In progress',
+    'closed': 'Archived',
+    'all': 'All products',
 }
 NEW: Final = '__new__'
 
 
-def _create(ws: Workspace, title: str, summary: str, label: str) -> str:
-    item = CaseInput.model_validate({'title': title, 'summary': summary, 'tlp': label})
+def _create(
+    ws: Workspace, title: str, summary: str, label: str, kind: str = 'assessment', audience: str = ''
+) -> str:
+    item = CaseInput.model_validate(
+        {'title': title, 'summary': summary, 'tlp': label, 'product_type': kind, 'audience': audience}
+    )
     with ws.write() as db:
         return services.create_case(db, item, max_tlp=ws.app.state.settings.max_tlp).id
 
@@ -38,10 +44,11 @@ def _new_case(ws: Workspace, saved: Callable[[str], object]) -> None:
     if not ws.authorized():
         return
     labels, start = _labels(ws)
-    with ui.dialog().props('aria-label="Open a case"') as dialog, ui.card().classes('dialog-card w-full'):
-        heading('Open a case', 2)
-        title = ui.input('What are you looking into?').props('outlined maxlength=200').mark('case-title')
-        summary = ui.textarea('Summary (optional)').props('outlined maxlength=10000')
+    with ui.dialog().props('aria-label="Start a product"') as dialog, ui.card().classes('dialog-card w-full'):
+        heading('Start a product', 2)
+        title = ui.input('What is it about?').props('outlined maxlength=200').mark('case-title')
+        kind = ui.select(PRODUCT_TYPES, value='assessment', label='Kind of product').props('outlined')
+        audience = ui.input('Who is it for? (optional)').props('outlined maxlength=200')
         label = ui.select(labels, value=start, label='Sharing label').props('outlined')
         error = problem_area()
 
@@ -49,16 +56,19 @@ def _new_case(ws: Workspace, saved: Callable[[str], object]) -> None:
             if not ws.authorized():
                 return
             try:
-                case_id = _create(ws, title.value or '', summary.value or '', label.value)
+                case_id = _create(ws, title.value or '', '', label.value, kind.value, audience.value or '')
             except (ValidationError, ValueError):
-                error.set_text('Give the case a title, and a sharing label this server allows.')
+                error.set_text('Give the product a title, and a sharing label this server allows.')
                 return
             dialog.close()
             saved(case_id)
-            tell('Case opened. Add reports and indicators from the reader or the entity explorer.', 'success')
+            tell(
+                'Product started. Add reports and indicators to it from the reader or the explorer.',
+                'success',
+            )
 
         with ui.row():
-            ui.button('Open case', on_click=save).mark('case-save')
+            ui.button('Start', on_click=save).mark('case-save')
             ui.button('Cancel', on_click=dialog.close).props('flat')
     dialog.open()
 
@@ -90,7 +100,7 @@ def build_cases(ws: Workspace) -> None:
                 db, max_tlp=ws.app.state.settings.max_tlp, status=status['value'], limit=200
             )
         if not found:
-            ui.label('No cases here yet.').classes('muted p-2')
+            ui.label('No products here yet.').classes('muted p-2')
             return
         for case in found:
             with ui.column().classes('panel w-full p-3 gap-1 min-w-0').mark(f'case-{case.id}'):
@@ -100,17 +110,23 @@ def build_cases(ws: Workspace) -> None:
                     ).classes('font-semibold break-value text-left')
                     tlp_badge(case.tlp)
                     if case.status == 'closed':
-                        ui.badge('Closed').props('outline')
+                        ui.badge('Archived').props('outline')
                 items = 'item' if case.items == 1 else 'items'
-                ui.label(f'{case.items} {items} · changed {case.updated_at[:10]}').classes('muted text-sm')
+                published = f'version {case.version}' if case.version else 'not published'
+                kind = PRODUCT_TYPES[case.product_type].split(':')[0]
+                changed = case.updated_at[:10]
+                ui.label(
+                    f'{kind} · {published} · {case.items} {items} of evidence · changed {changed}'
+                ).classes('muted text-sm')
 
-    heading('Cases', 1)
+    heading('Products', 1)
     ui.label(
-        'A case groups the reports, indicators, actors and campaigns of one investigation, with your notes. '
-        'Its label is the strictest of what it holds. Close it with a note when you are done.'
+        'A product answers a question for its readers: the bottom line first, then key judgements with how '
+        'likely and how sure you are, the evidence behind them, and what you could not find out. Its label '
+        'is the strictest of what it holds. Publish a version when it is ready.'
     ).classes('muted prose')
     with ui.row().classes('items-center gap-4'):
-        ui.button('＋ Open a case', on_click=lambda: _new_case(ws, created)).mark('case-new')
+        ui.button('＋ Start a product', on_click=lambda: _new_case(ws, created)).mark('case-new')
         ui.select(STATUSES, value='open', label='Show', on_change=lambda e: choose(e.value)).props(
             'outlined dense'
         ).classes('min-w-40').mark('case-status')
@@ -126,16 +142,16 @@ def open_add_to_case(ws: Workspace, kind: CaseItemKind, target_id: str, name: st
     limit = ws.app.state.settings.max_tlp
     with ws.read() as db:
         found = services.list_cases(db, max_tlp=limit, status='open', limit=200)
-    choices = {c.id: f'{c.title} · TLP:{c.tlp}' for c in found} | {NEW: 'A new case…'}
+    choices = {c.id: f'{c.title} · TLP:{c.tlp}' for c in found} | {NEW: 'A new product…'}
     labels, start = _labels(ws)
-    with ui.dialog().props('aria-label="Add to case"') as dialog, ui.card().classes('dialog-card w-full'):
-        heading('Add to case', 2)
+    with ui.dialog().props('aria-label="Add to product"') as dialog, ui.card().classes('dialog-card w-full'):
+        heading('Add to product', 2)
         ui.label(name).classes('break-value')
         target = (
-            ui.select(choices, value=next(iter(choices)), label='Case').props('outlined').mark('case-pick')
+            ui.select(choices, value=next(iter(choices)), label='Product').props('outlined').mark('case-pick')
         )
-        title = ui.input('New case title').props('outlined maxlength=200').mark('case-new-title')
-        label = ui.select(labels, value=start, label='New case sharing label').props('outlined')
+        title = ui.input('New product title').props('outlined maxlength=200').mark('case-new-title')
+        label = ui.select(labels, value=start, label='New product sharing label').props('outlined')
         title.bind_visibility_from(target, 'value', value=NEW)
         label.bind_visibility_from(target, 'value', value=NEW)
         error = problem_area()
@@ -152,12 +168,12 @@ def open_add_to_case(ws: Workspace, kind: CaseItemKind, target_id: str, name: st
                     services.add_case_item(db, case_id, item, max_tlp=limit)
             except (ValidationError, ValueError, LookupError) as exc:
                 error.set_text(
-                    str(exc) if isinstance(exc, services.CaseClosed) else 'Choose a case or give a title.'
+                    str(exc) if isinstance(exc, services.CaseClosed) else 'Choose a product or give a title.'
                 )
                 return
             dialog.close()
             ws.refresh_all()
-            tell(f'Added this {kind_label(kind)} to the case.', 'success')
+            tell(f'Added this {kind_label(kind)} to the product.', 'success')
 
         with ui.row():
             ui.button('Add', on_click=add).mark('case-add')

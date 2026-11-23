@@ -282,22 +282,90 @@ CaseItemKind = Literal['document', 'indicator', 'actor', 'campaign']
 CaseStatusFilter = Literal['open', 'closed', 'all']
 
 
+ProductType = Literal['assessment', 'alert', 'profile', 'summary']
+#: ICD 203's expressions of likelihood, least to most likely (TIP 4.4, ADR 0036).
+Likelihood = Literal[
+    'almost-no-chance', 'very-unlikely', 'unlikely', 'roughly-even-chance', 'likely', 'very-likely',
+    'almost-certain',
+]  # fmt: skip
+AnalyticConfidence = Literal['low', 'moderate', 'high']
+ProductExportFormat = Literal['md', 'stix']
+MAX_ANALYSIS = 30_000
+
+
 class CaseInput(BaseModel):
-    """``POST /api/cases``: open an investigation (TIP 3.8). TLP markings in the text raise the label."""
+    """``POST /api/cases``: start an intelligence product (TIP 3.8, 4.4). TLP markings in the text raise the
+    label. ``summary`` is the product's analysis; ``bluf`` its bottom line up front."""
 
     model_config = ConfigDict(frozen=True, extra='forbid')
     title: str = Field(min_length=1, max_length=200)
-    summary: str = Field(default='', max_length=10_000)
+    summary: str = Field(default='', max_length=MAX_ANALYSIS)
     tlp: TLP = DEFAULT_TLP
+    product_type: ProductType = 'assessment'
+    audience: str = Field(default='', max_length=200)
+    bluf: str = Field(default='', max_length=2_000)
 
 
 class CaseUpdate(BaseModel):
-    """``PATCH /api/cases/{id}``: change what is given. A lower ``tlp`` never goes below the items' labels."""
+    """``PATCH /api/cases/{id}``: change what is given. A lower ``tlp`` never goes below the labels of the
+    items, judgements and gaps, or the markings in the text."""
 
     model_config = ConfigDict(frozen=True, extra='forbid')
     title: str | None = Field(default=None, min_length=1, max_length=200)
-    summary: str | None = Field(default=None, max_length=10_000)
+    summary: str | None = Field(default=None, max_length=MAX_ANALYSIS)
     tlp: TLP | None = None
+    product_type: ProductType | None = None
+    audience: str | None = Field(default=None, max_length=200)
+    bluf: str | None = Field(default=None, max_length=2_000)
+
+
+class JudgementInput(BaseModel):
+    """``POST /api/cases/{id}/judgements``: a key judgement in ICD 203's estimative language, with the items
+    of the product that support it. Labelled like the product unless ``tlp`` says otherwise; TLP markings in
+    the statement raise it."""
+
+    model_config = ConfigDict(frozen=True, extra='forbid')
+    statement: str = Field(min_length=1, max_length=1_000)
+    likelihood: Likelihood
+    confidence: AnalyticConfidence
+    evidence: list[DocumentId] = Field(default_factory=list, max_length=50)
+    tlp: TLP | None = None
+
+    @field_validator('statement')
+    @classmethod
+    def not_blank(cls, value: str) -> str:
+        return _not_blank(value)
+
+
+class JudgementUpdate(BaseModel):
+    """``PATCH /api/cases/{id}/judgements/{judgement_id}``: change what is given; ``evidence`` replaces the
+    list; ``position`` moves it (1 is first)."""
+
+    model_config = ConfigDict(frozen=True, extra='forbid')
+    statement: str | None = Field(default=None, min_length=1, max_length=1_000)
+    likelihood: Likelihood | None = None
+    confidence: AnalyticConfidence | None = None
+    evidence: list[DocumentId] | None = Field(default=None, max_length=50)
+    position: int | None = Field(default=None, ge=1, le=1_000)
+
+    @field_validator('statement')
+    @classmethod
+    def not_blank(cls, value: str | None) -> str | None:
+        return None if value is None else _not_blank(value)
+
+
+class GapInput(BaseModel):
+    """``POST /api/cases/{id}/gaps``: a question the product cannot answer yet. Labelled like the product
+    unless ``tlp`` says otherwise; TLP markings in the question raise it."""
+
+    model_config = ConfigDict(frozen=True, extra='forbid')
+    question: str = Field(min_length=5, max_length=300)
+    tlp: TLP | None = None
+
+    @field_validator('question')
+    @classmethod
+    def not_blank(cls, value: str) -> str:
+        return _not_blank(value)
 
 
 class CaseItemInput(BaseModel):
