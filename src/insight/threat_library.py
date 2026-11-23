@@ -1,11 +1,12 @@
-"""The threat-group library: MITRE ATT&CK groups with sourced industry claims (TIP 2.10, ADR 0025).
+"""The threat library: ATT&CK groups/software and sourced MISP aliases/claims (ADR 0025, ADR 0038).
 
-Two editions, one format (``insight.threat_library_build``):
+Two editions, versioned format (``insight.threat_library_build``; format 1 is still readable):
 
 * **bundled**: ``data/actors.json``, shipped with Insight and regenerated with ``scripts/update_actors.py``.
   Every current ATT&CK group, its aliases, techniques, software, campaigns and industry claims, and for each
   technique its ATT&CK mitigations and detection strategies (data components, log sources). Descriptions are
   shortened and ATT&CK analytics and procedure examples are left out, to keep the repository small.
+  Every current malware/tool is included, even without a group; aliases retain their catalog provenance.
 * **full**: ``<INSIGHT_DATA_DIR>/threat-library.json``, written by ``insight threat-library-sync`` from the
   same pinned releases (``insight.threat_library_sync``). Adds whole descriptions, procedure examples, ATT&CK
   analytics and every reference. Used instead of the bundled edition when present and valid.
@@ -30,7 +31,8 @@ from .industries import BY_KEY
 
 log = logging.getLogger('insight.threat_library')
 
-FORMAT: Final = 'insight-threat-library-1'
+FORMAT: Final = 'insight-threat-library-2'
+LEGACY_FORMAT: Final = 'insight-threat-library-1'
 SYNCED_NAME: Final = 'threat-library.json'
 
 
@@ -76,6 +78,18 @@ class Campaign:
 
 
 @dataclass(frozen=True, slots=True)
+class AliasSource:
+    """The catalog that supplies an alias; MISP also records its entry and the exact ATT&CK name match."""
+
+    name: str
+    source: str
+    url: str
+    entry: str = ''
+    entry_id: str = ''
+    matched_name: str = ''
+
+
+@dataclass(frozen=True, slots=True)
 class Group:
     id: str
     name: str
@@ -90,6 +104,7 @@ class Group:
     campaigns: tuple[Campaign, ...]
     references: tuple[Citation, ...]
     procedures: dict[str, str] = field(default_factory=dict)
+    alias_sources: tuple[AliasSource, ...] = ()
 
     @property
     def names(self) -> tuple[str, ...]:
@@ -145,6 +160,15 @@ class Software:
     id: str
     name: str
     type: str  # 'malware' or 'tool'
+    aliases: tuple[str, ...] = ()
+    description: str = ''
+    platforms: tuple[str, ...] = ()
+    techniques: tuple[str, ...] = ()
+    groups: tuple[str, ...] = ()
+
+    @property
+    def names(self) -> tuple[str, ...]:
+        return (self.name, *self.aliases)
 
     @property
     def url(self) -> str:
@@ -198,10 +222,52 @@ def _claims(raw: list[dict[str, Any]], url: str, misp_url: str) -> tuple[Claim, 
     )
 
 
+def _alias_sources(group: dict[str, Any], misp_url: str, legacy: bool) -> tuple[AliasSource, ...]:
+    if legacy:
+        sources = {name: [{'source': 'attack'}] for name in group.get('aliases', [])}
+    else:
+        references = group['alias_references']
+        sources = {}
+        for name, indices in group['alias_sources'].items():
+            if any(type(index) is not int or not 0 <= index < len(references) for index in indices):
+                raise ValueError('Invalid alias source reference')
+            sources[name] = [references[index] for index in indices]
+    return tuple(
+        AliasSource(
+            name=name,
+            source=source['source'],
+            url=group.get('url', '') if source['source'] == 'attack' else misp_url,
+            entry=source.get('entry', ''),
+            entry_id=source.get('entry_id', ''),
+            matched_name=source.get('matched_name', ''),
+        )
+        for name, evidence in sources.items()
+        for source in evidence
+    )
+
+
+def _software(software_id: str, raw: dict[str, Any], legacy: bool) -> Software:
+    if raw['type'] not in ('malware', 'tool'):
+        raise ValueError('Library software must be malware or tool')
+    if legacy:
+        return Software(software_id, raw['name'], raw['type'])
+    return Software(
+        id=software_id,
+        name=raw['name'],
+        type=raw['type'],
+        aliases=tuple(raw['aliases']),
+        description=raw['description'],
+        platforms=tuple(raw['platforms']),
+        techniques=tuple(raw['techniques']),
+        groups=tuple(raw['groups']),
+    )
+
+
 def parse(raw: dict[str, Any], path: str) -> Library:
     """A :class:`Library` from the JSON of either edition (``ValueError`` for anything else)."""
-    if raw.get('format') != FORMAT:
+    if raw.get('format') not in (FORMAT, LEGACY_FORMAT):
         raise ValueError(f'Not an Insight threat library ({FORMAT})')
+    legacy = raw['format'] == LEGACY_FORMAT
     misp_url = raw['sources'].get('misp-galaxy', {}).get('url', 'https://github.com/MISP/misp-galaxy')
     groups = {}
     for g in raw['groups']:
@@ -220,6 +286,7 @@ def parse(raw: dict[str, Any], path: str) -> Library:
             campaigns=tuple(Campaign(**c) for c in g.get('campaigns', [])),
             references=tuple(Citation(r['name'], r['url']) for r in g.get('references', [])),
             procedures=dict(g.get('procedures', {})),
+            alias_sources=_alias_sources(g, misp_url, legacy),
         )
     techniques = {
         tid: TechniqueContext(
@@ -253,7 +320,7 @@ def parse(raw: dict[str, Any], path: str) -> Library:
         groups=groups,
         techniques=techniques,
         mitigations=dict(raw.get('mitigations', {})),
-        software={sid: Software(sid, s['name'], s['type']) for sid, s in raw.get('software', {}).items()},
+        software={sid: _software(sid, s, legacy) for sid, s in raw.get('software', {}).items()},
         data_components=dict(raw.get('data_components', {})),
         path=path,
     )

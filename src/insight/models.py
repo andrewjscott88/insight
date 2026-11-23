@@ -502,6 +502,23 @@ class ActorDocument(Base):
     actor: Mapped[str] = mapped_column(String(80), default='')
 
 
+class SoftwareDocument(Base):
+    """An explicit software/report association; snapshots preserve retired catalog links."""
+
+    __tablename__ = 'software_documents'
+    __table_args__ = (UniqueConstraint('software_id', 'document_id'),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    software_id: Mapped[str] = mapped_column(String(16), index=True)
+    software_name: Mapped[str] = mapped_column(Text)
+    software_type: Mapped[str] = mapped_column(String(10))
+    document_id: Mapped[str] = mapped_column(ForeignKey('documents.id', ondelete='CASCADE'), index=True)
+    tlp: Mapped[str] = mapped_column(String(20))
+    note: Mapped[str] = mapped_column(Text, default='')
+    created_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
+    updated_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
+    actor: Mapped[str] = mapped_column(String(80), default='')
+
+
 class Campaign(Base):
     """A campaign an analyst explicitly tracks."""
 
@@ -511,6 +528,21 @@ class Campaign(Base):
     aliases: Mapped[str] = mapped_column(Text, default='')
     description: Mapped[str] = mapped_column(Text, default='')
     tlp: Mapped[str] = mapped_column(String(20), default='AMBER')
+    created_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
+    updated_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
+    actor: Mapped[str] = mapped_column(String(80), default='')
+
+
+class ActorCampaign(Base):
+    """An analyst's explicit group/campaign association, never inferred from shared evidence."""
+
+    __tablename__ = 'actor_campaigns'
+    __table_args__ = (UniqueConstraint('group_ref', 'campaign_id'),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    group_ref: Mapped[str] = mapped_column(String(36), index=True)
+    campaign_id: Mapped[str] = mapped_column(ForeignKey('campaigns.id', ondelete='CASCADE'), index=True)
+    tlp: Mapped[str] = mapped_column(String(20), default='CLEAR')
+    note: Mapped[str] = mapped_column(Text, default='')
     created_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
     actor: Mapped[str] = mapped_column(String(80), default='')
 
@@ -750,15 +782,18 @@ class ThreatLink(Base):
         CheckConstraint(
             '(CASE WHEN document_id IS NULL THEN 0 ELSE 1 END + '
             'CASE WHEN entity_id IS NULL THEN 0 ELSE 1 END + '
-            'CASE WHEN technique_id IS NULL THEN 0 ELSE 1 END) = 1',
+            'CASE WHEN technique_id IS NULL THEN 0 ELSE 1 END + '
+            'CASE WHEN software_id IS NULL THEN 0 ELSE 1 END) = 1',
             name='one_threat_target',
         ),
         CheckConstraint('actor_id IS NULL OR document_id IS NULL', name='existing_actor_reports'),
         UniqueConstraint('actor_id', 'entity_id'),
         UniqueConstraint('actor_id', 'technique_id'),
+        UniqueConstraint('actor_id', 'software_id'),
         UniqueConstraint('campaign_id', 'document_id'),
         UniqueConstraint('campaign_id', 'entity_id'),
         UniqueConstraint('campaign_id', 'technique_id'),
+        UniqueConstraint('campaign_id', 'software_id'),
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     actor_id: Mapped[str | None] = mapped_column(
@@ -772,8 +807,12 @@ class ThreatLink(Base):
     )
     entity_id: Mapped[str | None] = mapped_column(ForeignKey('entities.id', ondelete='CASCADE'), index=True)
     technique_id: Mapped[str | None] = mapped_column(String(16), index=True)
+    software_id: Mapped[str | None] = mapped_column(String(16), index=True)
+    software_name: Mapped[str] = mapped_column(Text, default='', server_default='')
+    software_type: Mapped[str] = mapped_column(String(10), default='', server_default='')
     tlp: Mapped[str] = mapped_column(String(20))
     created_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
+    updated_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
     actor: Mapped[str] = mapped_column(String(80), default='')
 
 

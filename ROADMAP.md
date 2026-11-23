@@ -118,8 +118,15 @@ tools over TAXII and STIX; sightings and requests for information come back
       *Done (unreleased):* [ADR 0034](docs/adr/0034-hunt-packages.md).
 - [x] **TIP 4.4 Finished intelligence products,** replacing incident-style cases: judgements, gaps, versions,
       and PDF, Markdown and STIX exports. *Done (unreleased):* [ADR 0036](docs/adr/0036-intelligence-products.md).
-- [ ] **TIP 4.5–4.8** Operator-defined sources, infrastructure pivots, ATT&CK and MISP-galaxy imports, and a
-      read-only MCP endpoint.
+- [ ] **TIP 4.5** Operator-defined RSS, Atom and TAXII sources.
+- [x] **TIP 4.6 Infrastructure pivots.** Reviewed indicators support approved RDAP, RIPEstat, certificate
+  transparency and credentialed CIRCL passive DNS lookups, with dated graph context. [ADR 0037](docs/adr/0037-infrastructure-pivots.md).
+- [x] **TIP 4.7 Adversary library imports.** The pinned catalog includes ATT&CK software and sourced MISP
+      aliases. Analysts can link software to reports, actors and campaigns, and share those decisions through
+      STIX and TAXII. Actor timelines and software Navigator layers are available in threat guides.
+      [ADR 0038](docs/adr/0038-adversary-library.md).
+- [x] **TIP 4.8 Read-only MCP endpoint.** Eight read tools apply API-key sharing ceilings and publisher
+      restrictions. [MCP guide](docs/MCP.md), [ADR 0039](docs/adr/0039-read-only-mcp.md).
 
 ## Later
 
@@ -141,6 +148,7 @@ tools over TAXII and STIX; sightings and requests for information come back
 - [ ] **TIP 3.6 Opt-in LLM proposals** under the contract in [docs/LLM_EXTENSION.md](docs/LLM_EXTENSION.md).
 - [x] **TIP 3.7 Optional Shodan enrichment** with the operator's own key ([ADR 0031](docs/adr/0031-shodan.md));
       Censys waits for its Platform API transition.
+
 
 **Out of scope on purpose:** cloning CrowdStrike, Mandiant or Recorded Future collection, a malware sandbox,
 automated adversary attribution, and any always-on cloud AI.

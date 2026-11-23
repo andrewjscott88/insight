@@ -1,5 +1,26 @@
 # Security posture
 
+## Manual infrastructure connections
+
+TIP 4.6 part 1 adds RDAP and RIPEstat, each off by default with an audited Settings switch. An uncached
+lookup needs one explicit operator approval and an accepted observation in a current TLP:CLEAR report.
+Sessions and unlimited read-write keys can request lookups; limited keys can only read eligible cached data.
+
+RDAP connects only to HTTPS servers present in the pinned IANA DNS/IPv4/IPv6 bootstrap files. HTTP-only
+servers are unsupported. No returned URL, referral or redirect is followed. `scripts/update_rdap_bootstrap.py`
+manually fetches updated bootstrap files from `data.iana.org`; review host changes and commit the SHA-256 pins
+together with the files. RIPEstat connects only to `stat.ripe.net` over HTTPS, using network-info and
+prefix-overview. Both requests consume the same provider throttle. No DNS-based enrichment is used.
+
+Every request uses `connectors.download` and checked public destination addresses, a 30-second total deadline
+and a two-megabyte cap. Returned subjects/prefixes must match the requested value. Cache reads expire after
+24 hours and recheck eligibility. Personal RDAP contact details are never persisted. Errors contain no raw
+provider text or credentials. Graph nodes remain provider context and cannot create observations or verdicts.
+
+The operator must comply with each registry's terms and
+[RIPEstat's terms](https://stat.ripe.net/docs/getting-started/what-is-ripestat), including its commercial-use
+permission requirement. See [ADR 0037](adr/0037-infrastructure-pivots.md).
+
 Insight is a single-operator workbench, not a hardened multi-user service. Docker Compose binds it to loopback. It can be published for its one operator (and that operator's scripts and SIEM) behind a TLS reverse proxy, following the checklist at the end of this page; never expose port 8080 itself.
 
 The normal configuration requires sign-in. The explicit, default-off `INSIGHT_DEV_NO_AUTH` exception is
@@ -32,7 +53,35 @@ Reverse proxy: `X-Forwarded-For`/`X-Forwarded-Proto` are honoured only from `INS
 
 TLP labels are metadata, not a complete access-control engine. No automatic sharing occurs. A local export is not permission to redistribute. Source reuse/retention rights remain the operator's responsibility. Do not upload leaked secrets, unnecessary personal data, or documents you lack permission to retain.
 
+**MCP is API-key only** ([ADR 0039](adr/0039-read-only-mcp.md)). `POST /mcp` offers only fixed read tools,
+uses the key's TLP ceiling and publisher reuse rules, and has its own per-key rate budget. The exact MCP
+transport POST accepts read-only keys; other write routes retain their permissions. Browser sessions cannot
+authorize it, including open-access development sessions. It does not offer OAuth, write tools, model calls,
+provider lookups or executable rules. Every tool call reaching validation is audited with the key actor,
+tool name and outcome, without arguments or returned text. Existing key last-use metadata is preserved.
+Origin, Host and proxy-trust checks still apply. Bodies, queries and results are bounded.
+
+A key holder can send allowed intelligence to their chosen agent or model. That is a disclosure to that
+client, governed by its retention and access rules; use the lowest useful TLP ceiling. The server marks tools
+as read-only and source text as untrusted, but a client still must resist prompt injection in evidence.
+Do not use an Insight API key as an OAuth client secret. Protocol revision and client limitations are in
+[MCP.md](MCP.md). None of this enables Insight's separate opt-in LLM proposal contract.
+
 IOC exports (see [IOC_EXPORT.md](IOC_EXPORT.md)) change no reports or review states; each one adds an audit event (`ioc.export`, whose object ID is the `export_id` inside the file). Each file carries the most restrictive TLP of the reports it includes, and `max_tlp` keeps more restrictive reports out of a file entirely. Residual risks the operator must manage: evidence excerpts are raw report text (up to 90 characters either side of a mention) and can carry names, internal host names or indicators an analyst rejected, so exports that leave the team should be made without evidence (`--no-evidence`, `evidence=false`, or the dialog's **Include evidence excerpts**); defanging covers values, titles and evidence (including e-mail domains, CIDR ranges and file-like names) but leaves source URLs as stored; browser and API downloads use the operator's default file permissions, while the CLI writes owner-only files; and an extracted or accepted indicator is not a maliciousness verdict, so exports must not feed blocking controls without review.
+
+Optional infrastructure pivots ([ADR 0037](adr/0037-infrastructure-pivots.md)) use `crt.sh` as an
+outbound destination. The switch is off by default; each uncached request requires consent,
+accepted evidence in a current CLEAR report, a shared throttle and audit. Cache reads recheck that evidence.
+The guarded HTTPS downloader enforces the fixed host, public checked addresses, no redirects, 2 MB and
+30 seconds. No certificate blobs, contact fields or new observations are kept. Provider conditions and
+limitations: [Infrastructure pivots](INFRASTRUCTURE_PIVOTS.md).
+
+Optional infrastructure pivots ([ADR 0037](adr/0037-infrastructure-pivots.md)) use `www.circl.lu` as an
+outbound host. CIRCL requires host credentials and an off-by-default switch; each uncached
+request needs consent, current accepted CLEAR evidence, audit and a shared throttle. Basic credentials go
+in a header only; active query resolution is explicitly disabled. Guarded HTTPS pins public checked
+addresses, refuses redirects and caps responses at 2 MB / 30 seconds. No response bodies or credentials
+appear in errors. [Access conditions and metadata limits](INFRASTRUCTURE_PIVOTS.md).
 
 Outbound requests (source syncs, CVE lookups, alert webhooks) resolve the host once, check every address it resolves to, and then connect to one of those checked addresses, with the host name kept for TLS (SNI and the certificate check) and the `Host` header (`insight.egress`, code review L1, TIP 0.4). A DNS answer that changes between the check and the connection (DNS rebinding) can no longer redirect a request to loopback, a private network or a cloud metadata address. IPv4-mapped IPv6 addresses (`::ffff:127.0.0.1`) are judged by the IPv4 address they reach. Two explicit opt-ins relax the public-address rule for one destination each: `INSIGHT_ALERT_PRIVATE_TARGETS=on` for webhooks and `INSIGHT_MISP_PRIVATE_NETWORK=on` for the configured MISP instance. Neither reaches link-local (cloud metadata), multicast or reserved addresses, and the MISP opt-in does not reach loopback either. An outbound network policy remains the backstop and is still recommended. The framework supplies local JS/CSS assets; the GUI uses no application-authored model calls or remote font/CDN assets.
 
@@ -52,7 +101,9 @@ password and signing secret remain required. Enabling this mode together with `I
 so it cannot silently bypass an enabled second factor.
 
 While enabled, `GET /login` issues the existing expiring, revocable operator session and a fresh CSRF token,
-then redirects to the workspace. Signed HttpOnly SameSite=Strict cookies, secure-cookie configuration,
+then returns a same-origin page that confirms the session before continuing to the workspace. This ends a
+cross-site redirect chain without relaxing cookie policy; a fixed link works when scripts are blocked.
+Signed HttpOnly SameSite=Strict cookies, secure-cookie configuration,
 CSRF for writes, Host/Origin/socket checks, API-key permissions and request limits still apply. API requests
 without a session or valid key still receive `401`. These controls do not make the open workspace private:
 any visitor can obtain a session, read the reports and use operator editing, export and synchronization

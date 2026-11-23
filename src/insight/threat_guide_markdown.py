@@ -189,6 +189,27 @@ def _hunt(guide: ThreatGuide) -> list[str]:
     return [*out, '']
 
 
+def _timeline(guide: ThreatGuide) -> list[str]:
+    timeline = guide.data.timeline
+    out = [
+        '## Activity timeline',
+        '',
+        'Source activity, report collection and analyst actions have different date meanings. '
+        'A mention or sighting is not attribution.',
+        '',
+    ]
+    if timeline is None or not timeline.events:
+        return [*out, 'No dated events in this period.', '']
+    out.extend(
+        f'- {event.at[:10]} [TLP:{event.tlp}] **{link(event.title, event.url)}** '
+        f'({escape(event.source)}; {escape(event.relation)}). {escape(event.detail)}'
+        for event in timeline.events
+    )
+    if timeline.truncated:
+        out.append('This is a bounded view; more events may be available.')
+    return [*out, '']
+
+
 def _sources(guide: ThreatGuide) -> list[str]:
     lib, group = guide.library, guide.data.subject.catalog
     out = ['## Sources', '']
@@ -207,6 +228,7 @@ def to_markdown(guide: ThreatGuide) -> str:
         + _targets(guide)
         + _techniques(guide)
         + _reports(guide)
+        + _timeline(guide)
         + _hunt(guide)
         + _sources(guide)
     )

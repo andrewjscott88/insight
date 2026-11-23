@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 from datetime import UTC, date, datetime, timedelta
-from typing import Annotated, Literal, get_args
+from typing import Annotated, Any, Literal, get_args
 from urllib.parse import urlsplit
 
 from pydantic import (
@@ -43,6 +43,54 @@ MAX_EXPORT_DOCUMENT_IDS = 200
 DocumentId = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=36)]
 
 
+class McpInput(BaseModel):
+    """Strict, bounded MCP arguments; callers cannot supply an authorization or TLP override."""
+
+    model_config = ConfigDict(extra='forbid', strict=True)
+
+
+class McpSearchInput(McpInput):
+    q: str = Field(min_length=1, max_length=200)
+    limit: int = Field(default=20, ge=1, le=50)
+
+
+class McpIdInput(McpInput):
+    id: str = Field(min_length=1, max_length=64)
+
+
+class McpRequirementsInput(McpInput):
+    kind: Literal['pir', 'ir', 'rfi'] | None = None
+    limit: int = Field(default=20, ge=1, le=50)
+
+
+class McpLandscapeInput(McpInput):
+    days: int = Field(default=7, ge=1, le=30)
+
+
+class McpMessage(McpInput):
+    jsonrpc: Literal['2.0']
+    id: int | Annotated[str, Field(max_length=128)] | None = None
+    method: str = Field(min_length=1, max_length=100)
+    params: dict[str, Any] = Field(default_factory=dict)
+
+
+class McpInitializeInput(McpInput):
+    protocolVersion: str = Field(min_length=1, max_length=32)
+    capabilities: dict[str, Any]
+    clientInfo: dict[str, Any]
+    meta: dict[str, Any] | None = Field(default=None, alias='_meta')
+
+
+class McpCallInput(McpInput):
+    name: str = Field(min_length=1, max_length=100)
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    meta: dict[str, Any] | None = Field(default=None, alias='_meta')
+
+
+class McpEmptyInput(McpInput):
+    meta: dict[str, Any] | None = Field(default=None, alias='_meta')
+
+
 def _not_blank(value: str) -> str:
     if not value.strip():
         raise ValueError('Must not be blank')
@@ -58,6 +106,12 @@ def tlp_markings(text: str) -> list[str]:
 
 def most_restrictive(*levels: str) -> str:
     return max(levels, key=TLP_LEVELS.index)
+
+
+class PivotInput(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    value: str = Field(min_length=1, max_length=253)
+    approved: bool = False
 
 
 class ReportMetadata(BaseModel):
@@ -266,11 +320,11 @@ class ActorInput(CampaignInput):
 
 
 ThreatSubjectKind = Literal['actor', 'campaign']
-ThreatTargetKind = Literal['document', 'indicator', 'technique']
+ThreatTargetKind = Literal['document', 'indicator', 'technique', 'software']
 
 
 class ThreatLinkInput(BaseModel):
-    """An explicit link to an existing report, indicator, or catalog technique."""
+    """An explicit link to an existing report, indicator, catalog technique or software."""
 
     model_config = ConfigDict(frozen=True, extra='forbid')
     target_kind: ThreatTargetKind
@@ -633,6 +687,19 @@ class ActorLinkInput(BaseModel):
     model_config = ConfigDict(frozen=True, extra='forbid')
 
     document_id: DocumentId
+    note: str = Field(default='', max_length=2_000)
+    tlp: TLP = 'CLEAR'
+
+
+class SoftwareLinkInput(ActorLinkInput):
+    """An explicit, labelled software/report link; no attribution follows from the association."""
+
+
+class ActorCampaignInput(BaseModel):
+    """An explicit association, not an attribution inferred from shared reports."""
+
+    model_config = ConfigDict(frozen=True, extra='forbid')
+    campaign_id: DocumentId
     note: str = Field(default='', max_length=2_000)
     tlp: TLP = 'CLEAR'
 

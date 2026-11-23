@@ -1,10 +1,21 @@
 # Insight
 
+TIP 4.6 adds optional RDAP, RIPEstat, certificate transparency and passive DNS context in the indicator explorer and link map.
+Enable a provider in Settings, then approve each uncached lookup of a reviewed TLP:CLEAR indicator. Contact
+details are dropped and results never become indicators by themselves. See
+[ADR 0037](docs/adr/0037-infrastructure-pivots.md).
+
 A single-operator threat-intelligence workbench, run locally or published behind a TLS reverse proxy. Application logic and the interactive GUI are authored in **Python**, using **NiceGUI + FastAPI + SQLAlchemy**. NiceGUI supplies the underlying browser assets; no separate React/Node build is required.
 
 **Version 0.9.0: a single-operator pilot release, not a production multi-user TIP.** Nothing is deployed or connected automatically. Operating it: [docs/RUNBOOK.md](docs/RUNBOOK.md). Scripting against it: [docs/API_GUIDE.md](docs/API_GUIDE.md) (every call, with `curl`). All documentation: [docs/README.md](docs/README.md).
 
 ## What works
+
+- **Read-only MCP for agents:** Search reports and indicators, read report summaries, check indicator verdicts
+  and confidence, and retrieve open requirements, hunt packages, group profiles and the threat landscape.
+  Uses bearer API keys, TLP ceilings, publisher reuse rules and audited reads. Supports protocols
+  2026-07-28 and 2025-11-25.
+  Insight calls no model; OAuth is out of scope. [MCP guide](docs/MCP.md)
 
 - **Built for readability, including for people with dyslexia or other reading difficulties** ([ADR 0017](docs/adr/0017-readability-standard.md)): WCAG 2.2 AA plus its reading-related AAA criteria (7:1 contrast, lines of about 70 characters, 1.5 line spacing, plain language), 16 px minimum text, no capitals, real headings, a strong focus outline, messages that stay until you dismiss them, a **Larger text** button and a **What the words mean** glossary. Checked in the test suite with axe-core on every screen.
 - **Light and dark themes, readable on phones.** The workspace follows each device's light/dark setting by default; the **Light / Dark / System** buttons in the header override it for that browser. The instance default is `INSIGHT_THEME` (`make theme THEME=dark`). On a phone the layout uses larger text, no zoom-on-focus, big touch targets, and opening a report scrolls to it (with **← Back to list**). Text in both themes meets WCAG AA contrast (tested).
@@ -40,6 +51,13 @@ A single-operator threat-intelligence workbench, run locally or published behind
   sources and the TLP label, plus a hunt plan (starting hypotheses with log sources), an indicator sweep list,
   linked YARA, Sigma, Suricata and Snort rules (never run) and hunt records. Works offline from a bundled, pinned library;
   `make threat-library-sync` fetches a fuller copy. A group is never inferred from indicators or co-occurrence.
+- **Adversary library imports** ([ADR 0038](docs/adr/0038-adversary-library.md)): the pinned catalog
+  covers every current ATT&CK malware and tool, plus uniquely matched MISP group aliases with their sources.
+  Aliases improve group searches and report name matches; they never create links. In **Investigate > Threat groups**, link software to a report or record its use by an
+  actor or campaign. These labelled decisions appear in STIX and TAXII. [Software guide](docs/THREAT_GUIDES.md#software-and-report-links).
+  Actor guides also include a bounded, reader-filtered [activity timeline](docs/THREAT_GUIDES.md#activity-timeline-and-software-layers-tip-47-part-3),
+  with explicit campaign associations and distinct source/collection/action dates. Software Navigator layers
+  show catalog techniques; software-only actor context never changes existing scores or hunt hypotheses.
 - **Alerts** ([docs/ALERTS.md](docs/ALERTS.md)): when a new report mentions a watch term, or CISA adds a KEV
   entry, Insight tells a chat channel (Slack, Mattermost, Google Chat), your own tool (signed JSON webhook) or
   an e-mail address, within about 15 seconds of the sync. Each alert fires once; report titles go only up to
@@ -51,6 +69,8 @@ A single-operator threat-intelligence workbench, run locally or published behind
   short summary and link. Each publisher's reuse rule applies: only CISA's text leaves Insight in exports; for
   every other feed, exports carry titles, links, dates and indicators, not the publisher's words.
 - **GreyNoise Community IP context.** With a host key, analysts can approve a passive lookup of a reviewed public IPv4 address from a current TLP:CLEAR report in Entity explorer. [Runbook](docs/RUNBOOK.md#greynoise-community-ip-context)
+- **Certificate transparency (TIP 4.6 part 2).** Optional, approved crt.sh domain lookups show certificate names, issuer and dates in the workspace and link map. [Guide](docs/INFRASTRUCTURE_PIVOTS.md)
+- **Passive DNS (TIP 4.6 part 3).** With approved CIRCL access and your own credentials, manually approved pivots show bounded DNS history and provider/date links. [Guide](docs/INFRASTRUCTURE_PIVOTS.md)
 - **Shodan exposure context (optional, paid).** With your own Shodan key, the same reviewed address can be looked up at Shodan for open ports and exposure. [Runbook](docs/RUNBOOK.md#shodan-exposure-context)
 - **Optional abuse.ch indicator feeds.** Import recent URLs from URLhaus, network indicators and hashes from
   ThreatFox, and file hashes from MalwareBazaar. Set `INSIGHT_ABUSECH_AUTH_KEY` and enable the feeds you use.

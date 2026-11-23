@@ -22,7 +22,7 @@ from starlette.responses import Response
 from .. import apikeys, services
 from ..config import Settings
 from ..models import SessionFactory
-from ..ratelimit import AUTH_FAILURES, IOC_EXPORT, READ, TAXII, WRITE, Policy, RateLimiter
+from ..ratelimit import AUTH_FAILURES, IOC_EXPORT, MCP, READ, TAXII, WRITE, Policy, RateLimiter
 from .boundary import (
     SAFE_METHODS,
     SESSION_ONLY_ROUTES,
@@ -127,6 +127,8 @@ def api_key_verifier(sessions: SessionFactory) -> KeyVerifier:
 
 def rate_limit_policy(method: str, path: str) -> Policy:
     """Which budget a request draws from. IOC exports are the expensive read and get their own."""
+    if (method, path) == ('POST', '/mcp'):
+        return MCP
     if path in ('/api/iocs/export', '/api/iocs/stix', '/api/iocs/blocklist'):
         return IOC_EXPORT
     if path.startswith('/taxii2/insight/collections/') and (
@@ -202,13 +204,15 @@ def auth_dependency(
     def require_auth(request: Request) -> None:
         method = request.method
         path: str = request.scope.get('path', '')
+        # This exact transport POST exposes only fixed read tools. No other POST gains read-key access.
+        mcp_read = (method, path) == ('POST', '/mcp')
         token = apikeys.bearer_token(request.headers.get('authorization', ''))
         if token is not None:
             caller = key_caller(request, token)
             if path in SESSION_ONLY_ROUTES:
                 raise HTTPException(403, 'Not available to API keys')
             feedback = caller.access == 'read-feedback' and (method, path) in apikeys.FEEDBACK_INTAKE
-            if method not in SAFE_METHODS and caller.access != 'read-write' and not feedback:
+            if method not in SAFE_METHODS and caller.access != 'read-write' and not (feedback or mcp_read):
                 raise HTTPException(403, 'This API key is read-only')
             if method not in SAFE_METHODS and path.startswith(SESSION_ONLY_WRITE_PREFIXES):
                 raise HTTPException(
@@ -217,6 +221,8 @@ def auth_dependency(
             if caller.max_tlp is not None and path.startswith(UNLIMITED_READER_PREFIXES):
                 raise HTTPException(403, 'Not available to TLP-limited API keys')
         else:
+            if mcp_read:
+                raise HTTPException(401, 'API key required', headers=INVALID_KEY_HEADERS)
             if not authenticated(request.session):
                 raise HTTPException(401, 'Sign in required')
             if method not in SAFE_METHODS and not tokens_match(

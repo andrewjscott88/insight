@@ -78,6 +78,7 @@ Set in `.env` (Compose reads it) or the process environment. Real environment va
 | `INSIGHT_ALERT_PRIVATE_TARGETS` | no | `off` | `on` lets webhooks reach private networks (a chat or automation server on your LAN); link-local addresses stay blocked ([ADR 0022](adr/0022-alerts.md)) |
 | `INSIGHT_ABUSECH_AUTH_KEY` | no | (none) | Account key for the optional URLhaus, ThreatFox and MalwareBazaar Community APIs. Sent in the `Auth-Key` header to the enabled publisher API. |
 | `INSIGHT_GREYNOISE_KEY` | no | (none) | Enables manual GreyNoise Community IP lookups from Entity explorer and the API. [IP context](#greynoise-community-ip-context) |
+| `INSIGHT_CIRCL_PDNS_USER` / `INSIGHT_CIRCL_PDNS_PASSWORD` | no | (none) | Your approved CIRCL passive DNS credentials. Fixed HTTPS host, Basic header only; requires Settings opt-in and each uncached approval. [Guide](INFRASTRUCTURE_PIVOTS.md) |
 | `INSIGHT_SHODAN_KEY` | no | (none) | Your own Shodan API key. Enables manual Shodan host lookups of reviewed CLEAR IPs (paid, optional). Sent only to `api.shodan.io`, never logged. [Shodan](#shodan-exposure-context) |
 | `INSIGHT_NVD_API_KEY` | no | (none) | A free NIST NVD API key: CVE lookups at NVD every 0.7 s instead of every 6.5 s ([ADR 0023](adr/0023-automatic-cve-lookups.md)). Sent only in NVD's `apiKey` header, never logged |
 | `INSIGHT_VULNCHECK_API_KEY` | no | (none) | Your own VulnCheck community token. Needed for VulnCheck KEV lookups (exploitation reports and public exploit links, [ADR 0028](adr/0028-exploit-availability.md)); without it they do not run. Sent only as a Bearer header, never logged |
@@ -181,14 +182,16 @@ To enable it temporarily:
    `docker compose restart` does not apply changed Compose environment values. For local Python, restart
    `insight serve` with the new environment.
 4. From a fresh browser, open the site and confirm it enters the workspace without a password. A visit to
-   `/login` creates a normal expiring session and redirects to `/`; it no longer returns a password form.
+   `/login` creates a normal expiring session and returns a `200` page that checks the session before
+   continuing to `/`. If scripts are blocked, use **Continue to workspace**. Check a link from another site
+   as well as direct entry; neither should loop back and forth between `/` and `/login`.
 
 The cookie, CSRF checks, same-origin checks, API-key rules and HTTPS/proxy settings remain in effect.
 An API request without a valid session or key still returns `401`, but anyone can obtain a session through
 `/login` while this mode is on. API-key TLP limits do not restrict the full operator session. Signing out,
 including **Sign out everywhere**, ends existing sessions but cannot keep visitors out while the mode is
 enabled: they can visit `/login` again. Password-form smoke scripts are for the normal protected mode;
-verify the open mode's redirect, session, CSRF and report access explicitly.
+verify the open mode's entry page, session, CSRF and report access explicitly.
 
 To restore password protection:
 

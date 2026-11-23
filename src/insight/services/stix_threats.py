@@ -54,7 +54,7 @@ def _add_stix_threats(
     """Emit only visible links with selected endpoints. Return the highest marking for the export audit.
 
     With ``stable`` (TAXII, ADR 0026), every ID is deterministic and a relationship's ``modified`` is the
-    later of its link's creation and its target's own change time, so it appears to a polling client when
+    latest contributing link, subject or target change time, so it appears to a polling client when
     the client can first see it; ``modified`` (the export time) is not used.
     """
     reports = {
@@ -74,13 +74,13 @@ def _add_stix_threats(
         (Campaign, ThreatLink, ThreatLink.campaign_id, ThreatLink.technique_id, techniques),
     )
     levels = visible_levels(max_tlp)
-    subjects: dict[tuple[str, str, str], str] = {}
+    subjects: dict[tuple[str, str, str], dict[str, Any]] = {}
     needed_labels: set[str] = set()
     count = 0
     for subject, link, owner, endpoint, targets in selections:
         ids = list(targets)
         kind = 'threat-actor' if subject is ThreatActor else 'campaign'
-        updated = ThreatActor.updated_at if subject is ThreatActor else Campaign.created_at
+        updated = subject.updated_at
         stmt = (
             select(
                 subject.id.label('subject_id'),
@@ -92,6 +92,7 @@ def _add_stix_threats(
                 link.id.label('link_id'),
                 link.tlp.label('link_tlp'),
                 link.created_at.label('link_created'),
+                getattr(link, 'updated_at', link.created_at).label('link_updated'),
                 endpoint.label('target_id'),
             )
             .select_from(link)
@@ -119,7 +120,7 @@ def _add_stix_threats(
                     if key not in subjects:
                         obj = _subject_object(kind, label, row, stable=stable)
                         bundle['objects'].append(obj)
-                        subjects[key] = obj['id']
+                        subjects[key] = obj
                     needed_labels.add(label)
                     created = stix_timestamp(row['link_created'])
                     if target['type'] == 'report' and label == row['subject_tlp']:
@@ -130,7 +131,18 @@ def _add_stix_threats(
                         )
                     else:
                         relationship_id = f'relationship--{uuid4()}'
-                    changed = max(created, target['modified']) if stable else max(modified, created)
+                    changed = (
+                        max(
+                            created,
+                            target['modified'],
+                            stix_timestamp(row['link_updated']),
+                            stix_timestamp(row['subject_updated']),
+                        )
+                        if stable
+                        else max(modified, created)
+                    )
+                    if stable:
+                        subjects[key]['modified'] = max(subjects[key]['modified'], changed)
                     bundle['objects'].append(
                         {
                             'type': 'relationship',
@@ -139,7 +151,7 @@ def _add_stix_threats(
                             'created': created,
                             'modified': changed,
                             'relationship_type': 'related-to',
-                            'source_ref': subjects[key],
+                            'source_ref': subjects[key]['id'],
                             'target_ref': target['id'],
                             'object_marking_refs': [TLP_MARKINGS[label]],
                         }

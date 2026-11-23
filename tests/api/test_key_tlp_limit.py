@@ -18,9 +18,14 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from insight import services
+from insight.mcp import TOOL_BY_NAME
 from insight.models import Enrichment
 from insight.schemas import (
+    ActorCampaignInput,
+    ActorInput,
+    ActorLinkInput,
     AssessmentInput,
+    CampaignInput,
     CaseInput,
     CaseItemInput,
     CriterionInput,
@@ -31,6 +36,7 @@ from insight.schemas import (
     JudgementInput,
     RequirementInput,
     SightingInput,
+    SoftwareLinkInput,
 )
 from insight.services import SourceRef
 
@@ -39,6 +45,8 @@ from .test_auth import PROTECTED
 MARKER = 'ZEBRA-MERIDIAN-7731'
 HIDDEN_TECHNIQUE = 'T1490'  # Inhibit System Recovery: written only in the AMBER report
 HIDDEN_IP = '198.51.100.77'
+HIDDEN_PIVOT_IP = '8.8.4.4'
+HIDDEN_PIVOT_DOMAIN = 'hidden.example.net'
 SHARED_IP = '192.0.2.44'
 
 
@@ -58,14 +66,29 @@ def world(app: FastAPI) -> dict[str, Any]:
             db,
             report(
                 f'{MARKER} briefing',
-                f'{MARKER}: C2 at {HIDDEN_IP}, also {SHARED_IP}. {HIDDEN_TECHNIQUE}. A wiper followed.',
+                f'{MARKER}: C2 at {HIDDEN_IP}, also {SHARED_IP}, {HIDDEN_PIVOT_IP} '
+                f'and {HIDDEN_PIVOT_DOMAIN}. '
+                f'{HIDDEN_TECHNIQUE}. A wiper followed.',
                 'AMBER',
             ),
+        )
+        # Actor activity must be planted here too: the central GREEN sweep exercises the real
+        # timeline/campaign routes against restricted report links and explicit campaign associations.
+        # The public group must hide both the AMBER report and the AMBER link to a GREEN report.
+        services.link_report(db, 'G0016', ActorLinkInput(document_id=amber.id, note=MARKER, tlp='AMBER'))
+        services.link_report(db, 'G0016', ActorLinkInput(document_id=green.id, tlp='AMBER', note=MARKER))
+        campaign = services.create_campaign(db, CampaignInput(name=f'{MARKER} campaign', tlp='AMBER'))
+        services.link_actor_campaign(
+            db, 'G0016', ActorCampaignInput(campaign_id=campaign.id, note=MARKER, tlp='AMBER')
         )
         ref = SourceRef('partner-feed', 'item-1')
         old, _ = services.ingest(db, report('Item v1', 'CVE-2024-11111 first.', 'GREEN'), ref=ref)
         new, _ = services.ingest(db, report(f'Item v2 {MARKER}', 'CVE-2024-11111 edited.', 'AMBER'), ref=ref)
         hidden_obs = next(o for o in services.detail(db, amber)['observations'] if o['value'] == HIDDEN_IP)
+        services.link_software_report(db, 'S0154', SoftwareLinkInput(document_id=amber.id, note=MARKER))
+        services.link_software_report(
+            db, 'S0154', SoftwareLinkInput(document_id=green.id, note=MARKER, tlp='AMBER')
+        )
         shared = next(o for o in services.detail(db, green)['observations'] if o['value'] == SHARED_IP)
         # An AMBER verdict on an indicator the GREEN key can see: its reason must stay hidden.
         services.assess_entity(
@@ -74,6 +97,27 @@ def world(app: FastAPI) -> dict[str, Any]:
         # A cached NVD answer for a CVE only the current AMBER revision mentions.
         nvd = {'vulnerabilities': [{'cve': {'descriptions': [{'lang': 'en', 'value': MARKER}]}}]}
         db.add(Enrichment(cve='CVE-2024-11111', provider='nvd', payload=json.dumps(nvd)))
+        # A pivot cache is not its own access grant: a hidden/ineligible subject remains missing.
+        for provider, value in (
+            ('rdap', HIDDEN_PIVOT_IP),
+            ('asn', HIDDEN_PIVOT_IP),
+            ('crtsh', HIDDEN_PIVOT_DOMAIN),
+            ('circl', HIDDEN_PIVOT_DOMAIN),
+        ):
+            pivot_obs = next(o for o in services.detail(db, amber)['observations'] if o['value'] == value)
+            db.add(
+                Enrichment(
+                    subject=pivot_obs['entity_id'],
+                    provider=provider,
+                    payload=json.dumps(
+                        {
+                            'found': True,
+                            'network_name': MARKER,
+                            'nodes': [{'type': 'name_server', 'value': 'hidden.example.net'}],
+                        }
+                    ),
+                )
+            )
         # A case that holds the AMBER report is AMBER too (TIP 3.8): its title and items stay hidden.
         case = services.create_case(db, CaseInput(title=f'{MARKER} case', tlp='GREEN', bluf=MARKER))
         evidence_item = services.add_case_item(
@@ -114,9 +158,15 @@ def world(app: FastAPI) -> dict[str, Any]:
             db, SightingInput(value=SHARED_IP, first_seen=seen, note=MARKER, where=MARKER, tlp='AMBER')
         )
         services.record_sighting(db, SightingInput(value=HIDDEN_IP, first_seen=seen, tlp='GREEN'))
+        hidden_actor = services.create_actor(db, ActorInput(name=f'{MARKER} actor', tlp='AMBER'))
+        services.create_requirement(
+            db, RequirementInput(kind='rfi', question=f'{MARKER} request?', tlp='AMBER')
+        )
         _, token = services.create_api_key(db, name='siem', access='read-write', max_tlp='GREEN')
     return {
+        'actor_campaign': campaign.id,
         'case': case.id,
+        'hidden_actor': hidden_actor.id,
         'hunt_package': hunt.id,
         'requirement': open_req.id,
         'cited': cited.id,
@@ -129,6 +179,85 @@ def world(app: FastAPI) -> dict[str, Any]:
         'shared_entity': shared['entity_id'],
         'headers': {'Authorization': f'Bearer {token}'},
     }
+
+
+@pytest.mark.parametrize('protocol', ['2025-11-25', '2026-07-28'])
+def test_every_mcp_tool_keeps_the_green_ceiling(
+    client: TestClient,
+    world: dict[str, Any],
+    protocol: str,
+) -> None:
+    """Every advertised MCP tool is swept in the same planted AMBER world as the REST API."""
+    calls = [
+        ('search_reports', {'q': MARKER}),
+        ('search_reports', {'q': 'CVE-2024-11111'}),
+        ('get_indicator', {'id': world['hidden_entity']}),
+        ('get_indicator', {'id': world['shared_entity']}),
+        ('search_indicators', {'q': HIDDEN_IP}),
+        ('search_indicators', {'q': SHARED_IP}),
+        ('get_report_summary', {'id': world['amber']}),
+        ('get_report_summary', {'id': world['old']}),
+        ('list_requirements', {}),
+        ('list_requirements', {'kind': 'rfi'}),
+        ('get_hunt_package', {'id': world['hunt_package']}),
+        ('get_threat_group', {'id': world['hidden_actor']}),
+        ('get_threat_group', {'id': 'G0016'}),
+        ('get_landscape_summary', {}),
+    ]
+    assert {name for name, _ in calls} == set(TOOL_BY_NAME)
+    headers = world['headers'] | {
+        'Accept': 'application/json, text/event-stream',
+        'MCP-Protocol-Version': protocol,
+    }
+
+    def request_tool(name: str, arguments: dict[str, Any]) -> Any:
+        params: dict[str, Any] = {'name': name, 'arguments': arguments}
+        sent_headers = dict(headers)
+        if protocol == '2026-07-28':
+            params['_meta'] = {
+                'io.modelcontextprotocol/protocolVersion': protocol,
+                'io.modelcontextprotocol/clientCapabilities': {},
+            }
+            sent_headers |= {'Mcp-Method': 'tools/call', 'Mcp-Name': name}
+        return client.post(
+            '/mcp',
+            headers=sent_headers,
+            json={'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': params},
+        )
+
+    forbidden = [
+        MARKER,
+        HIDDEN_IP,
+        world['amber'],
+        world['new'],
+        world['hidden_entity'],
+        world['hidden_actor'],
+    ]
+    for name, arguments in calls:
+        response = request_tool(name, arguments)
+        assert response.status_code == 200, response.text
+        assert response.json()['result']['structuredContent']['sharing_tlp'] == 'GREEN'
+        assert all(secret not in response.text for secret in forbidden), (name, response.text)
+        data = response.json()['result']['structuredContent']
+        if name == 'search_indicators' and arguments['q'] == SHARED_IP:
+            assert data['indicators'][0]['reports'] == 1
+        if name == 'get_landscape_summary':
+            assert data['reports'] == 1
+            assert 'Destructive attacks' not in {trend['name'] for trend in data['threats']}
+        if name == 'list_requirements' and not arguments:
+            requirement = next(row for row in data['requirements'] if row['id'] == world['requirement'])
+            assert requirement['recent_matches'] == 0
+            assert requirement['last_match_at'] is None
+        if name == 'get_threat_group' and arguments['id'] == 'G0016':
+            assert response.json()['result']['structuredContent']['linked_reports'] == []
+        if arguments.get('id') in (
+            world['amber'],
+            world['hidden_entity'],
+            world['hunt_package'],
+            world['hidden_actor'],
+        ):
+            missing = request_tool(name, {'id': 'missing'})
+            assert response.json() == missing.json()
 
 
 def get(client: TestClient, world: dict[str, Any], path: str, **params: Any) -> Any:
@@ -152,6 +281,13 @@ def readable(response: Any) -> str:  # the test client's response (httpx or http
 
 def test_nothing_hidden_leaks_through_any_read_route(client: TestClient, world: dict[str, Any]) -> None:
     paths = [
+        '/api/software',
+        '/api/software/S0154',
+        '/api/software/S0154/documents',
+        f'/api/documents/{world["green"]}/software',
+        f'/api/documents/{world["amber"]}/software',
+        f'/api/pivots?value={HIDDEN_PIVOT_IP}',
+        f'/api/pivots?value={HIDDEN_PIVOT_DOMAIN}',
         '/api/documents',
         '/api/documents?include_superseded=true',
         f'/api/documents?q={MARKER}',
@@ -194,6 +330,9 @@ def test_nothing_hidden_leaks_through_any_read_route(client: TestClient, world: 
         '/api/actors',
         '/api/actors/G0016',
         '/api/actors/G0016/guide',
+        '/api/actors/G0016/timeline',
+        '/api/actors/G0016/campaigns',
+        '/api/software/S0154/navigator',
         '/api/actors/G0016/guide?format=md',
         '/api/actors/G0016/navigator',
         '/api/actors/G0016/sweep?format=csv',
@@ -246,8 +385,22 @@ def test_nothing_hidden_leaks_through_any_read_route(client: TestClient, world: 
             template = route.replace('/x', '/{id}')
             assert any(p.rstrip('/').count('/') == template.rstrip('/').count('/') for p in covered), route
     for path in paths:
-        body = readable(client.get(path, headers=world['headers']))
-        for secret in (MARKER, HIDDEN_IP, world['amber'], world['new'], world['hidden_entity']):
+        response = client.get(path, headers=world['headers'])
+        if path in {
+            '/api/actors/G0016/timeline',
+            '/api/actors/G0016/campaigns',
+            '/api/software/S0154/navigator',
+        }:
+            assert response.status_code == 200, response.text
+        body = readable(response)
+        for secret in (
+            MARKER,
+            HIDDEN_IP,
+            world['amber'],
+            world['new'],
+            world['hidden_entity'],
+            world['actor_campaign'],
+        ):
             # A value the caller itself sent (e.g. an IOC export echoing its filters) discloses nothing.
             if secret not in path:
                 assert secret not in body, f'{secret} leaked through {path}'

@@ -48,7 +48,7 @@ def test_a_read_key_can_read_everything_and_write_nothing(
     client: TestClient, read_key: str, method: str, path: str
 ) -> None:
     response = client.request(method, path, headers=bearer(read_key))
-    if method in SAFE:
+    if method in SAFE or (method, path) == ('POST', '/mcp'):
         assert response.status_code not in (401, 403), response.text  # 404 for the placeholder IDs is fine
     else:
         assert response.status_code == 403

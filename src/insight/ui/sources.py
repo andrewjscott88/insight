@@ -12,6 +12,7 @@ from ..connectors import sync_all, sync_source
 from ..source_registry import CATEGORIES, SOURCES, Source, in_use
 from .lookups import build_lookup_switches
 from .messages import tell
+from .pivots import build_pivot_switches
 from .schedules import ScheduleControls, build_all_sources_schedule, build_schedule_control
 from .typography import heading, new_tab_link
 from .workspace import Workspace
@@ -105,6 +106,7 @@ def build_sources(ws: Workspace) -> None:
         for source in (s for s in SOURCES.values() if s.category == category):
             source_panel(source, in_use(source, switches), controls)
     build_lookup_switches(ws)
+    build_pivot_switches(ws)
     heading('Recent sync activity', 3, 'subsection-title mt-4')
     with ui.column().classes('w-full gap-3'):
         source_history()

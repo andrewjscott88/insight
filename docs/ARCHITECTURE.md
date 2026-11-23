@@ -101,6 +101,13 @@ To add a migration: change `models.py`, then run
 
 ## API
 
+Read-only agent access lives at `POST /mcp` ([ADR 0039](adr/0039-read-only-mcp.md), [MCP.md](MCP.md)).
+`web/routes/mcp.py` handles stateless JSON-RPC, `mcp_transport.py` checks current request metadata/headers,
+`mcp.py` owns the fixed catalog and result bounds, and
+`services/mcp.py` projects the existing TLP-aware domain reads. The only permission exception is read-key
+access to this exact read-only transport POST. It uses the existing key verifier and audit actor, a separate
+rate policy, and no browser-session fallback, SDK, schema migration or external calls.
+
 JSON routes live under `/api`. Each is reachable with the browser session (cookie plus `X-CSRF-Token` on writes;
 `/api/session` hands out the token) or the single API key (`Authorization: Bearer`, no CSRF). Contracts are not
 versioned yet; breaking changes are listed in the CHANGELOG. Usage: [API_GUIDE](API_GUIDE.md); fields:
@@ -156,3 +163,8 @@ globally throttled for the single operator.
 4. Add asset inventory relevance, investigations and watchlist notifications.
 5. Add structured import/export and source-specific licensing/retention controls.
 6. Add opt-in LLM enrichment behind the independent contract, only after evaluations and routing policies.
+
+Actor activity is read through `services/actor_timeline.py`, with shared bounded report references in
+`actor_reports.py` and explicit, audited campaign associations in `actor_campaigns.py`. The guide, JSON API,
+Markdown export and narrow-screen UI share event DTOs. `software_navigator.py` is a pure projection and does
+not change direct group techniques or hunt hypotheses. Campaign label raises advance `updated_at` for TAXII.

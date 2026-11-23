@@ -27,6 +27,8 @@ from .access import (
     verify_api_key,
     verify_mfa_code,
 )
+from .actor_campaigns import ActorCampaignView, actor_campaigns, link_actor_campaign, unlink_actor_campaign
+from .actor_timeline import ActorTimeline, TimelineEvent, actor_timeline, timeline_json
 from .actors import (
     GroupSubject,
     actor_aliases,
@@ -208,7 +210,9 @@ from .lookups import (
     record_lookup_failure,
     set_lookup_switch,
 )
+from .mcp import mcp_read
 from .pdf_reports import PdfReport, import_pdf, prepare_pdf_report, store_pdf_report
+from .pivots import cached_pivots, eligible_pivot, pivot_switches, set_pivot_switch, store_pivot
 from .product_exports import ProductExport, export_product
 from .product_views import (
     PRODUCT_FORMAT,
@@ -288,6 +292,8 @@ from .search import (
     summary,
 )
 from .sightings import MAX_SIGHTINGS, SightingView, delete_sighting, list_sightings, record_sighting
+from .software import link_software_report, search_software, software_link_view, unlink_software_report
+from .software_views import report_software, software_detail, software_reports, software_uses
 from .sources import (
     cached_enrichments,
     fetch_cursor,
@@ -391,6 +397,8 @@ __all__ = [
     'SESSION_TTL',
     'SOURCE_SYNC',
     'SUMMARY_LENGTH',
+    'ActorCampaignView',
+    'ActorTimeline',
     'AlertReport',
     'BlocklistEntry',
     'BriefData',
@@ -450,10 +458,13 @@ __all__ = [
     'TechniqueCount',
     'TechniqueTag',
     'ThreatLinkView',
+    'TimelineEvent',
     'TlpNotPermitted',
     'VersionSummary',
     'active_api_key',
     'actor_aliases',
+    'actor_campaigns',
+    'actor_timeline',
     'add_case_item',
     'add_case_note',
     'add_criterion',
@@ -482,6 +493,7 @@ __all__ = [
     'cached_enrichments',
     'cached_greynoise_context',
     'cached_ip_context',
+    'cached_pivots',
     'carry_decisions',
     'case_sensitive',
     'case_timeline',
@@ -516,6 +528,7 @@ __all__ = [
     'document_techniques',
     'due_alerts',
     'eligible_greynoise_ip',
+    'eligible_pivot',
     'end_all_operator_sessions',
     'end_operator_session',
     'enqueue_due_alerts',
@@ -561,8 +574,10 @@ __all__ = [
     'known_kev',
     'landscape_data',
     'like_pattern',
+    'link_actor_campaign',
     'link_report',
     'link_rule',
+    'link_software_report',
     'link_threat',
     'linked_reports',
     'linked_rules',
@@ -582,11 +597,13 @@ __all__ = [
     'lookup_failures',
     'lookup_switches',
     'mark_alert',
+    'mcp_read',
     'mfa_paired',
     'navigator_layer',
     'operator_session_valid',
     'pair_mfa',
     'permitted_tlp_levels',
+    'pivot_switches',
     'prepare_pdf_report',
     'product_parts',
     'product_view',
@@ -617,6 +634,7 @@ __all__ = [
     'reopen_case',
     'reopen_requirement',
     'report_groups',
+    'report_software',
     'requeue_running_jobs',
     'requirement_counts',
     'reset_mfa',
@@ -632,6 +650,7 @@ __all__ = [
     'save_fetch_cursor',
     'save_fetch_state',
     'search_documents',
+    'search_software',
     'search_terms',
     'session_binding',
     'set_actor',
@@ -639,9 +658,14 @@ __all__ = [
     'set_document_status',
     'set_lookup_switch',
     'set_observation_status',
+    'set_pivot_switch',
     'set_schedule',
     'set_source_switch',
     'set_target_enabled',
+    'software_detail',
+    'software_link_view',
+    'software_reports',
+    'software_uses',
     'source_statistics',
     'source_switches',
     'stamp',
@@ -651,6 +675,7 @@ __all__ = [
     'store_greynoise_context',
     'store_ip_context',
     'store_pdf_report',
+    'store_pivot',
     'stricter_limit',
     'summaries',
     'summary',
@@ -661,9 +686,12 @@ __all__ = [
     'technique_labels',
     'technique_summary',
     'time_of_day',
+    'timeline_json',
     'tlp_permitted',
+    'unlink_actor_campaign',
     'unlink_report',
     'unlink_rule',
+    'unlink_software_report',
     'unlink_threat',
     'untag_technique',
     'update_case',

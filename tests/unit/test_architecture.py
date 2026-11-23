@@ -23,6 +23,8 @@ SQL_BUILDERS = {'select', 'insert', 'update', 'delete', 'func', 'or_', 'and_', '
 ORM_CLASSES = {'Document', 'Entity', 'Observation', 'Note', 'AuditEvent', 'KEVRecord', 'WatchTerm'}
 ORM_CLASSES |= {'SourceRating', 'HuntPackage', 'HuntPackageItem', 'Sighting', 'CaseJudgement'}
 ORM_CLASSES |= {'CaseJudgementItem', 'CaseGap', 'CaseVersion'}
+ORM_CLASSES |= {'SoftwareDocument'}
+ORM_CLASSES |= {'ActorCampaign'}
 ORM_CLASSES |= {'SourceRun', 'Enrichment', 'ApiKey', 'Job', 'Schedule', 'FetchState', 'EntityAssessment'}
 ORM_CLASSES |= {'DocumentTechnique', 'SourceSwitch', 'LookupFailure'}
 ORM_CLASSES |= {'ThreatActor', 'ActorDocument', 'IndustryClaim', 'DetectionRule', 'RuleLink'}
@@ -121,6 +123,9 @@ def test_ui_does_not_depend_on_the_api_module(path: Path) -> None:
 #: Service functions that read or change reports. Every call from the API must pass the caller's TLP limit
 #: (``max_tlp=``), or a TLP-limited API key could see reports above its limit (ADR 0014).
 TLP_AWARE_SERVICES = {
+    'actor_timeline', 'actor_campaigns', 'link_actor_campaign', 'unlink_actor_campaign',
+    'mcp_read',
+    'cached_pivots', 'eligible_pivot', 'store_pivot',
     'DocumentQuery', 'detail', 'list_entities', 'entity_documents', 'count_entity_documents', 'stats',
     'set_document_status', 'set_observation_status', 'add_note', 'ingest', 'brief_data',
     'assess_entity', 'entity_assessment', 'entity_seen', 'blocklist',
@@ -143,12 +148,15 @@ TLP_AWARE_SERVICES = {
     'retire_hunt_package', 'export_hunt_package', 'record_sighting', 'list_sightings', 'delete_sighting',
     'product_parts', 'add_judgement', 'update_judgement', 'remove_judgement', 'add_gap', 'remove_gap',
     'ask_gap', 'publish_product', 'product_view', 'export_product',
+    'search_software', 'software_detail', 'software_reports', 'link_software_report',
+    'unlink_software_report', 'report_software',
 }  # fmt: skip
 
 
 def test_api_routes_pass_the_callers_tlp_limit_to_services() -> None:
     tree = ast.Module(
-        body=[node for p in WEB_MODULES for node in ast.parse(p.read_text()).body], type_ignores=[]
+        body=[node for p in [*WEB_MODULES, PACKAGE / 'pivots.py'] for node in ast.parse(p.read_text()).body],
+        type_ignores=[],
     )
     calls = [
         node

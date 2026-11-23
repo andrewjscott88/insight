@@ -1,5 +1,27 @@
 # Industry threats and threat guides
 
+## Software and report links
+
+In **Investigate > Threat groups**, open **Software library** and search a name or ATT&CK
+software ID such as `S0154`. The public catalog entry shows its type and available context. **Reports that
+name it** lists whole-word name or alias matches from visible current reports. Plain single-word names are
+case-sensitive to avoid ordinary-word matches. At most the newest 5,000 reports are checked; the view says
+when that cap is reached. Publisher-restricted sources show metadata rather than quoted excerpts.
+
+A candidate is not proof of use. Choose **Link this report**, record why, and pick a sharing label. The label
+cannot be lower than the report or a TLP marking in the note. The report reader's **Software links** section
+can link any report, including one with no name match. The software page shows up to 50 linked reports and
+up to 50 candidates; the API pages through additional report links. Remove a link on the software page.
+Every change is audited. Catalog removal does not erase saved names/types or prevent link removal.
+
+To record that an actor or campaign uses software, open **Actors and campaigns you track**, choose the
+record, then select **Software used** in **Link to**. This is a separate, explicit decision. Linking the same
+report to an actor and software never infers use. Up to 50 visible use decisions appear on the software page.
+
+Software associations on selected reports and explicit use links appear in STIX/TAXII exports, within the
+reader's TLP limit. Analyst notes stay out of software objects. See [API](API.md#software) and
+[TAXII](TAXII.md#software-associations).
+
 Insight's **Investigate › Threat groups** tab answers two questions: *which groups target my industry?* and *what do I do
 about this group?* It is TIP roadmap item 2.10 ([ADR 0025](adr/0025-threat-guides.md)); it also brings the
 minimum of item 2.5 (actors you track) and item 2.7 (YARA and Sigma rules as linked artifacts).
@@ -53,7 +75,7 @@ Each relationship carries its own sharing label. See the [STIX export guide](IOC
 
 | Section | Source |
 | --- | --- |
-| Names, description | ATT&CK group (aliases from ATT&CK; MISP names are not merged) |
+| Names, description | ATT&CK group; sourced ATT&CK aliases and uniquely matched MISP synonyms (groups are never merged) |
 | Who it targets | Industry claims with evidence (below); countries from MISP `cfr-suspected-victims`; latest ATT&CK campaign |
 | How it works | ATT&CK techniques by tactic, plus techniques tagged in reports **you linked** (ADR 0019); download as an ATT&CK Navigator layer |
 | Tools and malware | ATT&CK software the group uses |
@@ -84,6 +106,26 @@ sweep list as CSV or JSON (`insight-sweep-v1`). The API equivalents are in [API.
   MISP's "similar" links are not followed. Vague labels ("Private sector") are dropped.
 * **You.** Add an industry with an HTTPS citation or a report you can see, or remove one with a reason. Your
   decisions carry a TLP label, are audited (`actor.industry`) and apply to your instance only.
+
+### Group aliases and software
+
+The library adds MISP synonyms only when an entry's primary name exactly matches one group's ATT&CK name
+or ATT&CK alias (ignoring case and surrounding spaces). Duplicate entries or names shared by groups cannot
+establish a match. A new synonym claimed by multiple groups is omitted. Imported aliases never establish
+another match, and MISP's `similar` links are never followed. Each alias records its catalog source; MISP
+evidence also keeps the entry name, UUID when present, and the ATT&CK name that matched it.
+
+Search and reports naming a group use these aliases with the same whole-word and one-word case rules as
+before. A requirement's term criterion can search an alias; its group criterion still needs a visible,
+explicit analyst link to that group. A name match never creates an actor or a report link.
+
+Both editions contain every current ATT&CK Enterprise malware and tool, including software no group is
+listed as using. Each item keeps its ID, name, type, aliases, description, platforms, techniques and groups
+that use it. Only current, explicit ATT&CK `uses` relationships count. A group's software techniques do
+not become direct group techniques. This is public catalog context, not evidence about your reports.
+
+This is **TIP 4.7 part 1** ([ADR 0038](adr/0038-adversary-library.md)). Software search pages, API routes,
+analyst links and STIX output are part 2; actor timelines and software Navigator layers are part 3.
 
 ### Hunt hypotheses
 
@@ -131,7 +173,7 @@ what it ran and found, and reports sightings back.
 
 ## TLP
 
-* Library groups are public catalog data: TLP:CLEAR.
+* Library groups, aliases and software are public catalog data: TLP:CLEAR.
 * Actors, links, industry decisions, rules and hunts carry their own labels. A reader (API key, CLI
   `--max-tlp`) sees only what is within its limit, and a write is refused above the caller's or the instance
   limit (`INSIGHT_MAX_TLP`).
@@ -151,7 +193,7 @@ what it ran and found, and reports sightings back.
 
 | Edition | Where | What |
 | --- | --- | --- |
-| bundled | `src/insight/data/actors.json` (about 600 KB) | Every current ATT&CK Enterprise group with aliases, campaigns, techniques, software, industry claims; per technique its mitigations and detection strategies. Shortened descriptions; no procedure examples or analytics |
+| bundled | `src/insight/data/actors.json` (under 1 MB) | Every current ATT&CK Enterprise group, malware and tool, with sourced aliases and context; group campaigns and industry claims; per technique its mitigations and detection strategies. Shortened descriptions; no procedure examples or analytics |
 | full | `<INSIGHT_DATA_DIR>/threat-library.json` | The same, with whole descriptions, procedure examples, ATT&CK analytics and every reference. Written by `insight threat-library-sync`; used instead of the bundled one when present and valid |
 
 Both are built from the same pinned releases (`insight.threat_library_sync.PINNED`):
@@ -159,13 +201,18 @@ Both are built from the same pinned releases (`insight.threat_library_sync.PINNE
 * MITRE ATT&CK Enterprise **20.1**, `attack-stix-data` commit `a8db2f52eb933c9c99060c123e088b3326d3a607`;
 * MISP galaxy `threat-actor.json` **version 359**, commit `6d78ff22dd1986ffd1a74bd720e635991a52e91a`.
 
+The writer uses `insight-threat-library-2`. The reader also accepts format 1 full editions already on disk;
+their software context stays empty where the older file has no data. Run `insight threat-library-sync` to
+replace one with format 2. No database migration is needed. Source URLs, versions and SHA-256 digests stay
+in each edition. The format contract is [the library schema](schemas/insight-threat-library-2.schema.json).
+
 The sync downloads exactly those two files over HTTPS from `raw.githubusercontent.com` (on the connector
 allowlist, no redirects, at most 80 MB and 8 MB), checks each SHA-256 before parsing, and replaces the file
 atomically. It runs only when you ask: [RUNBOOK](RUNBOOK.md#threat-library) explains it. Updating the pinned
 versions is a code change (`scripts/update_actors.py`, then review the diff of claims).
 
 Attribution and licences are in [NOTICE](../NOTICE): MITRE ATT&CK under MITRE's terms of use; the MISP galaxy
-under CC0-1.0.
+under its dual CC0-1.0 or BSD-2-Clause licence (Insight uses CC0-1.0).
 
 ## Command line
 
@@ -190,8 +237,41 @@ Files are created owner-only (0600) and never overwritten; every export and chan
 * **Word lists can miss or mismatch.** The industry patterns are precision-first and reviewed, but prose is
   prose: read the quoted sentence before relying on a claim, and remove wrong ones with a reason.
 * **No vendor intelligence.** No CrowdStrike, Mandiant, Recorded Future or Microsoft data and no closed-source
-  attribution. Vendor names for groups appear only where ATT&CK lists them as aliases.
+  attribution. Vendor names appear only as ATT&CK aliases or sourced synonyms from uniquely matched MISP entries.
 * **Naming is counted, not attribution.** The mention count shows what your reports discuss.
 * **Hypotheses are generic.** They come from ATT&CK detection strategies, not from your environment.
 * **Rules are not validated or run.** Test them in your own tooling.
 * **Only Enterprise ATT&CK.** Mobile and ICS groups are not included.
+
+## Activity timeline and software layers (TIP 4.7, part 3)
+
+The guide's **Activity timeline** uses the same reader-filtered events as its JSON and Markdown downloads.
+Dates have explicit meanings: ATT&CK campaign first/last activity; the date a current report entered Insight;
+the date an analyst linked a campaign; the package's latest publication or retirement; and an indicator's
+reported first/last sighting. A report that only names a group is labelled as a mention, not attribution.
+Sightings require an accepted indicator in a current, explicitly linked report. They do not prove the actor
+caused the activity. No report excerpts are copied into the timeline.
+
+Use **Link a campaign** in the guide to record evidence for an association. Nothing associates campaigns
+from shared reports, indicators, software or techniques. The link label includes the actor, campaign and note
+markings. The campaign keeps that label after unlinking. Hidden actors, campaigns and links appear missing.
+Group references are exact: catalog groups and separately tracked analyst actors do not silently merge.
+
+The API defaults to ten years and 100 events; `days` accepts 1–36,500 and `limit` accepts 1–200. Results are
+newest first with deterministic ties, within the inclusive UTC period. Missing or invalid source dates are
+omitted; they are never replaced with today. Report collection is bounded to 200 current linked reports and
+50 named reports from the newest 5,000 visible reports. Campaign and package scans stop at 201; sighting
+support stops at 5,000 accepted report/indicator associations and sightings at 201. `truncated` means a visible
+source or output cap was reached. The timeline label includes every in-period event that influences this
+flag, even if the output limit omits it. If a source scan is capped, the flag is conservatively marked at the
+reader ceiling (RED for an unlimited reader). The guide label includes its timeline. Hidden events never
+influence a limited reader's counts or flags.
+
+Hunt packages retain only the latest publication timestamp and the current retirement timestamp. Republished
+packages therefore do not show earlier cycles. This view is not a complete activity or audit history.
+
+`GET /api/software/{software_id}/navigator` exports Navigator layer format 4.5 with explicit ATT&CK software
+techniques, source attribution and TLP:CLEAR. Legacy libraries with no software technique context return an
+empty layer. The actor layer keeps every existing direct-group/report score. Techniques available only through
+catalog group/software links or visible explicit analyst software links have score zero and an explanatory
+comment. They never become direct group techniques, change hunt hypotheses or infer attribution.

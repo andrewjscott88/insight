@@ -1,5 +1,35 @@
 # HTTP API (0.9.0)
 
+## Software
+
+Software catalog entries are public reference data, but these routes require authentication like other API
+reads. Analyst report/use links and name-match candidates respect the caller's TLP limit. IDs are ATT&CK
+software IDs such as `S0154`; lowercase IDs are accepted. Hidden reports/links look missing (`404`), and a
+write above the instance or key limit is refused (`403`). Browser writes require the normal CSRF token.
+
+| Route | Result |
+| --- | --- |
+| `GET /api/software?q=&offset=0&limit=50` | `{software: [...]}`; catalog ID/name/alias substring search. Query at most 120 characters, nonnegative offset, limit 1–200. |
+| `GET /api/software/{ref}` | Catalog context plus `reports`, `uses`, `candidates`, `reports_scanned`, `scan_capped`, and aggregate `tlp`. Missing items return `404`; retired items with a visible saved link retain their saved name/type. |
+| `GET /api/software/{ref}/documents?offset=0&limit=50` | `{reports: [...]}`; visible explicit report links, newest link first; limit 1–200. Unknown IDs return an empty list. |
+| `POST /api/software/{ref}/documents` | Body `{document_id, note?: "", tlp?: "CLEAR"}`. Note at most 2,000 characters; unknown fields refused. Returns `201` with `{id, software_id, document_id, note, tlp, created_at, created_by}`. Idempotent repeated writes; label never lowered. |
+| `DELETE /api/software/{ref}/documents/{document_id}` | Remove a visible link, including a retired catalog link; `{removed: document_id}`. Missing/hidden link `404`. |
+| `GET /api/documents/{document_id}/software` | `{software: [...]}` containing saved `{id, name, type, tlp, note, retired}` for up to 200 visible links. Missing/hidden report `404`. |
+
+Catalog fields: `id`, `name`, `type` (`malware` or `tool`), `aliases`, `description`, `platforms`, `techniques`,
+`groups`, `url`, `tlp`, `retired`. Context absent from an older library edition uses empty lists/text.
+Detail returns at most 50 explicit report links, 50 actor/campaign use decisions and 50 candidates. Report
+links contain `document_id`, `title`, report `created_at`, `linked_at`, `note`, effective `tlp`, and saved
+`software_id`, `software_name`, `software_type`. Use decisions contain `kind`, subject `ref`, `name`, `tlp`,
+`linked_at`, and saved software name/type. Candidates carry `document_id`, `title`, `tlp`, `created_at`,
+`source_name`, matched `name`, and `evidence` (empty for metadata-only sources). They check at most the newest
+5,000 visible current reports with the existing whole-word matcher; a match never adds a link.
+
+The existing `/api/actors/{ref}/links` and `/api/campaigns/{ref}/links` accept `target_kind: "software"` with
+`target_id: "S0154"` and a TLP label. Their GET results and DELETE paths use the same kind. Only explicit
+analyst actor/campaign links produce STIX `uses`, never catalog claims or report co-occurrence. Mutations are
+audited as `software.link`/`software.unlink` or the existing `actor.link`/`campaign.link` actions.
+
 JSON over HTTP on the same origin as the workspace. The API is **unversioned and intended for automation by
 the single operator** (scripts, a SIEM), signed in with a browser session or the
 [API key](#api-key-scripts-and-siem). Breaking changes are listed in `CHANGELOG.md` under "Upgrade notes".
@@ -23,7 +53,10 @@ page is the field-by-field reference.
 4. `POST /logout` (form field `csrf_token`) revokes the session server-side.
 
 **Temporary password-free mode:** with the explicit default-off `INSIGHT_DEV_NO_AUTH=on`, `GET /login`
-creates the normal operator session and CSRF token, then returns `303` to `/` instead of a password form.
+creates the normal operator session and CSRF token, then returns a `200` continuation page instead of a
+password form. The page checks `/api/session` before navigating to `/`, with a fixed link as a fallback.
+Ending the HTTP redirect chain lets the browser send its `SameSite=Strict` cookie after a cross-site entry.
+An already authenticated `GET /login` still returns `303` to `/`.
 Anyone who can reach the site can obtain this full-access session. Direct API calls without a valid session
 or key still return `401`, and session-authenticated writes still require `X-CSRF-Token`; API-key behavior
 is unchanged. Enabling MFA and this mode together is rejected. Turning the mode off and restarting with
@@ -124,6 +157,7 @@ operator have separate budgets, so a runaway script cannot lock the analyst out 
 | `write` | `POST` (ingest, triage, notes, demo, sync, enrichment) | 60 per minute |
 | `ioc-export` | `GET /api/iocs/export`, `GET /api/iocs/stix`, `GET /api/iocs/blocklist` | 30 per hour |
 | `taxii` | TAXII collection reads (`objects/`, `manifest/`, single objects and versions) | 240 per hour |
+| `mcp` | All `POST /mcp` messages, per API key | 120 per minute |
 | (invalid keys) | Requests with a wrong, revoked or expired key, per client address | 10 per minute |
 
 Budgets are token buckets: the full limit is available as a burst, then it refills evenly (`read`: 5 per
@@ -377,6 +411,29 @@ For IPs and domains, `format=suricata` or `format=snort` downloads a plain-text 
 return 422 when the selection is empty or the kind is unsupported. See [network sensor rules](IOC_EXPORT.md#network-sensor-rules)
 for signatures, DNS coverage and local rule IDs.
 
+## MCP (read-only)
+
+`POST /mcp` accepts stateless JSON-RPC 2.0 using protocol `2026-07-28`: `server/discover`, `ping`,
+`tools/list` and `tools/call`. Legacy `2025-11-25` also supports `initialize` and
+`notifications/initialized`. `GET /mcp` returns `405`.
+API keys only; browser sessions are refused. The exact MCP POST accepts all API-key access levels, because
+the fixed tools only read. Every intelligence read applies the key's TLP ceiling and publisher reuse rules.
+
+Send `Content-Type: application/json` and `Accept: application/json, text/event-stream`. Modern requests
+require matching protocol/method/name headers and per-request `_meta`; legacy requests send
+`MCP-Protocol-Version: 2025-11-25` after initialization. Results include identical structured JSON and text,
+explicit truncation and a conservative `sharing_tlp`. Tool errors set `isError`; missing and hidden IDs
+give the same `status: 404` result. No write
+tools, OAuth, transport sessions, STIX, resources, prompts, sampling, elicitation or model calls.
+
+Authentication errors use `401`, Origin errors `403`, unsupported protocol headers `400`, media errors
+`406`/`415`, body limits `413`, and the dedicated per-key budget `429`. Protocol errors use JSON-RPC codes
+`-32700` (parse), `-32600` (request), `-32601` (method), and `-32602` (parameters/unknown tool).
+Modern header mismatches use `400` / `-32020`; unsupported revisions use `400` / `-32022` with supported
+versions. Unknown modern methods use `404` / `-32601`.
+The request limit is 65,536 bytes. [MCP.md](MCP.md) lists tool arguments, response limits, audit semantics
+and client requirements; [API_GUIDE.md](API_GUIDE.md#read-only-mcp) has curl examples.
+
 ## TAXII 2.1 (read-only)
 
 API keys only (`Authorization: Bearer <key>`); a signed-in browser gets `403`. Responses use
@@ -411,6 +468,42 @@ API keys only (`Authorization: Bearer <key>`); a signed-in browser gets `403`. R
 | `GET /api/entities` | `q` | Up to 200 `{id, kind, value, document_count}` sorted by kind and value |
 | `GET /api/entities/{id}` | `offset` (0), `limit` (100, at most 200) | `{id, kind, value, flags, assessment, first_seen_at, last_seen_at, document_count, offset, documents: [summaries]}`, newest first, paginated. `assessment` is `null` or `{verdict, reason, tlp, valid_until, decided_at, actor}`; a TLP-limited key sees it only within its limit. `exploit` is the CVE's exploit context as in `GET /api/cves` (`null` for other kinds, or when nothing is known). `first_seen_at` / `last_seen_at`: when the oldest and newest report **you can see** that mentions it was added. `confidence`: see [Confidence and source reliability](#confidence-and-source-reliability) |
 | `POST /api/entities/{id}/assessment` | JSON `{verdict, reason, tlp, valid_until}`: `verdict` `unknown` (clears) / `benign` / `suspicious` / `malicious`; `reason` up to 2,000 characters; `tlp` (default `AMBER`) labels the reason; `valid_until` a date, today or later, or omitted | The recorded assessment, or `{"verdict": "unknown"}`. Audited as `entity.assess`. `404` if you cannot see the entity; `403` if a TLP-limited key would set, or replace, a verdict above its limit |
+
+## Infrastructure pivots (TIP 4.6)
+
+`GET /api/pivots?value=...` returns the fresh cached results for a reviewed indicator in a current
+TLP:CLEAR report. Each result names `provider`, `value`, `fetched_at`, `found` and bounded provider metadata.
+An eligible subject without a fresh cache returns `[]`; a missing, hidden or ineligible subject returns
+`404`. Reads never contact a provider. Results expire after 24 hours and eligibility is rechecked each time.
+
+`POST /api/pivots/{provider}` accepts `{"value":"example.com","approved":true}`. Providers
+are `rdap` (domain or public IP), `asn` (public IP), `crtsh` (domain), and `circl` (domain or public IP).
+Only `circl` requires credentials configured on the host. Extra fields are refused. An uncached lookup needs
+`approved: true`; each provider must be enabled in Settings first. Only an operator session with CSRF or an
+unlimited read-write API key may request it. Limited/read-only keys get `403`, disabled providers `503`,
+missing/ineligible subjects `404`, invalid/unapproved requests `422`, throttled requests `429` with
+`Retry-After`, and failed or unrelated provider answers `502`. A fresh cache is returned without disclosure.
+
+RDAP metadata includes registry status/dates, public registrar IDs and name servers, or network name,
+handle, first/last address and country. No contact data is kept. RIPEstat returns prefix and a list of origin
+network numbers and holders. `nodes` describes provider context for the link map, never new observations.
+`GET /api/graph` can include `domain`, `address`, `as`, `certificate_name` and `name_server` node types, with
+provider and fetch date in edge labels. Hidden known indicators are not linked. All graph caps still apply.
+
+A certificate transparency result has `provider`, `value`, `found`, `fetched_at`, `truncated`, `certificates` and `nodes`.
+`certificates` contains at most 500 distinct `{name, issuer, not_before, not_after}` records; dates are UTC ISO
+strings. `nodes` contains `{type:"certificate_name", value}` graph context. No matches means empty lists and
+`found=false`. Renewed names keep their newest validity record. Every provider row must relate to the query.
+Settings switches have no API; they are audited workspace controls. Nothing is scheduled.
+[Limits and provider conditions](INFRASTRUCTURE_PIVOTS.md).
+
+A passive DNS result has `provider`, `value`, `found`, `fetched_at`, `truncated`, `records` and `nodes`.
+`records` holds at most 500 `{name, type, answer, first_seen, last_seen, count}` records; dates are UTC ISO
+strings and unknown counts are null. Name and answer preserve provider orientation. Graph nodes contain
+validated standalone domain/address values only. No matches means empty lists and `found=false`.
+The Settings switch has no API. Credentials stay on the host, outside request bodies and cached metadata.
+[Exact merge rules, passive-only behaviour and provider conditions](INFRASTRUCTURE_PIVOTS.md).
+
 
 ## ATT&CK techniques
 
@@ -599,7 +692,8 @@ How far each source and report can be trusted, and how well the reports back up 
 | `GET /api/cves?days=30&limit=50` | The prioritised CVE view ([ADR 0024](adr/0024-prioritised-cves.md)): the CVEs that current reports received in the last `days` days (1-365) mention, most urgent first, from the reports the caller may see (TLP limit; the demo and rejected mentions left out). `{days, since, total, truncated, cves: [cve]}`; `limit` 1-500 rows. A row is `{cve, tier, label, reason, details: [line], reports, sources, first_seen, last_seen, report: {id, title}, kev: {date_added, due_date, ransomware, name, document_id} \| null, cvss: {score, source, csaf}, nvd, epss, exploit}`. `tier`: 1 used in ransomware (CISA KEV), 2 known exploited (KEV), 3 reported exploited (VulnCheck KEV), 4 public exploit (a report or VulnCheck), 5 likely to be attacked soon (EPSS 10% or more), 6 critical (CVSS 9 or more), 7 high (CVSS 7 or more), 8 no strong signal (tiers 3 and 4 since 0.9.0, [ADR 0028](adr/0028-exploit-availability.md)); within a tier, higher EPSS, higher CVSS, more reports, most recently seen. `details` are plain-English lines; `nvd`/`epss` as in the scores route. `exploit` is `null` or `{public_exploit, reported_exploited, reports: {poc\|metasploit\|exploit-db: count}, vulncheck, attribution}`: `reports` counts current reports the caller may see that mention that kind of public exploit near the CVE; `vulncheck` is VulnCheck KEV's cached answer `{listed, date_added, exploits: [{xdb_id, url, exploit_type, date_added}], exploit_count, reported_count, canaries, ransomware}` or `null`, and `attribution` is the notice VulnCheck's terms require when it is shown. `truncated`: more than 20,000 mentions, older ones left out |
 | `GET /api/cves/{cve}/scores` | The cached scores, read without contacting anyone ([ADR 0023](adr/0023-automatic-cve-lookups.md)): `{cve, nvd, epss, nvd_checked_at, epss_checked_at, vulncheck, vulncheck_checked_at, exploit}` (`vulncheck` and `exploit` as in `GET /api/cves`). `nvd` is `{score, severity, version, vector, status, published, description, cwes}` or `null` (not looked up, or NVD has no record); `score` is the CVSS base score from the newest version NVD has (4.0, 3.1, 3.0, then 2), `null` when NVD has not scored it (`status` says why, such as `Awaiting Analysis` or `Rejected`). `epss` is `{probability, percentile, date}` (both 0-1; probability of exploitation attempts in the next 30 days) or `null`. A `*_checked_at` time with a `null` score means the provider was asked and has none. `404` unless a current report the caller may see mentions the CVE, so TLP-limited keys can use it for their own reports. |
 
-Sync and enrichment are the only routes that cause outbound network traffic. A schedule makes the same syncs happen by
+
+Sync, enrichment and approved infrastructure pivots are the only routes that cause outbound network traffic. A schedule makes the same syncs happen by
 themselves; an unchanged feed is skipped (conditional requests with `If-None-Match` / `If-Modified-Since`, then a
 payload hash), and its run says `Unchanged since the last sync.`
 
@@ -688,3 +782,24 @@ Audit actions:
 - `document.revision.supersede`, `document.revision.reactivate`;
 - `observation.review`, `note.add`, `watch_term.create`, `watch_term.remove`;
 - `document.delete` (manual procedure, RUNBOOK §9).
+
+## Actor activity and software Navigator
+
+| Method | Route | Meaning |
+| --- | --- | --- |
+| GET | `/api/actors/{ref}/timeline` | Dated source and local events; `days=3650` (1–36,500), `limit=100` (1–200). |
+| GET | `/api/actors/{ref}/campaigns` | Up to 200 visible explicit campaign associations. |
+| POST | `/api/actors/{ref}/campaigns` | Explicit association: `campaign_id`, optional `note` (2,000 characters), `tlp` (CLEAR default). Returns 201. |
+| DELETE | `/api/actors/{ref}/campaigns/{campaign_id}` | Remove the visible association; campaign label stays raised. |
+| GET | `/api/software/{software_id}/navigator` | Public catalog software techniques as a Navigator 4.5 JSON attachment. |
+
+Normal authentication applies. Writes require write access and browser CSRF/Origin checks, and respect both
+instance and caller TLP ceilings. Unknown and hidden associations return 404. Payloads reject extra fields.
+Audit actions: `actor.campaign.link`, `actor.campaign.unlink`, `software.navigator`.
+
+Timeline format `insight-actor-timeline-1`: `ref`, `since`, `until`, `tlp`, `limit`, `truncated`, and `events`.
+Each event has `id`, `at` (UTC), `kind`, `title`, `source`, `source_ref`, `relation`, `tlp`, `detail`, `url`.
+Kinds include campaign first/last seen, campaign linked, report added, hunt published/retired and sighting
+first/last seen. The date meaning is explicit; a name match or indicator sighting is not actor attribution.
+Guide format `insight-threat-guide-1` gains an additive `timeline` field; existing fields remain unchanged.
+See [collection limits and historical coverage](THREAT_GUIDES.md#activity-timeline-and-software-layers-tip-47-part-3).

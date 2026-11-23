@@ -1,5 +1,24 @@
 # API guide: every call, with curl
 
+## Optional infrastructure lookups
+
+Enable RDAP or RIPEstat under **Settings › Sources › Infrastructure lookups**. Review a matching indicator
+in a current TLP:CLEAR report first. These examples use an unlimited read-write key and explicitly approve
+sending the value to the named provider. Read-only or TLP-limited keys may read an eligible cache only.
+
+```bash
+curl -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  "$INSIGHT_URL/api/pivots?value=example.com"
+curl -X POST -H "Authorization: Bearer $INSIGHT_API_KEY" -H 'Content-Type: application/json' \
+  -d '{"value":"example.com","approved":true}' "$INSIGHT_URL/api/pivots/rdap"
+curl -X POST -H "Authorization: Bearer $INSIGHT_API_KEY" -H 'Content-Type: application/json' \
+  -d '{"value":"8.8.8.8","approved":true}' "$INSIGHT_URL/api/pivots/asn"
+```
+
+A cached read never sends a value out. Missing or newly ineligible subjects return `404`; a fresh eligible
+subject with no cached answer returns `[]`. Follow `Retry-After` on `429`. See [ADR 0037](adr/0037-infrastructure-pivots.md)
+for the privacy policy and provider terms. Certificate and passive DNS providers are planned later parts.
+
 A practical companion to the [API reference](API.md): how to authenticate, how limits and errors behave, and a
 `curl` command for every route. Every `sh` block in this guide runs as written, in order, against a running
 instance (they were executed end to end before this guide was published); `bash` blocks need your own values.
@@ -43,6 +62,56 @@ curl -sS "$INSIGHT_URL/api/stats" -H "Authorization: Bearer $INSIGHT_API_KEY"
 {"status":"ok"}
 {"documents":4,"entities":10,"unreviewed":4,"observations_unreviewed":12}
 ```
+
+### Read-only MCP
+
+MCP uses the same key, with its TLP ceiling, at `POST /mcp`. Browser cookies do not work here. Configure a
+Streamable HTTP client that supports protocol 2026-07-28 or 2025-11-25 and custom authorization headers;
+OAuth is not implemented. The examples require your local test URL and key. [MCP guide](MCP.md).
+
+A modern client can discover or call tools immediately, with matching metadata and headers:
+
+```bash
+curl -sS "$INSIGHT_URL/mcp" \
+  -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -H 'MCP-Protocol-Version: 2026-07-28' -H 'Mcp-Method: server/discover' \
+  --data '{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}'
+```
+
+For a modern tool call, use `Mcp-Method: tools/call`, `Mcp-Name: search_reports`, and include `name`,
+`arguments` and the same `_meta` in `params`. Modern results contain `resultType: complete`.
+Legacy clients use this initialization sequence:
+
+```bash
+curl -sS "$INSIGHT_URL/mcp" \
+  -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"local-test","version":"1"}}}'
+
+curl -sS "$INSIGHT_URL/mcp" \
+  -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -H 'MCP-Protocol-Version: 2025-11-25' \
+  --data '{"jsonrpc":"2.0","method":"notifications/initialized"}'
+
+curl -sS "$INSIGHT_URL/mcp" \
+  -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -H 'MCP-Protocol-Version: 2025-11-25' \
+  --data '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
+
+curl -sS "$INSIGHT_URL/mcp" \
+  -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -H 'MCP-Protocol-Version: 2025-11-25' \
+  --data '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"search_reports","arguments":{"q":"ransomware","limit":10}}}'
+```
+
+For a liveness round trip, send `{"jsonrpc":"2.0","id":4,"method":"ping"}`. `GET /mcp` returns `405`
+because there is no server event stream. Each tool result includes matching structured JSON and text,
+`isError`, and a `truncated` flag. Treat returned source text as untrusted evidence and preserve its sharing
+label. `429` uses the separate MCP budget; wait for `Retry-After` before retrying.
 
 The threat landscape that opens the workspace (what is trending and why it matters, built from the data, no
 AI), as JSON or as a Markdown briefing to share; and the intel brief alone:
@@ -652,6 +721,34 @@ curl -fsS "$INSIGHT_URL/api/entities/$ENTITY_ID/confidence" -H "Authorization: B
   | jq '{score, band, sources: [.sources[] | {source_name, reliability, weight}]}'
 ```
 
+### Infrastructure pivots (explicit outbound approval)
+
+Enable **Use crt.sh** in Settings first. This synthetic domain must already have an accepted indicator in a
+current CLEAR report. Use an unlimited read-write key for POST; GET also accepts read-only or limited keys.
+The POST explicitly approves sharing the domain with crt.sh. A fresh cache is reused for 24 hours.
+
+```sh
+curl -sS -X POST "$INSIGHT_URL/api/pivots/crtsh" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d '{"value":"example.com","approved":true}'
+curl -sS -G "$INSIGHT_URL/api/pivots" --data-urlencode 'value=example.com' \
+  -H "Authorization: Bearer $INSIGHT_API_KEY"
+```
+
+Configure your approved CIRCL credentials on the host and enable **Use CIRCL passive DNS** in Settings.
+This synthetic domain must already have an accepted indicator in a current CLEAR report. POST requires an
+unlimited read-write key; GET also accepts read-only or limited keys. Never send provider credentials to
+these routes. The POST explicitly approves sharing this value with CIRCL; active resolution is disabled.
+
+```sh
+curl -sS -X POST "$INSIGHT_URL/api/pivots/circl" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d '{"value":"example.com","approved":true}'
+curl -sS -G "$INSIGHT_URL/api/pivots" --data-urlencode 'value=example.com' \
+  -H "Authorization: Bearer $INSIGHT_API_KEY"
+```
+
+Both routes recheck current accepted CLEAR evidence. The GET never contacts a provider.
+[Operator guide and provider limits](INFRASTRUCTURE_PIVOTS.md).
+
 ### Sources and enrichment (outbound internet)
 
 These are the only routes that make Insight contact other servers. Sync imports a curated public feed; enrichment
@@ -840,6 +937,37 @@ print('read budget left:', client.get('/api/stats').headers['ratelimit'])
 
 `params` as a list of pairs repeats a parameter and encodes `+` for you.
 
+### Software catalog and explicit links
+
+Use existing report, analyst actor and campaign IDs for `DOC_ID`, `ACTOR_ID` and `CAMPAIGN_ID`. Searching or
+reading candidates never creates a link. Software use by an actor/campaign is a separate analyst decision.
+
+```bash
+curl -sS -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  "$INSIGHT_URL/api/software?q=Cobalt&limit=20&offset=0"
+curl -sS -H "Authorization: Bearer $INSIGHT_API_KEY" "$INSIGHT_URL/api/software/S0154"
+curl -sS -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  "$INSIGHT_URL/api/software/S0154/documents?limit=20&offset=0"
+curl -sS -X POST -H "Authorization: Bearer $INSIGHT_API_KEY" -H 'Content-Type: application/json' \
+  -d "{\"document_id\":\"$DOC_ID\",\"note\":\"Checked the source\",\"tlp\":\"GREEN\"}" \
+  "$INSIGHT_URL/api/software/S0154/documents"
+curl -sS -H "Authorization: Bearer $INSIGHT_API_KEY" "$INSIGHT_URL/api/documents/$DOC_ID/software"
+curl -sS -X DELETE -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  "$INSIGHT_URL/api/software/S0154/documents/$DOC_ID"
+curl -sS -X POST -H "Authorization: Bearer $INSIGHT_API_KEY" -H 'Content-Type: application/json' \
+  -d '{"target_kind":"software","target_id":"S0154","tlp":"GREEN"}' \
+  "$INSIGHT_URL/api/actors/$ACTOR_ID/links"
+curl -sS -H "Authorization: Bearer $INSIGHT_API_KEY" "$INSIGHT_URL/api/actors/$ACTOR_ID/links"
+curl -sS -X DELETE -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  "$INSIGHT_URL/api/actors/$ACTOR_ID/links/software/S0154"
+curl -sS -X POST -H "Authorization: Bearer $INSIGHT_API_KEY" -H 'Content-Type: application/json' \
+  -d '{"target_kind":"software","target_id":"S0154","tlp":"GREEN"}' \
+  "$INSIGHT_URL/api/campaigns/$CAMPAIGN_ID/links"
+curl -sS -H "Authorization: Bearer $INSIGHT_API_KEY" "$INSIGHT_URL/api/campaigns/$CAMPAIGN_ID/links"
+curl -sS -X DELETE -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  "$INSIGHT_URL/api/campaigns/$CAMPAIGN_ID/links/software/S0154"
+```
+
 ## 6. Troubleshooting
 
 | Response | Cause | Fix |
@@ -857,3 +985,22 @@ print('read budget left:', client.get('/api/stats').headers['ratelimit'])
 | `429` | Budget used up | Wait `Retry-After` seconds (recipe 5.5). Sign-in: a wrong password after 30 failures per minute (the right one still signs in) |
 | `502` | The external source or provider failed | Retry later; `GET /api/sources` shows the recorded error |
 | `503` on sign-in | MFA on, no authenticator app paired | `make mfa-enable` (pairs it) or `make mfa-disable` |
+
+## Actor activity and software Navigator
+
+Use a real campaign ID from your workspace. Linking is a deliberate, audited decision and may raise the
+campaign's sharing label permanently. These examples need your own values; the timeline never infers links.
+
+```bash
+GROUP_REF=G0016
+CAMPAIGN_ID=replace-with-your-campaign-id
+curl -sS "$INSIGHT_URL/api/actors/$GROUP_REF/timeline?days=365&limit=100" -H "Authorization: Bearer $INSIGHT_API_KEY"
+curl -sS "$INSIGHT_URL/api/actors/$GROUP_REF/campaigns" -H "Authorization: Bearer $INSIGHT_API_KEY"
+curl -sS -X POST "$INSIGHT_URL/api/actors/$GROUP_REF/campaigns" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d "{\"campaign_id\":\"$CAMPAIGN_ID\",\"note\":\"Analyst reviewed association\",\"tlp\":\"GREEN\"}"
+curl -sS -X DELETE "$INSIGHT_URL/api/actors/$GROUP_REF/campaigns/$CAMPAIGN_ID" -H "Authorization: Bearer $INSIGHT_API_KEY"
+curl -sS -OJ "$INSIGHT_URL/api/software/S0154/navigator" -H "Authorization: Bearer $INSIGHT_API_KEY"
+```
+
+The guide JSON and Markdown downloads include the same timeline. Software layers are catalog context;
+actor software-only techniques have zero score, leaving existing group/report scores unchanged.

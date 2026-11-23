@@ -2,8 +2,71 @@
 
 ## Unreleased
 
+### Changed: platform branding
+
+- The workspace, browser title, and sign-in and sign-out pages now use **Cyber Threat Intelligence Platform**
+  as the descriptor. The **Insight** name and symbol stay the same.
+
+### Fixed
+
+- Opening a link from another site no longer loops between the workspace and sign-in page when temporary
+  password-free access is on. A same-origin page confirms the session before continuing, with a link for
+  browsers that block scripts. Session cookies remain `SameSite=Strict`, secure where configured, and
+  HTTP-only; password, MFA, origin and CSRF checks are unchanged.
+
+### Added: actor activity timelines and software Navigator (TIP 4.7, part 3)
+
+- Threat guides, JSON and Markdown include a dated timeline: public ATT&CK campaigns, explicitly associated
+  analyst campaigns, current reports linked to or naming the group, the latest hunt package publication and
+  retirement, and sightings of accepted indicators in current linked reports. Every event states its source,
+  date meaning and sharing label. This is not inferred attribution or a complete historical archive.
+- `GET /api/actors/{ref}/timeline` and explicit campaign association APIs/editor; campaign labels retain the
+  strictest association label after removal. Software Navigator layers use only catalog techniques; actor
+  layers add software-only context at score zero without changing existing scores or hunt hypotheses.
+
+### Added: read-only MCP (TIP 4.8)
+
+- Eight tools at `POST /mcp` search reports and indicators, show report summaries and indicator context,
+  and read open requirements, hunt packages, threat groups and the landscape.
+  Supports protocols 2026-07-28 and 2025-11-25, API-key TLP ceilings, publisher reuse rules and a separate
+  per-key rate budget. Browser sessions never authorize it.
+- Calls are audited as `mcp.call`; no write tools, OAuth, model calls, new dependencies or schema migration.
+  See [MCP.md](docs/MCP.md) and [ADR 0039](docs/adr/0039-read-only-mcp.md).
+
+### Added
+
+- TIP 4.6 part 1: optional manual RDAP and RIPEstat infrastructure lookups with off-by-default Settings
+  switches, explicit disclosure approval, a 24-hour cache, and provider/date-labelled link-map context.
+  Only reviewed indicators in current TLP:CLEAR reports qualify. RDAP contact data is discarded.
+  No migration is required.
+- Long certificate names and issuer text stay within the phone dialog when a result is expanded.
+
+- Long domains wrap within the pivot title and approval label on phones, including larger text.
+
+### Added: certificate transparency (TIP 4.6 part 2)
+
+- Optional crt.sh pivots show up to 500 distinct certificate names, issuer and validity dates from a reviewed
+  domain in a current CLEAR report, with provider/date links in the map. Settings starts off; each uncached
+  lookup needs explicit consent. Cache reads recheck eligibility; shared throttling and audit apply.
+- Includes shared infrastructure-pivot API and workspace support. The same boundary applies to RDAP and RIPEstat. [Operator guide](docs/INFRASTRUCTURE_PIVOTS.md), [ADR 0037](docs/adr/0037-infrastructure-pivots.md).
+- Upgrade: no database migration or new dependency; no outbound calls until enabled and approved.
+
+- Long passive DNS names and answers stay within the phone dialog when a result is expanded.
+
+### Added: passive DNS (TIP 4.6 part 3)
+
+- With approved CIRCL access and host credentials, an optional manual pivot shows up to 500 DNS history
+  records with dates and counts. Its active resolver is explicitly disabled. The provider starts off and
+  each uncached lookup needs consent for a reviewed value in a current CLEAR report.
+- Shared pivot API, cache, audit, throttle and link-map controls keep provider context separate from
+  reviewed indicators.
+  [Guide](docs/INFRASTRUCTURE_PIVOTS.md) · [ADR 0037](docs/adr/0037-infrastructure-pivots.md).
+- Upgrade: no database migration or dependency. No CIRCL calls without host credentials, Settings opt-in and approval.
+
 ### Upgrade notes
 
+- The threat library now writes `insight-threat-library-2`. Existing format 1 synced libraries still load;
+  run `insight threat-library-sync` to gain the expanded catalog. No database migration is needed for this change.
 - Migration `0024` adds the `requirements`, `requirement_criteria` and `requirement_evidence` tables. It runs
   at start-up and changes no existing data.
 - Migration `0025` adds the `source_ratings` table and a `credibility` column on reports (every existing report
@@ -15,6 +78,11 @@
 - Migration `0028` adds product fields to cases (kind, audience, bottom line up front, version) and the
   `case_judgements`, `case_judgement_items`, `case_gaps` and `case_versions` tables. Existing cases become
   unpublished assessments. It runs at start-up.
+- Migration `0029` adds explicit software/report links and software targets on actor/campaign links.
+  It snapshots the catalog name and type so saved decisions survive catalog removal. Existing records
+  are unchanged. Downgrading removes these new software associations.
+- Migration `0030` adds `actor_campaigns` and `campaigns.updated_at` (backfilled from creation time). A campaign
+  label raise advances its STIX/TAXII modification time so incremental polling sees the changed marking.
 
 ### Added: finished intelligence products (TIP 4.4)
 
@@ -33,6 +101,18 @@
 - `/api/cases/{id}/judgements`, `/gaps`, `/gaps/{id}/rfi`, `/publish`, `/product` and `/export`; the case
   routes take and return the product fields. The API keeps the name `cases`.
 
+### Added: software links and sharing (TIP 4.7 part 2)
+
+- Search software in **Investigate > Threat groups**, review reports that name it, and save or remove
+  labelled report links. Name matches are candidates only. The report reader also offers software links.
+- Actors and campaigns can have explicit software-use links through their existing links editor and API.
+  Report co-occurrence never creates an attribution or a `uses` relationship.
+- STIX exports and the Reviewed indicators TAXII collection include linked malware and tools, with stable
+  software IDs and sharing labels on every association. More restricted links do not alter a report's label.
+- `/api/software`, software detail and report-link routes, and `/api/documents/{id}/software`.
+- TAXII polling picks up later label changes to explicit actor/campaign links and includes the updated
+  subject version, even when the subject was created before the link.
+
 ### Added: sightings from hunt tools (TIP 4.2)
 
 - A hunt tool reports a known indicator it saw in its own data with `POST /api/sightings`: when, how often,
@@ -41,6 +121,15 @@
 - Sightings are the strongest confidence signal: each place an indicator was seen counts as a completely
   reliable source, ageing from when it was last seen. The indicator explorer shows **Seen in your own data**.
 - `GET /api/sightings` and `DELETE /api/sightings/{id}`.
+
+### Added: adversary library software and aliases (TIP 4.7 part 1)
+
+- Both library editions include every current ATT&CK malware and tool, with aliases, descriptions,
+  platforms, techniques and groups that use it, including software with no listed group.
+- MISP synonyms from uniquely matched entry names improve group searches and reports naming a group.
+  Every alias retains its source. Ambiguous names and similar links never merge groups or create analyst links.
+- The pure, pinned build keeps the MITRE and MISP notices and a bundled edition under 1 MB.
+  See [ADR 0038](docs/adr/0038-adversary-library.md) and [the guide](docs/THREAT_GUIDES.md).
 
 ### Added: hunt packages over TAXII (TIP 4.3)
 

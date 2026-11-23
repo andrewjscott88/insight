@@ -27,6 +27,7 @@ from insight.connectors import SOURCES, import_kev, parse_feed
 from insight.demo import seed
 from insight.models import Enrichment, Entity, Observation, SourceRun, database
 from insight.schemas import (
+    ActorCampaignInput,
     ActorInput,
     ActorLinkInput,
     AssessmentInput,
@@ -51,6 +52,7 @@ from insight.schemas import (
     RuleInput,
     RuleLinkInput,
     SightingInput,
+    SoftwareLinkInput,
     SourceRatingInput,
     ThreatLinkInput,
 )
@@ -141,6 +143,7 @@ def build(path: Path) -> None:
             services.record_lookup_failure(db, 'nvd', 'CVE-2024-3400', 'NVD answered HTTP 404', at=when)
             # 0.7.0: threat guides (TIP 2.10): an actor, a report link, an industry decision, a rule, a hunt
             campaign = services.create_campaign(db, CampaignInput(name='Fixture campaign', tlp='GREEN'))
+            services.link_actor_campaign(db, 'G0016', ActorCampaignInput(campaign_id=campaign.id))
             services.link_threat(
                 db,
                 'campaign',
@@ -149,6 +152,13 @@ def build(path: Path) -> None:
             )
             actor = services.create_actor(db, ActorInput(name='Fixture Fox', aliases=('FF-1',), tlp='AMBER'))
             services.link_report(db, actor.id, ActorLinkInput(document_id=manual.id, note='Same beacon'))
+            services.link_software_report(db, 'S0154', SoftwareLinkInput(document_id=manual.id))
+            services.link_threat(
+                db,
+                'actor',
+                actor.id,
+                ThreatLinkInput(target_kind='software', target_id='S0154', tlp='AMBER'),
+            )
             services.record_industry_claim(
                 db, actor.id, IndustryClaimInput(industry='energy', document_id=manual.id, tlp='AMBER')
             )

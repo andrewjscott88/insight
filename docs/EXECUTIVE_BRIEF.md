@@ -3,8 +3,8 @@
 The landing page helps a reader decide what deserves attention in the intelligence already collected by
 Insight. It serves both general readers who need an explanation and IT readers who need the supporting
 report, vulnerability identifier or product name. The workspace keeps the **Insight** name and symbol and
-uses **Threat intelligence workbench** as its tagline (until 0.9.0: **Cyber Threat Intelligence Feed**). The previous **Collect. Connect. Understand.** line
-is removed.
+uses **Cyber Threat Intelligence Platform** as its tagline. The previous **Collect. Connect. Understand.**
+line is removed.
 
 ## What the brief answers
 

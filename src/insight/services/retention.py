@@ -24,6 +24,7 @@ from dataclasses import asdict, dataclass
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
+from .. import pivot_data
 from ..models import (
     ActorDocument,
     Document,
@@ -169,7 +170,8 @@ def delete_document(db: Session, document_id: str, reason: str) -> DeletionResul
         # Deleting the entity first synchronizes with a provider response being saved concurrently.
         db.execute(
             delete(Enrichment).where(
-                Enrichment.provider.in_(('greynoise', 'shodan')), Enrichment.subject.in_(orphans)
+                Enrichment.provider.in_(('greynoise', 'shodan', *pivot_data.PROVIDERS)),
+                Enrichment.subject.in_(orphans),
             )
         )
     result = DeletionResult(

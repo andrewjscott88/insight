@@ -54,6 +54,20 @@ hypothesis_settings.load_profile(os.environ.get('HYPOTHESIS_PROFILE', 'default')
 # --------------------------------------------------------------------------- network guard
 
 
+@pytest.fixture(params=['rdap', 'asn', 'crtsh', 'circl'])
+def pivot_case(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> tuple[str, str]:
+    from tests.greynoise_fixtures import IP
+
+    provider = str(request.param)
+    if provider == 'circl':
+        monkeypatch.setenv('INSIGHT_CIRCL_PDNS_USER', 'synthetic-user')
+        monkeypatch.setenv('INSIGHT_CIRCL_PDNS_PASSWORD', 'synthetic-password')
+    else:
+        monkeypatch.delenv('INSIGHT_CIRCL_PDNS_USER', raising=False)
+        monkeypatch.delenv('INSIGHT_CIRCL_PDNS_PASSWORD', raising=False)
+    return provider, IP if provider in ('rdap', 'asn') else 'example.com'
+
+
 @pytest.fixture(autouse=True)
 def _fresh_lookup_throttles() -> None:
     """Each test starts with every provider's lookup window open (the throttles are process-wide, B2)."""

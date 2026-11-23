@@ -28,11 +28,36 @@ from ..models import (
     ThreatLink,
 )
 from ..threat_library import library
+from .pivot_graph import _KINDS, _pivot_description, _pivot_neighbours, _pivot_parent
 from .techniques import TAGGED
 from .tlp import _visible, visible_levels
 
-NodeType = Literal['report', 'indicator', 'technique', 'group', 'actor', 'campaign']
-NODE_TYPES: Final[tuple[NodeType, ...]] = ('report', 'indicator', 'technique', 'group', 'actor', 'campaign')
+NodeType = Literal[
+    'report',
+    'indicator',
+    'technique',
+    'group',
+    'actor',
+    'campaign',
+    'domain',
+    'address',
+    'as',
+    'certificate_name',
+    'name_server',
+]
+NODE_TYPES: Final[tuple[NodeType, ...]] = (
+    'report',
+    'indicator',
+    'technique',
+    'group',
+    'actor',
+    'campaign',
+    'domain',
+    'address',
+    'as',
+    'certificate_name',
+    'name_server',
+)
 MAX_NODES: Final = 150
 #: Neighbours listed per node; a busier node is marked ``truncated``.
 PER_NODE: Final = 25
@@ -102,6 +127,11 @@ class _Walker:
         """The node itself, if it exists and the caller may see it."""
         kind, _, key = node.partition(':')
         db, limit = self.db, self.max_tlp
+        if kind in _KINDS:
+            found_pivot = _pivot_description(db, kind, key, limit)
+            return (
+                GraphNode(node, cast(NodeType, kind), found_pivot[1], found_pivot[2]) if found_pivot else None
+            )
         if kind == 'report':
             doc = db.scalar(select(Document).where(Document.id == key, *_visible(limit)))
             return GraphNode(node, 'report', doc.title, doc.source_name) if doc else None
@@ -138,6 +168,8 @@ class _Walker:
         kind, _, key = node.partition(':')
         found: list[Neighbour] = []
         truncated = False
+        if kind in _KINDS:
+            return _first(_pivot_parent(self.db, kind, key, self.max_tlp))
         for part in getattr(self, f'_from_{kind}')(key):
             rows, more = _first(part)
             found += rows
@@ -258,6 +290,7 @@ class _Walker:
         return [
             [(n, label, detail, 'mentions') for n, label, detail, _ in mentioned],
             self._subjects(self._threat_links(ThreatLink.entity_id == key)),
+            _pivot_neighbours(self.db, key, self.max_tlp, limit=PER_NODE + 1),
         ]
 
     def _from_technique(self, key: str) -> list[list[Neighbour]]:

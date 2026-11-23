@@ -21,7 +21,9 @@ from typing import Any, Final
 from . import __version__
 from .attack import catalog, technique
 from .industries import BY_KEY
+from .services.actor_timeline import timeline_json
 from .services.threat_guides import GuideData, SweepEntry
+from .software_navigator import software_techniques
 from .threat_library import Detection, Library, technique_name
 
 FORMAT: Final = 'insight-threat-guide-1'
@@ -285,6 +287,7 @@ def guide_json(guide: ThreatGuide) -> dict[str, Any]:
         'generator': f'Insight {__version__}',
         'tlp': guide.tlp,
         'reader_limit': data.max_tlp,
+        'timeline': timeline_json(data.timeline) if data.timeline else None,
         'group': {
             'ref': subject.ref,
             'kind': subject.kind,
@@ -381,6 +384,11 @@ def navigator_layer(guide: ThreatGuide) -> dict[str, Any]:
     counts = Counter({r.id: int(r.in_attack) + r.in_reports for r in guide.techniques})
     top = max(counts.values(), default=1)
     name = guide.name
+    group = guide.data.subject.catalog
+    software_sources = software_techniques(
+        guide.library, (*(group.software if group else ()), *guide.data.linked_software)
+    )
+    software_only = {tid: names for tid, names in software_sources.items() if tid not in counts}
     return {
         'name': f'{name}: techniques (Insight threat guide)',
         'versions': {
@@ -392,7 +400,8 @@ def navigator_layer(guide: ThreatGuide) -> dict[str, Any]:
         'description': (
             f'TLP:{guide.tlp}. Techniques for {name}: from MITRE ATT&CK and from reports the analyst '
             'linked to it. '
-            'Score: 1 if ATT&CK lists it, plus the number of linked reports tagged with it.'
+            'Score: 1 if ATT&CK lists it, plus the number of linked reports tagged with it. '
+            'Software-only techniques have score 0 and are not direct group observations.'
         ),
         'layout': {'layout': 'side', 'showID': True, 'showName': True, 'expandedSubtechniques': 'annotated'},
         'gradient': {'colors': ['#fff3e0', '#e65100'], 'minValue': 0, 'maxValue': max(1, top)},
@@ -411,6 +420,17 @@ def navigator_layer(guide: ThreatGuide) -> dict[str, Any]:
                 'enabled': True,
             }
             for r in guide.techniques
+        ]
+        + [
+            {
+                'techniqueID': tid,
+                'score': 0,
+                'enabled': True,
+                'comment': 'Software only (explicit group software association; ATT&CK software technique): '
+                + ', '.join(names)
+                + '. Not a direct group technique or analyst attribution.',
+            }
+            for tid, names in sorted(software_only.items())
         ],
         'metadata': [
             {'name': 'TLP', 'value': f'TLP:{guide.tlp}'},

@@ -539,18 +539,27 @@ redistribution rule (review J3).
 
 ### 4.6 Infrastructure pivots
 
+RDAP, RIPEstat, certificate transparency, and credentialed CIRCL passive DNS share per-lookup consent,
+cache, settings and graph support. [Operator guide](INFRASTRUCTURE_PIVOTS.md) · [ADR 0037](adr/0037-infrastructure-pivots.md).
+
 Manual, approved-per-lookup, metadata-only pivots that land in the link map: RDAP, certificate transparency
 (crt.sh), IP-to-ASN, and passive DNS where the operator has access (for example CIRCL for vetted users).
 
 ### 4.7 Adversary library imports
 
-MITRE ATT&CK groups and software, and the MISP threat-actor galaxy for aliases, as malware and tool entities;
-an activity timeline per actor; ATT&CK Navigator layers per actor and for the landscape.
+**Done (unreleased).** Both pinned library editions cover current ATT&CK malware and tools, their techniques,
+and the groups that use them. Aliases retain their MISP or ATT&CK provenance. Format 1 editions still load.
+Analysts can link reports, actors and campaigns to software and share those decisions through STIX and TAXII.
+Actor guides include a dated, TLP-filtered timeline. Software Navigator layers show catalog techniques;
+software-only techniques in actor layers have score zero. [ADR 0038](adr/0038-adversary-library.md) and
+[threat guides](THREAT_GUIDES.md).
 
 ### 4.8 Read-only MCP endpoint
 
 Model Context Protocol access for AI agents, using API keys and their TLP ceilings. Insight itself still
 writes nothing with a model ([LLM_EXTENSION.md](LLM_EXTENSION.md); 3.6 stays separate and opt-in).
+Eight read tools share a stateless `POST /mcp` endpoint for protocols 2026-07-28 and 2025-11-25.
+The per-key sharing ceiling applies to each result. [MCP guide](MCP.md), [ADR 0039](adr/0039-read-only-mcp.md).
 
 ---
 
@@ -630,9 +639,9 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
 - [x] **4.4** Finished intelligence products (key judgements, estimative language, PDF/Markdown/STIX):
   ADR 0036
 - [ ] **4.5** Operator-defined RSS/Atom and TAXII sources
-- [ ] **4.6** Infrastructure pivots: RDAP, certificate transparency, ASN, passive DNS
-- [ ] **4.7** ATT&CK groups and software, MISP threat-actor galaxy, actor timelines, Navigator layers
-- [ ] **4.8** Read-only MCP endpoint for AI agents
+- [x] **4.6** Infrastructure pivots: RDAP, RIPEstat, certificate transparency and CIRCL passive DNS
+- [x] **4.7** Adversary library imports: sourced group aliases, software links and sharing, actor timelines and Navigator layers (ADR 0038)
+- [x] **4.8** Read-only MCP endpoint for AI agents, with eight tools and per-key sharing ceilings (ADR 0039)
 
 **Total: 39 items.** Out of scope on purpose: cloning CrowdStrike/Mandiant/Recorded Future collection, building a malware sandbox, automated adversary attribution, and any always-on cloud AI.
 

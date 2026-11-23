@@ -53,7 +53,7 @@ async def test_unauthenticated_visitors_are_redirected(ui_env: SimpleNamespace) 
 
 async def test_workspace_renders_empty_state(user: User) -> None:
     await user.should_see('Threat landscape')
-    await user.should_see('Threat intelligence workbench')
+    await user.should_see('Cyber Threat Intelligence Platform')
     await user.should_not_see('Collect. Connect. Understand.')
     await user.should_see('No reports match.')
     await user.should_see('Choose a report from the list')
