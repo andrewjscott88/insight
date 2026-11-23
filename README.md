@@ -40,10 +40,10 @@ A single-operator threat-intelligence workbench, run locally or published behind
   sources and the TLP label, plus a hunt plan (starting hypotheses with log sources), an indicator sweep list,
   linked YARA, Sigma, Suricata and Snort rules (never run) and hunt records. Works offline from a bundled, pinned library;
   `make threat-library-sync` fetches a fuller copy. A group is never inferred from indicators or co-occurrence.
-- **Adversary library imports, part 1** ([ADR 0038](docs/adr/0038-adversary-library.md)): the pinned catalog
+- **Adversary library imports** ([ADR 0038](docs/adr/0038-adversary-library.md)): the pinned catalog
   covers every current ATT&CK malware and tool, plus uniquely matched MISP group aliases with their sources.
-  Aliases improve group searches and report name matches; they never create links. Software pages, analyst
-  linking, STIX output and actor timelines remain later parts of TIP 4.7.
+  Aliases improve group searches and report name matches; they never create links. In **Investigate > Threat groups**, link software to a report or record its use by an
+  actor or campaign. These labelled decisions appear in STIX and TAXII. [Software guide](docs/THREAT_GUIDES.md#software-and-report-links).
 - **Alerts** ([docs/ALERTS.md](docs/ALERTS.md)): when a new report mentions a watch term, or CISA adds a KEV
   entry, Insight tells a chat channel (Slack, Mattermost, Google Chat), your own tool (signed JSON webhook) or
   an e-mail address, within about 15 seconds of the sync. Each alert fires once; report titles go only up to

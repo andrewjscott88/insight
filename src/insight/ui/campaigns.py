@@ -59,6 +59,11 @@ def _targets(ws: Workspace, kind: str, text: str) -> list[tuple[str, str]]:
     limit = ws.app.state.settings.max_tlp
     if kind == 'technique':
         return [(t.id, f'{t.id} · {t.full_name}') for t in search(text, 12)]
+    if kind == 'software':
+        return [
+            (s['id'], f'{s["id"]} · {s["name"]}')
+            for s in services.search_software(q=text, limit=12, max_tlp=limit)
+        ]
     with ws.read() as db:
         if kind == 'indicator':
             return [(e.id, e.value) for e, _ in services.list_entities(db, text, limit=12, max_tlp=limit)]
@@ -79,9 +84,10 @@ def _manage(ws: Workspace, kind: ThreatSubjectKind, ref: str, name: str) -> None
             'document': 'Report',
             'indicator': 'Indicator',
             'technique': 'Technique',
+            'software': 'Software used',
         }
         target = ui.select(choices, value='document', label='Link to').props('outlined')
-        query = ui.input('Find a report, indicator, or technique').props(
+        query = ui.input('Find a report, indicator, technique, or software').props(
             'outlined debounce=200 maxlength=120'
         )
         label = ui.select(labels, value=start, label='Link sharing label').props('outlined')
@@ -161,7 +167,9 @@ def _manage(ws: Workspace, kind: ThreatSubjectKind, ref: str, name: str) -> None
 
 def render_tracked_threats(ws: Workspace) -> None:
     with ui.expansion('Actors and campaigns you track').classes('w-full') as panel:
-        ui.label('Choose a record to link a report, indicator, or technique to it.').classes('muted prose')
+        ui.label('Choose a record. Add links to reports, indicators, techniques, or software used.').classes(
+            'muted prose'
+        )
         text = ui.input('Find a tracked name').props('outlined debounce=200 maxlength=120')
 
         @ui.refreshable

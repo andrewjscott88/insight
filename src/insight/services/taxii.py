@@ -32,6 +32,7 @@ from ..taxii import COLLECTIONS, HUNT_PACKAGES_COLLECTION, KEV_COLLECTION, Taxii
 from .audit import audit
 from .exports import _selection
 from .hunt_package_stix import _hunt_package_bundle
+from .stix_software import _add_stix_software
 from .stix_techniques import _add_stix_techniques
 from .stix_threats import _add_stix_threats
 
@@ -99,6 +100,7 @@ def _indicator_bundle(db: Session, max_tlp: str | None) -> dict[str, Any]:
             modified='',
             stable=True,
         )
+        _add_stix_software(db, bundle, max_tlp=max_tlp)
     except ValueError as exc:  # more technique tags or threat links than one export may hold
         raise TaxiiError(413, 'Collection too large to serve', str(exc)) from None
     return bundle

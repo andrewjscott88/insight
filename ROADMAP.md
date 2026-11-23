@@ -120,9 +120,9 @@ tools over TAXII and STIX; sightings and requests for information come back
       and PDF, Markdown and STIX exports. *Done (unreleased):* [ADR 0036](docs/adr/0036-intelligence-products.md).
 - [ ] **TIP 4.5–4.8** Operator-defined sources, infrastructure pivots, ATT&CK and MISP-galaxy imports, and a
       read-only MCP endpoint.
-      *TIP 4.7 part 1 done (unreleased):* all current ATT&CK software and sourced MISP group aliases in the
-      pinned library ([ADR 0038](docs/adr/0038-adversary-library.md)). Software APIs, analyst links, workspace
-      and STIX output (part 2), then actor timelines and software Navigator layers (part 3), remain open.
+      *TIP 4.7 parts 1 and 2 done (unreleased):* the pinned catalog includes ATT&CK software and sourced MISP
+      aliases. Analysts link software to reports, actors and campaigns and share the links through STIX/TAXII.
+      Actor timelines and software Navigator layers remain open ([ADR 0038](docs/adr/0038-adversary-library.md)).
 
 ## Later
 

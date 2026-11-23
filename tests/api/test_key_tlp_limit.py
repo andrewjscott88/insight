@@ -31,6 +31,7 @@ from insight.schemas import (
     JudgementInput,
     RequirementInput,
     SightingInput,
+    SoftwareLinkInput,
 )
 from insight.services import SourceRef
 
@@ -66,6 +67,10 @@ def world(app: FastAPI) -> dict[str, Any]:
         old, _ = services.ingest(db, report('Item v1', 'CVE-2024-11111 first.', 'GREEN'), ref=ref)
         new, _ = services.ingest(db, report(f'Item v2 {MARKER}', 'CVE-2024-11111 edited.', 'AMBER'), ref=ref)
         hidden_obs = next(o for o in services.detail(db, amber)['observations'] if o['value'] == HIDDEN_IP)
+        services.link_software_report(db, 'S0154', SoftwareLinkInput(document_id=amber.id, note=MARKER))
+        services.link_software_report(
+            db, 'S0154', SoftwareLinkInput(document_id=green.id, note=MARKER, tlp='AMBER')
+        )
         shared = next(o for o in services.detail(db, green)['observations'] if o['value'] == SHARED_IP)
         # An AMBER verdict on an indicator the GREEN key can see: its reason must stay hidden.
         services.assess_entity(
@@ -152,6 +157,11 @@ def readable(response: Any) -> str:  # the test client's response (httpx or http
 
 def test_nothing_hidden_leaks_through_any_read_route(client: TestClient, world: dict[str, Any]) -> None:
     paths = [
+        '/api/software',
+        '/api/software/S0154',
+        '/api/software/S0154/documents',
+        f'/api/documents/{world["green"]}/software',
+        f'/api/documents/{world["amber"]}/software',
         '/api/documents',
         '/api/documents?include_superseded=true',
         f'/api/documents?q={MARKER}',

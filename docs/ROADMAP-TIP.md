@@ -544,6 +544,10 @@ Manual, approved-per-lookup, metadata-only pivots that land in the link map: RDA
 
 ### 4.7 Adversary library imports
 
+Part 2 adds software search/detail, labelled report decisions, explicit actor/campaign use links, workspace
+controls, and STIX/TAXII projections ([ADR 0038](adr/0038-adversary-library.md)). No link is inferred
+from report co-occurrence.
+
 MITRE ATT&CK groups and software, and the MISP threat-actor galaxy for aliases, as malware and tool entities;
 an activity timeline per actor; ATT&CK Navigator layers per actor and for the landscape.
 
@@ -551,8 +555,7 @@ an activity timeline per actor; ATT&CK Navigator layers per actor and for the la
 aliases, description, platforms, techniques and groups, and MISP synonyms from uniquely matched group
 entry names, with provenance. Both editions use format 2; format 1 remains readable. No DB change or
 automatic attribution ([ADR 0038](adr/0038-adversary-library.md), [guide](THREAT_GUIDES.md)).
-**Still open:** software API/workspace, explicit labelled analyst links and STIX output (part 2); actor
-timelines, software Navigator layers and actor-layer software context (part 3).
+**Still open:** actor timelines, software Navigator layers and actor-layer software context (part 3).
 
 ### 4.8 Read-only MCP endpoint
 
@@ -638,7 +641,7 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
   ADR 0036
 - [ ] **4.5** Operator-defined RSS/Atom and TAXII sources
 - [ ] **4.6** Infrastructure pivots: RDAP, certificate transparency, ASN, passive DNS
-- [ ] **4.7** Adversary library imports: library software and sourced MISP aliases done (part 1); software API/links/workspace/STIX (part 2) and timelines/Navigator (part 3) remain
+- [ ] **4.7** Adversary library imports: catalog and sourced aliases, software links, workspace and STIX done (parts 1–2); timelines/Navigator remain
 - [ ] **4.8** Read-only MCP endpoint for AI agents
 
 **Total: 39 items.** Out of scope on purpose: cloning CrowdStrike/Mandiant/Recorded Future collection, building a malware sandbox, automated adversary attribution, and any always-on cloud AI.

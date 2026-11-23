@@ -840,6 +840,37 @@ print('read budget left:', client.get('/api/stats').headers['ratelimit'])
 
 `params` as a list of pairs repeats a parameter and encodes `+` for you.
 
+### Software catalog and explicit links
+
+Use existing report, analyst actor and campaign IDs for `DOC_ID`, `ACTOR_ID` and `CAMPAIGN_ID`. Searching or
+reading candidates never creates a link. Software use by an actor/campaign is a separate analyst decision.
+
+```bash
+curl -sS -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  "$INSIGHT_URL/api/software?q=Cobalt&limit=20&offset=0"
+curl -sS -H "Authorization: Bearer $INSIGHT_API_KEY" "$INSIGHT_URL/api/software/S0154"
+curl -sS -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  "$INSIGHT_URL/api/software/S0154/documents?limit=20&offset=0"
+curl -sS -X POST -H "Authorization: Bearer $INSIGHT_API_KEY" -H 'Content-Type: application/json' \
+  -d "{\"document_id\":\"$DOC_ID\",\"note\":\"Checked the source\",\"tlp\":\"GREEN\"}" \
+  "$INSIGHT_URL/api/software/S0154/documents"
+curl -sS -H "Authorization: Bearer $INSIGHT_API_KEY" "$INSIGHT_URL/api/documents/$DOC_ID/software"
+curl -sS -X DELETE -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  "$INSIGHT_URL/api/software/S0154/documents/$DOC_ID"
+curl -sS -X POST -H "Authorization: Bearer $INSIGHT_API_KEY" -H 'Content-Type: application/json' \
+  -d '{"target_kind":"software","target_id":"S0154","tlp":"GREEN"}' \
+  "$INSIGHT_URL/api/actors/$ACTOR_ID/links"
+curl -sS -H "Authorization: Bearer $INSIGHT_API_KEY" "$INSIGHT_URL/api/actors/$ACTOR_ID/links"
+curl -sS -X DELETE -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  "$INSIGHT_URL/api/actors/$ACTOR_ID/links/software/S0154"
+curl -sS -X POST -H "Authorization: Bearer $INSIGHT_API_KEY" -H 'Content-Type: application/json' \
+  -d '{"target_kind":"software","target_id":"S0154","tlp":"GREEN"}' \
+  "$INSIGHT_URL/api/campaigns/$CAMPAIGN_ID/links"
+curl -sS -H "Authorization: Bearer $INSIGHT_API_KEY" "$INSIGHT_URL/api/campaigns/$CAMPAIGN_ID/links"
+curl -sS -X DELETE -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  "$INSIGHT_URL/api/campaigns/$CAMPAIGN_ID/links/software/S0154"
+```
+
 ## 6. Troubleshooting
 
 | Response | Cause | Fix |

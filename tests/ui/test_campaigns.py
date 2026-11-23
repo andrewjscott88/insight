@@ -27,7 +27,9 @@ async def test_create_campaign_and_manage_report_links(user: User, ui_env: Simpl
     await user.should_see('Example series (campaign)')
     user.find(kind=ui.button, content='Example series (campaign)').click()
     await user.should_see('Saved links')
-    user.find(kind=ui.input, content='Find a report, indicator, or technique').type('Synthetic advisory')
+    user.find(kind=ui.input, content='Find a report, indicator, technique, or software').type(
+        'Synthetic advisory'
+    )
     await user.should_see('Link Synthetic advisory')
     user.find(kind=ui.button, content='Link Synthetic advisory').click()
     await user.should_see('Remove link')

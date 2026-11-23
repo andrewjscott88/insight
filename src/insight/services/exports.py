@@ -21,6 +21,7 @@ from ..models import (
 from ..schemas import (
     TLP_LEVELS,
     IocExportQuery,
+    most_restrictive,
 )
 from ..source_registry import metadata_only
 from ..stix_export import build_stix_bundle, stix_timestamp
@@ -28,6 +29,7 @@ from ..stix_validation import validate_stix_bundle
 from .assessments import visible_assessments
 from .audit import audit
 from .search import _document_conditions, _kev_view
+from .stix_software import _add_stix_software
 from .stix_techniques import _add_stix_techniques
 from .stix_threats import _add_stix_threats
 
@@ -254,6 +256,7 @@ def export_stix(db: Session, query: IocExportQuery) -> dict[str, Any]:
         initial_tlp=export['tlp'],
         modified=stix_timestamp(export['generated_at']),
     )
+    highest = most_restrictive(highest, _add_stix_software(db, bundle, max_tlp=query.max_tlp))
     validate_stix_bundle(bundle)
     detail = {'counts': export['counts'], 'tlp': highest, 'filters': export['filters']}
     audit(db, 'stix.export', export['export_id'], json.dumps(detail, sort_keys=True))

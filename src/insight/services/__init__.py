@@ -288,6 +288,8 @@ from .search import (
     summary,
 )
 from .sightings import MAX_SIGHTINGS, SightingView, delete_sighting, list_sightings, record_sighting
+from .software import link_software_report, search_software, software_link_view, unlink_software_report
+from .software_views import report_software, software_detail, software_reports, software_uses
 from .sources import (
     cached_enrichments,
     fetch_cursor,
@@ -563,6 +565,7 @@ __all__ = [
     'like_pattern',
     'link_report',
     'link_rule',
+    'link_software_report',
     'link_threat',
     'linked_reports',
     'linked_rules',
@@ -617,6 +620,7 @@ __all__ = [
     'reopen_case',
     'reopen_requirement',
     'report_groups',
+    'report_software',
     'requeue_running_jobs',
     'requirement_counts',
     'reset_mfa',
@@ -632,6 +636,7 @@ __all__ = [
     'save_fetch_cursor',
     'save_fetch_state',
     'search_documents',
+    'search_software',
     'search_terms',
     'session_binding',
     'set_actor',
@@ -642,6 +647,10 @@ __all__ = [
     'set_schedule',
     'set_source_switch',
     'set_target_enabled',
+    'software_detail',
+    'software_link_view',
+    'software_reports',
+    'software_uses',
     'source_statistics',
     'source_switches',
     'stamp',
@@ -664,6 +673,7 @@ __all__ = [
     'tlp_permitted',
     'unlink_report',
     'unlink_rule',
+    'unlink_software_report',
     'unlink_threat',
     'untag_technique',
     'update_case',

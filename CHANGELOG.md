@@ -29,6 +29,9 @@
 - Migration `0028` adds product fields to cases (kind, audience, bottom line up front, version) and the
   `case_judgements`, `case_judgement_items`, `case_gaps` and `case_versions` tables. Existing cases become
   unpublished assessments. It runs at start-up.
+- Migration `0029` adds explicit software/report links and software targets on actor/campaign links.
+  It snapshots the catalog name and type so saved decisions survive catalog removal. Existing records
+  are unchanged. Downgrading removes these new software associations.
 
 ### Added: finished intelligence products (TIP 4.4)
 
@@ -46,6 +49,18 @@
   readers, and a bookmark per section. Insight writes it itself: no new dependency.
 - `/api/cases/{id}/judgements`, `/gaps`, `/gaps/{id}/rfi`, `/publish`, `/product` and `/export`; the case
   routes take and return the product fields. The API keeps the name `cases`.
+
+### Added: software links and sharing (TIP 4.7 part 2)
+
+- Search software in **Investigate > Threat groups**, review reports that name it, and save or remove
+  labelled report links. Name matches are candidates only. The report reader also offers software links.
+- Actors and campaigns can have explicit software-use links through their existing links editor and API.
+  Report co-occurrence never creates an attribution or a `uses` relationship.
+- STIX exports and the Reviewed indicators TAXII collection include linked malware and tools, with stable
+  software IDs and sharing labels on every association. More restricted links do not alter a report's label.
+- `/api/software`, software detail and report-link routes, and `/api/documents/{id}/software`.
+- TAXII polling picks up later label changes to explicit actor/campaign links and includes the updated
+  subject version, even when the subject was created before the link.
 
 ### Added: sightings from hunt tools (TIP 4.2)
 

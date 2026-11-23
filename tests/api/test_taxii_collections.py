@@ -148,6 +148,7 @@ def test_techniques_actors_and_campaigns_are_served_with_stable_ids(
 def test_a_new_link_brings_an_older_actor_into_the_next_poll(
     client: TestClient, world: dict[str, Any], app: FastAPI
 ) -> None:
+    """Regression: an old actor's newly exposed projection needs a current version as well as date_added."""
     with app.state.session_factory.begin() as db:
         old = services.create_actor(db, ActorInput(name='Old Otter', tlp='GREEN'))
         later, _ = services.ingest(db, report('Later note', 'Beacon to 192.0.2.99.', 'GREEN'))
@@ -161,7 +162,8 @@ def test_a_new_link_brings_an_older_actor_into_the_next_poll(
     assert {o['type'] for o in fresh} >= {'threat-actor', 'relationship'}
     [otter] = by_type(fresh, 'threat-actor')
     assert otter['name'] == 'Old Otter'
-    assert otter['modified'] <= last  # created long ago, but new to this collection
+    assert otter['created'] <= last
+    assert otter['modified'] > last  # the projection changed when this link first exposed it
 
 
 def test_dates_follow_markings_and_first_relationships() -> None:

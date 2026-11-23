@@ -1,5 +1,35 @@
 # HTTP API (0.9.0)
 
+## Software
+
+Software catalog entries are public reference data, but these routes require authentication like other API
+reads. Analyst report/use links and name-match candidates respect the caller's TLP limit. IDs are ATT&CK
+software IDs such as `S0154`; lowercase IDs are accepted. Hidden reports/links look missing (`404`), and a
+write above the instance or key limit is refused (`403`). Browser writes require the normal CSRF token.
+
+| Route | Result |
+| --- | --- |
+| `GET /api/software?q=&offset=0&limit=50` | `{software: [...]}`; catalog ID/name/alias substring search. Query at most 120 characters, nonnegative offset, limit 1–200. |
+| `GET /api/software/{ref}` | Catalog context plus `reports`, `uses`, `candidates`, `reports_scanned`, `scan_capped`, and aggregate `tlp`. Missing items return `404`; retired items with a visible saved link retain their saved name/type. |
+| `GET /api/software/{ref}/documents?offset=0&limit=50` | `{reports: [...]}`; visible explicit report links, newest link first; limit 1–200. Unknown IDs return an empty list. |
+| `POST /api/software/{ref}/documents` | Body `{document_id, note?: "", tlp?: "CLEAR"}`. Note at most 2,000 characters; unknown fields refused. Returns `201` with `{id, software_id, document_id, note, tlp, created_at, created_by}`. Idempotent repeated writes; label never lowered. |
+| `DELETE /api/software/{ref}/documents/{document_id}` | Remove a visible link, including a retired catalog link; `{removed: document_id}`. Missing/hidden link `404`. |
+| `GET /api/documents/{document_id}/software` | `{software: [...]}` containing saved `{id, name, type, tlp, note, retired}` for up to 200 visible links. Missing/hidden report `404`. |
+
+Catalog fields: `id`, `name`, `type` (`malware` or `tool`), `aliases`, `description`, `platforms`, `techniques`,
+`groups`, `url`, `tlp`, `retired`. Context absent from an older library edition uses empty lists/text.
+Detail returns at most 50 explicit report links, 50 actor/campaign use decisions and 50 candidates. Report
+links contain `document_id`, `title`, report `created_at`, `linked_at`, `note`, effective `tlp`, and saved
+`software_id`, `software_name`, `software_type`. Use decisions contain `kind`, subject `ref`, `name`, `tlp`,
+`linked_at`, and saved software name/type. Candidates carry `document_id`, `title`, `tlp`, `created_at`,
+`source_name`, matched `name`, and `evidence` (empty for metadata-only sources). They check at most the newest
+5,000 visible current reports with the existing whole-word matcher; a match never adds a link.
+
+The existing `/api/actors/{ref}/links` and `/api/campaigns/{ref}/links` accept `target_kind: "software"` with
+`target_id: "S0154"` and a TLP label. Their GET results and DELETE paths use the same kind. Only explicit
+analyst actor/campaign links produce STIX `uses`, never catalog claims or report co-occurrence. Mutations are
+audited as `software.link`/`software.unlink` or the existing `actor.link`/`campaign.link` actions.
+
 JSON over HTTP on the same origin as the workspace. The API is **unversioned and intended for automation by
 the single operator** (scripts, a SIEM), signed in with a browser session or the
 [API key](#api-key-scripts-and-siem). Breaking changes are listed in `CHANGELOG.md` under "Upgrade notes".

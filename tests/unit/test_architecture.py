@@ -23,6 +23,7 @@ SQL_BUILDERS = {'select', 'insert', 'update', 'delete', 'func', 'or_', 'and_', '
 ORM_CLASSES = {'Document', 'Entity', 'Observation', 'Note', 'AuditEvent', 'KEVRecord', 'WatchTerm'}
 ORM_CLASSES |= {'SourceRating', 'HuntPackage', 'HuntPackageItem', 'Sighting', 'CaseJudgement'}
 ORM_CLASSES |= {'CaseJudgementItem', 'CaseGap', 'CaseVersion'}
+ORM_CLASSES |= {'SoftwareDocument'}
 ORM_CLASSES |= {'SourceRun', 'Enrichment', 'ApiKey', 'Job', 'Schedule', 'FetchState', 'EntityAssessment'}
 ORM_CLASSES |= {'DocumentTechnique', 'SourceSwitch', 'LookupFailure'}
 ORM_CLASSES |= {'ThreatActor', 'ActorDocument', 'IndustryClaim', 'DetectionRule', 'RuleLink'}
@@ -143,6 +144,8 @@ TLP_AWARE_SERVICES = {
     'retire_hunt_package', 'export_hunt_package', 'record_sighting', 'list_sightings', 'delete_sighting',
     'product_parts', 'add_judgement', 'update_judgement', 'remove_judgement', 'add_gap', 'remove_gap',
     'ask_gap', 'publish_product', 'product_view', 'export_product',
+    'search_software', 'software_detail', 'software_reports', 'link_software_report',
+    'unlink_software_report', 'report_software',
 }  # fmt: skip
 
 
