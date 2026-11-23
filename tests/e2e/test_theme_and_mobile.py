@@ -309,7 +309,8 @@ def test_phone_hunt_guide_can_be_built_read_and_changed(phone: Any) -> None:
     download = page.get_by_role('button', name='Download PDF (opens in a new tab)', exact=True)
     expect(build).to_be_disabled()
     expect(download).to_be_disabled()
-    page.get_by_label('Threat type', exact=True).click()
+    # Quasar's read-only input delegates taps to its field; its own pointer events are disabled.
+    page.locator('.q-field').filter(has=page.get_by_label('Threat type', exact=True)).click()
     page.get_by_role('option', name='Ransomware', exact=True).click()
     build.click()
     expect(page.get_by_role('heading', name='Threat hunt guide: Ransomware', exact=True)).to_be_visible()
@@ -317,7 +318,7 @@ def test_phone_hunt_guide_can_be_built_read_and_changed(phone: Any) -> None:
     assert overflow(page) <= 0
     for name in ('Build guide', 'Search', 'Download PDF (opens in a new tab)'):
         assert page.get_by_role('button', name=name, exact=True).bounding_box()['height'] >= 40
-    page.get_by_label('Start from', exact=True).click()
+    page.locator('.q-field').filter(has=page.get_by_label('Start from', exact=True)).click()
     page.get_by_role('option', name='Report or advisory', exact=True).click()
     expect(download).to_be_disabled()
     expect(page.get_by_role('heading', name='Threat hunt guide: Ransomware', exact=True)).to_have_count(0)

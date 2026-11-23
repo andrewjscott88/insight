@@ -740,7 +740,7 @@ default 7; invalid values return `422`. It reads stored data and makes no source
 | `as_of` | string | Window end, as an ISO-8601 UTC timestamp. This is the brief's reference time, not a source's last successful sync. |
 | `report_count` | integer | Current, visible, non-demo reports included in this brief after its date filters. |
 | `source_count` | integer | Distinct source identities among those reports: connector key, or case/space-normalized source name for other reports. Not a count of independent confirmations or all configured connectors. |
-| `recent_reports` | integer | Included reports received during the last 24 hours relative to `as_of`. This is a receipt count, not a count of attacks or newly published vulnerabilities. |
+| `recent_reports` | integer | Included reports received during the last 24 hours relative to `as_of`. Retained as compatibility metadata; the workspace has no separate receipt card or highlight. This is not a count of attacks or newly published vulnerabilities. |
 | `summary` | array of strings | Plain-English executive summary. The existing field is retained; its wording can change. |
 | `highlights` | array of objects | Prioritized explanations with `{title, text, action, evidence}`. The first three values are strings; `evidence` is an array of brief items described below. `action` is a conditional next step, not an instruction executed by Insight. |
 | `coverage` | array of strings | Notes explaining the data covered, count limits, excluded invalid/future dates and stored source-check freshness. Connector error details are omitted. |
@@ -748,6 +748,8 @@ default 7; invalid values return `422`. It reads stored data and makes no source
 
 The added fields are always present and are not nullable. Empty collections are `[]`; counts may be zero.
 Existing clients can continue using `summary` and `sections` and ignore the additions.
+The receipt-count field remains, but `highlights` no longer includes a recent-receipt entry. Highlight titles
+and summary wording are presentation text, not stable identifiers.
 
 A **brief item** is `{text, document_id, entity, search}`. `text` is a string; the remaining values are strings
 or `null`. A `document_id` opens a visible report; `entity` opens the indicator's evidence; `search` searches
@@ -822,7 +824,7 @@ These reads never create actor attribution or establish that an indicator is mal
 | Route | Result |
 | --- | --- |
 | `GET /api/stats` | `{documents, entities, unreviewed, observations_unreviewed}` (current revisions only) |
-| `GET /api/brief?days=7` | Executive summary, report/source counts, last-24-hour receipt count, linked highlights, coverage notes and existing detail sections. See the [executive brief contract](#executive-brief). |
+| `GET /api/brief?days=7` | Executive summary, report/source counts, compatibility receipt-count metadata, linked highlights, coverage notes and detail sections. No recent-receipt highlight. See the [executive brief contract](#executive-brief). |
 | `GET /api/landscape?days=7` | The threat landscape that opens the workspace ([ADR 0020](adr/0020-threat-landscape.md)), built from the data (no AI). `days` 1-30 (default 7); the period is compared with the 4 periods before it. `{days, since, compared_since, compared_periods, tlp, reports, sources, summary: [sentence], caveats: [sentence], threats: [threat], quieter: [threat], tactics: [tactic], brief}`. A threat is `{key, name, change: {label, current, usual}, sources, what, impact, check, reports: [{text, document_id}], words, techniques}`; `label` is `rising`, `new`, `steady`, `quieter` or `no-history` (nothing before the period to compare with); `usual` is reports per period before, `null` without history. A tactic is `{shortname, name, plain, change, techniques: [[id, name, reports]]}`. `brief` is the intel brief below for the same period. `tlp` is the most restrictive label of the reports counted: share no wider. Built only from reports the caller may see (TLP limit) |
 | `GET /api/landscape/briefing?days=7` | The same as a Markdown briefing (`text/markdown`, attachment `insight-threat-landscape-7d.md`), marked with its TLP on the first and last lines; text from reports is escaped. Audited as `landscape.briefing` |
 | `GET /api/audit` | Latest 200 audit events: `{action, object_id, detail, actor, created_at}`. Not available to TLP-limited keys |

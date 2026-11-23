@@ -8,7 +8,8 @@ line is removed.
 
 ## What the brief answers
 
-The default view covers seven days and separately highlights reports received in the last 24 hours. It
+The default view covers seven days, with a 30-day option. There is no separate last-24-hour receipt card or
+attention highlight. The `recent_reports` API field remains as compatibility metadata. The brief
 explains known exploitation, repeated reporting, serious weaknesses and matches to the operator's watch
 terms when those facts exist. Each highlight combines a short explanation, a conditional next step and
 links to available, visible evidence. **Exploited now** and **Most severe** remain available below the
@@ -18,8 +19,8 @@ The landing section is **Intel Brief**, with the main heading **Intel brief** an
 chosen beside it ([ADR 0020](adr/0020-threat-landscape.md),
 [ADR 0041](adr/0041-guided-threat-hunt-workspace.md)). Its **Executive summary** leads with known exploited
 products and severe flaws when present; otherwise it leads with the reported threat theme. It explains the
-meaning and next step before report-volume context. The summary sits beside the reporting-window
-counts, last-24-hour receipt count and UTC reference time on wide screens; they stack on smaller screens.
+meaning and next step before report-volume context. Report/source counts and the UTC reference time
+remain part of the brief's data contract; the separate receipt section is not shown.
 **About this brief** expands the coverage notes, including how fresh each source in use is (optional sources
 count only once switched on). **What needs attention** contains the highlights and their **Next step** and
 **View evidence** controls. The landscape's trending threats and attacker behaviour follow, then **Evidence at
@@ -60,8 +61,8 @@ presentation without creating a second set of intelligence rules.
 
 Highlights follow a fixed priority: known ransomware use and other known exploitation, the most-mentioned
 CVE (or a vendor to check when no CVE repeats), stored attack forecasts, the highest reported severity,
-watch-term relevance, then recent receipts. The recent
-receipt highlight also appears for an empty collection. Each highlight has at most five evidence items.
+then watch-term relevance. No recent-receipt highlight is generated, including for an empty collection.
+Each highlight has at most five evidence items.
 The severity explanation translates a small set of explicitly named weaknesses into plain English; when
 no precise translation applies, the supporting highlight quotes the source description or directs the
 reader to the advisory. The executive summary omits untranslated quotations and sends the reader to the
@@ -75,7 +76,7 @@ infer an attack technique from a severity number, or current attacks from a hist
 | Seven-day view | The default reporting window. API callers can request 1–30 days. |
 | Reference time (`as_of`) | The end of the reporting window, in UTC. It is not proof that every source was synced at that time. |
 | Report count | Included current reports after visibility, date and demo filtering. It is not a count of unique incidents. |
-| Last 24 hours (`recent_reports`) | Included reports that Insight received during the previous 24 hours. It does not mean the underlying attacks occurred then. |
+| API receipt metadata (`recent_reports`) | Included reports received during the previous 24 hours. Retained for compatibility, not displayed as a separate card or highlight. It does not date the underlying attacks. |
 | Source count | Distinct source identities among included reports, not all configured or currently healthy connectors. |
 
 The existing publication-date rules keep historical imports from appearing to be new intelligence. KEV
@@ -83,7 +84,7 @@ reports use the date CISA added the vulnerability; CISA advisories use their fir
 revision date. Where the publisher's date is unavailable, the receipt date is the fallback. A first sync of
 an old advisory therefore does not make it a new advisory in the brief. Publisher dates have day-level
 precision. Invalid dates and dates after the reference time are excluded rather than treated as fresh
-evidence. The last-24-hour count is a subset of the reports included after those rules, based on their
+evidence. The API's last-24-hour count is a subset of the reports included after those rules, based on their
 received timestamps; an updated report's current version can count as a recent receipt.
 
 The database query considers at most 2,000 current reports received in the requested window, newest first.
@@ -104,13 +105,14 @@ error details and do not trigger a check. Synchronization remains the way to bri
 | Known exploitation | A vulnerability is on the stored CISA KEV list, including recent additions and older entries discussed in included reports. | Current attack frequency, a new attack wave, or compromise of the operator's systems. |
 | Ransomware use | CISA's KEV entry says it knows of ransomware campaigns that use the weakness (**Used in ransomware attacks**). | That the operator is targeted, or that a campaign is active today. |
 | Technical severity | A CISA advisory or NIST NVD supplies a CVSS base score of at least 9 for the **Most severe** section. | Proof that the vulnerability is being exploited or is present in the operator's environment. |
-| Attack likelihood | FIRST's EPSS estimates a 10% or higher chance of exploitation attempts in the next 30 days (**Likely to be attacked soon**). | That the operator uses the product, or that an attempt will reach them. |
+| Attack likelihood | FIRST's EPSS estimates a 10% or higher chance of exploitation attempts in the next 30 days (**Forecasts worth checking**). | That the operator uses the product, or that an attempt will reach them. |
 | Repeated reporting | A vulnerability, indicator or product appears repeatedly in the selected collection. | More attacks than last week, independent corroboration, or broader prevalence outside the collection. |
 | Watch-term match | A configured literal term occurs in an included report. | An asset inventory match, exposure assessment or risk score. |
-| Recent receipt | Insight received an included report in the last 24 hours. | The event's time, a fresh vulnerability disclosure or a verified current threat. |
+| API receipt metadata | Insight received an included report in the last 24 hours; no receipt card or highlight is shown. | The event's time, a fresh vulnerability disclosure or a verified current threat. |
 
-There is no previous-period comparison. If a reader calls repeated coverage "trending", it means repeated
-reporting within the collected sources, not an increase in attacks. Publisher deadlines for US federal
+`GET /api/brief` has no previous-period comparison. The landing overview (`GET /api/landscape`) compares
+reporting with earlier periods. In both cases, "trending" refers to the collected reporting, not a measured
+increase in attacks. Publisher deadlines for US federal
 agencies, when reported, retain that scope rather than becoming a universal deadline.
 
 ## Evidence and access

@@ -94,8 +94,10 @@ async def test_brief_explains_sharing_without_changing_the_source_label(
     with user.scope(marker='intel-brief'):
         await user.should_see(f'{audience} · TLP:{label}')
         await user.should_see(guidance)
-        await user.should_see('Received in the last 24 hours')
-        await user.should_see('Reports in this brief received in the last 24 hours.')
+        await user.should_not_see('Received in the last 24 hours')
+        await user.should_not_see('Reports in this brief received in the last 24 hours.')
+        await user.should_see('1 report · 1 source')
+        await user.should_see('Across the last 7 days')
         if label == 'CLEAR':
             await user.should_not_see('This brief has limits on who may read it.')
         else:

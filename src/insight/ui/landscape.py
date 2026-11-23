@@ -1,8 +1,8 @@
 """The threat landscape panel: an executive summary of what is trending, why it matters, and the evidence.
 
 It opens the workspace. Everything in it comes from ``insight.landscape`` (counts from the reports, fixed
-explanations from ``insight.themes``) and ``insight.brief`` (findings with a next step, the last 24 hours,
-and the limits of the data; docs/EXECUTIVE_BRIEF.md); every report and indicator in it opens its evidence
+explanations from ``insight.themes``) and ``insight.brief`` (findings with a next step and the limits of the
+data; docs/EXECUTIVE_BRIEF.md); every report and indicator in it opens its evidence
 (ADR 0020).
 """
 
@@ -71,12 +71,9 @@ def build_landscape(ws: Workspace) -> None:
         ).classes('brief-evidence w-full break-value text-left')
 
     def context(brief: Brief) -> None:
-        """The last 24 hours, what the period covers, and the limits of the data (#39)."""
-        with ui.column().classes('brief-context min-w-0 gap-3 p-4 sm:p-5').mark('brief-context'):
-            ui.label('Received in the last 24 hours').classes('eyebrow')
-            ui.label(str(brief.recent_reports)).classes('brief-recent-count')
-            ui.label('Reports in this brief received in the last 24 hours.').classes('muted prose')
-            with ui.column().classes('brief-scope w-full gap-1'):
+        """The selected period's report count, source count, time and data limits."""
+        with ui.column().classes('brief-context min-w-0 gap-3 p-4 sm:p-5 self-start').mark('brief-context'):
+            with ui.column().classes('w-full gap-1'):
                 ui.label(
                     f'{count_of(brief.report_count, "report")} · {count_of(brief.source_count, "source")}'
                 ).classes('font-medium')

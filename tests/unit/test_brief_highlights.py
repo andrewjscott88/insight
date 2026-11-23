@@ -27,6 +27,7 @@ def data(*docs: BriefDocument, **kwargs: object) -> BriefData:
 
 
 def test_receipt_count_uses_an_exact_clock_and_normalized_source_identity() -> None:
+    """Regression: retain API receipt metadata without recreating a last-24-hours highlight."""
     items = [document(1), document(2, hours=24, source=' PARTNER '), document(3, hours=24.001)]
     items += [replace(document(4), created_at='2026-11-20T00:00:00+12:00')]
     result = compose(data(*items))
@@ -36,8 +37,8 @@ def test_receipt_count_uses_an_exact_clock_and_normalized_source_identity() -> N
         3,
         1,
     )
-    assert {item.document_id for item in result.highlights[-1].evidence} == {'1', '2', '4'}
-    assert 'collection time' in result.highlights[-1].text
+    assert result.highlights == ()
+    assert not any('24-hour count' in note for note in result.coverage)
 
 
 def test_bad_future_and_old_dates_cannot_become_current_news() -> None:

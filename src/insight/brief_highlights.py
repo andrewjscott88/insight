@@ -225,23 +225,6 @@ def highlights(data: BriefData, facts: _Facts, as_of: datetime) -> tuple[BriefHi
             )
         )
 
-    recent = [
-        doc
-        for doc in facts.fresh
-        if (received := _time(doc.created_at)) is not None
-        and as_of - timedelta(hours=24) <= received <= as_of
-    ]
-    result.append(
-        BriefHighlight(
-            'Received in the last 24 hours',
-            f'{count_of(len(recent), "report")} in this brief {_verb(len(recent), "was", "were")} received '
-            'in the last 24 hours. This is collection time, not when a flaw or attack first appeared.',
-            'Open the latest reports to see what changed and whether it matters to your systems.'
-            if recent
-            else 'Check the source status below. No new reports does not mean no risk.',
-            _evidence(recent),
-        )
-    )
     return tuple(result)
 
 
@@ -253,8 +236,6 @@ def coverage(data: BriefData, facts: _Facts, as_of: datetime) -> tuple[str, ...]
     notes = [
         'Counts cover the reports in this brief, not all threats. '
         'Repeated mentions do not measure a rise in attacks.',
-        'The 24-hour count uses receipt time for the current report version. '
-        'A received report may be an update.',
         'CISA dates have day-level precision. '
         'Other reports use receipt time when no publisher date is stored.',
         'The CISA list shows known exploitation. It does not show whether attacks are happening today.',

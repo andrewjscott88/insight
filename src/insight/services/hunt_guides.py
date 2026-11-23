@@ -10,15 +10,16 @@ from sqlalchemy.orm import Session
 
 from ..hunt_guide import GuideSection, HuntGuide, bounded
 from ..hunt_guide_plan import planning_sections
-from ..models import Document, DocumentTechnique, SoftwareDocument, ThreatActor
+from ..models import Document, DocumentTechnique, Entity, Observation, SoftwareDocument, ThreatActor
 from ..schemas import most_restrictive
 from ..themes import THEMES, THEMES_BY_KEY, Theme
 from ..threat_library import library
 from .actor_reports import ReportRef
 from .actors import actor_aliases, linked_reports, resolve_group
+from .assessments import visible_assessments
 from .common import fold, like_pattern
 from .techniques import TAGGED
-from .threat_guides import GuideData, sweep_list
+from .threat_guides import SWEEP_KINDS, GuideData, sweep_list
 from .tlp import _visible, visible_levels
 
 _KINDS = ('theme', 'actor', 'software', 'cve', 'document', 'exploit', 'indicator', 'campaign')
@@ -135,6 +136,22 @@ def _evidence(
 ) -> tuple[tuple[GuideSection, ...], str]:
     shown = reports[:_MAX_REPORTS]
     sweep, truncated = sweep_list(db, shown, max_tlp=max_tlp, now=now)
+    # A verdict can remove an indicator (benign or expired), affecting the list and its cap notice.
+    # Its sharing label still contributes even when the indicator is absent from the returned sweep.
+    considered = db.scalars(
+        select(Entity.id)
+        .join(Observation, Observation.entity_id == Entity.id)
+        .join(Document, Document.id == Observation.document_id)
+        .where(
+            Document.id.in_([r.document_id for r in shown]),
+            Document.is_current.is_(True),
+            Observation.review_status == 'accepted',
+            Entity.kind.in_(SWEEP_KINDS),
+            *_visible(max_tlp),
+        )
+        .distinct()
+    )
+    assessments = visible_assessments(db, considered, max_tlp=max_tlp)
     indicators = [
         f'{e.kind}: {_text(e.value)}. Review: accepted; verdict: {e.verdict}. '
         f'First report: {e.first_seen[:10]}; last report: {e.last_seen[:10]}. '
@@ -172,7 +189,12 @@ def _evidence(
                 'Reports used', tuple(sources) or ('No current, linked or matching reports are available.',)
             ),
         ),
-        most_restrictive('CLEAR', *(r.tlp for r in reports), *(e.tlp for e in sweep)),
+        most_restrictive(
+            'CLEAR',
+            *(r.tlp for r in reports),
+            *(e.tlp for e in sweep),
+            *(a.tlp for a in assessments.values()),
+        ),
     )
 
 

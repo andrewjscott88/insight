@@ -61,6 +61,8 @@ def test_the_briefing_downloads_with_its_tlp_and_is_audited(app: FastAPI, signed
     assert lines[0] == '**TLP:AMBER**'
     assert '# Threat landscape: the last 30 days' in lines
     assert '### Ransomware: No history yet' in lines
+    assert 'Received in the last 24 hours' not in response.text
+    assert '24-hour count' not in response.text
     with app.state.session_factory() as db:
         event = db.scalars(select(AuditEvent).where(AuditEvent.action == 'landscape.briefing')).one()
     assert json.loads(event.detail) == {'days': 30, 'max_tlp': None, 'tlp': 'AMBER'}

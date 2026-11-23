@@ -134,6 +134,54 @@ def test_theme_matches_words_and_techniques_but_filters_review_and_verdicts(db: 
     assert 'Criminals lock up files' in rendered
 
 
+@pytest.mark.parametrize('expired', [False, True])
+@pytest.mark.parametrize('kind', ['theme', 'document'])
+def test_excluded_restricted_verdicts_still_label_the_guide(db: Session, expired: bool, kind: str) -> None:
+    """Regression: a private benign/expired decision removed a check from a guide labelled public."""
+    doc = report(db, 'Ransomware report', 'reviewed-hunt-domain.net', tlp='CLEAR')
+    accept_all(db, doc)
+    ref = 'ransomware' if kind == 'theme' else doc.id
+    when = NOW + timedelta(days=2)
+    public = services.hunt_guide(db, kind, ref, max_tlp='GREEN', now=when)
+    entity_id = services.detail(db, doc)['observations'][0]['entity_id']
+    services.assess_entity(
+        db,
+        entity_id,
+        AssessmentInput(
+            verdict='malicious' if expired else 'benign',
+            reason='Private decision text',
+            valid_until=(NOW + timedelta(days=1)).date() if expired else None,
+            tlp='AMBER',
+        ),
+    )
+    restricted = services.hunt_guide(db, kind, ref, max_tlp='AMBER', now=when)
+    assert restricted.tlp == 'AMBER'
+    assert 'reviewed-hunt-domain.net' not in text(restricted)
+    assert 'No eligible reviewed indicators' in text(restricted)
+    assert 'Private decision text' not in text(restricted)
+    assert public.tlp == 'CLEAR'
+    assert 'reviewed-hunt-domain.net' in text(public)
+    assert 'verdict: unknown' in text(public)
+    assert services.hunt_guide(db, kind, ref, max_tlp='GREEN', now=when) == public
+
+
+def test_restricted_exclusion_labels_a_changed_indicator_cap_notice(db: Session) -> None:
+    """Regression: removing a private benign value outside the shown 100 changed public cap metadata."""
+    values = [f'hunt-cap-{n:03d}.net' for n in range(101)]
+    doc = report(db, 'Ransomware report', '; '.join(values), tlp='CLEAR')
+    accept_all(db, doc)
+    before = services.hunt_guide(db, 'theme', 'ransomware', max_tlp='GREEN', now=NOW)
+    assert 'Shows the first 100 eligible indicators' in text(before)
+    entity_id = next(
+        obs['entity_id'] for obs in services.detail(db, doc)['observations'] if obs['value'] == values[0]
+    )
+    services.assess_entity(db, entity_id, AssessmentInput(verdict='benign', reason='Private', tlp='AMBER'))
+    after = services.hunt_guide(db, 'theme', 'ransomware', max_tlp='AMBER', now=NOW)
+    assert after.tlp == 'AMBER'
+    assert 'Shows the first 100 eligible indicators' not in text(after)
+    assert services.hunt_guide(db, 'theme', 'ransomware', max_tlp='GREEN', now=NOW) == before
+
+
 def test_empty_theme_plan_is_honest_and_unknown_or_hidden_choices_are_missing(db: Session) -> None:
     guide = services.hunt_guide(db, 'theme', 'zero-day', now=NOW)
     assert guide.tlp == 'CLEAR'

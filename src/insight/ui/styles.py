@@ -52,8 +52,6 @@ body.body--dark, body.body--light { background:var(--ins-bg);color:var(--ins-tex
   background:var(--ins-panel); }
 .brief-prose { line-height:1.7; }
 .brief-context { border:1px solid var(--ins-line);border-radius:10px;background:var(--ins-selected); }
-.brief-recent-count { font-size:2.5rem;font-weight:600;line-height:1.2; }
-.brief-scope { padding-top:1rem;border-top:1px solid var(--ins-line); }
 .brief-coverage .q-item { padding:0; }
 .brief-priorities { display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,20rem),1fr));
   gap:1rem; }

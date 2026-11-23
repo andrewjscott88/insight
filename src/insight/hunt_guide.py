@@ -81,20 +81,28 @@ def to_pdf(guide: HuntGuide) -> bytes:
         Block('H1', [(BOLD, defang_text(guide.title))], size=18, leading=23, before=0),
         paragraph(f'Created: {guide.created_at} | TLP:{guide.tlp}', grey=True),
         paragraph(defang_text(guide.summary)),
-    ]
-    for section in guide.sections:
-        blocks.append(heading(defang_text(section.title)))
-        blocks += [paragraph(defang_text(line)) for line in section.lines]
-    blocks.append(
         paragraph(
             'Network indicators use [.] and hxxp so they are not opened by mistake. '
             'Built by Insight from saved intelligence and fixed guidance. No AI wrote this guide.',
+            size=9,
+            leading=12,
+            before=4,
             grey=True,
-        )
-    )
+        ),
+    ]
+    for section in guide.sections:
+        blocks.append(heading(defang_text(section.title)))
+        blocks += [paragraph(defang_text(line), before=4, leading=14) for line in section.lines]
     if not all(printable(text) for block in blocks for _, text in block.runs):
-        blocks.append(
-            paragraph('Some characters cannot be shown here and print as "?". The Markdown keeps them.')
+        blocks.insert(
+            4,
+            paragraph(
+                'Some characters cannot be shown here and print as "?". The Markdown keeps them.',
+                size=9,
+                leading=12,
+                before=4,
+                grey=True,
+            ),
         )
     return render(
         blocks,

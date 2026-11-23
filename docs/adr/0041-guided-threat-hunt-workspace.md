@@ -13,7 +13,9 @@ capabilities, not a new telemetry-hunting engine or a newly completed TIP milest
 
 Open the workspace on **Intel Brief**. Lead with known exploited products or reported threat themes, explain
 source-stated effects in plain language, and retain exact CVE and severity details in the evidence sections.
-Keep the existing date rules, 7/30-day choices and separate last-24-hour receipt count. No model writes text.
+Keep the existing date rules and 7/30-day choices. Remove the visible last-24-hour receipt section and
+attention highlight; retain the existing `recent_reports` API field as compatibility metadata. No model
+writes text.
 
 Replace the Products menu entry with **Threat Hunt**. It contains an on-demand guide builder, existing hunt
 packages and an expandable **Saved intelligence reports** area for the existing products. Move requirements
