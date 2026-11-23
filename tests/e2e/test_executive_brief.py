@@ -41,7 +41,8 @@ def test_restricted_sharing_label_wraps_at_phone_widths(context: Any) -> None:
         expect(badge).to_be_visible()
         assert badge.evaluate('(el) => el.scrollWidth <= el.clientWidth')
         assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
-        expect(page.get_by_text('Received in the last 24 hours', exact=True).first).to_be_visible()
+        expect(page.get_by_text('Received in the last 24 hours', exact=True)).to_have_count(0)
+        expect(page.get_by_text('Across the last 7 days', exact=True)).to_be_visible()
 
 
 def test_summary_links_to_its_source_report_on_phone_and_desktop(context: Any) -> None:
@@ -51,7 +52,6 @@ def test_summary_links_to_its_source_report_on_phone_and_desktop(context: Any) -
     expect(page.get_by_role('heading', name='Intel brief', exact=True)).to_be_visible()
     token = context.request.get('/api/session').json()['csrf_token']
     cve = f'CVE-2026-{uuid.uuid4().int % 900_000 + 100_000}'
-    titles = {}
     for source in ('A', 'B'):
         title = f'Brief browser fixture {source} {uuid.uuid4().hex[:8]}'
         response = context.request.post(
@@ -65,10 +65,9 @@ def test_summary_links_to_its_source_report_on_phone_and_desktop(context: Any) -
             headers={'X-CSRF-Token': token, 'Origin': BASE_URL},
         )
         assert response.ok, response.text()
-        titles[response.json()['id']] = title
     brief = context.request.get('/api/brief').json()
-    recent = next(h for h in brief['highlights'] if h['title'] == 'Received in the last 24 hours')
-    evidence = next(item for item in recent['evidence'] if item['document_id'] in titles)
+    recurring = next(h for h in brief['highlights'] if h['title'] == 'A recurring topic in the reports')
+    evidence = recurring['evidence'][0]
     page.set_viewport_size({'width': 390, 'height': 844})
     page.reload()
     expect(page.get_by_role('heading', name='Executive summary', exact=True)).to_be_visible()
@@ -76,12 +75,12 @@ def test_summary_links_to_its_source_report_on_phone_and_desktop(context: Any) -
     expect(page.get_by_role('heading', name='Exploited now', exact=True)).to_be_visible()
     expect(page.get_by_role('heading', name='Most severe', exact=True)).to_be_visible()
     assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
-    # This title can also appear in another highlight; the recent-receipt card is the intended context.
+    # Other reports can share this topic. Follow the exact evidence chosen by the recurring-topic card.
     card = page.locator('.brief-priority').filter(
-        has=page.get_by_role('heading', name='Received in the last 24 hours', exact=True)
+        has=page.get_by_role('heading', name='A recurring topic in the reports', exact=True)
     )
     card.get_by_role('button', name=f'View evidence: {evidence["text"]}', exact=True).click()
-    reader = page.locator('.document-reader h2', has_text=titles[evidence['document_id']])
+    reader = page.locator('.document-reader h2', has_text=evidence['text'])
     expect(reader).to_be_visible()
     expect(reader).to_be_in_viewport()
     page.set_viewport_size({'width': 1280, 'height': 900})

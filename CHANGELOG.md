@@ -5,7 +5,8 @@
 ### Guided threat hunt workspace
 
 - **Intel Brief** leads with affected products, known attacks and plain-English impact and next steps.
-  The 7/30-day choices, last-24-hour receipt count, exact CVE/score evidence and date rules remain.
+  The 7/30-day choices, exact CVE/score evidence and date rules remain. The visible last-24-hour receipt
+  section and attention highlight are removed; `recent_reports` remains API metadata for compatibility.
 - **Threat Hunt** builds a reviewable guide from a threat type, actor, CVE, report/advisory, exploit activity,
   malware/tool, indicator or campaign. Download metadata-only Markdown or PDF; no AI, network lookup,
   telemetry search, rule execution or saved intelligence changes. Guide generation is audited.

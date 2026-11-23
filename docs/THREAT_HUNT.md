@@ -71,8 +71,8 @@ and no intelligence changes; the audit entry is the only write.
 
 ## Where the other workflows went
 
-- **Intel Brief** is the opening section: the 7/30-day overview and a separate count of reports received
-  in the last 24 hours.
+- **Intel Brief** is the opening section, with a 7/30-day overview. It has no separate last-24-hour receipt
+  card or attention highlight. The existing receipt count remains API metadata for compatibility.
 - **Threat Hunt → Hunt packages** holds the saved hypotheses, techniques, indicators and rules published
   to external tools over TAXII. It moved from Share. A generated guide does not create or publish a package.
 - **Threat Hunt → Saved intelligence reports** holds the existing products: assessments, alerts, profiles

@@ -41,6 +41,7 @@ class Brief:
     summary: tuple[str, ...]
     sections: tuple[BriefSection, ...]
     as_of: str
+    #: Receipt count retained for API clients; Intel Brief does not display it.
     recent_reports: int
     report_count: int
     source_count: int

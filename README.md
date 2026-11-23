@@ -102,9 +102,10 @@ For setup, backups and upgrades, see the [operator runbook](docs/RUNBOOK.md). Fo
   `GET /api/landscape`, `GET /api/landscape/briefing`.
 - **Evidence behind the brief** ([docs/EXECUTIVE_BRIEF.md](docs/EXECUTIVE_BRIEF.md)): what the period adds up to,
   built from your reports (no AI). **What needs attention** gives plain findings (known exploitation, a recurring
-  topic, the highest severity, your watch terms, the last 24 hours), each with a conditional **next step** and
-  its evidence; beside the summary, how many reports came in during the **last 24 hours**, and **About this
-  brief** says what the data covers and how fresh each source is. Then *Exploited now* (CISA KEV), *Most
+  topic, the highest severity and your watch terms), each with a conditional **next step** and
+  its evidence. **About this brief** says what the data covers and how fresh each source is. There is no
+  separate last-24-hour receipt card or attention highlight; the existing `recent_reports` API field remains.
+  Then *Exploited now* (CISA KEV), *Most
   severe* (CVSS 9 or higher), *Your watch terms*, *Seen in several sources* and *Most-mentioned vendors*. Every
   line opens its report, indicator or a search. "New" means published in the period, so a first sync of old
   history does not flood it; the demo is left out. Also `GET /api/brief`.

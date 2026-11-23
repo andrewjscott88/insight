@@ -20,8 +20,8 @@ def add(app: FastAPI, title: str, source: str, *, tlp: str = 'CLEAR', body: str 
 
 
 def test_brief_has_an_executive_summary_and_linked_sections(app: FastAPI, authed: TestClient) -> None:
-    add(app, 'Scanning wave', 'SANS')
-    add(app, 'Advisory', 'NCSC')
+    add(app, 'Scanning wave', 'SANS', body='Seen 192.0.2.44. Report mentions CVE-2026-1001.')
+    add(app, 'Advisory', 'NCSC', body='Seen 192.0.2.44. Report mentions CVE-2026-1001.')
     response = authed.get('/api/brief')
     assert response.status_code == 200, response.text
     brief: dict[str, Any] = response.json()
@@ -32,7 +32,10 @@ def test_brief_has_an_executive_summary_and_linked_sections(app: FastAPI, authed
     )
     assert all(isinstance(note, str) for note in brief['coverage'])
     assert {'title', 'text', 'action', 'evidence'} == brief['highlights'][-1].keys()
+    assert brief['highlights'][-1]['title'] == 'A recurring topic in the reports'
     assert len(brief['highlights'][-1]['evidence']) == 2
+    assert all(h['title'] != 'Received in the last 24 hours' for h in brief['highlights'])
+    assert not any('24-hour count' in note for note in brief['coverage'])
     assert brief['summary'][0] == 'In the last 7 days, 2 new reports came in from 2 sources.'
     titles = [s['title'] for s in brief['sections']]
     assert titles == [
@@ -42,7 +45,8 @@ def test_brief_has_an_executive_summary_and_linked_sections(app: FastAPI, authed
         'Seen in several sources',
         'Most-mentioned vendors',
     ]
-    (shared,) = brief['sections'][3]['items']
+    assert {item['entity'] for item in brief['sections'][3]['items']} == {'192.0.2.44', 'CVE-2026-1001'}
+    shared = next(item for item in brief['sections'][3]['items'] if item['entity'] == '192.0.2.44')
     assert shared == {
         'text': '192.0.2.44 · 2 sources, 2 reports',
         'document_id': None,

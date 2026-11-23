@@ -667,7 +667,7 @@ async def test_brief_highlight_opens_its_report_and_explains_the_time_window(
     await user.open('/')
     with user.scope(marker='brief-context'):
         await user.should_see('2 reports · 2 sources')
-        await user.should_see('Reports in this brief received in the last 24 hours.')
+        await user.should_not_see('Reports in this brief received in the last 24 hours.')
         await user.should_see('Across the last 7 days')
     with user.scope(marker='brief-priority-0'):
         await user.should_see('A recurring topic in the reports')
