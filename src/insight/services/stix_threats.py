@@ -80,7 +80,7 @@ def _add_stix_threats(
     for subject, link, owner, endpoint, targets in selections:
         ids = list(targets)
         kind = 'threat-actor' if subject is ThreatActor else 'campaign'
-        updated = ThreatActor.updated_at if subject is ThreatActor else Campaign.created_at
+        updated = subject.updated_at
         stmt = (
             select(
                 subject.id.label('subject_id'),

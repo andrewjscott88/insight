@@ -14,6 +14,16 @@
   browsers that block scripts. Session cookies remain `SameSite=Strict`, secure where configured, and
   HTTP-only; password, MFA, origin and CSRF checks are unchanged.
 
+### Added: actor activity timelines and software Navigator (TIP 4.7, part 3)
+
+- Threat guides, JSON and Markdown include a dated timeline: public ATT&CK campaigns, explicitly associated
+  analyst campaigns, current reports linked to or naming the group, the latest hunt package publication and
+  retirement, and sightings of accepted indicators in current linked reports. Every event states its source,
+  date meaning and sharing label. This is not inferred attribution or a complete historical archive.
+- `GET /api/actors/{ref}/timeline` and explicit campaign association APIs/editor; campaign labels retain the
+  strictest association label after removal. Software Navigator layers use only catalog techniques; actor
+  layers add software-only context at score zero without changing existing scores or hunt hypotheses.
+
 ### Upgrade notes
 
 - The threat library now writes `insight-threat-library-2`. Existing format 1 synced libraries still load;
@@ -32,6 +42,8 @@
 - Migration `0029` adds explicit software/report links and software targets on actor/campaign links.
   It snapshots the catalog name and type so saved decisions survive catalog removal. Existing records
   are unchanged. Downgrading removes these new software associations.
+- Migration `0030` adds `actor_campaigns` and `campaigns.updated_at` (backfilled from creation time). A campaign
+  label raise advances its STIX/TAXII modification time so incremental polling sees the changed marking.
 
 ### Added: finished intelligence products (TIP 4.4)
 
@@ -77,8 +89,7 @@
   platforms, techniques and groups that use it, including software with no listed group.
 - MISP synonyms from uniquely matched entry names improve group searches and reports naming a group.
   Every alias retains its source. Ambiguous names and similar links never merge groups or create analyst links.
-- The pure, pinned build keeps the MITRE and MISP notices and a bundled edition under 1 MB. Software
-  workspace/API/linking, STIX output, timelines and software Navigator layers remain later parts of 4.7.
+- The pure, pinned build keeps the MITRE and MISP notices and a bundled edition under 1 MB.
   See [ADR 0038](docs/adr/0038-adversary-library.md) and [the guide](docs/THREAT_GUIDES.md).
 
 ### Added: hunt packages over TAXII (TIP 4.3)

@@ -41,4 +41,4 @@ superseded ones are marked, never deleted.
 | [0034](0034-hunt-packages.md) | Hunt packages over TAXII | Accepted |
 | [0035](0035-sightings.md) | Sightings from hunt tools | Accepted |
 | [0036](0036-intelligence-products.md) | Finished intelligence products | Accepted |
-| [0038](0038-adversary-library.md) | Adversary library imports | Proposed |
+| [0038](0038-adversary-library.md) | Adversary library imports | Accepted |

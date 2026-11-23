@@ -15,6 +15,7 @@ from nicegui import ui
 from .. import services
 from ..threat_guide import ThreatGuide, compose, industry_claims, industry_name
 from ..threat_library import library
+from .actor_timeline import render_actor_timeline
 from .actors import open_industry_dialog
 from .hunts import render_hunt_plan
 from .messages import tell
@@ -93,6 +94,7 @@ def _render(ws: Workspace, guide: ThreatGuide, refresh: Callable[[], Any]) -> No
     _targets(ws, guide, refresh)
     _techniques(guide)
     _reports(ws, guide)
+    render_actor_timeline(ws, guide, refresh)
     render_hunt_plan(ws, guide, refresh)
     ui.label(guide.library.notice).classes('muted text-sm')
 
@@ -141,6 +143,7 @@ def _techniques(guide: ThreatGuide) -> None:
     if software:
         with ui.expansion(f'Tools and malware ({len(software)})').classes('w-full'):
             for item in software:
+                new_tab_link(f'Download {item.name} Navigator layer', f'/api/software/{item.id}/navigator')
                 new_tab_link(f'{item.name} ({item.type})', item.url)
     if guide.mitigations:
         with ui.expansion(f'Ways to defend ({len(guide.mitigations)})').classes('w-full'):
@@ -166,4 +169,4 @@ def _reports(ws: Workspace, guide: ThreatGuide) -> None:
 
         ui.button(
             f'{report.title} · TLP:{report.tlp} · {report.created_at[:10]} · {how}', on_click=open_report
-        ).props('flat no-caps align=left').classes('w-full break-value')
+        ).props('flat no-caps align=left').classes('w-full shrink-0 break-value')

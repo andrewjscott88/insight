@@ -25,17 +25,20 @@ from sqlalchemy.orm import Session
 from ..flags import flags
 from ..models import Document, DocumentTechnique, Entity, Hunt, Observation
 from ..schemas import most_restrictive
-from .actors import GroupSubject, analyst_claims, linked_reports, resolve_group
+from .actor_reports import ReportRef as ReportRef
+from .actor_reports import _guide_reports
+from .actor_timeline import ActorTimeline, actor_timeline
+from .actors import GroupSubject, analyst_claims, resolve_group
 from .assessments import visible_assessments
+from .campaigns import list_threat_links
 from .common import stamp
 from .hunts import hunt_checks, hunts_for
 from .rules import LinkedRule, rules_for_group
 from .techniques import TAGGED, technique_labels, technique_summary
-from .threat_profiles import PROFILE_DAYS, Mention, find_mentions
+from .threat_profiles import PROFILE_DAYS
 from .tlp import _visible
 
 SWEEP_KINDS: Final = ('ip', 'domain', 'url', 'md5', 'sha1', 'sha256', 'sha512')
-MAX_NAMED: Final = 50
 MAX_SWEEP_REPORTS: Final = 200
 MAX_SWEEP: Final = 5_000
 
@@ -51,17 +54,6 @@ class SweepEntry:
     reports: tuple[str, ...]  # report IDs
     via: str  # 'linked' when any report is linked to the group, else 'named'
     tlp: str  # most restrictive label of the reports it came from
-
-
-@dataclass(frozen=True, slots=True)
-class ReportRef:
-    document_id: str
-    title: str
-    tlp: str
-    created_at: str
-    source_name: str
-    via: str  # 'linked' or 'named'
-    evidence: str  # the analyst's note for a link, the text around the name otherwise
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,11 +79,19 @@ class GuideData:
     max_tlp: str | None
     labels: tuple[str, ...] = field(default=())  # every TLP label of what went in
     sweep_linked_only: bool = True  # False: the sweep list also has indicators from reports naming the group
+    timeline: ActorTimeline | None = None
+    linked_software: tuple[str, ...] = ()  # explicit analyst actor/software decisions, Navigator context only
 
     @property
     def tlp(self) -> str:
         """The guide's label: at least as restrictive as everything in it, sweep rows included."""
-        return most_restrictive('CLEAR', self.subject.tlp, *self.labels, *(e.tlp for e in self.sweep))
+        return most_restrictive(
+            'CLEAR',
+            self.subject.tlp,
+            *self.labels,
+            *(e.tlp for e in self.sweep),
+            self.timeline.tlp if self.timeline else 'CLEAR',
+        )
 
 
 def _report_techniques(db: Session, document_ids: list[str]) -> dict[str, int]:
@@ -152,32 +152,6 @@ def sweep_list(
     return entries[:MAX_SWEEP], len(entries) > MAX_SWEEP
 
 
-def _reports(
-    db: Session, subject: GroupSubject, max_tlp: str | None
-) -> tuple[list[ReportRef], list[Mention]]:
-    """Linked reports, then up to ``MAX_NAMED`` reports that only name the group; and every mention found."""
-    linked = [
-        ReportRef(
-            d.id,
-            d.title,
-            most_restrictive(d.tlp, link.tlp, subject.tlp),
-            d.created_at,
-            d.source_name,
-            'linked',
-            link.note,
-        )
-        for d, link in linked_reports(db, subject.ref, max_tlp=max_tlp)
-    ]
-    seen = {r.document_id for r in linked}
-    mentions: list[Mention] = find_mentions(db, {subject.ref: subject.names}, max_tlp=max_tlp)[0][subject.ref]
-    named = [
-        ReportRef(m.document_id, m.title, m.tlp, m.created_at, m.source_name, 'named', m.evidence)
-        for m in mentions
-        if m.document_id not in seen
-    ]
-    return linked + named[:MAX_NAMED], mentions
-
-
 def guide_data(
     db: Session, ref: str, *, max_tlp: str | None = None, now: datetime, linked_only: bool = True
 ) -> GuideData:
@@ -187,8 +161,17 @@ def guide_data(
     the sweep list (an explicit opt-in: naming a group is not attributing anything to it).
     """
     subject = resolve_group(db, ref, max_tlp=max_tlp)
+    software_links = [
+        link
+        for link in (
+            list_threat_links(db, 'actor', subject.ref, max_tlp=max_tlp, limit=200)
+            if subject.kind == 'analyst'
+            else []
+        )
+        if str(link.target_kind) == 'software'
+    ]
     claims = analyst_claims(db, max_tlp=max_tlp, group_ref=subject.ref)
-    reports, mentions = _reports(db, subject, max_tlp)
+    reports, mentions, _ = _guide_reports(db, subject, max_tlp)
     linked_ids = [r.document_id for r in reports if r.via == 'linked']
     report_techniques = _report_techniques(db, linked_ids)
     techniques = {*report_techniques, *(subject.catalog.techniques if subject.catalog else ())}
@@ -211,6 +194,7 @@ def guide_data(
         + [e.tlp for e in sweep]  # a verdict's label can be stricter than its reports'
         + [r.tlp for r in rules]
         + [h.hunt.effective_tlp for h in hunts]
+        + [link.tlp for link in software_links]
     )
     return GuideData(
         subject=subject,
@@ -237,4 +221,6 @@ def guide_data(
         max_tlp=max_tlp,
         labels=tuple(labels),
         sweep_linked_only=linked_only,
+        timeline=actor_timeline(db, subject.ref, max_tlp=max_tlp, now=now),
+        linked_software=tuple(link.target_id for link in software_links),
     )

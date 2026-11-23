@@ -44,6 +44,9 @@ A single-operator threat-intelligence workbench, run locally or published behind
   covers every current ATT&CK malware and tool, plus uniquely matched MISP group aliases with their sources.
   Aliases improve group searches and report name matches; they never create links. In **Investigate > Threat groups**, link software to a report or record its use by an
   actor or campaign. These labelled decisions appear in STIX and TAXII. [Software guide](docs/THREAT_GUIDES.md#software-and-report-links).
+  Actor guides also include a bounded, reader-filtered [activity timeline](docs/THREAT_GUIDES.md#activity-timeline-and-software-layers-tip-47-part-3),
+  with explicit campaign associations and distinct source/collection/action dates. Software Navigator layers
+  show catalog techniques; software-only actor context never changes existing scores or hunt hypotheses.
 - **Alerts** ([docs/ALERTS.md](docs/ALERTS.md)): when a new report mentions a watch term, or CISA adds a KEV
   entry, Insight tells a chat channel (Slack, Mattermost, Google Chat), your own tool (signed JSON webhook) or
   an e-mail address, within about 15 seconds of the sync. Each alert fires once; report titles go only up to

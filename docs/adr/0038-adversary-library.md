@@ -1,16 +1,16 @@
 # 0038: Adversary library imports
 
-Status: Proposed
+Status: Accepted
 
 Date: 2026-11-22
 
 ## Context
 
 TIP 4.7 expands the existing pinned library (ADR 0025) from group guides to software context, richer
-name matching and, in later parts, analyst software links and actor activity timelines. The source data
+name matching, analyst software links and actor activity timelines. The source data
 must stay separate from analyst attribution. A public catalog name is not a decision about a report.
 
-## Decision: part 1
+## Part 1: catalog software and sourced aliases
 
 Keep the existing pure build and explicit sync paths. Both editions use the same pinned ATT&CK Enterprise
 20.1 release and MISP threat-actor cluster 359, with exact commit URLs and SHA-256 in
@@ -58,14 +58,6 @@ visible analyst report link; aliases do not weaken that rule.
 Catalog data is TLP:CLEAR. This part adds no stored intelligence, service, route or UI control. Existing
 API/UI flows use the enriched catalog, with tests through middleware and the NiceGUI user simulation.
 New software fields stay in the library; existing guide/STIX export shapes are unchanged.
-
-## Related parts
-
-Part 2 adds software search/API/workspace, explicit audited and labelled report links, and stable STIX
-software objects and relationships. Part 3 will add reader-scoped actor timelines and software Navigator
-layers, plus software context in actor layers without changing existing scores. Those decisions and their
-migrations, route protections, export handling and tests belong to their separate pull requests. TIP 4.7
-remains incomplete until those parts pass their gates.
 
 ## Validation
 
@@ -125,3 +117,24 @@ their received snapshots. Editing a retained link preserves its creation time wh
 Validation covers missing/hidden endpoints, higher link labels, note markings, duplicate writes, retirement,
 retention deletion, explicit versus inferred use, valid malware/tool output, stable TAXII IDs and dates,
 real middleware authentication/CSRF/key limits, the GREEN-key sweep, and the workspace decision flow.
+
+## Part 3: timeline and Navigator decisions
+
+- Reuse the pinned library, existing reports, packages and sightings. Never infer attribution or
+  actor/campaign associations from shared reports, indicators, software or techniques.
+- Add explicit `ActorCampaign` decisions with notes, caller/instance TLP enforcement, audit identity and
+  deterministic uniqueness. Migration `0030` follows software links `0029`. Raise the campaign's label
+  to its association floor and retain it after removal.
+  Add `Campaign.updated_at`, backfilled to creation time, so label raises are visible to TAXII polling.
+- Timeline event DTOs record source, date meaning, relation and effective label. Every stored read filters
+  before aggregation. Existing guides consume the same service; guide format 1 gets an additive timeline.
+  Reports use current revisions; sightings require accepted indicators in current explicit report links.
+- Use only known current package publication/retirement timestamps. Do not reconstruct earlier cycles from
+  unrelated audit records or imply complete historical coverage. Invalid dates are omitted, never invented.
+- Bound all source reads and the final result. A conservative truncation flag does not expose hidden counts.
+  Catalog/analyst group references are distinct; no name-based identity merge occurs.
+- Software Navigator is a pure projection of explicit catalog software techniques. Actor layers add
+  software-only techniques at score zero, with source comments, without modifying existing scores, direct
+  group techniques or hunt hypotheses. Visible explicit analyst/software links also contribute context and
+  their labels enter the guide envelope. Legacy software records remain valid with empty context.
+- No new dependency, external fetch, provider job, model call or deployment setting is added.

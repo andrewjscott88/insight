@@ -529,6 +529,21 @@ class Campaign(Base):
     description: Mapped[str] = mapped_column(Text, default='')
     tlp: Mapped[str] = mapped_column(String(20), default='AMBER')
     created_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
+    updated_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
+    actor: Mapped[str] = mapped_column(String(80), default='')
+
+
+class ActorCampaign(Base):
+    """An analyst's explicit group/campaign association, never inferred from shared evidence."""
+
+    __tablename__ = 'actor_campaigns'
+    __table_args__ = (UniqueConstraint('group_ref', 'campaign_id'),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    group_ref: Mapped[str] = mapped_column(String(36), index=True)
+    campaign_id: Mapped[str] = mapped_column(ForeignKey('campaigns.id', ondelete='CASCADE'), index=True)
+    tlp: Mapped[str] = mapped_column(String(20), default='CLEAR')
+    note: Mapped[str] = mapped_column(Text, default='')
+    created_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
     actor: Mapped[str] = mapped_column(String(80), default='')
 
 

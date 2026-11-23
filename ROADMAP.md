@@ -118,11 +118,12 @@ tools over TAXII and STIX; sightings and requests for information come back
       *Done (unreleased):* [ADR 0034](docs/adr/0034-hunt-packages.md).
 - [x] **TIP 4.4 Finished intelligence products,** replacing incident-style cases: judgements, gaps, versions,
       and PDF, Markdown and STIX exports. *Done (unreleased):* [ADR 0036](docs/adr/0036-intelligence-products.md).
-- [ ] **TIP 4.5–4.8** Operator-defined sources, infrastructure pivots, ATT&CK and MISP-galaxy imports, and a
-      read-only MCP endpoint.
-      *TIP 4.7 parts 1 and 2 done (unreleased):* the pinned catalog includes ATT&CK software and sourced MISP
-      aliases. Analysts link software to reports, actors and campaigns and share the links through STIX/TAXII.
-      Actor timelines and software Navigator layers remain open ([ADR 0038](docs/adr/0038-adversary-library.md)).
+- [ ] **TIP 4.5–4.6** Operator-defined sources and infrastructure pivots.
+- [x] **TIP 4.7 Adversary library imports.** The pinned catalog includes ATT&CK software and sourced MISP
+      aliases. Analysts can link software to reports, actors and campaigns, and share those decisions through
+      STIX and TAXII. Actor timelines and software Navigator layers are available in threat guides.
+      [ADR 0038](docs/adr/0038-adversary-library.md).
+- [ ] **TIP 4.8** Read-only MCP endpoint.
 
 ## Later
 

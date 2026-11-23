@@ -27,6 +27,7 @@ from insight.connectors import SOURCES, import_kev, parse_feed
 from insight.demo import seed
 from insight.models import Enrichment, Entity, Observation, SourceRun, database
 from insight.schemas import (
+    ActorCampaignInput,
     ActorInput,
     ActorLinkInput,
     AssessmentInput,
@@ -142,6 +143,7 @@ def build(path: Path) -> None:
             services.record_lookup_failure(db, 'nvd', 'CVE-2024-3400', 'NVD answered HTTP 404', at=when)
             # 0.7.0: threat guides (TIP 2.10): an actor, a report link, an industry decision, a rule, a hunt
             campaign = services.create_campaign(db, CampaignInput(name='Fixture campaign', tlp='GREEN'))
+            services.link_actor_campaign(db, 'G0016', ActorCampaignInput(campaign_id=campaign.id))
             services.link_threat(
                 db,
                 'campaign',

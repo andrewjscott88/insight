@@ -544,18 +544,12 @@ Manual, approved-per-lookup, metadata-only pivots that land in the link map: RDA
 
 ### 4.7 Adversary library imports
 
-Part 2 adds software search/detail, labelled report decisions, explicit actor/campaign use links, workspace
-controls, and STIX/TAXII projections ([ADR 0038](adr/0038-adversary-library.md)). No link is inferred
-from report co-occurrence.
-
-MITRE ATT&CK groups and software, and the MISP threat-actor galaxy for aliases, as malware and tool entities;
-an activity timeline per actor; ATT&CK Navigator layers per actor and for the landscape.
-
-**Part 1 done (unreleased):** the pure pinned library includes every current ATT&CK malware and tool with
-aliases, description, platforms, techniques and groups, and MISP synonyms from uniquely matched group
-entry names, with provenance. Both editions use format 2; format 1 remains readable. No DB change or
-automatic attribution ([ADR 0038](adr/0038-adversary-library.md), [guide](THREAT_GUIDES.md)).
-**Still open:** actor timelines, software Navigator layers and actor-layer software context (part 3).
+**Done (unreleased).** Both pinned library editions cover current ATT&CK malware and tools, their techniques,
+and the groups that use them. Aliases retain their MISP or ATT&CK provenance. Format 1 editions still load.
+Analysts can link reports, actors and campaigns to software and share those decisions through STIX and TAXII.
+Actor guides include a dated, TLP-filtered timeline. Software Navigator layers show catalog techniques;
+software-only techniques in actor layers have score zero. [ADR 0038](adr/0038-adversary-library.md) and
+[threat guides](THREAT_GUIDES.md).
 
 ### 4.8 Read-only MCP endpoint
 
@@ -641,7 +635,7 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
   ADR 0036
 - [ ] **4.5** Operator-defined RSS/Atom and TAXII sources
 - [ ] **4.6** Infrastructure pivots: RDAP, certificate transparency, ASN, passive DNS
-- [ ] **4.7** Adversary library imports: catalog and sourced aliases, software links, workspace and STIX done (parts 1–2); timelines/Navigator remain
+- [x] **4.7** Adversary library imports: sourced group aliases, software links and sharing, actor timelines and Navigator layers (ADR 0038)
 - [ ] **4.8** Read-only MCP endpoint for AI agents
 
 **Total: 39 items.** Out of scope on purpose: cloning CrowdStrike/Mandiant/Recorded Future collection, building a malware sandbox, automated adversary attribution, and any always-on cloud AI.

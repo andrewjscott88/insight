@@ -130,11 +130,6 @@ def _add_stix_software(db: Session, bundle: dict[str, Any], *, max_tlp: str | No
     ):
         if not eligible_software and not selected_subjects[kind]:
             continue
-        updated = (
-            ThreatActor.updated_at
-            if subject is ThreatActor
-            else getattr(Campaign, 'updated_at', Campaign.created_at)
-        )
         stmt = (
             select(
                 subject.id.label('subject_id'),
@@ -142,7 +137,7 @@ def _add_stix_software(db: Session, bundle: dict[str, Any], *, max_tlp: str | No
                 subject.aliases,
                 subject.tlp.label('subject_tlp'),
                 subject.created_at.label('subject_created'),
-                updated.label('subject_updated'),
+                subject.updated_at.label('subject_updated'),
                 ThreatLink.id.label('link_id'),
                 ThreatLink.tlp.label('link_tlp'),
                 ThreatLink.created_at.label('link_created'),

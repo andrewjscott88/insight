@@ -146,3 +146,7 @@ Errors use the TAXII error format, for example
 | `429` | The `taxii` budget is used up; wait for `Retry-After` |
 
 Every read is audited as `taxii.read`, with the key that made it.
+
+Campaign labels raised by explicit actor/campaign associations advance `campaigns.updated_at`. Campaign
+objects and their projected relationships use that timestamp so `added_after` polling sees changed labels.
+Removing the association does not lower the campaign label. The association itself is not a new STIX export.
