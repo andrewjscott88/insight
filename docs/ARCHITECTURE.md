@@ -176,8 +176,10 @@ The opening **Intel Brief** and **Threat Hunt** navigation are a workflow enhanc
 in advanced Settings; existing case/product views and hunt packages are composed under Threat Hunt.
 
 `services/hunt_guides.py` and `services/hunt_guide_subjects.py` gather bounded, TLP-filtered subject/evidence
-metadata for eight starting kinds. `hunt_guide_plan.py` supplies fixed planning steps and pinned ATT&CK
-references; `hunt_guide.py` bounds the DTO and renders Markdown/PDF with the existing writer.
+metadata for nine starting kinds. `hunt_guide_industries.py` shares the sector candidate/report selection
+with focused briefs and preserves source claims and match reasons. `hunt_guide_plan.py` supplies fixed
+planning steps and pinned ATT&CK references; `hunt_guide.py` bounds the DTO and renders Markdown/PDF
+with the existing writer.
 `web/routes/hunt_guides.py` and `ui/threat_hunt.py` share those services. Reads use the stricter instance and
 caller ceiling. Hidden and absent subjects look the same; the aggregate label covers contributing evidence
 and cap metadata. Explicit links stay distinct from theme matches and never imply attribution.

@@ -12,9 +12,10 @@ from sqlalchemy.orm import Session
 
 from insight import services
 from insight.hunt_guide import GuideSection, HuntGuide
-from insight.models import AuditEvent
+from insight.models import AuditEvent, HuntPackage
 from insight.ui.threat_hunt import KINDS
 
+from .test_landscape import add_report
 from .test_workspace import record_navigation
 
 pytestmark = pytest.mark.ui
@@ -25,6 +26,105 @@ async def choose(user: User, marker: str, value: str | None) -> None:
     select = user.find(marker=marker).elements.pop()
     assert isinstance(select, ui.select)
     select.set_value(value)
+
+
+async def test_industry_focus_browses_builds_downloads_and_saves_a_sector_hunt(
+    user: User, ui_env: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression: a sector selection must build and save its guide, not an unrelated actor or blank plan."""
+    add_report(ui_env, 'Hospital security advisory', 'Hospitals should review remote access logs. T1078')
+    add_report(ui_env, 'Unrelated bulletin', 'Routine office updates.')
+    await user.should_see(marker='hunt-guide-kind')
+    kind = user.find(marker='hunt-guide-kind').elements.pop()
+    assert isinstance(kind, ui.select)
+    assert isinstance(kind.options, dict)
+    assert kind.options['industry'] == 'Sector / Industry'
+    kind.set_value('industry')
+    await user.should_see(marker='hunt-guide-subject')
+    subject = user.find(marker='hunt-guide-subject').elements.pop()
+    assert isinstance(subject, ui.select)
+    assert isinstance(subject.options, dict)
+    assert len(subject.options) == 15
+    assert subject.options['healthcare'] == 'Healthcare and pharmaceuticals'
+    assert subject.label == 'Sector / Industry'
+    await user.should_see(marker='hunt-guide-query')
+    user.find(marker='hunt-guide-query').type('hospitals')
+    await user.should_see(marker='hunt-guide-search')
+    user.find(marker='hunt-guide-search').click()
+    assert subject.options == {'healthcare': 'Healthcare and pharmaceuticals'}
+    await choose(user, 'hunt-guide-subject', 'healthcare')
+    await user.should_see(marker='hunt-guide-build')
+    user.find(marker='hunt-guide-build').click()
+    await user.should_see('Your guide is ready.')
+    await user.should_see('Threat hunt guide: Healthcare and pharmaceuticals')
+    with user.scope(marker='hunt-guide-preview'):
+        await user.should_see('Threat hunt guide: Healthcare and pharmaceuticals')
+        await user.should_see('Groups known to target this sector')
+        await user.should_see('Reports mentioning this sector')
+        await user.should_see('Hospital security advisory')
+        await user.should_not_see('Unrelated bulletin')
+    downloads = record_navigation(user, monkeypatch)
+    await user.should_see(marker='hunt-guide-markdown')
+    user.find(marker='hunt-guide-markdown').click()
+    await user.should_see(marker='hunt-guide-pdf')
+    user.find(marker='hunt-guide-pdf').click()
+    assert downloads == [
+        ('/api/hunt-guides/industry/healthcare?format=md', True),
+        ('/api/hunt-guides/industry/healthcare?format=pdf', True),
+    ]
+    await user.should_see(marker='hunt-guide-save-package')
+    user.find(marker='hunt-guide-save-package').click()
+    await user.should_see('Saved as a draft hunt package.')
+    with ui_env.app.state.session_factory() as db:
+        package = db.scalars(select(HuntPackage)).one()
+        assert package.status == 'draft'
+        assert package.title == 'Threat hunt guide: Healthcare and pharmaceuticals'
+        assert package.group_ref is None
+        assert package.tlp == 'GREEN'
+        assert 'Groups known to target this sector' in package.hypothesis
+        assert 'Start the hunt' in package.hypothesis
+        assert any(
+            item.kind == 'document'
+            for item in services.get_hunt_package(db, package.id, max_tlp='AMBER+STRICT').items
+        )
+
+
+async def test_selected_guide_saves_a_draft_and_reopens_it_without_a_duplicate(
+    user: User, ui_env: SimpleNamespace
+) -> None:
+    """Regression: saving the selected guide must carry its plan into a package, not open a blank form."""
+    await user.should_see(marker='hunt-guide-save-package')
+    save = user.find(marker='hunt-guide-save-package').elements.pop()
+    assert isinstance(save, ui.button)
+    assert not save.enabled
+    await choose(user, 'hunt-guide-subject', 'ransomware')
+    await user.should_see(marker='hunt-guide-build')
+    user.find(marker='hunt-guide-build').click()
+    await user.should_see('Your guide is ready.')
+    assert save.enabled
+    user.find(marker='hunt-guide-save-package').click()
+    await user.should_see('Saved as a draft hunt package.')
+    await user.should_see('Open saved package')
+    with ui_env.app.state.session_factory() as db:
+        package = db.scalars(select(HuntPackage)).one()
+        package_id = package.id
+        assert package.status == 'draft'
+        assert 'Ransomware' in package.title
+        assert 'Start the hunt' in package.hypothesis
+        assert any(
+            item.kind == 'technique'
+            for item in services.get_hunt_package(db, package_id, max_tlp='AMBER+STRICT').items
+        )
+    await user.should_see('Done')
+    user.find('Done').click()
+    user.find(marker='hunt-guide-save-package').click()
+    await user.should_see('Done')
+    with ui_env.app.state.session_factory() as db:
+        assert db.scalars(select(HuntPackage.id)).all() == [package_id]
+    user.find('Done').click()
+    await choose(user, 'hunt-guide-subject', 'phishing')
+    assert not save.enabled
+    assert save.text == 'Save as hunt package'
 
 
 async def test_build_preview_download_and_invalidate_when_the_focus_changes(

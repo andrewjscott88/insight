@@ -29,7 +29,7 @@ from .actor_reports import ReportRef as ReportRef
 from .actor_reports import _guide_reports
 from .actor_timeline import ActorTimeline, actor_timeline
 from .actors import GroupSubject, analyst_claims, resolve_group
-from .assessments import visible_assessments
+from .assessments import _expires_at, visible_assessments
 from .campaigns import list_threat_links
 from .common import stamp
 from .hunts import hunt_checks, hunts_for
@@ -105,9 +105,17 @@ def _report_techniques(db: Session, document_ids: list[str]) -> dict[str, int]:
 
 
 def sweep_list(
-    db: Session, reports: list[ReportRef], *, max_tlp: str | None = None, now: datetime
+    db: Session,
+    reports: list[ReportRef],
+    *,
+    max_tlp: str | None = None,
+    now: datetime,
+    apply_default_lifetimes: bool = False,
 ) -> tuple[list[SweepEntry], bool]:
-    """Indicators to search for, from these reports (see the module docstring for what is left out)."""
+    """Eligible indicators; current hunt plans may also apply the verdict's default lifetime.
+
+    Legacy actor sweep exports look back and retain their explicit-expiry-only policy by default.
+    """
     by_id = {r.document_id: r for r in reports[:MAX_SWEEP_REPORTS]}
     if not by_id:
         return [], False
@@ -132,7 +140,12 @@ def sweep_list(
         verdict = verdicts.get(entity_id)
         if flags(kind, value) or (verdict is not None and verdict.verdict == 'benign'):
             continue
-        if verdict is not None and verdict.valid_until is not None and verdict.valid_until < today:
+        expires = (
+            (_expires_at(kind, verdict) if apply_default_lifetimes else verdict.valid_until)
+            if verdict is not None
+            else None
+        )
+        if expires is not None and expires <= today:
             continue
         docs = sorted((by_id[d] for d in doc_ids), key=lambda r: r.created_at)
         entries.append(
@@ -140,7 +153,7 @@ def sweep_list(
                 kind=kind,
                 value=value,
                 verdict=verdict.verdict if verdict else 'unknown',
-                verdict_until=verdict.valid_until if verdict else None,
+                verdict_until=expires,
                 first_seen=docs[0].created_at,
                 last_seen=docs[-1].created_at,
                 reports=tuple(d.document_id for d in docs),

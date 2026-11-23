@@ -8,7 +8,8 @@ from uuid import uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..attack import Technique, catalog
+from ..attack import DOMAINS, Technique, catalog
+from ..attack import technique as find_technique
 from ..models import Document, DocumentTechnique
 from ..stix_export import stable_id
 from .techniques import TAGGED
@@ -25,7 +26,7 @@ def _attack_pattern(
     ``stable`` (TAXII, ADR 0026): the ID is derived from everything the object says (catalog version,
     technique, markings), so the same content always has the same ID and a new catalog gets new IDs.
     """
-    source = catalog()
+    source = catalog(technique.domain)
     if stable:
         object_id = stable_id(
             'attack-pattern', 'mitre-attack', f'{source.version}|{technique.id}|{",".join(markings)}'
@@ -43,7 +44,7 @@ def _attack_pattern(
         'external_references': [
             {'source_name': 'mitre-attack', 'external_id': technique.id, 'url': technique.url},
             {
-                'source_name': f'MITRE ATT&CK Enterprise {source.version}',
+                'source_name': f'MITRE ATT&CK {DOMAINS[technique.domain]} {source.version}',
                 'description': source.notice,
                 'url': source.terms,
             },
@@ -51,7 +52,7 @@ def _attack_pattern(
     }
     if technique.tactics:
         obj['kill_chain_phases'] = [
-            {'kill_chain_name': 'mitre-attack', 'phase_name': tactic} for tactic in technique.tactics
+            {'kill_chain_name': technique.kill_chain, 'phase_name': tactic} for tactic in technique.tactics
         ]
     return obj
 
@@ -93,7 +94,7 @@ def _add_stix_techniques(
                 raise ValueError(
                     f'More than {MAX_EXPORT_TECHNIQUE_TAGS:,} technique tags match; narrow the filters.'
                 )
-            technique = catalog().techniques.get(technique_id)
+            technique = find_technique(technique_id)
             if technique is None:  # tag from a retired catalog entry
                 continue
             report = reports[document_id]

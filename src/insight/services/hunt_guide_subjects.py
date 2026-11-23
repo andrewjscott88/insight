@@ -17,6 +17,7 @@ from .common import like_pattern
 from .exploits import exploit_context
 from .search import DocumentQuery, search_documents
 from .techniques import TAGGED
+from .threat_guides import SweepEntry
 from .tlp import _visible
 
 _KINDS = ('cve', 'document', 'exploit', 'indicator', 'campaign')
@@ -202,10 +203,10 @@ def _report_flaws(db: Session, doc_id: str, max_tlp: str | None) -> tuple[list[s
     return lines, most_restrictive('CLEAR', *labels)
 
 
-def hunt_guide_subject(
+def _subject_parts(
     db: Session, kind: str, ref: str, *, max_tlp: str | None = None, now: datetime
-) -> HuntGuide:
-    """Build from a reader-visible subject. Hidden, rejected-only and missing subjects look the same."""
+) -> tuple[HuntGuide, list[ReportRef], tuple[str, ...], tuple[SweepEntry, ...]]:
+    """Keep the plan's actual evidence beside its text for an explicit save."""
     from .hunt_guides import _evidence
 
     label = 'CLEAR'
@@ -265,7 +266,7 @@ def hunt_guide_subject(
             .order_by(DocumentTechnique.technique_id)
         )
     )
-    evidence, evidence_label = _evidence(db, reports, max_tlp, now)
+    evidence, evidence_label, sweep = _evidence(db, reports, max_tlp, now)
     sections = (
         GuideSection('Why this hunt matters', tuple(_text(line) for line in why)),
         *planning_sections(techniques),
@@ -286,7 +287,7 @@ def hunt_guide_subject(
             ),
         ),
     )
-    return HuntGuide(
+    guide = HuntGuide(
         kind,
         ref,
         _text(f'Threat hunt guide: {name}'),
@@ -295,3 +296,11 @@ def hunt_guide_subject(
         now.isoformat(),
         sections,
     )
+    return guide, reports, tuple(techniques), sweep
+
+
+def hunt_guide_subject(
+    db: Session, kind: str, ref: str, *, max_tlp: str | None = None, now: datetime
+) -> HuntGuide:
+    """Build from a reader-visible subject. Hidden, rejected-only and missing subjects look the same."""
+    return _subject_parts(db, kind, ref, max_tlp=max_tlp, now=now)[0]

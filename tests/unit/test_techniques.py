@@ -7,7 +7,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from insight import services
-from insight.attack import catalog
+from insight.attack import Domain, catalog
 from insight.models import AuditEvent, Document, DocumentTechnique
 from insight.schemas import DocumentInput
 from insight.services import SourceRef, ingest
@@ -123,6 +123,27 @@ def test_the_summary_counts_current_reports_and_can_be_limited_in_time(db: Sessi
     pages = [d.id for d in services.technique_documents(db, 'T1486', limit=2)]
     assert len(pages) == 2
     assert pages[0] == other.id  # newest first
+
+
+def test_domain_summary_keeps_retired_tags_without_assigning_them_to_a_new_domain(db: Session) -> None:
+    """Regression: selecting a domain made all previously stored retired technique tags disappear."""
+    doc = report(db, 'T1486 plus T1636 and T0801.', tlp='CLEAR')
+    hidden = report(db, 'Restricted retired mapping.', tlp='AMBER')
+    for document, tid in ((doc, 'T9999'), (hidden, 'T9998')):
+        db.add(
+            DocumentTechnique(
+                document_id=document.id, technique_id=tid, source='analyst', status='tagged', actor='test'
+            )
+        )
+    db.flush()
+    enterprise = services.technique_summary(db, domain='enterprise', max_tlp='GREEN')
+    assert {row.technique_id for row in enterprise} == {'T1486', 'T9999'}
+    domains: tuple[tuple[Domain, str], ...] = (('mobile', 'T1636'), ('ics', 'T0801'))
+    for domain, expected in domains:
+        rows = services.technique_summary(db, domain=domain, max_tlp='GREEN')
+        assert {row.technique_id for row in rows} == {expected}
+    layer = services.navigator_layer(enterprise, period='all time')
+    assert [row['techniqueID'] for row in layer['techniques']] == ['T1486']
 
 
 def test_the_navigator_layer_scores_techniques_by_reports(db: Session) -> None:

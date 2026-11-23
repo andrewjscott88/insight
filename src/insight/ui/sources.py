@@ -10,6 +10,7 @@ from nicegui import ui
 from .. import services
 from ..connectors import sync_all, sync_source
 from ..source_registry import CATEGORIES, SOURCES, Source, in_use
+from .censys import build_censys_settings
 from .lookups import build_lookup_switches
 from .messages import tell
 from .operator_sources import build_operator_sources
@@ -116,6 +117,7 @@ def build_sources(ws: Workspace) -> None:
             source_panel(source, in_use(source, switches), controls)
     build_lookup_switches(ws)
     build_pivot_switches(ws)
+    build_censys_settings(ws)
     heading('Recent sync activity', 3, 'subsection-title mt-4')
     with ui.column().classes('w-full gap-3'):
         source_history()

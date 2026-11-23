@@ -108,3 +108,26 @@ async def test_the_tab_period_filters_and_explains_an_empty_period(
     add_report(ui_env, 'Ransom report', 'Files were encrypted (T1486).')
     user.find(kind=ui.select, marker='technique-period').elements.pop().set_value(0)
     await user.should_see('T1486 · Data Encrypted for Impact · 1 report(s)')
+
+
+async def test_the_workspace_switches_attack_domains(user: User, ui_env: SimpleNamespace) -> None:
+    """Regression: the technique workspace must expose Mobile and ICS tags and their offline catalogs."""
+    add_report(ui_env, 'Cross-domain report', 'Mapped T1398, T0800 and T1486.')
+    await user.open('/')
+    await user.should_see(marker='technique-domain')
+    domain = user.find(marker='technique-domain').elements.pop()
+    assert isinstance(domain, ui.select)
+    domain.set_value('mobile')
+    await user.should_see('Uses version 20.1 of Mobile ATT&CK.')
+    await user.should_see('T1398 · Boot or Logon Initialization Scripts · 1 report(s)')
+    domain.set_value('ics')
+    await user.should_see('Uses version 20.1 of Industrial control systems ATT&CK.')
+    await user.should_see('T0800 · Activate Firmware Update Mode · 1 report(s)')
+    await user.should_see('Browse the technique catalog')
+    user.find(kind=ui.expansion, content='Browse the technique catalog').elements.pop().open()
+    await user.should_see(marker='attack-catalog-query')
+    search = user.find(marker='attack-catalog-query').elements.pop()
+    assert isinstance(search, ui.input)
+    search.set_value('T0800')
+    with user.scope(marker='attack-catalog-results'):
+        await user.should_see('T0800 · Activate Firmware Update Mode')

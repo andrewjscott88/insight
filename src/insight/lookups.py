@@ -92,6 +92,7 @@ THROTTLES: Final[dict[str, Throttle]] = {
     'vulncheck': Throttle(VULNCHECK_INTERVAL),
     'greynoise': Throttle(1.0),
     'shodan': Throttle(1.0),  # Shodan: one request per second on every plan
+    'censys': Throttle(2.0),  # Conservative manual-only budget, shared across callers.
     'rdap': Throttle(2.0),
     'asn': Throttle(2.0),
     'crtsh': Throttle(60.0),  # A deliberately slow local limit for the public certificate search.

@@ -25,7 +25,7 @@ TEXT_SIZES: Final[tuple[TextSize, ...]] = ('standard', 'large')
 DEFAULT_TEXT_SIZE: Final[TextSize] = 'standard'
 TEXT_SIZE_COOKIE: Final = 'insight_text'
 #: Page background per theme, also used for the mobile browser's address bar (``<meta name="theme-color">``).
-PAGE_BACKGROUND: Final = {'light': '#f6f4fa', 'dark': '#050407'}
+PAGE_BACKGROUND: Final = {'light': '#f1f5f7', 'dark': '#080c10'}
 
 
 def parse_theme(value: str) -> Theme:

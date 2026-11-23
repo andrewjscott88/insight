@@ -80,6 +80,8 @@ Set in `.env` (Compose reads it) or the process environment. Real environment va
 | `INSIGHT_GREYNOISE_KEY` | no | (none) | Enables manual GreyNoise Community IP lookups from Entity explorer and the API. [IP context](#greynoise-community-ip-context) |
 | `INSIGHT_CIRCL_PDNS_USER` / `INSIGHT_CIRCL_PDNS_PASSWORD` | no | (none) | Your approved CIRCL passive DNS credentials. Fixed HTTPS host, Basic header only; requires Settings opt-in and each uncached approval. [Guide](INFRASTRUCTURE_PIVOTS.md) |
 | `INSIGHT_SHODAN_KEY` | no | (none) | Your own Shodan API key. Enables manual Shodan host lookups of reviewed CLEAR IPs (paid, optional). Sent only to `api.shodan.io`, never logged. [Shodan](#shodan-exposure-context) |
+| `INSIGHT_CENSYS_PAT` | no | (none) | Platform personal access token for manual reviewed CLEAR IPv4/IPv6 lookups. Requires private sign-in; never scheduled. [Censys](CENSYS.md) |
+| `INSIGHT_CENSYS_ORG_ID` | no | (none) | Optional Censys organization UUID for its account access and credit balance. Omit for an individual account. |
 | `INSIGHT_NVD_API_KEY` | no | (none) | A free NIST NVD API key: CVE lookups at NVD every 0.7 s instead of every 6.5 s ([ADR 0023](adr/0023-automatic-cve-lookups.md)). Sent only in NVD's `apiKey` header, never logged |
 | `INSIGHT_VULNCHECK_API_KEY` | no | (none) | Your own VulnCheck community token. Needed for VulnCheck KEV lookups (exploitation reports and public exploit links, [ADR 0028](adr/0028-exploit-availability.md)); without it they do not run. Sent only as a Bearer header, never logged |
 | `INSIGHT_MISP_URL` and `INSIGHT_MISP_KEY` | no | (none) | The trusted HTTPS instance and its API key, read by host CLI MISP transfers. File exchange also works offline. |

@@ -1,7 +1,7 @@
 """The workspace style sheet, written for readability (ADR 0017).
 
 Targets, from WCAG 2.2 AAA (1.4.8, 2.4.13, 2.5.5), the British Dyslexia Association style guide and W3C COGA:
-body text 16 px (never smaller), line height 1.5 or more, lines of about 70 characters at most, sentence
+body text 16 px (never smaller), line height 1.5 or more, full-panel workspace text, sentence
 case (no all-caps), left-aligned text, a 3 px focus outline, 44 px targets, and no motion for people who ask
 for less. Sizes are in ``rem``, so the per-device "Larger text" setting (``html[data-text="large"]``) scales
 them all.
@@ -20,63 +20,65 @@ from typing import Final
 STYLE: Final = """
 :root { --text-xs:1rem;--text-xs--line-height:1.5;--text-sm:1rem;--text-sm--line-height:1.5;
   --text-base:1rem;--text-base--line-height:1.5;--text-lg--line-height:1.5;--text-xl--line-height:1.4;
-  --text-2xl--line-height:1.35;--text-3xl--line-height:1.3; }
+  --text-2xl--line-height:1.35;--text-3xl--line-height:1.3;
+  --ins-mono:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace; }
 body.body--dark, body.body--light { background:var(--ins-bg);color:var(--ins-text);font-size:1rem;
   line-height:1.5;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
 .nicegui-content { padding:0;gap:0;width:100%; }
-.workspace { width:100%;max-width:1680px;margin:auto;padding:28px 36px; }
+.workspace { width:100%;max-width:100%;margin:auto;padding:28px 36px; }
 .workspace h1, .workspace h2, .workspace h3, .q-dialog h2, .q-dialog h3 { margin:0;letter-spacing:normal; }
-.page-title { font-size:1.875rem;font-weight:600;line-height:1.3; }
+.page-title { font-size:1.875rem;font-weight:700;line-height:1.3; }
 .section-title { font-size:1.25rem;font-weight:600;line-height:1.4; }
 .report-title { font-size:1.5rem;font-weight:600;line-height:1.35; }
 .subsection-title { font-size:1.125rem;font-weight:600;line-height:1.4; }
 .card-title { font-size:1rem;font-weight:600;line-height:1.5; }
-.eyebrow { color:var(--ins-accent);font-size:1rem;font-weight:600;letter-spacing:0.01em; }
+.eyebrow { color:var(--ins-accent);font-family:var(--ins-mono);font-size:1rem;font-weight:600;
+  letter-spacing:0.04em; }
 .muted { color:var(--ins-muted); }
 .text-warn { color:var(--ins-warn); }
 .text-error { color:var(--ins-error);font-weight:600; }
 .divider { border-color:var(--ins-line); }
-.panel { background:var(--ins-panel);border:1px solid var(--ins-line);border-radius:10px;
+.panel { background:var(--ins-panel);border:1px solid var(--ins-line);border-radius:4px;
   color:var(--ins-text); }
-.source-card { border:1px solid var(--ins-line);background:var(--ins-card);border-radius:7px;padding:16px;
+.source-card { border:1px solid var(--ins-line);background:var(--ins-card);border-radius:4px;padding:16px;
   width:100%;min-width:0;overflow-wrap:break-word;cursor:pointer; }
 .source-card > *, .source-card .q-btn__content, .source-card .q-btn__content > .block {
   min-width:0;max-width:100%; }
 .source-card:hover { background:var(--ins-hover); }
 .source-selected { border-color:var(--ins-accent);border-width:2px;background:var(--ins-selected); }
-/* The brief leads the page. Its reading column stays narrow while the scope stays alongside it. */
+/* Both the executive summary card and its text use the available page width. */
 .brand-description { font-size:1rem;line-height:1.5; }
 .brief-heading .page-title { font-size:2.5rem;line-height:1.2; }
-.brief-overview { display:grid;grid-template-columns:minmax(0, 1.8fr) minmax(17rem, 1fr);gap:1rem; }
-.summary-box { border:1px solid var(--ins-line);border-top:4px solid var(--ins-accent);border-radius:10px;
+.brief-overview { display:grid;grid-template-columns:minmax(0,1fr); }
+.summary-box { border:1px solid var(--ins-line);border-top:3px solid var(--ins-accent);border-radius:4px;
   background:var(--ins-panel); }
 .brief-prose { line-height:1.7; }
-.brief-context { border:1px solid var(--ins-line);border-radius:10px;background:var(--ins-selected); }
-.brief-coverage .q-item { padding:0; }
 .brief-priorities { display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,20rem),1fr));
   gap:1rem; }
-.brief-priority { border:1px solid var(--ins-line);border-radius:10px;background:var(--ins-panel); }
+.brief-priority { border:1px solid var(--ins-line);border-radius:4px;background:var(--ins-panel); }
 .brief-action { border-left:3px solid var(--ins-accent);padding-left:0.75rem;margin-top:auto; }
 .brief-sections { display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:1rem; }
-.brief-section { grid-column:span 2;border:1px solid var(--ins-line);border-radius:10px;
+.brief-section { grid-column:span 2;border:1px solid var(--ins-line);border-radius:4px;
   background:var(--ins-panel); }
 .brief-section-primary { grid-column:span 3;background:var(--ins-card); }
 .brief-evidence { color:var(--ins-link); }
 .brief-evidence .q-btn__content { min-width:0;max-width:100%; }
-.brief-evidence .block { min-width:0;max-width:min(100%,56ch); }
+.brief-evidence .block { min-width:0;max-width:100%; }
 /* The side menu (sections of the analyst's day) beside the content; on narrow screens it wraps above it. */
 .app-shell { display:flex;flex-wrap:wrap;min-height:100vh;width:100%; }
 .side-nav { flex:0 0 15rem;display:flex;flex-direction:column;gap:1.5rem;padding:28px 12px;
   border-right:1px solid var(--ins-line);background:var(--ins-evidence-bg); }
 .side-brand { padding:0 12px; }
 .app-shell > .workspace { flex:999 1 36rem;min-width:0;display:flex;flex-direction:column;margin:0; }
-.side-tabs .q-tab { justify-content:flex-start;border-radius:8px; }
-.side-tabs .q-tab--active { background:var(--ins-selected);color:var(--ins-accent); }
+.side-tabs .q-tab { justify-content:flex-start;border-radius:3px;border-left:3px solid transparent; }
+.side-tabs .q-tab__label { font-family:var(--ins-mono);font-weight:600; }
+.side-tabs .q-tab--active { background:var(--ins-selected);color:var(--ins-accent);
+  border-left-color:var(--ins-accent); }
 .workspace-toolbar { padding-bottom:1rem;border-bottom:1px solid var(--ins-line); }
 .stat-tile .q-btn__content { justify-content:flex-start; }
 .stat-tile:hover { border-color:var(--ins-accent); }
 .share-grid { display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,20rem),1fr)); }
-.share-card { border:1px solid var(--ins-line);border-radius:10px;background:var(--ins-card); }
+.share-card { border:1px solid var(--ins-line);border-radius:4px;background:var(--ins-card); }
 @media(max-width:899.98px) {
   .side-nav { flex:1 1 100%;flex-direction:row;flex-wrap:wrap;align-items:center;gap:0.75rem;
     padding:16px 14px;border-right:0;border-bottom:1px solid var(--ins-line); }
@@ -84,7 +86,6 @@ body.body--dark, body.body--light { background:var(--ins-bg);color:var(--ins-tex
   .side-tabs.q-tabs--vertical .q-tabs__content { flex-direction:row;flex-wrap:wrap; }
 }
 @media(max-width:1099px) {
-  .brief-overview { grid-template-columns:minmax(0,1fr); }
   .brief-section { grid-column:span 3; }
 }
 @media(max-width:699px) {
@@ -93,9 +94,11 @@ body.body--dark, body.body--light { background:var(--ins-bg);color:var(--ins-tex
 }
 .source-card .q-focus-helper { display:none; }
 .source-card .q-btn:hover .block { text-decoration:underline; }
-/* Reading width: about 70 characters per line (WCAG 1.4.8: at most 80; BDA: 60-70). 1ch is the width of "0",
-   wider than an average letter, so 56ch holds about 70-75 characters. */
+/* Dialogs keep a bounded reading width; workspace text follows the width of its panel. */
 .prose, .source-body, .evidence { max-width:56ch; }
+.workspace .prose, .workspace .source-body, .workspace .evidence {
+  width:100%;max-width:100%;min-width:0;overflow-wrap:break-word; }
+.workspace .q-expansion-item .q-item__label { max-width:100%; }
 .source-body { white-space:pre-wrap;overflow-wrap:break-word;font-size:1rem;line-height:1.7; }
 .evidence { border-left:3px solid var(--ins-evidence-line);padding:8px 12px;background:var(--ins-evidence-bg);
   white-space:pre-wrap;overflow-wrap:break-word;line-height:1.6; }
@@ -136,7 +139,8 @@ html { scroll-padding-bottom:8rem; }
   .dialog-card { padding:16px !important; }
 }
 @layer components {
-  .q-btn { text-transform:none;font-weight:600;font-size:1rem;line-height:1.5;min-height:2.75rem; }
+  .q-btn { text-transform:none;font-weight:600;font-size:1rem;line-height:1.5;min-height:2.75rem;
+    border-radius:3px; }
   .q-btn.q-btn--dense { min-height:2.75rem;padding-left:0.75rem;padding-right:0.75rem; }
   .q-tab { min-height:3rem;text-transform:none;padding:0 12px; }
   .q-tab--inactive { opacity:1; }
@@ -150,7 +154,7 @@ html { scroll-padding-bottom:8rem; }
      of each other ("Watch term" over "e.g. Palo Alto, VPN"). Quasar's selector, in this layer so it wins. */
   .q-field--labeled:not(.q-field--float) .q-field__native::placeholder,
   .q-field--labeled:not(.q-field--float) .q-field__input::placeholder { color:transparent; }
-  .q-field__control { background:var(--ins-field); }
+  .q-field__control { background:var(--ins-field);border-radius:3px; }
   .q-field--outlined .q-field__control:before { border-color:var(--ins-field-border); }
   .q-field--outlined .q-field__control:hover:before { border-color:var(--ins-text); }
   .q-field__bottom { font-size:1rem;line-height:1.5; }

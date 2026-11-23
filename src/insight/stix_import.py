@@ -183,7 +183,7 @@ def _value(obj: Object) -> tuple[Kind | None, str]:
     attack_id = _reference(obj, 'mitre-attack')
     found = technique(attack_id)
     if found is None:
-        raise ValueError('This ATT&CK technique is outside the bundled Enterprise catalog')
+        raise ValueError('This ATT&CK technique is outside the bundled catalogs')
     return None, found.id
 
 

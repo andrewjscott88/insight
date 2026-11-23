@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from . import __version__
-from .attack import technique
+from .attack import catalog, technique
 from .threat_library import Library
 
 
@@ -42,6 +42,7 @@ def software_navigator(lib: Library, software_id: str) -> dict[str, Any]:
                 'comment': f'ATT&CK software: {software.id} {software.name}',
             }
             for tid in sorted(sources)
+            if tid in catalog().techniques
         ],
         'metadata': [
             {'name': 'TLP', 'value': 'TLP:CLEAR'},

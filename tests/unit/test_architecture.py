@@ -124,6 +124,7 @@ def test_ui_does_not_depend_on_the_api_module(path: Path) -> None:
 #: Service functions that read or change reports. Every call from the API must pass the caller's TLP limit
 #: (``max_tlp=``), or a TLP-limited API key could see reports above its limit (ADR 0014).
 TLP_AWARE_SERVICES = {
+    'cached_censys_context', 'eligible_censys_ip', 'store_censys_context',
     'hunt_guide', 'hunt_guide_choices',
     'actor_timeline', 'actor_campaigns', 'link_actor_campaign', 'unlink_actor_campaign',
     'mcp_read',
@@ -160,7 +161,11 @@ TLP_AWARE_SERVICES = {
 
 def test_api_routes_pass_the_callers_tlp_limit_to_services() -> None:
     tree = ast.Module(
-        body=[node for p in [*WEB_MODULES, PACKAGE / 'pivots.py'] for node in ast.parse(p.read_text()).body],
+        body=[
+            node
+            for p in [*WEB_MODULES, PACKAGE / 'pivots.py', PACKAGE / 'censys.py']
+            for node in ast.parse(p.read_text()).body
+        ],
         type_ignores=[],
     )
     calls = [

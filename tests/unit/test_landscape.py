@@ -216,7 +216,7 @@ def test_nothing_new_says_so() -> None:
     assert result.summary == (
         (
             'No recent reports are available for the last 7 days. Sync your sources, and check their '
-            'status in About this brief.'
+            'status in Settings.'
         ),
     )
 

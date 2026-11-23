@@ -2,17 +2,54 @@
 
 ## Unreleased
 
+### More intelligence context
+
+- Hunt plans exclude indicators whose default verdict lifetime has expired, retaining any restricted
+  label that affected the result. Retired ATT&CK tags remain visible in the Enterprise compatibility view.
+- **Intel Brief** starts with the last 30 days, with the 7-day option retained. A new **Sector / Industry**
+  focus uses saved industry mappings and sources to explain relevant threat groups. Reports mentioning
+  sector terms and reports explicitly linked to those groups state why they match. Catalog background
+  stays separate; neither match proves a sector was attacked.
+- **Threat Hunt** also offers **Sector / Industry**. Browse or search the same 15 categories to build a
+  sourced guide, download Markdown/PDF or save an audited draft hunt package. It uses a 30-day report
+  window and keeps sector mentions distinct from explicit group links. It never assigns the package to
+  an arbitrary actor or turns a sector match into attribution.
+- The bundled ATT&CK technique catalogs include **Mobile** and **Industrial control systems (ICS)**.
+  The technique explorer and Navigator exports can select a domain; explicit technique IDs in reports
+  are recognised across the catalogs. Existing API requests keep the Enterprise default.
+- Optional **Censys Platform** host enrichment adds approved infrastructure context for reviewed public
+  IP indicators. It uses the operator's token, a bounded metadata cache and shared rate limits. No lookup
+  is scheduled. Censys data stays out of intelligence exports and is unavailable in temporary open-access
+  mode; account terms and lookup approval still apply.
+
 ### Guided threat hunt workspace
 
+- Graphite surfaces, electric cyan accents, sharper cards and console-style navigation replace the purple
+  workspace palette. The executive summary and its text span the page; the brief context sidebar is removed.
+- Workspace text, report bodies and hunt guides use the available panel width, with wrapping on phones.
+  The outer workspace no longer has a fixed desktop width cap.
 - **Intel Brief** leads with affected products, known attacks and plain-English impact and next steps.
   The 7/30-day choices, exact CVE/score evidence and date rules remain. The visible last-24-hour receipt
   section and attention highlight are removed; `recent_reports` remains API metadata for compatibility.
-- **Threat Hunt** builds a reviewable guide from a threat type, actor, CVE, report/advisory, exploit activity,
-  malware/tool, indicator or campaign. Download metadata-only Markdown or PDF; no AI, network lookup,
-  telemetry search, rule execution or saved intelligence changes. Guide generation is audited.
-- Hunt packages move from Share to Threat Hunt; existing products remain under **Saved intelligence
-  reports**. Requirements remain under **Settings → Intelligence questions (advanced)**, with their APIs
-  and report links intact.
+- The workspace executive summary shows up to three short, fact-based takeaways and one limitations note.
+  API responses and briefing exports retain their full summaries. **Import Intel** opens the existing
+  intelligence import dialog from the toolbar.
+- A top search bar focuses **Intel Brief** on the same nine starting types as Threat Hunt. Search all
+  types or filter to one, choose a match and select **Show brief** for a concise summary with supporting
+  reports. **All intelligence** restores the overview. The landing eyebrow text is removed.
+- Actor briefs add available background, targets, plain-English methods, watch guidance, tools, aliases
+  and catalog sources. Recent linked-report coverage is shown separately from historical catalog context.
+- A leaner lower brief keeps **Exploited now** and **Most severe** under **Vulnerabilities to watch**.
+  Separate attacker-tactic, watch-term, repeated-indicator and vendor panels, plus the four bottom counters,
+  are removed from the landing page. The underlying API and briefing-export details remain available.
+- **Threat Hunt** builds a reviewable guide from a sector/industry, threat type, actor, CVE, report/advisory,
+  exploit activity, malware/tool, indicator or campaign. Download metadata-only Markdown or PDF; no AI,
+  network lookup, telemetry search or rule execution. Guide generation is audited.
+- **Save as hunt package** keeps a built guide's focus, guidance and eligible facts in an audited draft,
+  then opens its editor. **Open saved package** returns to that draft. Publication remains a separate action.
+- Hunt packages move from Share to **Threat Hunt → Saved hunt packages**, with a separate blank-package
+  option. Existing products remain under **Advanced: intelligence reports**. Requirements remain under
+  **Settings → Intelligence questions (advanced)**, with their APIs and report links intact.
 - Sharing badges explain the audience while retaining standard TLP tokens. **Public · TLP:CLEAR** still
   carries copyright and source terms; no records or access limits are relabelled.
 - New read endpoints: `GET /api/hunt-guides` and `GET /api/hunt-guides/{kind}/{ref}`. No schema migration or

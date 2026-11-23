@@ -33,7 +33,7 @@ def test_restricted_sharing_label_wraps_at_phone_widths(context: Any) -> None:
         headers={'X-CSRF-Token': token, 'Origin': BASE_URL},
     )
     assert response.ok, response.text()
-    for width in (320, 390):
+    for width in (320, 390, 1280):
         page.set_viewport_size({'width': width, 'height': 844})
         page.reload()
         badge = page.locator('.intel-brief .tlp-badge')
@@ -42,7 +42,13 @@ def test_restricted_sharing_label_wraps_at_phone_widths(context: Any) -> None:
         assert badge.evaluate('(el) => el.scrollWidth <= el.clientWidth')
         assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
         expect(page.get_by_text('Received in the last 24 hours', exact=True)).to_have_count(0)
-        expect(page.get_by_text('Across the last 7 days', exact=True)).to_be_visible()
+        expect(page.locator('.brief-context')).to_have_count(0)
+        expect(page.get_by_text('About this brief', exact=True)).to_have_count(0)
+        summary = page.locator('.summary-box').bounding_box()
+        available = page.locator('.brief-overview').bounding_box()
+        assert summary is not None
+        assert available is not None
+        assert abs(summary['width'] - available['width']) <= 1
 
 
 def test_summary_links_to_its_source_report_on_phone_and_desktop(context: Any) -> None:

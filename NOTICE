@@ -17,7 +17,8 @@ This product includes data derived from the Public Suffix List
 labels of its ICANN section. The source of that file is the Public Suffix List
 itself; it is regenerated with scripts/update_tlds.py.
 
-This product includes data from MITRE ATT&CK(R): src/insight/data/attack-enterprise.json
+This product includes data from MITRE ATT&CK(R): src/insight/data/attack-enterprise.json,
+src/insight/data/attack-mobile.json and src/insight/data/attack-ics.json
 lists the techniques and tactics of Enterprise ATT&CK, regenerated with
 scripts/update_attack.py from https://github.com/mitre-attack/attack-stix-data.
 (c) 2026 The MITRE Corporation. This work is reproduced and distributed with the

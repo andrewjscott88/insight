@@ -1,7 +1,7 @@
-"""MITRE ATT&CK® techniques: the bundled Enterprise catalog and precision-first technique finding (ADR 0019).
+"""MITRE ATT&CK® domain catalogs and precision-first technique finding (ADRs 0019 and 0042).
 
-The catalog (``data/attack-enterprise.json``, regenerated with ``scripts/update_attack.py``) holds every
-current Enterprise technique and sub-technique with its tactics. MITRE ATT&CK is reproduced and distributed
+The catalogs (``data/attack-*.json``, regenerated with ``scripts/update_attack.py``) hold every
+current Enterprise, Mobile and ICS technique with its tactics. MITRE ATT&CK is reproduced and distributed
 with the permission of The MITRE Corporation; see ``NOTICE``.
 
 :func:`find_techniques` only reports technique IDs written in the text (``T1059``, ``T1059.001``) that exist
@@ -16,7 +16,14 @@ import re
 from dataclasses import dataclass
 from functools import cache
 from importlib.resources import files
-from typing import Final
+from typing import Final, Literal
+
+Domain = Literal['enterprise', 'mobile', 'ics']
+DOMAINS: Final[dict[Domain, str]] = {
+    'enterprise': 'Enterprise',
+    'mobile': 'Mobile',
+    'ics': 'Industrial control systems',
+}
 
 #: Characters of context kept on each side of a technique ID, as for indicators.
 EVIDENCE_CONTEXT: Final = 90
@@ -40,6 +47,11 @@ class Technique:
     name: str
     tactics: tuple[str, ...]  # tactic shortnames, in matrix order
     parent_name: str | None = None  # the parent technique's name, for sub-techniques
+    domain: Domain = 'enterprise'
+
+    @property
+    def kill_chain(self) -> str:
+        return 'mitre-attack' if self.domain == 'enterprise' else f'mitre-{self.domain}-attack'
 
     @property
     def is_subtechnique(self) -> bool:
@@ -62,6 +74,7 @@ class Catalog:
     terms: str
     tactics: tuple[Tactic, ...]
     techniques: dict[str, Technique]
+    domain: Domain = 'enterprise'
 
     def tactic_names(self, technique: Technique) -> tuple[str, ...]:
         names = {t.shortname: t.name for t in self.tactics}
@@ -79,9 +92,11 @@ class TechniqueMention:
 
 
 @cache
-def catalog() -> Catalog:
-    """The bundled Enterprise ATT&CK catalog (loaded once)."""
-    raw = json.loads(files('insight').joinpath('data/attack-enterprise.json').read_text(encoding='utf-8'))
+def catalog(domain: Domain = 'enterprise') -> Catalog:
+    """A bundled ATT&CK domain, loaded once; Enterprise remains the default."""
+    if domain not in DOMAINS:
+        raise ValueError('Unknown ATT&CK domain')
+    raw = json.loads(files('insight').joinpath(f'data/attack-{domain}.json').read_text(encoding='utf-8'))
     order = [t['shortname'] for t in raw['tactics']]
     names = {t['id']: t['name'] for t in raw['techniques']}
     techniques = {
@@ -90,6 +105,7 @@ def catalog() -> Catalog:
             name=t['name'],
             tactics=tuple(sorted(t['tactics'], key=order.index)),
             parent_name=names.get(t['id'].split('.')[0]) if '.' in t['id'] else None,
+            domain=domain,
         )
         for t in raw['techniques']
     }
@@ -99,19 +115,32 @@ def catalog() -> Catalog:
         terms=raw['terms'],
         tactics=tuple(Tactic(t['id'], t['shortname'], t['name']) for t in raw['tactics']),
         techniques=techniques,
+        domain=domain,
     )
 
 
+@cache
+def all_techniques() -> dict[str, Technique]:
+    """The three catalogs, refusing ambiguous IDs rather than silently picking a domain."""
+    combined: dict[str, Technique] = {}
+    for domain in DOMAINS:
+        for key, value in catalog(domain).techniques.items():
+            if key in combined:
+                raise ValueError('ATT&CK technique ID appears in multiple domains')
+            combined[key] = value
+    return combined
+
+
 def technique(technique_id: str) -> Technique | None:
-    return catalog().techniques.get(technique_id.strip().upper())
+    return all_techniques().get(technique_id.strip().upper())
 
 
-def search(query: str, limit: int = 50) -> list[Technique]:
+def search(query: str, limit: int = 50, *, domain: Domain = 'enterprise') -> list[Technique]:
     """Techniques whose ID starts with, or whose full name contains, ``query`` (case-insensitive), by ID."""
     q = query.strip().casefold()
     found = [
         t
-        for t in catalog().techniques.values()
+        for t in catalog(domain).techniques.values()
         if not q or t.id.casefold().startswith(q) or q in t.full_name.casefold()
     ]
     return found[: max(1, limit)]
@@ -119,7 +148,7 @@ def search(query: str, limit: int = 50) -> list[Technique]:
 
 def find_techniques(text: str) -> list[TechniqueMention]:
     """Technique IDs written in ``text`` that exist in the catalog: the first mention of each, in order."""
-    known = catalog().techniques
+    known = all_techniques()
     found: dict[str, TechniqueMention] = {}
     for match in _FINDER.finditer(text):
         technique_id = match.group()

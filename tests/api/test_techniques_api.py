@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from insight import services
-from insight.models import AuditEvent
+from insight.models import AuditEvent, DocumentTechnique
 from insight.schemas import DocumentInput
 
 
@@ -45,6 +45,7 @@ def test_the_catalog_can_be_searched(signed_in: TestClient) -> None:
         'name': 'Command and Scripting Interpreter: PowerShell',
         'tactics': ['Execution'],
         'url': 'https://attack.mitre.org/techniques/T1059/001/',
+        'domain': 'enterprise',
     }
     assert len(signed_in.get('/api/attack/techniques', params={'limit': 5}).json()['techniques']) == 5
 
@@ -108,6 +109,27 @@ def test_the_summary_and_pivot_show_what_reports_describe(app: FastAPI, signed_i
     assert signed_in.get('/api/attack/summary', params={'days': 4000}).status_code == 422
 
 
+def test_default_summary_preserves_retired_tags_but_navigator_omits_them(
+    app: FastAPI, signed_in: TestClient
+) -> None:
+    """Regression: the new default domain filter silently hid legacy retired report tags."""
+    document_id = ingest(app, 'Legacy report with a retired mapping.')
+    with app.state.session_factory.begin() as db:
+        db.add(
+            DocumentTechnique(
+                document_id=document_id, technique_id='T9999', source='analyst', status='tagged', actor='test'
+            )
+        )
+    summary = signed_in.get('/api/attack/summary', params={'days': 0})
+    assert summary.status_code == 200
+    assert [(row['id'], row['reports']) for row in summary.json()['techniques']] == [('T9999', 1)]
+    for domain in ('mobile', 'ics'):
+        assert signed_in.get('/api/attack/summary', params={'domain': domain}).json()['techniques'] == []
+    layer = signed_in.get('/api/attack/navigator', params={'days': 0})
+    assert layer.status_code == 200
+    assert layer.json()['techniques'] == []
+
+
 def test_the_navigator_layer_downloads_and_is_audited(app: FastAPI, signed_in: TestClient) -> None:
     ingest(app, 'Ransomware: T1486.')
     response = signed_in.get('/api/attack/navigator', params={'days': 7})
@@ -119,4 +141,30 @@ def test_the_navigator_layer_downloads_and_is_audited(app: FastAPI, signed_in: T
     assert [(t['techniqueID'], t['score']) for t in layer['techniques']] == [('T1486', 1)]
     with app.state.session_factory() as db:
         event = db.scalars(select(AuditEvent).where(AuditEvent.action == 'attack.navigator')).one()
-    assert json.loads(event.detail) == {'days': 7, 'max_tlp': None, 'techniques': 1}
+    assert json.loads(event.detail) == {'days': 7, 'max_tlp': None, 'techniques': 1, 'domain': 'enterprise'}
+
+
+@pytest.mark.parametrize(('domain', 'identifier'), [('mobile', 'T1398'), ('ics', 'T0800')])
+def test_mobile_and_ics_tags_pivots_and_navigator(
+    app: FastAPI,
+    signed_in: TestClient,
+    domain: str,
+    identifier: str,
+) -> None:
+    """Regression: non-Enterprise tags must stay in their own catalog and Navigator domain."""
+    doc = ingest(app, f'Mapped {identifier} alongside T1486.')
+    catalog = signed_in.get('/api/attack/techniques', params={'q': identifier, 'domain': domain}).json()
+    assert catalog['domain'] == domain
+    assert catalog['techniques'][0]['id'] == identifier
+    tags = signed_in.get(f'/api/documents/{doc}/techniques').json()
+    assert next(t for t in tags if t['id'] == identifier)['domain'] == domain
+    summary = signed_in.get('/api/attack/summary', params={'domain': domain}).json()
+    assert [t['id'] for t in summary['techniques']] == [identifier]
+    enterprise = signed_in.get('/api/attack/summary').json()
+    assert [t['id'] for t in enterprise['techniques']] == ['T1486']
+    layer = signed_in.get('/api/attack/navigator', params={'domain': domain}).json()
+    assert layer['domain'] == f'{domain}-attack'
+    assert [t['techniqueID'] for t in layer['techniques']] == [identifier]
+    pivot = signed_in.get(f'/api/attack/techniques/{identifier}/documents').json()
+    assert [d['id'] for d in pivot['documents']] == [doc]
+    assert signed_in.get('/api/attack/summary', params={'domain': '../bad'}).status_code == 422

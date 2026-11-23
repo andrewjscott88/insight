@@ -26,7 +26,7 @@ from importlib.resources import files
 from pathlib import Path
 from typing import Any, Final
 
-from .attack import catalog
+from .attack import technique
 from .industries import BY_KEY
 
 log = logging.getLogger('insight.threat_library')
@@ -356,5 +356,5 @@ def reload() -> Library:
 
 
 def technique_name(technique_id: str) -> str:
-    found = catalog().techniques.get(technique_id)
+    found = technique(technique_id)
     return found.full_name if found else technique_id
