@@ -116,8 +116,8 @@ tools over TAXII and STIX; sightings and requests for information come back
       [ADR 0033](docs/adr/0033-confidence-and-source-reliability.md), [ADR 0035](docs/adr/0035-sightings.md).
 - [x] **TIP 4.3 Hunt packages over TAXII:** Sigma, YARA and network rules as STIX indicators with their context.
       *Done (unreleased):* [ADR 0034](docs/adr/0034-hunt-packages.md).
-- [ ] **TIP 4.4 Finished intelligence products,** replacing incident-style cases. *Products, judgements, gaps,
-      versions, Markdown and STIX done (unreleased):* [ADR 0036](docs/adr/0036-intelligence-products.md); PDF next.
+- [x] **TIP 4.4 Finished intelligence products,** replacing incident-style cases: judgements, gaps, versions,
+      and PDF, Markdown and STIX exports. *Done (unreleased):* [ADR 0036](docs/adr/0036-intelligence-products.md).
 - [ ] **TIP 4.5–4.8** Operator-defined sources, infrastructure pivots, ATT&CK and MISP-galaxy imports, and a
       read-only MCP endpoint.
 

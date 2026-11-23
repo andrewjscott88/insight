@@ -627,8 +627,8 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
   done, ADR 0032
 - [x] **4.2** Admiralty grades, indicator confidence and ageing, source statistics (ADR 0033); sightings API (ADR 0035)
 - [x] **4.3** Hunt packages (Sigma, YARA, Suricata, Snort as STIX indicators) in a TAXII collection (ADR 0034)
-- [ ] **4.4** Finished intelligence products (key judgements, estimative language, PDF/Markdown/STIX):
-  done except PDF (ADR 0036)
+- [x] **4.4** Finished intelligence products (key judgements, estimative language, PDF/Markdown/STIX):
+  ADR 0036
 - [ ] **4.5** Operator-defined RSS/Atom and TAXII sources
 - [ ] **4.6** Infrastructure pivots: RDAP, certificate transparency, ASN, passive DNS
 - [ ] **4.7** ATT&CK groups and software, MISP threat-actor galaxy, actor timelines, Navigator layers

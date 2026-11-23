@@ -1,5 +1,5 @@
 """Finished intelligence products over HTTP (TIP 4.4, ADR 0036): judgements, gaps, publishing, versions and
-the Markdown and STIX exports, with their error codes and the key's TLP limit."""
+the PDF, Markdown and STIX exports, with their error codes and the key's TLP limit."""
 
 from __future__ import annotations
 
@@ -75,6 +75,10 @@ def test_a_product_is_written_published_and_exported(authed: TestClient) -> None
     assert markdown.headers['content-type'].startswith('text/markdown')
     assert markdown.headers['content-disposition'].endswith(f'insight-product-{case_id}-v1.md"')
     assert markdown.text.startswith('**TLP:GREEN**')
+    pdf = authed.get(f'{base}/export', params={'format': 'pdf', 'version': 1})
+    assert pdf.headers['content-type'] == 'application/pdf'
+    assert pdf.headers['content-disposition'].endswith(f'insight-product-{case_id}-v1.pdf"')
+    assert pdf.content.startswith(b'%PDF-1.7')
     stix = authed.get(f'{base}/export', params={'format': 'stix'})
     assert stix.headers['content-type'].startswith('application/stix+json')
     assert stix.headers['content-disposition'].endswith('-draft.json"')
@@ -98,7 +102,7 @@ def test_bad_input_and_archived_products(authed: TestClient) -> None:
     assert authed.post(f'{base}/judgements', json=foreign).status_code == 404
     assert authed.post(f'{base}/gaps', json={'question': 'Why?'}).status_code == 422  # too short for an RFI
     assert authed.get(f'{base}/export', params={'format': 'stix'}).status_code == 422  # nothing in it
-    assert authed.get(f'{base}/export', params={'format': 'pdf'}).status_code == 422
+    assert authed.get(f'{base}/export', params={'format': 'docx'}).status_code == 422
     authed.post(f'{base}/close', json={'note': 'Not needed.'})
     ok = {'statement': 'x', 'likelihood': 'likely', 'confidence': 'high'}
     assert authed.post(f'{base}/judgements', json=ok).status_code == 409
@@ -117,7 +121,13 @@ def test_a_limited_key_sees_only_products_and_versions_within_its_limit(
                                            'evidence': [item['id']]})  # fmt: skip
     authed.post(f'{base}/publish')
     reader = key(app, 'read', 'GREEN')
-    for path in (base, f'{base}/product', f'{base}/product?version=1', f'{base}/export?format=md'):
+    for path in (
+        base,
+        f'{base}/product',
+        f'{base}/product?version=1',
+        f'{base}/export?format=md',
+        f'{base}/export?format=pdf&version=1',
+    ):
         assert client.get(path, headers=reader).status_code == 404, path
     writer = key(app, 'read-write', 'GREEN')
     judgement = {'statement': 'x', 'likelihood': 'likely', 'confidence': 'high'}

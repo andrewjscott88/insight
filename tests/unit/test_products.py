@@ -138,7 +138,7 @@ def test_a_reader_sees_only_versions_within_its_limit(db: Session) -> None:
 def test_markdown_starts_and_ends_with_the_label_and_escapes_text(db: Session) -> None:
     case_id, _, _ = filled(db)
     services.update_case(db, case_id, CaseUpdate(title='Edge [link](http://evil.example) #1'))
-    text = services.export_product(db, case_id, 'md').content
+    text = services.export_product(db, case_id, 'md').content.decode()
     lines = text.strip().splitlines()
     assert (lines[0], lines[-1]) == ('**TLP:GREEN**', '**TLP:GREEN**')
     assert '# Edge \\[link\\](http://evil.example) \\#1' in text
@@ -151,6 +151,19 @@ def test_markdown_starts_and_ends_with_the_label_and_escapes_text(db: Session) -
     assert '1. [F6] [Vendor advisory]' not in text  # no URL: the title is plain text
     assert '1. [F6] Vendor advisory, Vendor, added ' in text
     assert 'Draft, not published' in text
+
+
+def test_pdf_export_is_a_labelled_file_and_is_audited(db: Session) -> None:
+    case_id, _, _ = filled(db)
+    services.publish_product(db, case_id)
+    found = services.export_product(db, case_id, 'pdf', version=1)
+    assert (found.media_type, found.filename) == ('application/pdf', f'insight-product-{case_id}-v1.pdf')
+    assert found.content.startswith(b'%PDF-1.7')
+    assert found.content.endswith(b'%%EOF\n')
+    again = services.export_product(db, case_id, 'pdf', version=1)
+    assert found.content == again.content  # one version, one file
+    events = db.scalars(select(AuditEvent).where(AuditEvent.action == 'case.export')).all()
+    assert [json.loads(e.detail)['format'] for e in events] == ['pdf', 'pdf']
 
 
 def test_stix_has_a_report_with_judgements_as_notes(db: Session) -> None:
