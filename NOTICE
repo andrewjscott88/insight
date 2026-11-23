@@ -57,5 +57,14 @@ e929887bd93b79c8bcfa869fe1046d99afd545fa. The upstream two-clause BSD licence
 and copyright notices are in tests/fixtures/misp/LICENSE alongside the schema.
 https://github.com/MISP/PyMISP/blob/e929887bd93b79c8bcfa869fe1046d99afd545fa/pymisp/data/schema-lax.json
 
+The PDF writer (src/insight/pdf_writer.py) measures text with the character
+widths of Helvetica and Helvetica-Bold from Adobe's Core 14 AFM font metrics,
+Copyright (c) 1985, 1987, 1989, 1990, 1997 Adobe Systems Incorporated. All
+Rights Reserved. Helvetica is a trademark of Linotype-Hell AG and/or its
+subsidiaries. Adobe's notice permits the AFM files to be used, copied and
+distributed for any purpose and without charge, with or without modification,
+provided all copyright notices are retained. Insight includes only the widths
+(re-encoded for Windows-1252), not the AFM files, and embeds no font.
+
 Third-party Python dependencies are installed from requirements.lock and retain
 their own licences; scripts/check_licenses.py enforces the permitted set.

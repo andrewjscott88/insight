@@ -44,8 +44,23 @@ released `/api/cases` routes keep working; no new dependency.
    `x_insight_likelihood`; `object_refs` the report and the cited objects) and per gap, and an object per cited
    indicator, CVE, actor or campaign. A published version's STIX IDs are derived from the product, version and
    item, so they are the same on every export; a draft's are new each time. Every export is audited.
-8. **Not built yet.** PDF export (TIP 4.4b, next), review and approval before publishing, distribution lists,
-   and linking a product to the requirements it answers.
+8. **PDF** (TIP 4.4b), of the draft or of a version, with the Markdown export's content, from a small writer
+   in Insight (`pdf_writer.py`) rather than a new dependency:
+   - US Letter pages. The TLP label is in the header and footer of every page, in 12-point bold type, aligned
+     right, in the TLP 2.0 colour on black.
+   - The standard Helvetica fonts, which every PDF reader has, so nothing is embedded. Text is in
+     Windows-1252, measured with Adobe's Core 14 font metrics (credited in NOTICE). A character outside it
+     prints as "?" and the PDF says so. The Markdown and STIX exports keep every character, and so does the
+     title in the PDF's document properties.
+   - Tagged (headings, paragraphs and lists), with the document's language and a bookmark per section. It is
+     not PDF/UA: that needs embedded fonts.
+   - Network indicators in the text are defanged, because a PDF goes to readers who might click them; the
+     publishers' links stay as stored, as in the IOC export. Markdown, for further editing, keeps values as
+     written.
+   - On one Insight release, the same version gives the same bytes: the dates are the version's, and nothing
+     random goes in.
+9. **Not built yet.** Review and approval before publishing, distribution lists, and linking a product to the
+   requirements it answers.
 
 ## Consequences
 - An analyst writes the product where the evidence is, and every issued version can be shown exactly as it

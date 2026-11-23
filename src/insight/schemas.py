@@ -289,7 +289,7 @@ Likelihood = Literal[
     'almost-certain',
 ]  # fmt: skip
 AnalyticConfidence = Literal['low', 'moderate', 'high']
-ProductExportFormat = Literal['md', 'stix']
+ProductExportFormat = Literal['md', 'stix', 'pdf']
 MAX_ANALYSIS = 30_000
 
 

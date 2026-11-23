@@ -1,5 +1,5 @@
 """Publishing a product and downloading it (TIP 4.4, ADR 0036): the next version, the versions so far, and the
-Markdown and STIX downloads of the draft and of each version."""
+PDF, Markdown and STIX downloads of the draft and of each version."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from .typography import heading, new_tab_link
 def _downloads(case_id: str, version: int | None) -> None:
     suffix = f'&version={version}' if version else ''
     with ui.row().classes('gap-x-6 gap-y-0'):
+        new_tab_link('PDF', f'/api/cases/{case_id}/export?format=pdf{suffix}')
         new_tab_link('Markdown', f'/api/cases/{case_id}/export?format=md{suffix}')
         new_tab_link('STIX', f'/api/cases/{case_id}/export?format=stix{suffix}')
 

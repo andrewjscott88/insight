@@ -27,6 +27,9 @@
 - Download the draft or any version as **Markdown** (the label first and last) or as a **STIX 2.1** report with
   a note per key judgement and gap; cited reports go out as references, never their text. Sources show their
   Admiralty grade, and indicators their confidence.
+- Or download it as a **PDF** to hand to readers: the TLP label at the top and bottom of every page in TLP 2.0
+  colours, network indicators defanged so no one opens one by accident, headings and lists tagged for screen
+  readers, and a bookmark per section. Insight writes it itself: no new dependency.
 - `/api/cases/{id}/judgements`, `/gaps`, `/gaps/{id}/rfi`, `/publish`, `/product` and `/export`; the case
   routes take and return the product fields. The API keeps the name `cases`.
 

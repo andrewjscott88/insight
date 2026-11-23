@@ -7,6 +7,8 @@ key: the marker, the report's ID and its unique indicator must not appear in any
 from __future__ import annotations
 
 import json
+import re
+import zlib
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -133,6 +135,21 @@ def get(client: TestClient, world: dict[str, Any], path: str, **params: Any) -> 
     return client.get(path, headers=world['headers'], params=params)
 
 
+def readable(response: Any) -> str:  # the test client's response (httpx or httpx2)
+    """The body as text. A PDF's compressed pages and UTF-16 strings are opened, so a leak in one shows."""
+    if response.headers.get('content-type') != 'application/pdf':
+        text: str = response.text
+        return text
+    raw: bytes = response.content
+    pages = re.findall(rb'stream\n(.*?)\nendstream', raw, re.DOTALL)
+    strings = re.findall(rb'<FEFF([0-9A-F]*)>', raw)
+    return '\n'.join(
+        [raw.decode('latin-1')]
+        + [zlib.decompress(page).decode('latin-1') for page in pages]
+        + [bytes.fromhex(string.decode()).decode('utf-16-be') for string in strings]
+    )
+
+
 def test_nothing_hidden_leaks_through_any_read_route(client: TestClient, world: dict[str, Any]) -> None:
     paths = [
         '/api/documents',
@@ -198,6 +215,7 @@ def test_nothing_hidden_leaks_through_any_read_route(client: TestClient, world: 
         f'/api/cases/{world["case"]}/product?version=1',
         f'/api/cases/{world["case"]}/export?format=md',
         f'/api/cases/{world["case"]}/export?format=stix&version=1',
+        f'/api/cases/{world["case"]}/export?format=pdf',
         '/api/requirements?status=all',
         f'/api/requirements/{world["requirement"]}',
         f'/api/requirements/{world["cited"]}',
@@ -228,7 +246,7 @@ def test_nothing_hidden_leaks_through_any_read_route(client: TestClient, world: 
             template = route.replace('/x', '/{id}')
             assert any(p.rstrip('/').count('/') == template.rstrip('/').count('/') for p in covered), route
     for path in paths:
-        body = client.get(path, headers=world['headers']).text
+        body = readable(client.get(path, headers=world['headers']))
         for secret in (MARKER, HIDDEN_IP, world['amber'], world['new'], world['hidden_entity']):
             # A value the caller itself sent (e.g. an IOC export echoing its filters) discloses nothing.
             if secret not in path:
@@ -361,3 +379,6 @@ def test_an_unlimited_key_and_the_operator_still_see_everything(
     # Regression: a limit of RED was stored as a limit, so the key stayed locked out of the audit log and
     # rotation could never return to an unlimited key.
     assert authed.get('/api/audit', headers=unlimited).status_code == 200
+    # The sweep reads inside PDFs: the hidden product's PDF shows the marker to a key that may see it.
+    pdf = authed.get(f'/api/cases/{world["case"]}/export', params={'format': 'pdf'}, headers=unlimited)
+    assert MARKER in readable(pdf)

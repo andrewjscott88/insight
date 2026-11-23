@@ -538,9 +538,10 @@ curl -fsS -X PATCH "$INSIGHT_URL/api/cases/$CASE_ID/judgements/$JUDGEMENT_ID" -H
 GAP_ID=$(curl -fsS -X POST "$INSIGHT_URL/api/cases/$CASE_ID/gaps" -H "Authorization: Bearer $INSIGHT_API_KEY" \
   -H 'Content-Type: application/json' -d '{"question": "Which of our gateways are exposed?"}' | jq -r .id)
 curl -fsS -X POST "$INSIGHT_URL/api/cases/$CASE_ID/gaps/$GAP_ID/rfi" -H "Authorization: Bearer $INSIGHT_API_KEY"
-# Publish version 1, read it back, and download it as Markdown and STIX
+# Publish version 1, read it back, and download it as a PDF, Markdown and STIX
 curl -fsS -X POST "$INSIGHT_URL/api/cases/$CASE_ID/publish" -H "Authorization: Bearer $INSIGHT_API_KEY"
 curl -fsS "$INSIGHT_URL/api/cases/$CASE_ID/product?version=1" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq '{bluf, judgements}'
+curl -fsS -OJ "$INSIGHT_URL/api/cases/$CASE_ID/export?format=pdf&version=1" -H "Authorization: Bearer $INSIGHT_API_KEY"
 curl -fsS -OJ "$INSIGHT_URL/api/cases/$CASE_ID/export?format=md&version=1" -H "Authorization: Bearer $INSIGHT_API_KEY"
 curl -fsS -OJ "$INSIGHT_URL/api/cases/$CASE_ID/export?format=stix&version=1" -H "Authorization: Bearer $INSIGHT_API_KEY"
 # Products in progress, one with its evidence, judgements and versions, and what happened to it

@@ -53,6 +53,9 @@ async def test_a_product_is_written_and_published(user: User, ui_env: SimpleName
     user.find(marker='product-publish').click()
     await user.should_see('Published. That version is kept as it is now.')
     await user.should_see(marker='product-version')
+    await user.should_see('PDF')
+    pdfs = sorted(link.props['href'] for link in user.find(kind=ui.link, content='PDF').elements)
+    assert [href.split('export?')[1] for href in pdfs] == ['format=pdf', 'format=pdf&version=1']
 
     with ui_env.app.state.session_factory() as db:
         assert db.scalars(select(CaseJudgement.statement)).one() == 'The crew will keep exploiting gateways.'

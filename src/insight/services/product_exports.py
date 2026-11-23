@@ -1,5 +1,5 @@
-"""Exporting intelligence products (TIP 4.4, ADR 0036): Markdown, or a validated STIX 2.1 bundle, of the draft
-or of a published version. Every export is audited as ``case.export``."""
+"""Exporting intelligence products (TIP 4.4, ADR 0036): Markdown, a validated STIX 2.1 bundle or a PDF, of the
+draft or of a published version. Every export is audited as ``case.export``."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from .product_views import product_view
 class ProductExport:
     filename: str
     media_type: str
-    content: str
+    content: bytes
     bundle: dict[str, Any] | None = None
 
 
@@ -35,6 +35,7 @@ def export_product(
     it."""
     # The renderers use the Markdown helpers of ``briefing``, which imports this package: import them here.
     from ..product_markdown import to_markdown
+    from ..product_pdf import to_pdf
     from ..product_stix import to_stix
 
     product = product_view(db, case_id, max_tlp=max_tlp, version=version)
@@ -42,9 +43,15 @@ def export_product(
     if fmt == 'stix':
         bundle = to_stix(product)
         validate_stix_bundle(bundle)
-        content, media_type, extension = json.dumps(bundle), 'application/stix+json;version=2.1', 'json'
+        content, media_type, extension = (
+            json.dumps(bundle).encode(),
+            'application/stix+json;version=2.1',
+            'json',
+        )
+    elif fmt == 'pdf':
+        content, media_type, extension = to_pdf(product), 'application/pdf', 'pdf'
     else:
-        content, media_type, extension = to_markdown(product), 'text/markdown; charset=utf-8', 'md'
+        content, media_type, extension = to_markdown(product).encode(), 'text/markdown; charset=utf-8', 'md'
     label = f'v{product["version"]}' if product['version'] else 'draft'
     detail = {'format': fmt, 'version': product['version'], 'tlp': product['tlp'], 'max_tlp': max_tlp}
     audit(db, 'case.export', product['id'], json.dumps(detail, sort_keys=True))
