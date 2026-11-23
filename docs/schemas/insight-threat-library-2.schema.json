@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://insight.local/schemas/insight-threat-library-2.schema.json",
+  "title": "Insight threat library, format 2",
+  "description": "Public catalog data, not analyst attribution. Full and bundled editions share this contract.",
+  "type": "object",
+  "required": ["format", "edition", "notice", "sources", "groups", "software", "techniques", "mitigations", "data_components", "reviewed_exclusions"],
+  "properties": {
+    "format": {"const": "insight-threat-library-2"},
+    "edition": {"enum": ["bundled", "full"]},
+    "notice": {"type": "string", "minLength": 1},
+    "sources": {
+      "type": "object",
+      "required": ["attack", "misp-galaxy"],
+      "additionalProperties": {"type": "object", "additionalProperties": {"type": "string"}}
+    },
+    "groups": {"type": "array", "items": {"$ref": "#/$defs/group"}},
+    "software": {
+      "type": "object",
+      "propertyNames": {"pattern": "^S[0-9]{4}$"},
+      "additionalProperties": {"$ref": "#/$defs/software"}
+    },
+    "techniques": {"type": "object"},
+    "mitigations": {"type": "object", "additionalProperties": {"type": "string"}},
+    "data_components": {"type": "object", "additionalProperties": {"type": "string"}},
+    "reviewed_exclusions": {"type": "array", "items": {"type": "object"}}
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "names": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "techniques": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^T[0-9]{4}(\\.[0-9]{3})?$"}},
+    "groupIds": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^G[0-9]{4}$"}},
+    "aliasSource": {
+      "type": "object",
+      "required": ["source"],
+      "properties": {
+        "source": {"enum": ["attack", "misp-galaxy"]},
+        "entry": {"type": "string", "minLength": 1},
+        "entry_id": {"type": "string"},
+        "matched_name": {"type": "string", "minLength": 1}
+      },
+      "if": {"properties": {"source": {"const": "misp-galaxy"}}},
+      "then": {"required": ["entry", "matched_name"]},
+      "additionalProperties": false
+    },
+    "group": {
+      "type": "object",
+      "required": ["id", "name", "aliases", "alias_sources", "alias_references"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^G[0-9]{4}$"},
+        "name": {"type": "string", "minLength": 1},
+        "aliases": {"$ref": "#/$defs/names"},
+        "alias_sources": {
+          "type": "object",
+          "description": "Each alias references one or more entries in this group's alias_references array.",
+          "additionalProperties": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "integer", "minimum": 0}}
+        },
+        "alias_references": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/aliasSource"}}
+      }
+    },
+    "software": {
+      "type": "object",
+      "required": ["name", "type", "aliases", "description", "platforms", "techniques", "groups"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "type": {"enum": ["malware", "tool"]},
+        "aliases": {"$ref": "#/$defs/names"},
+        "description": {"type": "string"},
+        "platforms": {"$ref": "#/$defs/names"},
+        "techniques": {"$ref": "#/$defs/techniques"},
+        "groups": {"$ref": "#/$defs/groupIds"}
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -16,6 +16,8 @@
 
 ### Upgrade notes
 
+- The threat library now writes `insight-threat-library-2`. Existing format 1 synced libraries still load;
+  run `insight threat-library-sync` to gain the expanded catalog. No database migration is needed for this change.
 - Migration `0024` adds the `requirements`, `requirement_criteria` and `requirement_evidence` tables. It runs
   at start-up and changes no existing data.
 - Migration `0025` adds the `source_ratings` table and a `credibility` column on reports (every existing report
@@ -53,6 +55,16 @@
 - Sightings are the strongest confidence signal: each place an indicator was seen counts as a completely
   reliable source, ageing from when it was last seen. The indicator explorer shows **Seen in your own data**.
 - `GET /api/sightings` and `DELETE /api/sightings/{id}`.
+
+### Added: adversary library software and aliases (TIP 4.7 part 1)
+
+- Both library editions include every current ATT&CK malware and tool, with aliases, descriptions,
+  platforms, techniques and groups that use it, including software with no listed group.
+- MISP synonyms from uniquely matched entry names improve group searches and reports naming a group.
+  Every alias retains its source. Ambiguous names and similar links never merge groups or create analyst links.
+- The pure, pinned build keeps the MITRE and MISP notices and a bundled edition under 1 MB. Software
+  workspace/API/linking, STIX output, timelines and software Navigator layers remain later parts of 4.7.
+  See [ADR 0038](docs/adr/0038-adversary-library.md) and [the guide](docs/THREAT_GUIDES.md).
 
 ### Added: hunt packages over TAXII (TIP 4.3)
 

@@ -64,24 +64,29 @@ PINNED: Final[dict[str, Pinned]] = {
 
 
 def render(library: dict[str, Any]) -> str:
-    """Stable JSON with one group, technique or software entry per line, so updates review as small diffs."""
+    """Stable compact JSON, one catalog entry per line: bounded bundle size and reviewable update diffs."""
     lines = ['{']
     keys = list(library)
     for position, key in enumerate(keys):
         value = library[key]
         comma = ',' if position < len(keys) - 1 else ''
         if key in ('groups', 'reviewed_exclusions') and isinstance(value, list):
-            items = [f'    {json.dumps(item, ensure_ascii=False, sort_keys=True)}' for item in value]
+            items = [
+                f'    {json.dumps(item, ensure_ascii=False, sort_keys=True, separators=(",", ":"))}'
+                for item in value
+            ]
             lines += [f'  "{key}": [', ',\n'.join(items), f'  ]{comma}']
         elif key in ('techniques', 'software', 'mitigations', 'data_components') and isinstance(value, dict):
             items = [
-                f'    {json.dumps(k)}: {json.dumps(v, ensure_ascii=False, sort_keys=True)}'
+                f'    {json.dumps(k)}: '
+                f'{json.dumps(v, ensure_ascii=False, sort_keys=True, separators=(",", ":"))}'
                 for k, v in value.items()
             ]
             lines += [f'  "{key}": {{', ',\n'.join(items), f'  }}{comma}']
         else:
             lines.append(
-                f'  {json.dumps(key)}: {json.dumps(value, ensure_ascii=False, sort_keys=True)}{comma}'
+                f'  {json.dumps(key)}: '
+                f'{json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))}{comma}'
             )
     lines.append('}')
     return '\n'.join(lines) + '\n'

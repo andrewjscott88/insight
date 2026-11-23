@@ -1,4 +1,4 @@
-"""Build Insight's threat-group library from MITRE ATT&CK and the MISP galaxy (TIP 2.10, ADR 0025).
+"""Build Insight's group/software library from MITRE ATT&CK and MISP galaxy (ADR 0025, ADR 0038).
 
 Pure functions: a parsed Enterprise ATT&CK STIX bundle and a parsed MISP galaxy ``threat-actor`` cluster go
 in, the library Insight reads (``insight.threat_library``) comes out. Used by ``scripts/update_actors.py`` for
@@ -26,8 +26,9 @@ from typing import Any, Final
 from urllib.parse import urlsplit
 
 from .industries import industries_in, industry_for_label, plain, sentences
+from .threat_library_aliases import add_aliases, misp_index, misp_matches
 
-FORMAT: Final = 'insight-threat-library-1'
+FORMAT: Final = 'insight-threat-library-2'
 ATTACK_TERMS: Final = 'https://attack.mitre.org/resources/legal-and-branding/terms-of-use/'
 #: MISP ``cfr-target-category`` labels come from the CFR Cyber Operations Tracker, cited for them.
 CFR_HOST: Final = 'cfr.org'
@@ -42,6 +43,7 @@ REVIEWED_EXCLUSIONS: Final[dict[tuple[str, str], str]] = {
 #: The bundled edition keeps descriptions short and leaves out analytics, procedures and most references.
 BUNDLED_DESCRIPTION: Final = 700
 BUNDLED_REFERENCES: Final = 6
+BUNDLED_SOFTWARE_DESCRIPTION: Final = 200
 
 
 def _attack_id(obj: dict[str, Any]) -> str | None:
@@ -117,33 +119,6 @@ class _Bundle:
     def ref(self, stix_id: str) -> dict[str, Any] | None:
         obj = self.by_id.get(stix_id)
         return obj if obj is not None and _current(obj) else None
-
-
-def _misp_index(cluster: dict[str, Any] | None) -> dict[str, list[dict[str, Any]]]:
-    """MISP entries by their case-folded primary name."""
-    index: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for value in (cluster or {}).get('values', []):
-        if isinstance(value, dict) and isinstance(value.get('value'), str):
-            index[value['value'].strip().casefold()].append(value)
-    return index
-
-
-def _misp_matches(
-    groups: list[dict[str, Any]], index: dict[str, list[dict[str, Any]]]
-) -> dict[str, tuple[str, dict[str, Any]]]:
-    """``{group ID: (matched name, MISP entry)}`` for names that point to exactly one group and one entry."""
-    claims: dict[str, set[str]] = defaultdict(set)
-    for group in groups:
-        for name in {group['name'], *group['aliases']}:
-            claims[name.strip().casefold()].add(group['id'])
-    matches: dict[str, tuple[str, dict[str, Any]]] = {}
-    for group in groups:
-        for name in [group['name'], *group['aliases']]:
-            key = name.strip().casefold()
-            entries = index.get(key, [])
-            if len(claims[key]) == 1 and len(entries) == 1 and group['id'] not in matches:
-                matches[group['id']] = (name, entries[0])
-    return matches
 
 
 def _citation_host(url: str) -> str:
@@ -243,6 +218,37 @@ def _detections(atk: _Bundle, technique: dict[str, Any], full: bool) -> list[dic
     return sorted(out, key=lambda d: d['id'])
 
 
+def _software(atk: _Bundle, groups: list[dict[str, Any]], full: bool) -> dict[str, dict[str, Any]]:
+    """All current software, including items with no group; relationships are explicit ATT&CK uses only."""
+    users: dict[str, set[str]] = defaultdict(set)
+    for group in groups:
+        for software_id in group['software']:
+            users[software_id].add(group['id'])
+    out: dict[str, dict[str, Any]] = {}
+    for kind in ('malware', 'tool'):
+        for obj in atk.current(kind):
+            if (software_id := _attack_id(obj)) is None:
+                continue
+            techniques = {
+                tid
+                for rel in atk.uses.get(obj['id'], [])
+                if (target := atk.ref(rel['target_ref'])) is not None
+                and target.get('type') == 'attack-pattern'
+                and (tid := _attack_id(target)) is not None
+            }
+            description = plain(obj.get('description', ''))
+            out[software_id] = {
+                'name': obj['name'],
+                'type': kind,
+                'aliases': sorted({a for a in obj.get('x_mitre_aliases', []) if a != obj['name']}),
+                'description': description if full else _shorten(description, BUNDLED_SOFTWARE_DESCRIPTION),
+                'platforms': sorted(set(obj.get('x_mitre_platforms', []))),
+                'techniques': sorted(techniques),
+                'groups': sorted(users[software_id]),
+            }
+    return dict(sorted(out.items()))
+
+
 def build(
     bundle: dict[str, Any],
     cluster: dict[str, Any] | None,
@@ -256,7 +262,6 @@ def build(
     collection = atk.collection or {}
     groups: list[dict[str, Any]] = []
     used_techniques: set[str] = set()
-    software: dict[str, dict[str, str]] = {}
     for obj in atk.current('intrusion-set'):
         group_id = _attack_id(obj)
         if group_id is None:
@@ -277,7 +282,6 @@ def build(
                 techniques.setdefault(target_id, plain(rel.get('description', '')))
             elif target['type'] in ('malware', 'tool'):
                 tools.add(target_id)
-                software[target_id] = {'name': target['name'], 'type': target['type']}
         used_techniques.update(techniques)
         by_sentence: dict[str, list[str]] = {}
         for key, sentence in industries_in(description).items():
@@ -325,11 +329,15 @@ def build(
             group['procedures'] = {t: p for t, p in sorted(techniques.items()) if p}
         groups.append(group)
     groups.sort(key=lambda g: g['id'])
-    for group_id, (name, entry) in _misp_matches(groups, _misp_index(cluster)).items():
+    index = misp_index(cluster)
+    for group_id, (name, entry) in misp_matches(groups, index).items():
         group = next(g for g in groups if g['id'] == group_id)
         group['industries'] += _misp_claims(group_id, name, entry)
         if regions := _misp_regions(entry):
             group['regions'] = [{'source': 'misp-galaxy', 'field': 'cfr-suspected-victims', 'names': regions}]
+    add_aliases(groups, index)
+    software = _software(atk, groups, full)
+    used_techniques.update(t for item in software.values() for t in item['techniques'])
     techniques_out: dict[str, Any] = {}
     mitigations: dict[str, str] = {}
     for obj in atk.current('attack-pattern'):
@@ -375,7 +383,7 @@ def build(
         ],
         'data_components': dict(sorted(components.items())),
         'mitigations': dict(sorted(mitigations.items())),
-        'software': dict(sorted(software.items())),
+        'software': software,
         'techniques': dict(sorted(techniques_out.items())),
         'groups': groups,
     }
