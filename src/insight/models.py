@@ -112,6 +112,7 @@ class Document(Base):
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     fingerprint: Mapped[str] = mapped_column(String(64), unique=True)
+    reuse_changed_at: Mapped[str | None] = mapped_column(UtcTimestamp(), default=None)
     content_hash: Mapped[str] = mapped_column(String(64), index=True)
     title: Mapped[str] = mapped_column(String(300))
     body: Mapped[str] = mapped_column(Text)
@@ -442,6 +443,23 @@ class Alert(Base):
     created_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
     sent_at: Mapped[str] = mapped_column(String(40), default='')
     error: Mapped[str] = mapped_column(String(300), default='')
+
+
+class OperatorSource(Base):
+    """Operator-approved feed configuration. Reports keep this key even if the source is deleted."""
+
+    __tablename__ = 'operator_sources'
+    key: Mapped[str] = mapped_column(String(35), primary_key=True)
+    name: Mapped[str] = mapped_column(String(160))
+    kind: Mapped[str] = mapped_column(String(20))
+    url: Mapped[str] = mapped_column(Text)
+    tlp: Mapped[str] = mapped_column(String(20))
+    reuse: Mapped[str] = mapped_column(String(20))
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
+    updated_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
+    actor: Mapped[str] = mapped_column(String(80))
+    history_visible_since: Mapped[str | None] = mapped_column(UtcTimestamp(), default=None)
 
 
 class SourceSwitch(Base):

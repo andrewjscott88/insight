@@ -20,9 +20,7 @@ from ...schemas import (
     validation_message,
 )
 from ...sensor_rules import sensor_rules
-from ...source_registry import metadata_only
 from ..auth import AuthDependency, acting, reader_limit
-from .documents import get_document_or_404
 
 #: How IOC export fields are named in the query string, for error messages that match what the caller sent.
 IOC_EXPORT_PARAMETERS: Final = {
@@ -129,22 +127,12 @@ def _register_export_routes(app: FastAPI, sessions: SessionFactory, require_auth
     def export(request: Request, doc_id: str) -> JSONResponse:
         limit = reader_limit(request)
         with acting(sessions, request) as db:
-            doc = get_document_or_404(db, doc_id, limit)
-            result = services.detail(db, doc, max_tlp=limit)
-            result['format'] = 'insight-report-v1'
-            result['handling_notice'] = (
-                'Local backup/export only. Preserve TLP and publisher restrictions. Not STIX.'
-            )
-            if metadata_only(doc.source_key):  # ADR 0021: the publisher's words stay in Insight.
-                result['body'] = ''
-                for observation in result['observations']:
-                    observation['evidence'] = ''
-                result['handling_notice'] += (
-                    ' The publisher allows metadata only: the report text and evidence are left out.'
-                )
-            services.audit(db, 'document.export', doc.id, doc.tlp)
+            try:
+                result = services.export_document(db, doc_id, max_tlp=limit)
+            except LookupError:
+                raise HTTPException(404, 'Report not found') from None
         return JSONResponse(
-            result, headers={'Content-Disposition': f'attachment; filename="insight-report-{doc.id}.json"'}
+            result, headers={'Content-Disposition': f'attachment; filename="insight-report-{doc_id}.json"'}
         )
 
     @app.get('/api/iocs/export', dependencies=[Depends(require_auth)])

@@ -12,6 +12,7 @@ from ..connectors import sync_all, sync_source
 from ..source_registry import CATEGORIES, SOURCES, Source, in_use
 from .lookups import build_lookup_switches
 from .messages import tell
+from .operator_sources import build_operator_sources
 from .pivots import build_pivot_switches
 from .schedules import ScheduleControls, build_all_sources_schedule, build_schedule_control
 from .typography import heading, new_tab_link
@@ -25,7 +26,8 @@ def build_sources(ws: Workspace) -> None:
             return
         with ws.read() as db:
             runs = [
-                (r.source_key, r.status, r.created_at, r.message) for r in services.recent_source_runs(db)
+                (r.source_key, r.status, r.created_at, r.message)
+                for r in services.recent_source_runs(db, max_tlp=ws.app.state.settings.max_tlp)
             ]
         if not runs:
             nothing = (
@@ -47,16 +49,20 @@ def build_sources(ws: Workspace) -> None:
         button.disable()
         try:
             async with lock:
-                message = await sync_source(ws.sessions, key)
+                message = await sync_source(ws.sessions, key, max_tlp=ws.app.state.settings.max_tlp)
             if ws.authorized():
                 tell(message, 'success')
                 ws.refresh_all()
         except Exception as exc:  # Surface any failure to the analyst, never crash the page.
             if ws.authorized():
-                tell(f'Sync failed: {exc}', 'error')
+                message = (
+                    f'Sync failed: {exc}' if key in SOURCES else 'Sync failed. Check recent sync activity.'
+                )
+                tell(message, 'error')
                 source_history.refresh()
         finally:
-            button.enable()
+            if not button.is_deleted:
+                button.enable()
 
     def switch(source: Source, on: bool, sync_button: ui.button, schedule: ui.select) -> None:
         if not ws.authorized():
@@ -80,7 +86,7 @@ def build_sources(ws: Workspace) -> None:
             with ui.row().classes('items-center gap-3 flex-wrap'):
                 sync_button = ui.button('Sync now')
                 sync_button.on_click(lambda key=source.key, button=sync_button: run(key, button))
-                schedule = build_schedule_control(ws, source, controls)
+                schedule = build_schedule_control(ws, source.key, source.name, controls)
             sync_button.set_enabled(on)
             schedule.set_enabled(on)
             toggle.on_value_change(lambda e: switch(source, bool(e.value), sync_button, schedule))
@@ -99,6 +105,7 @@ def build_sources(ws: Workspace) -> None:
     ).classes('muted prose')
     controls = ScheduleControls()
     build_all_sources_schedule(ws, controls)
+    build_operator_sources(ws, controls, run)
     with ws.read() as db:
         switches = services.source_switches(db)
     for category, title in CATEGORIES.items():
@@ -132,7 +139,7 @@ def build_sync_all_button(ws: Workspace) -> ui.button:
         button.disable()
         try:
             async with lock:
-                results = await sync_all(ws.sessions, on_start=started)
+                results = await sync_all(ws.sessions, on_start=started, max_tlp=ws.app.state.settings.max_tlp)
             if not ws.authorized():
                 return
             failed = [r.name for r in results if not r.ok]

@@ -141,7 +141,14 @@ from .exploits import (
     exploit_context,
     record_exploit_signals,
 )
-from .exports import MAX_EXPORT_MENTIONS, export_iocs, export_stix, ioc_export_counts, ioc_mentions
+from .exports import (
+    MAX_EXPORT_MENTIONS,
+    export_document,
+    export_iocs,
+    export_stix,
+    ioc_export_counts,
+    ioc_mentions,
+)
 from .graph import Graph, GraphEdge, GraphNode, build_graph
 from .hunt_package_stix import MAX_SERVED_HUNT_PACKAGES, export_hunt_package
 from .hunt_package_views import (
@@ -211,6 +218,15 @@ from .lookups import (
     set_lookup_switch,
 )
 from .mcp import mcp_read
+from .operator_sources import (
+    OperatorSourceView,
+    create_operator_source,
+    delete_operator_source,
+    get_operator_source,
+    list_operator_sources,
+    set_operator_source_enabled,
+    update_operator_source,
+)
 from .pdf_reports import PdfReport, import_pdf, prepare_pdf_report, store_pdf_report
 from .pivots import cached_pivots, eligible_pivot, pivot_switches, set_pivot_switch, store_pivot
 from .product_exports import ProductExport, export_product
@@ -437,6 +453,7 @@ __all__ = [
     'LinkedRule',
     'MatchView',
     'Mention',
+    'OperatorSourceView',
     'PdfReport',
     'ProductExport',
     'ProductIncomplete',
@@ -509,6 +526,7 @@ __all__ = [
     'create_campaign',
     'create_case',
     'create_hunt_package',
+    'create_operator_source',
     'create_requirement',
     'cve_score_view',
     'cve_scores',
@@ -517,6 +535,7 @@ __all__ = [
     'delete_case',
     'delete_document',
     'delete_hunt_package',
+    'delete_operator_source',
     'delete_requirement',
     'delete_rule',
     'delete_sighting',
@@ -539,6 +558,7 @@ __all__ = [
     'entity_documents',
     'entity_seen',
     'exploit_context',
+    'export_document',
     'export_hunt_package',
     'export_iocs',
     'export_product',
@@ -557,6 +577,7 @@ __all__ = [
     'get_fetch_state',
     'get_hunt',
     'get_hunt_package',
+    'get_operator_source',
     'get_requirement',
     'get_rule',
     'guide_data',
@@ -586,6 +607,7 @@ __all__ = [
     'list_cases',
     'list_entities',
     'list_hunt_packages',
+    'list_operator_sources',
     'list_requirements',
     'list_rules',
     'list_schedules',
@@ -658,6 +680,7 @@ __all__ = [
     'set_document_status',
     'set_lookup_switch',
     'set_observation_status',
+    'set_operator_source_enabled',
     'set_pivot_switch',
     'set_schedule',
     'set_source_switch',
@@ -698,6 +721,7 @@ __all__ = [
     'update_hunt',
     'update_hunt_package',
     'update_judgement',
+    'update_operator_source',
     'update_requirement',
     'validate_address',
     'verify_api_key',

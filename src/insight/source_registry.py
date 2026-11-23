@@ -202,10 +202,18 @@ SOURCES: Final[dict[str, Source]] = {
 
 #: Keys of the sources whose text stays in Insight (titles, links and dates may leave it).
 METADATA_ONLY: Final = frozenset(key for key, s in SOURCES.items() if s.reuse == 'metadata')
+OPERATOR_PREFIX: Final = 'op-'
 
 
-def metadata_only(source_key: str | None) -> bool:
-    """Whether a report from ``source_key`` may leave Insight only as metadata (pasted reports: never)."""
+def is_operator_source(source_key: str | None) -> bool:
+    """Operator source IDs keep their namespace after the source is deleted."""
+    return source_key is not None and source_key.startswith(OPERATOR_PREFIX)
+
+
+def metadata_only(source_key: str | None, operator_reuse: str | None = None) -> bool:
+    """Whether to withhold publisher text. An operator source needs a current, explicit public rule."""
+    if is_operator_source(source_key):
+        return operator_reuse != 'public'
     return source_key in METADATA_ONLY or source_key == 'stix-import-metadata'
 
 

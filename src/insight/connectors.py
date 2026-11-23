@@ -12,6 +12,7 @@ import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
+from functools import partial
 from html import unescape
 from itertools import islice
 from typing import Any, Final
@@ -28,7 +29,7 @@ from .cve_scores import summarise_vulncheck
 from .feed_items import MAX_FEED_ITEMS as MAX_FEED_ITEMS
 from .feed_items import FeedItem as FeedItem
 from .models import Enrichment, Entity, KEVRecord, SessionFactory, SourceRun, now
-from .schemas import DocumentInput
+from .schemas import TLP, DocumentInput
 from .services import (
     SourceRef,
     fetch_cursor,
@@ -137,7 +138,8 @@ class SourceSwitchedOff(ConnectorError):
     """The source is switched off: Insight does not contact it (nothing is recorded)."""
 
     def __init__(self, source: Source) -> None:
-        super().__init__(f'{source.name} is switched off. Switch it on in Settings › Sources first.')
+        name = 'This source' if source.key.startswith('op-') else source.name
+        super().__init__(f'{name} is switched off. Switch it on in Settings › Sources first.')
 
 
 ALLOWED_HOSTS: Final[frozenset[str]] = frozenset(
@@ -312,7 +314,7 @@ def _atom_link(item: Any) -> str:
     return ''
 
 
-def parse_feed(payload: bytes, source: Source) -> list[FeedItem]:
+def parse_feed(payload: bytes, source: Source, *, operator_tlp: TLP | None = None) -> list[FeedItem]:
     """Parse RSS 2.0 or Atom into at most :data:`MAX_FEED_ITEMS` bounded items.
 
     Identity preference: the (validated) link, then ``<guid>``/Atom ``<id>``. Links come first so that
@@ -321,6 +323,10 @@ def parse_feed(payload: bytes, source: Source) -> list[FeedItem]:
     if len(payload) > MAX_BYTES:
         raise ValueError('Source exceeds size limit')
     root = ElementTree.fromstring(payload)
+    if operator_tlp is not None and not (
+        root.tag == ATOM + 'feed' or (root.tag == 'rss' and root.find('channel') is not None)
+    ):
+        raise ValueError('Expected an RSS or Atom feed')
     items = root.findall('.//item') or root.findall(ATOM + 'entry')
     docs: list[FeedItem] = []
     for item in items[:MAX_FEED_ITEMS]:
@@ -330,15 +336,28 @@ def parse_feed(payload: bytes, source: Source) -> list[FeedItem]:
         summary = full_summary[:MAX_FEED_SUMMARY]
         body = title + '\n\n' + summary
         guid = (_find_text(item, 'guid') or _find_text(item, 'id')).strip()
-        # Public feeds are TLP:CLEAR (explicit: the schema default is the more restrictive AMBER).
+        # Curated public feeds are CLEAR. Every operator feed carries its configured floor.
+        tlp = operator_tlp or 'CLEAR'
         try:
             document = DocumentInput(
-                title=title, body=body, source_name=source.name, source_url=link, tlp='CLEAR'
+                title=title, body=body, source_name=source.name, source_url=link, tlp=tlp
             )
         except ValueError:
             # A malformed item cannot turn a dangerous link into a clickable source URL.
-            document = DocumentInput(title=title, body=body, source_name=source.name, tlp='CLEAR')
+            document = DocumentInput(title=title, body=body, source_name=source.name, tlp=tlp)
         external_id = (document.source_url or guid)[:500] or None
+        if operator_tlp is not None:
+            # Hash the complete publisher ID so distinct long GUIDs cannot collide at the column limit.
+            identity = document.source_url or guid
+            if not identity:
+                published = (_find_text(item, 'pubDate') or _find_text(item, 'published')).strip()
+                # Without any publisher identity/date, only exact title+summary redeliveries can be matched.
+                identity_field = ('published', published) if published else ('summary', full_summary)
+                material = json.dumps([_find_text(item, 'title'), *identity_field])
+                identity = 'fallback:' + hashlib.sha256(material.encode()).hexdigest()
+            else:
+                identity = 'publisher:' + hashlib.sha256(identity.encode()).hexdigest()
+            external_id = identity
         docs.append(FeedItem(document, external_id, truncated=len(full_summary) > MAX_FEED_SUMMARY))
     return docs
 
@@ -678,24 +697,35 @@ async def fetch_if_changed(
     *,
     headers: Mapping[str, str] | None = None,
     body: bytes | None = None,
+    state_key: str | None = None,
+    allowed_hosts: frozenset[str] | None = None,
+    allow_private: bool = False,
 ) -> Fetched | None:
     """Download ``url`` unless it is unchanged since it was last stored: ``None`` then.
 
     Unchanged means a ``304`` to a conditional request, or the same bytes as last time (for servers that
     ignore ``If-None-Match`` and ``If-Modified-Since``).
     """
-    stored = await asyncio.to_thread(_load_validators, session_factory, url)
+    key = state_key or url
+    stored = await asyncio.to_thread(_load_validators, session_factory, key)
     validators = Validators(stored[0].etag, stored[0].last_modified) if stored else Validators()
+    fetch = (
+        download
+        if allowed_hosts is None
+        else partial(download, allowed_hosts=allowed_hosts, allow_private=allow_private)
+    )
     try:
-        payload = await download(
+        payload = await fetch(
             url, headers=headers, body=body, validators=validators if body is None else None
         )
     except NotModified:
+        if state_key is not None and not (stored and (stored[0].etag or stored[0].last_modified)):
+            raise ValueError('Unexpected unchanged response to an unconditional request') from None
         return None
     digest = hashlib.sha256(payload).hexdigest()
     if stored is not None and digest == stored[1]:
         return None
-    return Fetched(url, payload, validators, digest)
+    return Fetched(key, payload, validators, digest)
 
 
 def _record_unchanged(session_factory: SessionFactory, source: Source) -> str:
@@ -828,10 +858,14 @@ def switches(session_factory: SessionFactory) -> dict[str, bool]:
         return source_switches(db)
 
 
-def sources_in_use(session_factory: SessionFactory) -> list[Source]:
+def sources_in_use(session_factory: SessionFactory, *, max_tlp: str | None = None) -> list[Source]:
     """The sources Insight may contact, in registry order (optional ones only once switched on)."""
+    from . import operator_feed
+
     current = switches(session_factory)
-    return [s for s in SOURCES.values() if in_use(s, current)]
+    curated = [s for s in SOURCES.values() if in_use(s, current)]
+    with session_factory() as db:
+        return curated + operator_feed.enabled_sources(db, max_tlp=max_tlp)
 
 
 def abusech_request(source: Source) -> tuple[dict[str, str], bytes | None]:
@@ -856,7 +890,9 @@ def abusech_request(source: Source) -> tuple[dict[str, str], bytes | None]:
     raise ValueError('Unknown abuse.ch source')
 
 
-async def sync_source(session_factory: SessionFactory, key: str) -> str:
+async def sync_source(
+    session_factory: SessionFactory, key: str, *, max_tlp: str | None = None, actor: str = 'operator'
+) -> str:
     """Download, validate and store one curated source. Every attempt is recorded as a ``SourceRun``.
 
     A source that has not changed since its last successful sync is not read again (:data:`UNCHANGED`).
@@ -864,6 +900,10 @@ async def sync_source(session_factory: SessionFactory, key: str) -> str:
     Raises ``ValueError`` for an unknown source, :class:`SourceSwitchedOff` for a source that is switched off
     and :class:`SourceSyncError` for any sync failure.
     """
+    if key.startswith('op-'):
+        from . import operator_feed
+
+        return await operator_feed.sync(session_factory, key, max_tlp=max_tlp, actor=actor)
     source = SOURCES.get(key)
     if source is None:
         raise ValueError('Unknown source')
@@ -912,7 +952,11 @@ class SyncResult:
 
 
 async def sync_all(
-    session_factory: SessionFactory, *, on_start: Callable[[int, int, Source], None] | None = None
+    session_factory: SessionFactory,
+    *,
+    on_start: Callable[[int, int, Source], None] | None = None,
+    max_tlp: str | None = None,
+    actor: str = 'operator',
 ) -> list[SyncResult]:
     """Sync every source in use (:func:`sources_in_use`) in registry order, one at a time, and report each.
 
@@ -921,16 +965,21 @@ async def sync_all(
     so a front end can show progress. Callers hold the sync lock, as for a single sync.
     """
     results: list[SyncResult] = []
-    sources = await asyncio.to_thread(sources_in_use, session_factory)
+    sources = await asyncio.to_thread(sources_in_use, session_factory, max_tlp=max_tlp)
     for position, source in enumerate(sources, start=1):
         if on_start is not None:
             on_start(position, len(sources), source)
         try:
-            results.append(
-                SyncResult(source.key, source.name, True, await sync_source(session_factory, source.key))
-            )
-        except SourceSyncError as exc:
+            if source.key.startswith('op-'):
+                message = await sync_source(session_factory, source.key, max_tlp=max_tlp, actor=actor)
+            else:
+                message = await sync_source(session_factory, source.key)
+            results.append(SyncResult(source.key, source.name, True, message))
+        except (SourceSyncError, SourceSwitchedOff) as exc:
             results.append(SyncResult(source.key, source.name, False, str(exc)))
+        except LookupError:
+            # An operator may remove an entry while earlier sources are being read.
+            results.append(SyncResult(source.key, source.name, False, 'The source is no longer available.'))
     return results
 
 

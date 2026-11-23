@@ -18,6 +18,18 @@ from urllib.parse import urlsplit, urlunsplit
 IPAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
 
 
+# Some clouds also serve instance or container metadata outside IPv4/IPv6 link-local space.
+_METADATA = frozenset(
+    ipaddress.ip_address(value)
+    for value in (
+        '100.100.100.200',
+        '168.63.129.16',
+        'fd00:ec2::254',
+        'fd20:ce::254',
+    )
+)
+
+
 def effective(address: IPAddress) -> IPAddress:
     """The IPv4 address an IPv4-mapped IPv6 address (``::ffff:127.0.0.1``) reaches, else ``address``.
 
@@ -31,7 +43,13 @@ def effective(address: IPAddress) -> IPAddress:
 def never_allowed(address: IPAddress) -> bool:
     """Never reachable: link-local (cloud metadata), multicast, unspecified and reserved addresses."""
     real = effective(address)
-    return real.is_link_local or real.is_multicast or real.is_unspecified or real.is_reserved
+    return (
+        real in _METADATA
+        or real.is_link_local
+        or real.is_multicast
+        or real.is_unspecified
+        or real.is_reserved
+    )
 
 
 def is_public(address: IPAddress) -> bool:

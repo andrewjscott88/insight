@@ -215,9 +215,7 @@ def auth_dependency(
             if method not in SAFE_METHODS and caller.access != 'read-write' and not (feedback or mcp_read):
                 raise HTTPException(403, 'This API key is read-only')
             if method not in SAFE_METHODS and path.startswith(SESSION_ONLY_WRITE_PREFIXES):
-                raise HTTPException(
-                    403, 'Schedules can be changed in the workspace or with `insight schedule` only'
-                )
+                raise HTTPException(403, 'Change these settings from a signed-in workspace session')
             if caller.max_tlp is not None and path.startswith(UNLIMITED_READER_PREFIXES):
                 raise HTTPException(403, 'Not available to TLP-limited API keys')
         else:

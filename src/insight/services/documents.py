@@ -22,6 +22,7 @@ from ..schemas import (
     TLP_LEVELS,
     DocumentInput,
 )
+from ..source_registry import is_operator_source
 from .alerts import queue_report_alerts
 from .audit import audit
 from .common import fold
@@ -47,9 +48,11 @@ class StructuredObservations:
     technique_ids: frozenset[str] | None = None
 
 
-def fingerprint(item: DocumentInput, *, file_sha256: str | None = None) -> str:
-    """Stable identity of a submission: exact title, body, source, URL and TLP."""
+def fingerprint(item: DocumentInput, *, file_sha256: str | None = None, ref: SourceRef | None = None) -> str:
+    """Content identity, scoped to the source item for operator feeds with independent reuse rules."""
     identity = item.model_dump()
+    if ref is not None and is_operator_source(ref.source_key):
+        identity.update(source_key=ref.source_key, external_id=ref.external_id)
     if file_sha256 is not None:
         # Preserve distinct files with identical text and the historic identity of pasted reports.
         del identity['body']  # A decoder update can change text ordering for the same immutable file.
@@ -167,13 +170,23 @@ def ingest(
 
     A structured importer can supply its validated, typed observations and the initial source document ID.
     Later revisions get new IDs as usual. Evidence offsets must refer to the supplied document body.
-    With ``preserve_source_tlp``, a revision may keep or raise the current label.
+    Operator feeds inherit the previous source item's label when it is stricter. Other imports using
+    ``preserve_source_tlp`` reject an attempted downgrade.
     """
     submitted_tlp = item.tlp
     item = apply_tlp_policy(item)
+    current = _current_revision(db, ref) if ref is not None else None
+    inherited = False
+    if (
+        current is not None
+        and is_operator_source(current.source_key)
+        and not tlp_permitted(current.tlp, item.tlp)
+    ):
+        item = item.model_copy(update={'tlp': current.tlp})
+        inherited = True
     if max_tlp is not None:
-        _refuse_above(submitted_tlp, item.tlp, max_tlp)
-    fp = fingerprint(item, file_sha256=file_sha256)
+        _refuse_above(item.tlp if inherited else submitted_tlp, item.tlp, max_tlp)
+    fp = fingerprint(item, file_sha256=file_sha256, ref=ref)
     existing = db.scalar(select(Document).where(Document.fingerprint == fp))
     if ref is None:
         if existing is not None:
@@ -190,7 +203,6 @@ def ingest(
         db.flush()
         return doc, True
 
-    current = _current_revision(db, ref)
     if current and preserve_source_tlp and not tlp_permitted(current.tlp, item.tlp):
         raise ValueError('Import conflicts with an existing document or handling restriction')
     if existing is not None:
@@ -225,7 +237,7 @@ def ingest(
         truncated=truncated,
         document_id=initial_document_id if current is None else None,
     )
-    _audit_tlp_raise(db, doc, submitted_tlp)
+    _audit_tlp_raise(db, doc, submitted_tlp, inherited=inherited)
     if current is not None:
         doc.supersedes_id = current.id
         audit(db, 'document.revision.supersede', doc.id, current.id)
@@ -237,9 +249,10 @@ def ingest(
     return doc, True
 
 
-def _audit_tlp_raise(db: Session, doc: Document, submitted: str) -> None:
+def _audit_tlp_raise(db: Session, doc: Document, submitted: str, *, inherited: bool = False) -> None:
     if doc.tlp != submitted:
-        audit(db, 'document.tlp_raised', doc.id, f'{submitted} -> {doc.tlp} (marking found in the text)')
+        reason = 'label retained from previous source revision' if inherited else 'marking found in the text'
+        audit(db, 'document.tlp_raised', doc.id, f'{submitted} -> {doc.tlp} ({reason})')
 
 
 def get_document(db: Session, doc_id: str, *, max_tlp: str | None = None) -> Document | None:

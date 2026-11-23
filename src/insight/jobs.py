@@ -109,7 +109,13 @@ def _lanes(locks: JobLocks) -> list[tuple[asyncio.Lock, Collection[str] | None, 
     return [(lock, kinds, ()) for lock, kinds in named] + [(locks.other, None, known)]
 
 
-async def run_due(sessions: SessionFactory, locks: JobLocks | asyncio.Lock, *, clock: Clock = utcnow) -> int:
+async def run_due(
+    sessions: SessionFactory,
+    locks: JobLocks | asyncio.Lock,
+    *,
+    clock: Clock = utcnow,
+    max_tlp: str | None = None,
+) -> int:
     """Queue the syncs whose schedule is due, then run every job that is due, the lanes side by side;
     returns how many ran. A bare lock is the sync lane's (the other lanes then get their own)."""
     if isinstance(locks, asyncio.Lock):
@@ -117,9 +123,9 @@ async def run_due(sessions: SessionFactory, locks: JobLocks | asyncio.Lock, *, c
     await asyncio.to_thread(_queue_due, sessions, clock())
     lanes = _lanes(locks)
     if shares_one_connection(sessions):  # In-memory SQLite: one connection, so the lanes take turns.
-        return sum([await _run_lane(sessions, *lane, clock) for lane in lanes])
+        return sum([await _run_lane(sessions, *lane, clock, max_tlp) for lane in lanes])
     results = await asyncio.gather(
-        *(_run_lane(sessions, lock, kinds, exclude, clock) for lock, kinds, exclude in lanes),
+        *(_run_lane(sessions, *lane, clock, max_tlp) for lane in lanes),
         return_exceptions=True,
     )
     for result in results:
@@ -134,6 +140,7 @@ async def _run_lane(
     kinds: Collection[str] | None,
     exclude: Collection[str],
     clock: Clock,
+    max_tlp: str | None,
 ) -> int:
     ran = 0
     while (claimed := await asyncio.to_thread(_claim, sessions, clock(), kinds, exclude)) is not None:
@@ -143,7 +150,11 @@ async def _run_lane(
                 handler = HANDLERS.get(kind)
                 if handler is None:
                     raise ValueError(f'No handler for job kind {kind!r}')
-                ok, message = True, await handler(sessions, key)
+                if kind == services.SOURCE_SYNC and key.startswith('op-'):
+                    message = await sync_source(sessions, key, max_tlp=max_tlp, actor='schedule')
+                else:
+                    message = await handler(sessions, key)
+                ok = True
             except SourceSyncError as exc:
                 ok, message = False, str(exc)  # Already "Type: detail", and recorded as a SourceRun.
             except Exception as exc:
@@ -157,10 +168,11 @@ def describe_schedules(sessions: SessionFactory) -> str:
     """One log line: which sources sync by themselves, and how often."""
     with sessions() as db:
         schedules = services.list_schedules(db)
+        known = set(SOURCES) | {s.key for s in services.list_operator_sources(db, max_tlp=None)}
     on = [f'{key} every {s.interval_minutes} min' for key, s in sorted(schedules.items()) if s.enabled]
     if not on:
         return 'No scheduled syncs: sources sync only when someone presses Sync now or Sync all sources.'
-    unknown = sorted(set(schedules) - set(SOURCES))
+    unknown = sorted(set(schedules) - known)
     note = f' (ignoring unknown sources: {", ".join(unknown)})' if unknown else ''
     return 'Scheduled syncs: ' + ', '.join(on) + note
 
@@ -177,6 +189,7 @@ async def run_forever(
     *,
     tick: float = TICK_SECONDS,
     clock: Clock = utcnow,
+    max_tlp: str | None = None,
 ) -> None:
     """Recover, log what is scheduled, then call :func:`run_due` every ``tick`` until ``stop`` is set."""
     if recovered := await asyncio.to_thread(_recover, sessions):
@@ -184,7 +197,7 @@ async def run_forever(
     log.info(await asyncio.to_thread(describe_schedules, sessions))
     while not stop.is_set():
         try:
-            await run_due(sessions, lock, clock=clock)
+            await run_due(sessions, lock, clock=clock, max_tlp=max_tlp)
         except Exception:  # A database hiccup must not stop scheduled syncs for good.
             log.exception('Background jobs failed; trying again at the next tick')
         with contextlib.suppress(TimeoutError):

@@ -15,6 +15,7 @@ from ..models import (
     Entity,
     KEVRecord,
     Observation,
+    OperatorSource,
     now,
     uid,
 )
@@ -28,13 +29,34 @@ from ..stix_export import build_stix_bundle, stix_timestamp
 from ..stix_validation import validate_stix_bundle
 from .assessments import visible_assessments
 from .audit import audit
-from .search import _document_conditions, _kev_view
+from .documents import get_document
+from .search import _document_conditions, _kev_view, detail
+from .source_reuse import _restricted_reports
 from .stix_software import _add_stix_software
 from .stix_techniques import _add_stix_techniques
 from .stix_threats import _add_stix_threats
 
 #: Upper bound on indicator mentions in one IOC export, so a single request cannot exhaust memory.
 MAX_EXPORT_MENTIONS: Final = 100_000
+
+
+def export_document(db: Session, doc_id: str, *, max_tlp: str | None) -> dict[str, Any]:
+    """Export one visible report under its current publisher permissions and audit the download."""
+    doc = get_document(db, doc_id, max_tlp=max_tlp)
+    if doc is None:
+        raise LookupError('Report not found')
+    result = detail(db, doc, max_tlp=max_tlp)
+    result['format'] = 'insight-report-v1'
+    result['handling_notice'] = 'Local backup/export only. Preserve TLP and publisher restrictions. Not STIX.'
+    if doc.id in _restricted_reports(db, [doc]):
+        result.update(body='', summary='')
+        for observation in result['observations']:
+            observation['evidence'] = ''
+        result['handling_notice'] += (
+            ' The publisher allows metadata only: the report text and evidence are left out.'
+        )
+    audit(db, 'document.export', doc.id, doc.tlp)
+    return result
 
 
 def _ioc_conditions(query: IocExportQuery) -> list[ColumnElement[bool]]:
@@ -131,11 +153,14 @@ def ioc_mentions(db: Session, query: IocExportQuery) -> list[IocMention]:
             Document.is_current,
             Document.extractor_version,
             Document.source_key,
+            Document.reuse_changed_at,
+            OperatorSource.reuse,
             KEVRecord,
         )
         .select_from(Observation)
         .join(Entity, Observation.entity_id == Entity.id)
         .join(Document, Observation.document_id == Document.id)
+        .outerjoin(OperatorSource, Document.source_key == OperatorSource.key)
         .outerjoin(KEVRecord, (Entity.kind == 'cve') & (KEVRecord.cve == Entity.value))
         .where(*_ioc_conditions(query))
         .order_by(
@@ -165,8 +190,9 @@ def ioc_mentions(db: Session, query: IocExportQuery) -> list[IocMention]:
             is_current=is_current,
             kev=_kev_view(kev),
             extractor_version=extractor_version,
-            metadata_only=metadata_only(source_key),
+            metadata_only=metadata_only(source_key, operator_reuse),
             reviewed_at=reviewed_at or '',
+            reuse_changed_at=reuse_changed_at or '',
         )
         for (
             review_status,
@@ -185,6 +211,8 @@ def ioc_mentions(db: Session, query: IocExportQuery) -> list[IocMention]:
             is_current,
             extractor_version,
             source_key,
+            reuse_changed_at,
+            operator_reuse,
             kev,
         ) in db.execute(stmt)
     ]

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Operator-defined RSS and Atom sources (TIP 4.5, part 1)
+
+- Add a feed in Settings, give it a TLP label and choose whether its publisher permits sharing the text.
+  New feeds start off with metadata-only sharing. Switch one on for a manual sync or an optional schedule.
+- Removing a source keeps its reports. Future exports of those reports share metadata only, including
+  when a client reads them through MCP or TAXII.
+- On upgrade, migration `0031` adds operator sources after `0030`. Existing curated feeds keep their settings.
+  Downgrading drops the new feed definitions and schedules. Retained reports keep their IDs, text and TLP
+  labels and use the earlier schema's metadata-only source key. Restore a pre-upgrade backup to recover its
+  original configuration.
+
 ### Changed: platform branding
 
 - The workspace, browser title, and sign-in and sign-out pages now use **Cyber Threat Intelligence Platform**

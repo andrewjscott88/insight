@@ -25,6 +25,7 @@ ORM_CLASSES |= {'SourceRating', 'HuntPackage', 'HuntPackageItem', 'Sighting', 'C
 ORM_CLASSES |= {'CaseJudgementItem', 'CaseGap', 'CaseVersion'}
 ORM_CLASSES |= {'SoftwareDocument'}
 ORM_CLASSES |= {'ActorCampaign'}
+ORM_CLASSES |= {'OperatorSource'}
 ORM_CLASSES |= {'SourceRun', 'Enrichment', 'ApiKey', 'Job', 'Schedule', 'FetchState', 'EntityAssessment'}
 ORM_CLASSES |= {'DocumentTechnique', 'SourceSwitch', 'LookupFailure'}
 ORM_CLASSES |= {'ThreatActor', 'ActorDocument', 'IndustryClaim', 'DetectionRule', 'RuleLink'}
@@ -150,6 +151,9 @@ TLP_AWARE_SERVICES = {
     'ask_gap', 'publish_product', 'product_view', 'export_product',
     'search_software', 'software_detail', 'software_reports', 'link_software_report',
     'unlink_software_report', 'report_software',
+    'list_operator_sources', 'get_operator_source', 'create_operator_source', 'update_operator_source',
+    'delete_operator_source', 'set_operator_source_enabled',
+    'recent_jobs', 'recent_source_runs', 'export_document',
 }  # fmt: skip
 
 

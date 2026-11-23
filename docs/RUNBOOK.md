@@ -84,6 +84,7 @@ Set in `.env` (Compose reads it) or the process environment. Real environment va
 | `INSIGHT_VULNCHECK_API_KEY` | no | (none) | Your own VulnCheck community token. Needed for VulnCheck KEV lookups (exploitation reports and public exploit links, [ADR 0028](adr/0028-exploit-availability.md)); without it they do not run. Sent only as a Bearer header, never logged |
 | `INSIGHT_MISP_URL` and `INSIGHT_MISP_KEY` | no | (none) | The trusted HTTPS instance and its API key, read by host CLI MISP transfers. File exchange also works offline. |
 | `INSIGHT_MISP_PRIVATE_NETWORK` | no | `off` | `on` lets the MISP instance be on a private network; loopback, link-local and reserved addresses stay blocked ([MISP.md](MISP.md)) |
+| `INSIGHT_SOURCES_PRIVATE_NETWORK` | no | `off` | Set to `on` to allow an operator-defined source on your private network. Each source can contact only its configured host. |
 | `NICEGUI_STORAGE_PATH` | no | `/data/.nicegui` in the image | Must be writable |
 | `INSIGHT_OTX_API_KEY` | no | (none) | The operator's OTX subscription key. Set it on the host and switch on the AlienVault OTX source. |
 
@@ -388,6 +389,16 @@ Nothing syncs automatically unless you turn on a schedule. **Sync now** contacts
 records a run (success or error) under *Recent sync activity*. **Sync all sources** (top of the workspace, or
 `POST /api/sources/sync-all`) does the same for every source in turn; a failing source does not stop the
 others, and the message names it.
+
+In **Settings › Sources**, add an RSS or Atom feed under **Your sources**. Enter the publisher's HTTPS feed
+URL and choose a TLP label. Reports from that feed carry at least that label. Keep the default
+**metadata-only** reuse rule unless the publisher allows you to share its text.
+Use a feed URL without an embedded login, query string or fragment.
+
+Switch the source on, then select **Sync now** to fetch it. To fetch updates automatically, set its schedule.
+Switching the source off also stops its schedule. Removing a source keeps the reports you already collected
+and limits future exports of those reports to metadata. A source inside your private network also requires
+`INSIGHT_SOURCES_PRIVATE_NETWORK=on` on the host.
 
 **Schedules** ([ADR 0018](adr/0018-opt-in-scheduled-syncs.md)) make a source sync by itself: *Off* (default),
 *Every hour*, *Every 6 hours* or *Every day*, per source or for all at once, in Settings › Sources (which also

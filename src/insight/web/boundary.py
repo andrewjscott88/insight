@@ -20,7 +20,7 @@ SESSION_ONLY_ROUTES: Final = frozenset({'/api/session', '/api/demo'})
 
 #: Settings only a signed-in browser session (or the host's CLI) may change: how often Insight goes online by
 #: itself is the operator's decision, not a script's.
-SESSION_ONLY_WRITE_PREFIXES: Final = ('/api/schedules',)
+SESSION_ONLY_WRITE_PREFIXES: Final = ('/api/schedules', '/api/operator-sources')
 
 #: Routes a TLP-limited key may not use: the audit log and CVE enrichment reveal things about reports the
 #: key cannot see (audit details, whether a CVE is mentioned anywhere), and watch terms often name clients,

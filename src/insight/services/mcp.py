@@ -6,12 +6,14 @@ facts and citations, not raw documents, rules, stored credentials or executable 
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import asdict, replace
 from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy.orm import Session
 
+from ..models import Document
 from ..schemas import (
     McpIdInput,
     McpInput,
@@ -20,7 +22,6 @@ from ..schemas import (
     McpSearchInput,
     most_restrictive,
 )
-from ..source_registry import metadata_only
 from .actors import MAX_LINKED_REPORTS, linked_reports, resolve_group
 from .assessments import entity_assessment, entity_seen
 from .confidence import indicator_confidence
@@ -29,24 +30,31 @@ from .entities import count_entity_documents, get_entity, list_entities
 from .hunt_package_views import get_hunt_package
 from .ranked_search import ranked_search
 from .requirement_views import list_requirements
-from .search import summary
+from .search import summaries
+from .source_reuse import _restricted_reports
+
+
+def _report_summaries(db: Session, docs: Sequence[Document]) -> list[dict[str, Any]]:
+    restricted = _restricted_reports(db, docs)
+    result = summaries(db, docs)
+    for row in result:
+        row['text_withheld'] = row['id'] in restricted
+        if row['text_withheld']:
+            row['summary'] = None
+    return result
 
 
 def _report(db: Session, document_id: str, max_tlp: str | None) -> dict[str, Any]:
     doc = get_document(db, document_id, max_tlp=max_tlp)
     if doc is None:
         raise LookupError('Not found')
-    result = summary(db, doc)
-    restricted = metadata_only(doc.source_key)
-    result['summary'] = None if restricted else result['summary']
-    result['text_withheld'] = restricted
-    return result
+    return _report_summaries(db, [doc])[0]
 
 
 def _search_reports(db: Session, args: McpSearchInput, max_tlp: str | None) -> dict[str, Any]:
     page = ranked_search(db, args.q, limit=args.limit, max_tlp=max_tlp)
     return {
-        'reports': [_report(db, hit.document.id, max_tlp) for hit in page.hits],
+        'reports': _report_summaries(db, [hit.document for hit in page.hits]),
         'total': page.total,
         'truncated': page.capped or page.total > len(page.hits),
     }

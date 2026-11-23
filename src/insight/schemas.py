@@ -2,24 +2,28 @@
 
 from __future__ import annotations
 
+import ipaddress
 import re
 from collections.abc import Mapping
 from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, Any, Literal, get_args
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    StrictBool,
     StringConstraints,
     ValidationError,
     field_validator,
     model_validator,
 )
 
+from .egress import effective, never_allowed
 from .extraction import Kind
 from .flags import FLAGS, Flag
+from .source_registry import Reuse
 
 TLP = Literal['CLEAR', 'GREEN', 'AMBER', 'AMBER+STRICT', 'RED']
 DocumentStatus = Literal['new', 'reviewing', 'reviewed']
@@ -660,6 +664,79 @@ class AnswerInput(BaseModel):
 
 
 Reliability = Literal['A', 'B', 'C', 'D', 'E', 'F']
+
+
+class OperatorSourceInput(BaseModel):
+    """An RSS or Atom subscription. The caller must explicitly declare public reuse."""
+
+    model_config = ConfigDict(frozen=True, extra='forbid')
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=160)]
+    kind: Literal['rss'] = 'rss'
+    url: str = Field(min_length=1, max_length=2048)
+    tlp: TLP = DEFAULT_TLP
+    reuse: Reuse = 'metadata'
+
+    @field_validator('name')
+    @classmethod
+    def printable_name(cls, name: str) -> str:
+        if not name.isprintable():
+            raise ValueError('Use a source name on a single line.')
+        return name
+
+    @field_validator('url')
+    @classmethod
+    def feed_url(cls, value: str) -> str:
+        error = 'Use an HTTPS feed address on port 443 without credentials, a query or a fragment.'
+        if any(ch.isspace() or not ch.isprintable() or ch in '?#\\' for ch in value):
+            raise ValueError(error)
+        try:
+            parts = urlsplit(value)
+            host = parts.hostname
+            port = parts.port
+        except ValueError:
+            raise ValueError(error) from None
+        if (
+            parts.scheme != 'https'
+            or not host
+            or port not in (None, 443)
+            or parts.username is not None
+            or parts.password is not None
+            or '%' in parts.netloc
+        ):
+            raise ValueError(error)
+        literal = f'[{host}]' if ':' in host else host
+        if parts.netloc.lower() not in (literal, f'{literal}:443'):
+            raise ValueError(error)
+        try:
+            address = ipaddress.ip_address(host)
+        except ValueError:
+            try:
+                dns_name = host.encode('idna').decode('ascii').rstrip('.')
+            except UnicodeError:
+                raise ValueError(error) from None
+            if (
+                len(dns_name) > 253
+                or not all(
+                    re.fullmatch(r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?', label)
+                    for label in dns_name.split('.')
+                )
+                or dns_name == 'localhost'
+                or dns_name.endswith('.localhost')
+            ):
+                raise ValueError(error) from None
+            authority = dns_name
+        else:
+            if never_allowed(address) or effective(address).is_loopback:
+                raise ValueError(error)
+            authority = f'[{address}]' if address.version == 6 else str(address)
+        return urlunsplit(('https', authority, parts.path or '/', '', ''))
+
+
+class OperatorSourceSwitchInput(BaseModel):
+    """Explicit consent to enable or disable one operator source."""
+
+    model_config = ConfigDict(frozen=True, extra='forbid')
+    enabled: StrictBool
 
 
 class SourceRatingInput(BaseModel):

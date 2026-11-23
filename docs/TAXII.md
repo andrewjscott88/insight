@@ -6,6 +6,13 @@ can list collections and read objects, but nothing can be written or created.
 
 ## What a client gets
 
+For an indicator reviewed in an operator-defined feed, Insight uses the feed's current reuse rule. A
+metadata-only source can supply the report's title and link. Its publisher's text and evidence excerpts
+stay in Insight. A change in reuse policy gives affected report objects a new `modified` time. Clients
+polling with `added_after` receive the revised report, including when a public source is deleted.
+Unchanged indicators keep their versions. The key's TLP ceiling still applies.
+[Operator-defined sources](adr/0040-operator-defined-sources.md)
+
 ### Software associations
 
 The Reviewed indicators collection also carries explicitly linked catalog software as `malware`

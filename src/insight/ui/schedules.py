@@ -11,7 +11,7 @@ from typing import Final
 from nicegui import ui
 
 from .. import services
-from ..source_registry import SOURCES, Source, in_use
+from ..source_registry import SOURCES, in_use
 from .messages import tell
 from .workspace import Workspace
 
@@ -27,7 +27,7 @@ class ScheduleControls:
 
     start: str = SOON
     selects: dict[str, ui.select] = field(default_factory=dict)
-    redraw: list[Callable[[], object]] = field(default_factory=list)
+    redraw: dict[str, Callable[[], object]] = field(default_factory=dict)
 
 
 def _interval(ws: Workspace, key: str) -> tuple[int, str | None]:
@@ -42,15 +42,38 @@ def _in_use(ws: Workspace) -> list[str]:
     """Keys of the sources Insight may contact: a schedule for every source covers only these."""
     with ws.read() as db:
         switches = services.source_switches(db)
-    return [key for key, source in SOURCES.items() if in_use(source, switches)]
+        operator = services.list_operator_sources(db, max_tlp=ws.app.state.settings.max_tlp)
+    return [key for key, source in SOURCES.items() if in_use(source, switches)] + [
+        source.key for source in operator if source.enabled
+    ]
 
 
-def _save(ws: Workspace, keys: list[str], minutes: int, start: str) -> None:
+def _save(ws: Workspace, keys: list[str], minutes: int | None, start: str) -> list[str]:
+    """For a new start time, keep the current interval. Recheck each custom feed in the write transaction."""
     now = datetime.now(UTC)
     starts_at = services.time_of_day(start, now) if start != SOON else None
+    saved = []
     with ws.write() as db:
+        schedules = services.list_schedules(db) if minutes is None else {}
         for key in keys:
-            services.set_schedule(db, key, minutes, at=now, starts_at=starts_at)
+            if key not in SOURCES:
+                try:
+                    source = services.get_operator_source(
+                        db, key, max_tlp=ws.app.state.settings.max_tlp, lock=True
+                    )
+                except LookupError:
+                    continue
+                if not source.enabled:
+                    continue
+            interval = minutes
+            if interval is None:
+                schedule = schedules.get(key)
+                if schedule is None or not schedule.enabled:
+                    continue
+                interval = schedule.interval_minutes
+            services.set_schedule(db, key, interval, at=now, starts_at=starts_at)
+            saved.append(key)
+    return saved
 
 
 def _confirm(ws: Workspace, what: str, minutes: int, start: str, *, plural: bool = False) -> None:
@@ -72,32 +95,24 @@ def build_all_sources_schedule(ws: Workspace, controls: ScheduleControls) -> Non
     """The start time, and one control that sets every source's schedule at once."""
 
     def redraw() -> None:
-        for refresh in controls.redraw:
+        for refresh in controls.redraw.values():
             refresh()
 
     def start_changed(start: str | None) -> None:
         if start is None or not ws.authorized():
             return
         controls.start = start
-        on = [key for key in _in_use(ws) if _interval(ws, key)[0]]
-        if start != SOON and on:
-            with ws.write() as db:
-                for key in on:
-                    services.set_schedule(
-                        db, key, _interval(ws, key)[0], at=datetime.now(UTC),
-                        starts_at=services.time_of_day(start, datetime.now(UTC)),
-                    )  # fmt: skip
+        if start != SOON and _save(ws, _in_use(ws), None, start):
             tell(f'Schedules that are on now run from {start} UTC.', 'success')
             redraw()
 
     def changed(minutes: int | None) -> None:
         if minutes is None or not ws.authorized():
             return
-        keys = _in_use(ws)
-        _save(ws, keys, minutes, controls.start)
-        for key in keys:
+        for key in _save(ws, _in_use(ws), minutes, controls.start):
             # Each source's own control runs nothing new for an unchanged value.
-            controls.selects[key].set_value(minutes)
+            if select := controls.selects.get(key):
+                select.set_value(minutes)
         _confirm(ws, 'All sources you use sync', minutes, controls.start, plural=True)
         redraw()
 
@@ -113,27 +128,30 @@ def build_all_sources_schedule(ws: Workspace, controls: ScheduleControls) -> Non
     ).classes('muted text-sm prose')
 
 
-def build_schedule_control(ws: Workspace, source: Source, controls: ScheduleControls) -> ui.select:
+def build_schedule_control(ws: Workspace, key: str, name: str, controls: ScheduleControls) -> ui.select:
     """A source's schedule choice, and when it next syncs by itself."""
-    minutes, _ = _interval(ws, source.key)
+    minutes, _ = _interval(ws, key)
 
     @ui.refreshable
     def next_sync() -> None:
-        current, upcoming = _interval(ws, source.key)
+        current, upcoming = _interval(ws, key)
         when = f'Next sync: {upcoming[:16].replace("T", " ")} UTC' if current and upcoming else ''
         ui.label(when or 'Syncs only when you ask.').classes('muted text-sm')
 
     def changed(value: int | None) -> None:
-        if value is None or not ws.authorized() or value == _interval(ws, source.key)[0]:
+        if value is None or not ws.authorized() or value == _interval(ws, key)[0]:
             next_sync.refresh()
             return
-        _save(ws, [source.key], value, controls.start)
-        _confirm(ws, source.name + ' syncs', value, controls.start)
+        if not _save(ws, [key], value, controls.start):
+            ws.refresh_all()
+            tell('This source has changed. Check it before you set a schedule.', 'warning')
+            return
+        _confirm(ws, name + ' syncs', value, controls.start)
         next_sync.refresh()
 
     select = ui.select(CHOICES, value=minutes, label='Sync by itself', on_change=lambda e: changed(e.value))
     select.props('outlined dense').classes('min-w-[12rem]')
     next_sync()
-    controls.selects[source.key] = select
-    controls.redraw.append(lambda: next_sync.refresh())
+    controls.selects[key] = select
+    controls.redraw[key] = next_sync.refresh
     return select

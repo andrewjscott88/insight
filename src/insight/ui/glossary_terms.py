@@ -279,6 +279,7 @@ GLOSSARY: Final[tuple[tuple[str, str], ...]] = (
         'The groups that a cited source says attack an industry. Insight never guesses this. Groups named in '
         'your recent reports come first.',
     ),
+    ('RSS, Atom', 'Feed formats that list new posts. RSS stands for Really Simple Syndication.'),
     (
         'Threat guide',
         'One page about a group: who it attacks, how it works, your reports about it, and a hunt plan.',

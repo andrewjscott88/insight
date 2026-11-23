@@ -24,7 +24,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..industries import BY_KEY, Industry
-from ..models import Document, IndustryClaim
+from ..models import Document, IndustryClaim, OperatorSource
 from ..schemas import most_restrictive
 from ..source_registry import metadata_only
 from ..threat_library import Campaign, Claim, library
@@ -119,15 +119,17 @@ def _scan_mentions(
             Document.created_at,
             Document.source_name,
             Document.source_key,
+            OperatorSource.reuse,
             Document.body,
         )
+        .outerjoin(OperatorSource, Document.source_key == OperatorSource.key)
         .where(*conditions)
         .order_by(Document.created_at.desc(), Document.id)
         .limit(limit)
     )
     scanned = 0
     labels: set[str] = set()
-    for doc_id, title, tlp, created_at, source_name, source_key, body in db.execute(stmt):
+    for doc_id, title, tlp, created_at, source_name, source_key, operator_reuse, body in db.execute(stmt):
         labels.add(tlp)
         scanned += 1
         text = f'{title}\n{body}'
@@ -148,7 +150,7 @@ def _scan_mentions(
                         created_at,
                         source_name,
                         name,
-                        '' if metadata_only(source_key) else evidence,
+                        '' if metadata_only(source_key, operator_reuse) else evidence,
                     )
                 )
     return found, scanned, labels

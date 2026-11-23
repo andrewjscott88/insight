@@ -28,6 +28,7 @@ services:
       INSIGHT_NVD_API_KEY: ${INSIGHT_NVD_API_KEY:-}
       INSIGHT_ABUSECH_AUTH_KEY: ${INSIGHT_ABUSECH_AUTH_KEY:-}
       INSIGHT_OTX_API_KEY: ${INSIGHT_OTX_API_KEY:-}
+      INSIGHT_SOURCES_PRIVATE_NETWORK: ${INSIGHT_SOURCES_PRIVATE_NETWORK:-off}
       # Alerts (docs/ALERTS.md): a link back to Insight, an optional mail server, and private webhook targets.
       INSIGHT_PUBLIC_URL: ${INSIGHT_PUBLIC_URL:-}
       INSIGHT_SMTP_HOST: ${INSIGHT_SMTP_HOST:-}

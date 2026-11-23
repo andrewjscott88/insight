@@ -15,13 +15,21 @@ from ..models import (
     SourceSwitch,
     now,
 )
+from ..source_registry import SOURCES
 from .audit import DEFAULT_ACTOR, audit
 from .common import stamp
 from .jobs import set_schedule
 
 
-def recent_source_runs(db: Session, source_key: str | None = None, limit: int = 12) -> list[SourceRun]:
-    stmt = select(SourceRun).order_by(SourceRun.created_at.desc()).limit(limit)
+def recent_source_runs(
+    db: Session, source_key: str | None = None, limit: int = 12, *, max_tlp: str | None = None
+) -> list[SourceRun]:
+    from .operator_sources import _visible_operator_history
+
+    visible = SourceRun.source_key.in_(tuple(SOURCES)) | _visible_operator_history(
+        SourceRun.source_key, SourceRun.created_at, max_tlp
+    )
+    stmt = select(SourceRun).where(visible).order_by(SourceRun.created_at.desc(), SourceRun.id).limit(limit)
     if source_key is not None:
         stmt = stmt.where(SourceRun.source_key == source_key)
     return list(db.scalars(stmt))

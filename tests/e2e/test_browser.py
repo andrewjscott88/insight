@@ -344,3 +344,29 @@ def test_industry_threats_open_a_threat_guide(context: Any) -> None:
     guide = page.evaluate("async () => (await fetch('/api/actors/G0016/guide')).json()")
     assert guide['format'] == 'insight-threat-guide-1'
     assert guide['hunt']['hypotheses']
+
+
+def test_operator_adds_edits_and_removes_an_offline_feed(context: Any) -> None:
+    page = context.new_page()
+    sign_in(page)
+    show(page, 'Settings')
+    name = f'Training feed {uuid.uuid4().hex[:8]}'
+    page.get_by_role('button', name='Add a feed', exact=True).click()
+    add = page.get_by_role('dialog', name='Add a feed')
+    add.get_by_label('Feed name', exact=True).fill(name)
+    add.get_by_label('Feed web address').fill('https://example.org/training.xml')
+    add.get_by_role('button', name='Save feed').click()
+    card = page.locator('.operator-source-card').filter(
+        has=page.get_by_role('heading', name=name, exact=True)
+    )
+    expect(card.get_by_role('switch', name='Use this feed')).not_to_be_checked()
+    expect(card.get_by_role('button', name='Sync now')).to_be_disabled()
+    expect(card.get_by_text('Share titles, dates and links only.')).to_be_visible()
+    card.get_by_role('button', name='Edit feed').click()
+    edit = page.get_by_role('dialog', name='Edit feed')
+    edit.get_by_role('checkbox', name='The publisher allows sharing its report text.').check()
+    edit.get_by_role('button', name='Save feed').click()
+    expect(card.get_by_text('The publisher allows sharing its report text.')).to_be_visible()
+    card.get_by_role('button', name='Delete feed').click()
+    page.get_by_role('dialog', name='Delete feed').get_by_role('button', name='Delete feed').click()
+    expect(card).to_have_count(0)
