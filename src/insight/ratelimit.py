@@ -41,6 +41,8 @@ WRITE: Final = Policy('write', 60, 60)
 IOC_EXPORT: Final = Policy('ioc-export', 30, 3600)
 #: TAXII collection reads (each page is built from a full, validated snapshot), per API key (ADR 0026).
 TAXII: Final = Policy('taxii', 240, 3600)
+#: Stateless, read-only MCP messages have their own budget per API key (ADR 0039).
+MCP: Final = Policy('mcp', 120, 60)
 #: Requests with an invalid API key, per client address. Valid keys are never counted or refused by this.
 AUTH_FAILURES: Final = Policy('auth-failures', 10, 60)
 

@@ -47,6 +47,7 @@ PROTECTED = [
     ('POST', '/api/actors/x/campaigns'),
     ('DELETE', '/api/actors/x/campaigns/x'),
     ('GET', '/api/software/x/navigator'),
+    ('POST', '/mcp'),
     ('GET', '/api/session'),
     ('GET', '/api/documents'),
     ('GET', '/api/documents/x'),

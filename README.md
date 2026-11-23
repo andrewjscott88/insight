@@ -6,6 +6,11 @@ A single-operator threat-intelligence workbench, run locally or published behind
 
 ## What works
 
+- **Read-only MCP for agents (TIP 4.8 part 1):** report search and indicator context.
+  Uses bearer API keys, TLP ceilings, publisher reuse rules and audited reads. Supports protocols
+  2026-07-28 and 2025-11-25. The other part and combined checks are needed to finish TIP 4.8.
+  Insight calls no model; OAuth is out of scope. [MCP guide](docs/MCP.md)
+
 - **Built for readability, including for people with dyslexia or other reading difficulties** ([ADR 0017](docs/adr/0017-readability-standard.md)): WCAG 2.2 AA plus its reading-related AAA criteria (7:1 contrast, lines of about 70 characters, 1.5 line spacing, plain language), 16 px minimum text, no capitals, real headings, a strong focus outline, messages that stay until you dismiss them, a **Larger text** button and a **What the words mean** glossary. Checked in the test suite with axe-core on every screen.
 - **Light and dark themes, readable on phones.** The workspace follows each device's light/dark setting by default; the **Light / Dark / System** buttons in the header override it for that browser. The instance default is `INSIGHT_THEME` (`make theme THEME=dark`). On a phone the layout uses larger text, no zoom-on-focus, big touch targets, and opening a report scrolls to it (with **← Back to list**). Text in both themes meets WCAG AA contrast (tested).
 - **Intelligence requirements:** priority intelligence requirements (PIRs), narrower requirements and requests for information (RFIs), each with criteria (terms, CVEs, ATT&CK techniques, groups, campaigns). Every report shows the requirements it addresses; every requirement shows its matching reports, cited evidence and answer, and flags itself as quiet when nothing has matched for 30 days. A `read-feedback` API key lets a hunt tool file questions and report sightings, and nothing else ([ADR 0032](docs/adr/0032-intelligence-requirements.md)).

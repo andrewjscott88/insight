@@ -44,6 +44,7 @@ from .routes.hunt_packages import _register_hunt_package_routes
 from .routes.hunting import _register_hunting_routes
 from .routes.imports import _register_import_routes
 from .routes.landscape import _register_landscape_routes
+from .routes.mcp import _register_mcp_routes
 from .routes.pages import _register_page_routes
 from .routes.products import _register_product_routes
 from .routes.requirements import _register_requirement_routes
@@ -222,6 +223,7 @@ def create_app(settings: Settings | None = None, *, with_ui: bool = True) -> Fas
         _register_source_routes,
         _register_enrichment_route,
         _register_taxii_routes,
+        _register_mcp_routes,
         _register_explore_routes,
     ):
         register(app, sessions, require_auth)

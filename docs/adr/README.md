@@ -42,3 +42,4 @@ superseded ones are marked, never deleted.
 | [0035](0035-sightings.md) | Sightings from hunt tools | Accepted |
 | [0036](0036-intelligence-products.md) | Finished intelligence products | Accepted |
 | [0038](0038-adversary-library.md) | Adversary library imports | Accepted |
+| [0039](0039-read-only-mcp.md) | Read-only MCP with API keys and per-key TLP ceilings | Proposed |

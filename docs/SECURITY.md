@@ -32,6 +32,20 @@ Reverse proxy: `X-Forwarded-For`/`X-Forwarded-Proto` are honoured only from `INS
 
 TLP labels are metadata, not a complete access-control engine. No automatic sharing occurs. A local export is not permission to redistribute. Source reuse/retention rights remain the operator's responsibility. Do not upload leaked secrets, unnecessary personal data, or documents you lack permission to retain.
 
+**MCP is API-key only** ([ADR 0039](adr/0039-read-only-mcp.md)). `POST /mcp` offers only fixed read tools,
+uses the key's TLP ceiling and publisher reuse rules, and has its own per-key rate budget. The exact MCP
+transport POST accepts read-only keys; other write routes retain their permissions. Browser sessions cannot
+authorize it, including open-access development sessions. It does not offer OAuth, write tools, model calls,
+provider lookups or executable rules. Every tool call reaching validation is audited with the key actor,
+tool name and outcome, without arguments or returned text. Existing key last-use metadata is preserved.
+Origin, Host and proxy-trust checks still apply. Bodies, queries and results are bounded.
+
+A key holder can send allowed intelligence to their chosen agent or model. That is a disclosure to that
+client, governed by its retention and access rules; use the lowest useful TLP ceiling. The server marks tools
+as read-only and source text as untrusted, but a client still must resist prompt injection in evidence.
+Do not use an Insight API key as an OAuth client secret. Protocol revision and client limitations are in
+[MCP.md](MCP.md). None of this enables Insight's separate opt-in LLM proposal contract.
+
 IOC exports (see [IOC_EXPORT.md](IOC_EXPORT.md)) change no reports or review states; each one adds an audit event (`ioc.export`, whose object ID is the `export_id` inside the file). Each file carries the most restrictive TLP of the reports it includes, and `max_tlp` keeps more restrictive reports out of a file entirely. Residual risks the operator must manage: evidence excerpts are raw report text (up to 90 characters either side of a mention) and can carry names, internal host names or indicators an analyst rejected, so exports that leave the team should be made without evidence (`--no-evidence`, `evidence=false`, or the dialog's **Include evidence excerpts**); defanging covers values, titles and evidence (including e-mail domains, CIDR ranges and file-like names) but leaves source URLs as stored; browser and API downloads use the operator's default file permissions, while the CLI writes owner-only files; and an extracted or accepted indicator is not a maliciousness verdict, so exports must not feed blocking controls without review.
 
 Outbound requests (source syncs, CVE lookups, alert webhooks) resolve the host once, check every address it resolves to, and then connect to one of those checked addresses, with the host name kept for TLS (SNI and the certificate check) and the `Host` header (`insight.egress`, code review L1, TIP 0.4). A DNS answer that changes between the check and the connection (DNS rebinding) can no longer redirect a request to loopback, a private network or a cloud metadata address. IPv4-mapped IPv6 addresses (`::ffff:127.0.0.1`) are judged by the IPv4 address they reach. Two explicit opt-ins relax the public-address rule for one destination each: `INSIGHT_ALERT_PRIVATE_TARGETS=on` for webhooks and `INSIGHT_MISP_PRIVATE_NETWORK=on` for the configured MISP instance. Neither reaches link-local (cloud metadata), multicast or reserved addresses, and the MISP opt-in does not reach loopback either. An outbound network policy remains the backstop and is still recommended. The framework supplies local JS/CSS assets; the GUI uses no application-authored model calls or remote font/CDN assets.

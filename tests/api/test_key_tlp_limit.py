@@ -18,6 +18,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from insight import services
+from insight.mcp import TOOL_BY_NAME
 from insight.models import Enrichment
 from insight.schemas import (
     ActorCampaignInput,
@@ -145,6 +146,61 @@ def world(app: FastAPI) -> dict[str, Any]:
         'shared_entity': shared['entity_id'],
         'headers': {'Authorization': f'Bearer {token}'},
     }
+
+
+@pytest.mark.parametrize('protocol', ['2025-11-25', '2026-07-28'])
+def test_every_mcp_tool_keeps_the_green_ceiling(
+    client: TestClient,
+    world: dict[str, Any],
+    protocol: str,
+) -> None:
+    """Every advertised MCP tool is swept in the same planted AMBER world as the REST API."""
+    calls = [
+        ('search_reports', {'q': MARKER}),
+        ('search_reports', {'q': 'CVE-2024-11111'}),
+        ('get_indicator', {'id': world['hidden_entity']}),
+        ('get_indicator', {'id': world['shared_entity']}),
+    ]
+    assert {name for name, _ in calls} == set(TOOL_BY_NAME)
+    headers = world['headers'] | {
+        'Accept': 'application/json, text/event-stream',
+        'MCP-Protocol-Version': protocol,
+    }
+
+    def request_tool(name: str, arguments: dict[str, Any]) -> Any:
+        params: dict[str, Any] = {'name': name, 'arguments': arguments}
+        sent_headers = dict(headers)
+        if protocol == '2026-07-28':
+            params['_meta'] = {
+                'io.modelcontextprotocol/protocolVersion': protocol,
+                'io.modelcontextprotocol/clientCapabilities': {},
+            }
+            sent_headers |= {'Mcp-Method': 'tools/call', 'Mcp-Name': name}
+        return client.post(
+            '/mcp',
+            headers=sent_headers,
+            json={'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': params},
+        )
+
+    forbidden = [
+        MARKER,
+        HIDDEN_IP,
+        world['amber'],
+        world['new'],
+        world['hidden_entity'],
+    ]
+    for name, arguments in calls:
+        response = request_tool(name, arguments)
+        assert response.status_code == 200, response.text
+        assert response.json()['result']['structuredContent']['sharing_tlp'] == 'GREEN'
+        assert all(secret not in response.text for secret in forbidden), (name, response.text)
+        if arguments.get('id') in (
+            world['amber'],
+            world['hidden_entity'],
+            world['hunt_package'],
+        ):
+            missing = request_tool(name, {'id': 'missing'})
+            assert response.json() == missing.json()
 
 
 def get(client: TestClient, world: dict[str, Any], path: str, **params: Any) -> Any:

@@ -157,6 +157,7 @@ operator have separate budgets, so a runaway script cannot lock the analyst out 
 | `write` | `POST` (ingest, triage, notes, demo, sync, enrichment) | 60 per minute |
 | `ioc-export` | `GET /api/iocs/export`, `GET /api/iocs/stix`, `GET /api/iocs/blocklist` | 30 per hour |
 | `taxii` | TAXII collection reads (`objects/`, `manifest/`, single objects and versions) | 240 per hour |
+| `mcp` | All `POST /mcp` messages, per API key | 120 per minute |
 | (invalid keys) | Requests with a wrong, revoked or expired key, per client address | 10 per minute |
 
 Budgets are token buckets: the full limit is available as a burst, then it refills evenly (`read`: 5 per
@@ -409,6 +410,29 @@ the `ioc-export` budget.
 For IPs and domains, `format=suricata` or `format=snort` downloads a plain-text `.rules` file. These formats
 return 422 when the selection is empty or the kind is unsupported. See [network sensor rules](IOC_EXPORT.md#network-sensor-rules)
 for signatures, DNS coverage and local rule IDs.
+
+## MCP (read-only)
+
+`POST /mcp` accepts stateless JSON-RPC 2.0 using protocol `2026-07-28`: `server/discover`, `ping`,
+`tools/list` and `tools/call`. Legacy `2025-11-25` also supports `initialize` and
+`notifications/initialized`. `GET /mcp` returns `405`.
+API keys only; browser sessions are refused. The exact MCP POST accepts all API-key access levels, because
+the fixed tools only read. Every intelligence read applies the key's TLP ceiling and publisher reuse rules.
+
+Send `Content-Type: application/json` and `Accept: application/json, text/event-stream`. Modern requests
+require matching protocol/method/name headers and per-request `_meta`; legacy requests send
+`MCP-Protocol-Version: 2025-11-25` after initialization. Results include identical structured JSON and text,
+explicit truncation and a conservative `sharing_tlp`. Tool errors set `isError`; missing and hidden IDs
+give the same `status: 404` result. No write
+tools, OAuth, transport sessions, STIX, resources, prompts, sampling, elicitation or model calls.
+
+Authentication errors use `401`, Origin errors `403`, unsupported protocol headers `400`, media errors
+`406`/`415`, body limits `413`, and the dedicated per-key budget `429`. Protocol errors use JSON-RPC codes
+`-32700` (parse), `-32600` (request), `-32601` (method), and `-32602` (parameters/unknown tool).
+Modern header mismatches use `400` / `-32020`; unsupported revisions use `400` / `-32022` with supported
+versions. Unknown modern methods use `404` / `-32601`.
+The request limit is 65,536 bytes. [MCP.md](MCP.md) lists tool arguments, response limits, audit semantics
+and client requirements; [API_GUIDE.md](API_GUIDE.md#read-only-mcp) has curl examples.
 
 ## TAXII 2.1 (read-only)
 
