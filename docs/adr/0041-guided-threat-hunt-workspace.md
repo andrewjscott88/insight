@@ -17,6 +17,13 @@ Keep the existing date rules and 7/30-day choices. Remove the visible last-24-ho
 attention highlight; retain the existing `recent_reports` API field as compatibility metadata. No model
 writes text.
 
+Workspace explanations, brief summaries, report text and evidence fill their panels, as requested, rather
+than stopping at a narrow reading column. This intentionally relaxes ADR 0017's 80-character line target
+for those full-width workspace elements and expandable item labels; it is not a claim of full WCAG 1.4.8
+compliance there. Bounded text such as dialog prose retains the line-length check. Browser checks still
+require readable font size and line spacing, whole word wrapping, left alignment and no horizontal page
+overflow, and now check that workspace prose uses its available width at standard and larger text sizes.
+
 Replace the Products menu entry with **Threat Hunt**. It contains an on-demand guide builder, a collapsed
 **Saved hunt packages** area and a separate **Advanced: intelligence reports** area for existing products.
 Move requirements to **Settings → Intelligence questions (advanced)** without removing their APIs or

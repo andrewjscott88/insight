@@ -25,7 +25,9 @@ def test_greynoise_authorization_and_cached_read(
     headers = {'Authorization': f'Bearer {key}'}
     assert authed.post(POST, headers=headers).status_code == 403
     assert authed.get(GET, headers=headers).status_code == 404
-    csrf = {'X-CSRF-Token': authed.get('/api/session').json()['csrf_token']}
+    session_response = authed.get('/api/session')
+    assert session_response.status_code == 200, (session_response.status_code, session_response.text)
+    csrf = {'X-CSRF-Token': session_response.json()['csrf_token']}
     assert authed.post(POST, headers={'X-CSRF-Token': 'wrong'}).status_code == 403
     monkeypatch.delenv('INSIGHT_GREYNOISE_KEY', raising=False)
     assert authed.post(POST, headers=csrf).status_code == 503
