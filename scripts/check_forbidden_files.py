@@ -14,8 +14,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 FORBIDDEN_NAMES = re.compile(r'(^|/)(\.env(\..*)?|.*\.(db|sqlite3?|pem|key|p12|pfx))$')
-#: Where `make backup` and `make export-iocs` write: database copies and TLP-labelled exports.
-FORBIDDEN_DIRECTORIES = re.compile(r'^(backups|exports)/')
+#: Where `make backup` and `make export-iocs` write: database copies and TLP-labelled exports. Records of real
+#: deployments stay outside this public repository too (AGENTS.md).
+FORBIDDEN_DIRECTORIES = re.compile(r'^(backups|exports|docs/deployments)/')
 ALLOWED = re.compile(r'^(\.env\.example|tests/fixtures/.*\.sqlite3)$')
 SECRET_CONTENT = [
     (re.compile(r'-----BEGIN (RSA |EC |OPENSSH |)PRIVATE KEY-----'), 'private key'),
