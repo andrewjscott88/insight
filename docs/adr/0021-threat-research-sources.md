@@ -1,6 +1,6 @@
 # ADR 0021: Threat-research sources, switched on by the operator, with per-publisher reuse rules
 
-Status: accepted (unreleased)
+Status: Accepted
 
 ## Context
 Insight's four sources (CISA KEV, CISA's CSAF advisories, SANS ISC, UK NCSC) are mostly about weaknesses. The

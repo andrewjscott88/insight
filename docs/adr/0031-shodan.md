@@ -1,6 +1,6 @@
 # ADR 0031: Optional Shodan exposure context for reviewed IPs
 
-Status: accepted (unreleased)
+Status: Accepted
 
 ## Context
 TIP 3.7 asks for optional exposure context for IPs from Shodan or Censys, only with the operator's own key,

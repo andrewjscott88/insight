@@ -1,6 +1,6 @@
 # ADR 0033: Confidence, source reliability and report credibility
 
-Status: accepted (unreleased)
+Status: Accepted
 
 ## Context
 Every indicator in Insight looked equally trustworthy: one blog post and five independent vendor reports gave

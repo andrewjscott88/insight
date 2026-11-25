@@ -1,6 +1,38 @@
 # Changelog
 
-## Unreleased
+## 1.0.0 - 2026-11-25
+
+Insight 1.0 completes the intelligence program (TIP Phase 4): requirements and requests for information,
+confidence and sightings, hunt packages over TAXII, finished intelligence products, operator-defined sources,
+infrastructure pivots, the adversary library and a read-only MCP endpoint. A guided Threat Hunt workspace and
+a plain-language Intel Brief now lead the workspace.
+
+### Upgrade notes
+
+- **Back up first** (`make backup`, or `pg_dump --format=custom` on PostgreSQL) and keep
+  `INSIGHT_SESSION_SECRET` unchanged. Migrations `0024` to `0032` run at start-up. Coming from 0.8.0 or
+  earlier, also follow the 0.9.0 upgrade notes (`make exploit-backfill` once).
+- Every new outbound feature is off until the operator turns it on: infrastructure lookups, operator sources
+  and Censys (`INSIGHT_CENSYS_PAT`, optional `INSIGHT_CENSYS_ORG_ID`). Read-only MCP at `POST /mcp` takes
+  existing API keys only.
+- The threat library now writes `insight-threat-library-2`. Existing format 1 synced libraries still load;
+  run `insight threat-library-sync` to gain the expanded catalog. No database migration is needed for this change.
+- Migration `0024` adds the `requirements`, `requirement_criteria` and `requirement_evidence` tables. It runs
+  at start-up and changes no existing data.
+- Migration `0025` adds the `source_ratings` table and a `credibility` column on reports (every existing report
+  starts at 6, cannot be judged). It runs at start-up.
+- Migration `0026` adds the `hunt_packages` and `hunt_package_items` tables. It runs at start-up and changes no
+  existing data.
+- Migration `0027` adds the `sightings` table, and renames API keys with the unreleased `read-rfi` access to
+  `read-feedback`.
+- Migration `0028` adds product fields to cases (kind, audience, bottom line up front, version) and the
+  `case_judgements`, `case_judgement_items`, `case_gaps` and `case_versions` tables. Existing cases become
+  unpublished assessments. It runs at start-up.
+- Migration `0029` adds explicit software/report links and software targets on actor/campaign links.
+  It snapshots the catalog name and type so saved decisions survive catalog removal. Existing records
+  are unchanged. Downgrading removes these new software associations.
+- Migration `0030` adds `actor_campaigns` and `campaigns.updated_at` (backfilled from creation time). A campaign
+  label raise advances its STIX/TAXII modification time so incremental polling sees the changed marking.
 
 ### More intelligence context
 
@@ -55,12 +87,12 @@
 - New read endpoints: `GET /api/hunt-guides` and `GET /api/hunt-guides/{kind}/{ref}`. No schema migration or
   dependency change. See [Threat hunt](docs/THREAT_HUNT.md) and [ADR 0041](docs/adr/0041-guided-threat-hunt-workspace.md).
 
-## 1.0.0 - 2026-11-23
-
 ### Poll a TAXII 2.1 collection (TIP 4.5, part 2)
 
 - Add a publisher's collection in Settings, with an optional host environment variable for its credential.
   Poll it once or on a schedule. Each successful import saves the position for next time.
+- While temporary open access is on, a collection's credential is never sent: any visitor could repoint the
+  source to another host. Such a source shows as not configured; collections without a credential still sync.
 - Imports enforce the source and publisher sharing rules, including when a report is updated. A failed
   batch keeps the previous position and reports.
 - Migration `0032` adds TAXII settings and records publisher restrictions on imported reports. Downgrading
@@ -138,27 +170,6 @@
   reviewed indicators.
   [Guide](docs/INFRASTRUCTURE_PIVOTS.md) · [ADR 0037](docs/adr/0037-infrastructure-pivots.md).
 - Upgrade: no database migration or dependency. No CIRCL calls without host credentials, Settings opt-in and approval.
-
-### Upgrade notes
-
-- The threat library now writes `insight-threat-library-2`. Existing format 1 synced libraries still load;
-  run `insight threat-library-sync` to gain the expanded catalog. No database migration is needed for this change.
-- Migration `0024` adds the `requirements`, `requirement_criteria` and `requirement_evidence` tables. It runs
-  at start-up and changes no existing data.
-- Migration `0025` adds the `source_ratings` table and a `credibility` column on reports (every existing report
-  starts at 6, cannot be judged). It runs at start-up.
-- Migration `0026` adds the `hunt_packages` and `hunt_package_items` tables. It runs at start-up and changes no
-  existing data.
-- Migration `0027` adds the `sightings` table, and renames API keys with the unreleased `read-rfi` access to
-  `read-feedback`.
-- Migration `0028` adds product fields to cases (kind, audience, bottom line up front, version) and the
-  `case_judgements`, `case_judgement_items`, `case_gaps` and `case_versions` tables. Existing cases become
-  unpublished assessments. It runs at start-up.
-- Migration `0029` adds explicit software/report links and software targets on actor/campaign links.
-  It snapshots the catalog name and type so saved decisions survive catalog removal. Existing records
-  are unchanged. Downgrading removes these new software associations.
-- Migration `0030` adds `actor_campaigns` and `campaigns.updated_at` (backfilled from creation time). A campaign
-  label raise advances its STIX/TAXII modification time so incremental polling sees the changed marking.
 
 ### Added: finished intelligence products (TIP 4.4)
 
@@ -253,18 +264,22 @@
 
 ### Changed: a side menu built around the analyst's day
 
-- The workspace is organised as **Today**, **Triage**, **Investigate**, **Cases**, **Share** and **Settings**
-  instead of eight tabs under the brief. Investigate holds indicators, CVEs, ATT&CK techniques and threat
+- The workspace is organised as **Intel Brief**, **Triage**, **Investigate**, **Threat Hunt**, **Share** and
+  **Settings** instead of eight tabs under the brief. Investigate holds indicators, CVEs, ATT&CK techniques and threat
   groups; Settings holds sources, lookups, watch terms and alerts; Share gathers the IOC export and how to
   set up TAXII, API keys and MISP.
-- The counters on Today open the list they count. **Ingest intelligence** is now **Add intelligence**.
+- **Ingest intelligence** is now **Add intelligence**.
 - Nothing was removed, and the API is unchanged.
+
+### Changed: dependencies
+
+- Runtime libraries refreshed (#119): FastAPI 0.165.0, NiceGUI 3.19.0, python-socketio 5.18.1, Pydantic 2.14.4,
+  SQLAlchemy 2.1.9, certifi 2026.11.20 and patch releases. The locks stay hash-pinned.
 
 ### Changed: darker colours
 
-- The dark theme is now near-black with a purple accent, blue links and red for errors; the light theme uses
-  the same purple accent. Every text colour still meets WCAG AAA (7:1) and APCA on every background, and the
-  sign-in page matches. Set `INSIGHT_THEME=dark` to make the dark theme the default for every browser.
+- The dark theme is now graphite with a cyan accent; the light theme uses a deep teal accent. Every text
+  colour still meets WCAG AAA (7:1) and APCA on every background. Set `INSIGHT_THEME=dark` to make the dark theme the default for every browser.
 
 ## 0.9.0 - 2026-11-22
 

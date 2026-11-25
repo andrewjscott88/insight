@@ -1,6 +1,6 @@
 # ADR 0035: Sightings from hunt tools
 
-Status: accepted (unreleased)
+Status: Accepted
 
 ## Context
 TIP Phase 4 lets intelligence flow back from hunt tools (the maintainer's is Shift), but only as intelligence:

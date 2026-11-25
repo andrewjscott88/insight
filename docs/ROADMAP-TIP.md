@@ -19,7 +19,7 @@ advanced Settings. This does not mark a new milestone complete or expand Insight
 The plans use saved metadata and fixed guidance; they make no network request, run no rule and save no
 new intelligence. Existing API contracts and the milestone checklist below remain in place.
 
-The unreleased Intel Brief extension adds **Sector / Industry** focus and a **Last 30 days** default.
+In 1.0.0, Intel Brief adds **Sector / Industry** focus and a **Last 30 days** default.
 It separates catalog targeting history, reports mentioning sector terms and analyst-linked group reports.
 The seven-day option remains available ([ADR 0044](adr/0044-sector-intel-briefs.md)).
 The same sector categories also build Threat Hunt guides, Markdown/PDF downloads and audited draft
@@ -283,8 +283,8 @@ session secret is deliberately changed. [Upgrade, backup and recovery](RUNBOOK.m
 
 ### 2.3 ATT&CK mapping
 
-Current implementation: Enterprise, Mobile and ICS technique catalogs are bundled. The unreleased domain
-extension adds a workspace selector, offline browsing, domain-filtered API and Navigator output, and
+Current implementation: Enterprise, Mobile and ICS technique catalogs are bundled. The domain
+extension (1.0.0) adds a workspace selector, offline browsing, domain-filtered API and Navigator output, and
 explicit-ID tagging across all three catalogs ([ADR 0042](adr/0042-mobile-and-ics-attack-catalogs.md)).
 
 - **What to build:** Store MITRE ATT&CK technique (and tactic) IDs on reports or as first-class entities, with manual tagging plus conservative auto-suggest from explicit technique IDs in text.
@@ -327,7 +327,7 @@ explicit-ID tagging across all three catalogs ([ADR 0042](adr/0042-mobile-and-ic
 
 ### 2.7 Link YARA and Sigma as artifacts
 
-- **Status (unreleased):** Built, including individual rule downloads with a handling manifest. [Using rule files](THREAT_GUIDES.md#rules)
+- **Status:** Built, including individual rule downloads with a handling manifest. [Using rule files](THREAT_GUIDES.md#rules)
 
 - **What to build:** Attach rule text (YARA or Sigma) to a report, CVE, actor, or malware-family label. Do **not** build a detection engine.
 - **Why / which TIP capability:** Detection content. CrowdStrike documents YARA rule download; MISP exports Suricata/Snort/Zeek; Google TI describes YARA hunting. Insight should *carry* rules, not execute them.
@@ -423,8 +423,8 @@ explicit-ID tagging across all three catalogs ([ADR 0042](adr/0042-mobile-and-ic
 
 ### 3.7 Optional Shodan or Censys enrichment (operator-supplied keys)
 
-Current implementation: Shodan and the Censys Platform host endpoint are supported. The unreleased Censys
-addition uses a host token, explicit per-lookup approval, private access and a bounded metadata cache.
+Current implementation: Shodan and the Censys Platform host endpoint are supported. The Censys
+addition (1.0.0) uses a host token, explicit per-lookup approval, private access and a bounded metadata cache.
 Account terms apply; data is not redistributed through intelligence exports
 ([ADR 0043](adr/0043-censys-platform-enrichment.md)).
 
@@ -497,7 +497,7 @@ Account terms apply; data is not redistributed through intelligence exports
 - **Sources / libraries:** [attack-stix-data](https://github.com/mitre-attack/attack-stix-data) (already used;
   terms in `NOTICE`); [MISP galaxy](https://github.com/MISP/misp-galaxy) (licence to confirm before bundling).
 - **Effort:** L (catalog and industry mapping M; ranking and views M; guide export S to M).
-- **Status (unreleased):** built. See [ADR 0025](adr/0025-threat-guides.md) and [THREAT_GUIDES.md](THREAT_GUIDES.md).
+- **Status:** built. See [ADR 0025](adr/0025-threat-guides.md) and [THREAT_GUIDES.md](THREAT_GUIDES.md).
   Differences from this plan: TIP 2.5 and 2.7 were built at their minimum (`threat_actors`, `actor_documents`,
   `industry_claims`, `detection_rules`, `rule_links`, `hunts`, `hunt_checks`; migration `0014`), the guide is also
   exported as JSON, a Navigator layer and a sweep list, and `insight threat-library-sync` fetches a fuller copy of
@@ -574,7 +574,7 @@ Manual, approved-per-lookup, metadata-only pivots that land in the link map: RDA
 
 ### 4.7 Adversary library imports
 
-**Done (unreleased).** Both pinned library editions cover current ATT&CK malware and tools, their techniques,
+**Done.** Both pinned library editions cover current ATT&CK malware and tools, their techniques,
 and the groups that use them. Aliases retain their MISP or ATT&CK provenance. Format 1 editions still load.
 Analysts can link reports, actors and campaigns to software and share those decisions through STIX and TAXII.
 Actor guides include a dated, TLP-filtered timeline. Software Navigator layers show catalog techniques;
@@ -638,7 +638,7 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
 - [x] **2.1** STIX 2.1 export, validated (`ROADMAP` #12)
 - [x] **2.2** STIX 2.1 import with TLP enforcement
 - [x] **2.3** Enterprise, Mobile and ICS ATT&CK catalogs, report and analyst tags, domain-specific Navigator
-  output, and TLP-marked technique references in STIX Reports. Domain extension unreleased (ADR 0042).
+  output, and TLP-marked technique references in STIX Reports. Domain extension in 1.0.0 (ADR 0042).
 - [x] **2.4** MISP export/import (host CLI). [Event files and trusted instance exchange](MISP.md)
 - [x] **2.5** Manual actors and campaigns with TLP-marked report, indicator and technique links in STIX exports
 - [x] **2.6** Optional GreyNoise community IP enrichment
@@ -656,7 +656,7 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
 - [ ] **3.5** Shared rate limits for multi-worker deploys (`ROADMAP` #16)
 - [ ] **3.6** Opt-in LLM proposals per `docs/LLM_EXTENSION.md`
 - [x] **3.7** Optional Shodan/Censys enrichment (operator credentials; vendor-priced): Shodan, ADR 0031;
-  Censys Platform host context implemented, unreleased, ADR 0043.
+  Censys Platform host context in 1.0.0, ADR 0043.
 - [x] **3.8** Lightweight case management: done, ADR 0029 (no webhook on open)
 
 ### Phase 4 — An intelligence program (8)

@@ -1,6 +1,6 @@
 # ADR 0029: Lightweight case management
 
-Status: accepted (unreleased)
+Status: Accepted
 
 ## Context
 Analysts work an investigation across several reports, indicators, actors and campaigns, but Insight only

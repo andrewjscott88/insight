@@ -1,6 +1,6 @@
 # ADR 0027: Ranked search and a link graph from what Insight already records
 
-Status: accepted (unreleased)
+Status: Accepted
 
 ## Context
 Search was a literal, folded substring match (`documents.search_text LIKE '%…%'`), newest first. With hundreds

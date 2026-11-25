@@ -1,6 +1,6 @@
 # ADR 0022: Alerts on watch-term matches and new KEV entries, sent by the job runner
 
-Status: accepted (unreleased)
+Status: Accepted
 
 ## Context
 Analysts only learned about a watch-term match or a new KEV entry by opening the workspace (issue #15, TIP 1.4).

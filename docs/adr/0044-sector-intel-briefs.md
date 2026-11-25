@@ -1,6 +1,6 @@
 # ADR 0044: Sector and industry Intel Briefs
 
-Status: proposed (local iteration)
+Status: Accepted (1.0.0)
 
 ## Context
 

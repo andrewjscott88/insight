@@ -13,7 +13,7 @@ response and dark-web collection they sell.
 Background: [docs/CI_CD.md](docs/CI_CD.md) (pipeline), [docs/VALIDATION.md](docs/VALIDATION.md) (what is not yet
 verified) and the README's "Scope and known limits".
 
-## Workspace enhancement under review
+## Workspace enhancements in 1.0.0
 
 [ADR 0041](docs/adr/0041-guided-threat-hunt-workspace.md) adds a clearer Intel Brief, an on-demand
 [Threat Hunt guide builder](docs/THREAT_HUNT.md), and plain-language sharing audiences. It brings existing
@@ -21,7 +21,7 @@ packages and saved intelligence reports into Threat Hunt and keeps requirements 
 This is an enhancement to the existing intelligence workflow, not completion of another TIP milestone.
 It adds no telemetry execution, automatic attribution, AI writing or schema migration.
 
-The unreleased update also adds **Sector / Industry** focus to Intel Brief and makes **Last 30 days** the
+1.0.0 also adds **Sector / Industry** focus to Intel Brief and makes **Last 30 days** the
 workspace default. Sector mentions and explicit group links state why reports match, separately from
 catalog targeting history ([ADR 0044](docs/adr/0044-sector-intel-briefs.md)).
 Threat Hunt offers the same categories for downloadable guides and saved draft packages
@@ -35,7 +35,7 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
 - [x] **TIP 2.3 ATT&CK techniques** ([ADR 0019](docs/adr/0019-attack-techniques.md)): the bundled Enterprise
       catalog, tags from technique IDs written in reports, analyst tags and removals kept across revisions, the
       **ATT&CK techniques** tab with report pivots, a Navigator layer export and the API. Mobile and ICS
-      catalogs are implemented in the unreleased workspace update, with domain selection, offline browsing
+      catalogs arrive in 1.0.0, with domain selection, offline browsing
       and matching Navigator exports ([ADR 0042](docs/adr/0042-mobile-and-ics-attack-catalogs.md)).
 - [x] **Threat landscape** ([ADR 0020](docs/adr/0020-threat-landscape.md)), at the operator's request: a
       plain-English executive summary of what is trending against the weeks before, why it matters and what to
@@ -111,9 +111,9 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
       from it: hypotheses per technique with the data sources to search, an indicator sweep list from your
       reports, linked Sigma/YARA rules, and a hunt record. Needs a bundled threat-group library (ATT&CK groups
       plus sourced industry data); builds on TIP 2.3, 2.5 and 2.7.
-      *Done (unreleased):* [docs/THREAT_GUIDES.md](docs/THREAT_GUIDES.md), [ADR 0025](docs/adr/0025-threat-guides.md).
+      *Done:* [docs/THREAT_GUIDES.md](docs/THREAT_GUIDES.md), [ADR 0025](docs/adr/0025-threat-guides.md).
 - [x] **TIP 2.7 YARA and Sigma rules as linked artifacts** (carried and exported, never executed).
-      *Done (unreleased):* attach rules to reports, actors, techniques, CVEs and malware families. Download
+      *Done:* attach rules to reports, actors, techniques, CVEs and malware families. Download
       the rule and its handling manifest together. [Rule files](docs/THREAT_GUIDES.md#rules)
 - [x] **TIP 2.6 Optional GreyNoise enrichment** for IP addresses (operator key; never a verdict by itself).
 - [x] [#13](https://github.com/andrewjscott88/insight/issues/13) **TIP 2.8 PDF report ingestion,** keeping the
@@ -126,13 +126,13 @@ tools over TAXII and STIX; sightings and requests for information come back
 ([plan](docs/ROADMAP-TIP.md#phase-4--an-intelligence-program-planned-22-november-2026)).
 
 - [x] **TIP 4.1 Intelligence requirements and requests for information,** with RFI intake for hunt tools
-      (`read-rfi` keys). *Done (unreleased):* [ADR 0032](docs/adr/0032-intelligence-requirements.md).
-- [x] **TIP 4.2 Confidence, source reliability and sightings,** with a sightings API. *Done (unreleased):*
+      (`read-rfi` keys). *Done:* [ADR 0032](docs/adr/0032-intelligence-requirements.md).
+- [x] **TIP 4.2 Confidence, source reliability and sightings,** with a sightings API. *Done:*
       [ADR 0033](docs/adr/0033-confidence-and-source-reliability.md), [ADR 0035](docs/adr/0035-sightings.md).
 - [x] **TIP 4.3 Hunt packages over TAXII:** Sigma, YARA and network rules as STIX indicators with their context.
-      *Done (unreleased):* [ADR 0034](docs/adr/0034-hunt-packages.md).
+      *Done:* [ADR 0034](docs/adr/0034-hunt-packages.md).
 - [x] **TIP 4.4 Finished intelligence products,** replacing incident-style cases: judgements, gaps, versions,
-      and PDF, Markdown and STIX exports. *Done (unreleased):* [ADR 0036](docs/adr/0036-intelligence-products.md).
+      and PDF, Markdown and STIX exports. *Done:* [ADR 0036](docs/adr/0036-intelligence-products.md).
 - [x] **TIP 4.5 Operator-defined sources.** Add RSS feeds, Atom feeds and TAXII 2.1 collections in Settings.
       Each has its own switch, schedule, TLP floor and publisher reuse policy. [ADR 0040](docs/adr/0040-operator-defined-sources.md)
 - [x] **TIP 4.6 Infrastructure pivots.** Reviewed indicators support approved RDAP, RIPEstat, certificate
@@ -163,8 +163,8 @@ tools over TAXII and STIX; sightings and requests for information come back
 - [x] **TIP 3.8 Lightweight case management** ([ADR 0029](docs/adr/0029-cases.md)).
 - [ ] **TIP 3.6 Opt-in LLM proposals** under the contract in [docs/LLM_EXTENSION.md](docs/LLM_EXTENSION.md).
 - [x] **TIP 3.7 Optional Shodan and Censys enrichment** with operator credentials. Shodan follows
-      [ADR 0031](docs/adr/0031-shodan.md). Censys Platform host lookups are implemented in the unreleased
-      update, with per-lookup approval, private access and metadata-only caching
+      [ADR 0031](docs/adr/0031-shodan.md). Censys Platform host lookups arrive in 1.0.0,
+      with per-lookup approval, private access and metadata-only caching
       ([ADR 0043](docs/adr/0043-censys-platform-enrichment.md)).
 
 

@@ -1,6 +1,6 @@
 # 0041. Guided threat hunt workspace
 
-Status: Proposed.
+Status: Accepted (1.0.0).
 
 ## Context
 

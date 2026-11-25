@@ -1,6 +1,6 @@
 # ADR 0034: Hunt packages over TAXII
 
-Status: accepted (unreleased)
+Status: Accepted
 
 ## Context
 Insight feeds hunt tools (the maintainer's is Shift) but does not hunt itself: TIP Phase 4 draws the line at

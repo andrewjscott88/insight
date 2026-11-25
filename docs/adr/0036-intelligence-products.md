@@ -1,6 +1,6 @@
 # ADR 0036: Finished intelligence products
 
-Status: accepted (unreleased)
+Status: Accepted
 
 ## Context
 Insight's cases (TIP 3.8, [ADR 0029](0029-cases.md)) collect one investigation's reports, indicators, actors,

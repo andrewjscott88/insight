@@ -1,6 +1,6 @@
 # ADR 0018: Opt-in scheduled syncs with an in-process job runner
 
-Status: accepted (unreleased)
+Status: Accepted
 
 ## Context
 Until now Insight went online only when someone pressed **Sync now** (or, since the landing-page work, **Sync

@@ -45,8 +45,8 @@ superseded ones are marked, never deleted.
 | [0038](0038-adversary-library.md) | Adversary library imports | Accepted |
 | [0039](0039-read-only-mcp.md) | Read-only MCP with API keys and per-key TLP ceilings | Accepted |
 | [0040](0040-operator-defined-sources.md) | Operator-defined sources, handling labels and publisher reuse | Accepted |
-| [0041](0041-guided-threat-hunt-workspace.md) | Plain-English intel brief and bounded, read-only threat hunt guides | Proposed |
-| [0042](0042-mobile-and-ics-attack-catalogs.md) | Mobile and industrial-control ATT&CK catalogs | Proposed |
-| [0043](0043-censys-platform-enrichment.md) | Approved private Censys Platform host context | Proposed |
-| [0044](0044-sector-intel-briefs.md) | Sector-focused Intel Brief and a 30-day workspace default | Proposed |
-| [0045](0045-sector-threat-hunt-guides.md) | Sector and industry hunt guides, downloads and draft packages | Proposed |
+| [0041](0041-guided-threat-hunt-workspace.md) | Plain-English intel brief and bounded, read-only threat hunt guides | Accepted |
+| [0042](0042-mobile-and-ics-attack-catalogs.md) | Mobile and industrial-control ATT&CK catalogs | Accepted |
+| [0043](0043-censys-platform-enrichment.md) | Approved private Censys Platform host context | Accepted |
+| [0044](0044-sector-intel-briefs.md) | Sector-focused Intel Brief and a 30-day workspace default | Accepted |
+| [0045](0045-sector-threat-hunt-guides.md) | Sector and industry hunt guides, downloads and draft packages | Accepted |

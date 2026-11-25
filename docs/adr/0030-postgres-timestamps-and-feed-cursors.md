@@ -1,6 +1,6 @@
 # ADR 0030: Native PostgreSQL timestamps and resumable OTX syncs
 
-Status: accepted (unreleased)
+Status: Accepted
 
 ## Context
 Issue #11 (milestone M2) asked for three things: native datetime columns on PostgreSQL, cursor-based resume

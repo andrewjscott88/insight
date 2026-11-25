@@ -1,6 +1,6 @@
 # ADR 0020: A threat landscape counted from the reports, compared with the weeks before
 
-Status: accepted (unreleased)
+Status: Accepted
 
 ## Context
 The intel brief (0.5.0) told analysts what came in during the last 7 days: new KEV entries, severe advisories,
