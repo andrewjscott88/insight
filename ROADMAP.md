@@ -154,7 +154,8 @@ tools over TAXII and STIX; sightings and requests for information come back
 - [x] **TIP 3.3 Exploit-availability signals,** metadata only: report signals and optional VulnCheck KEV
       ([ADR 0028](docs/adr/0028-exploit-availability.md)).
 - [ ] [#14](https://github.com/andrewjscott88/insight/issues/14) **TIP 3.4 OIDC sign-in and roles (M3),** with an
-      authenticated ZAP active scan.
+      authenticated ZAP active scan. *Next; designed in
+      [ADR 0046](docs/adr/0046-sso-sign-in-and-roles.md); building in parts 3.4a–d.*
 - [ ] [#16](https://github.com/andrewjscott88/insight/issues/16) **TIP 3.5 Multi-worker deployments:** shared rate
       limits (sessions are already in the database).
 - [x] [#11](https://github.com/andrewjscott88/insight/issues/11) **PostgreSQL datetime columns and feed cursors
