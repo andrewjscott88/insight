@@ -8,6 +8,7 @@ from nicegui import ui
 from pydantic import ValidationError
 
 from .. import services
+from ..permissions import Permission
 from ..schemas import EvidenceInput
 from .messages import tell
 from .workspace import Workspace
@@ -23,10 +24,10 @@ def render_report_requirements(ws: Workspace, document_id: str, refresh: Callabl
         return
 
     def cite(requirement_id: str) -> None:
-        if not ws.authorized():
+        if not ws.allowed(Permission.REQUIREMENTS):
             return
         try:
-            with ws.write() as db:
+            with ws.write(Permission.REQUIREMENTS) as db:
                 services.add_evidence(
                     db, requirement_id, EvidenceInput(document_id=document_id), max_tlp=limit
                 )

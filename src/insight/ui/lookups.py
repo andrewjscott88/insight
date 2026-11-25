@@ -10,6 +10,7 @@ from .. import services
 from ..connectors import PROVIDER_KEYS
 from ..cve_scores import NVD_NOTICE, VULNCHECK_NOTICE
 from ..lookups import NAMES, unready_providers
+from ..permissions import Permission
 from .messages import tell
 from .typography import heading
 from .workspace import Workspace
@@ -17,9 +18,9 @@ from .workspace import Workspace
 
 def build_lookup_switches(ws: Workspace) -> None:
     def switch(provider: str, on: bool) -> None:
-        if not ws.authorized():
+        if not ws.allowed(Permission.SOURCES):
             return
-        with ws.write() as db:
+        with ws.write(Permission.SOURCES) as db:
             services.set_lookup_switch(db, provider, on, at=datetime.now(UTC))
         status.refresh()
         if on:

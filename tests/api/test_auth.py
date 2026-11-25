@@ -365,7 +365,7 @@ def test_sign_out_everywhere_ends_every_session(
         assert other_browser.get('/api/session').status_code == 401
     assert client.get('/api/session').status_code == 401
     assert stored_sessions(app) == 0
-    assert 'Operator signed out everywhere: 2 session(s) ended' in caplog.text
+    assert 'Signed out everywhere (operator): 2 session(s) ended' in caplog.text
     with app.state.session_factory() as db:
         event = db.scalars(select(AuditEvent).where(AuditEvent.action == 'session.end_all')).one()
         assert (event.actor, event.detail) == ('operator', '2 session(s) ended')

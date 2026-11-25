@@ -24,7 +24,7 @@ The narrower first release trades the research report's React, RabbitMQ/Celery, 
   `documents` (ingest, fingerprints, revisions), `search` (search, summaries, the reader view, stats),
   `entities` (pivots), `triage` (review, notes, watch terms), `brief` (the intel brief's facts), `exports`
   (IOC export queries), `sources` (source runs, enrichment cache, fetch state), `jobs` (queue and schedules),
-  `access` (API keys, MFA), and for threat guides ([ADR 0025](adr/0025-threat-guides.md)) `actors` (actors,
+  `access` (API keys, MFA, sessions), `users` (people and their roles), and for threat guides ([ADR 0025](adr/0025-threat-guides.md)) `actors` (actors,
   report links, industry decisions), `threat_profiles` (an industry's top ten), `threat_guides` (a guide's
   facts and the sweep list), `rules` (YARA, Sigma, Suricata and Snort as text) and `hunts` (hunt records).
 - `industries.py`: the fixed industry list and the reviewed words that map catalog labels and ATT&CK prose to it.
@@ -41,7 +41,7 @@ The narrower first release trades the research report's React, RabbitMQ/Celery, 
 - `brief.py`: the intel brief's wording (headline and sections) from facts that `services.brief_data` gathers.
   Pure functions, no SQL, no AI.
 - `apikeys.py`: API key format, generation and hashing (pure functions). `totp.py`: RFC 6238 codes for the sign-in second factor (pure, standard library only). `ratelimit.py`: in-process per-caller token buckets and the API's policies ([ADR 0012](adr/0012-single-api-key-and-rate-limits.md)).
-- `web/`: the JSON API and the security boundary. `app.py` holds `create_app`, which only composes: state, middleware, then one `_register_*` function per route group. `boundary.py` is the ASGI boundary (body-size limit, authentication gate, CSRF, rate limits, security headers); `auth.py` holds callers, sessions, API-key checks and sign-in; `routes/` has one module per area (`pages`, `documents`, `triage`, `exports`, `entities`, `sources`, `workspace`, `threats`, `hunting`, and others). Shared pieces (`session_checker`, `auth_dependency`, `start_session`, `get_document_or_404`, `ioc_export_query`) are module-level so they can be tested alone (`tests/api/test_app_factory.py`). `main.py` remains as a compatibility module: `insight.main:create_app` still works.
+- `web/`: the JSON API and the security boundary. `app.py` holds `create_app`, which only composes: state, middleware, then one `_register_*` function per route group. `boundary.py` is the ASGI boundary (body-size limit, authentication gate, CSRF, rate-limit policies, security headers); `auth.py` holds callers, sessions, API-key checks, the auth dependency and sign-in, and `route_permissions.py` each route's permission; `routes/` has one module per area (`pages`, `documents`, `triage`, `exports`, `entities`, `sources`, `workspace`, `threats`, `hunting`, and others). Shared pieces (`session_checker`, `auth_dependency`, `start_session`, `get_document_or_404`, `ioc_export_query`) are module-level so they can be tested alone (`tests/api/test_app_factory.py`). `main.py` remains as a compatibility module: `insight.main:create_app` still works.
 - `ui/`: NiceGUI workspace, one module per panel (`inbox`, `entities`, `watch_terms`, `sources`, `enrichment`, `ingest`, `ioc_export`, `stats`, `brief`, `schedules`; for threat guides `threats`, `threat_guide`, `hunts`, `rules`, `actors`), plus `workspace.py` (typed per-tab state and cross-panel hooks), `page.py` (layout), `reader.py` (the report reader), `theme.py` (light and dark colour tokens), `styles.py` (the style sheet: type scale, reading width, focus outline, phone rules), `typography.py` (real headings, new-tab links), `messages.py` (messages that stay until dismissed), `glossary.py` ("What the words mean"), `appearance.py` (the Light/Dark/System and "Larger text" buttons) and `mobile.py` (phone inbox navigation). Readability rules: [ADR 0017](adr/0017-readability-standard.md).
 - `appearance.py`: the theme vocabulary shared by the configuration, the sign-in pages and the workspace (`INSIGHT_THEME`, the per-device `insight_theme` cookie). See [ADR 0016](adr/0016-colour-themes-and-per-device-choice.md).
 - `templates/`, `static/app.css`: the sign-in and sign-out pages, in the same themes.
@@ -119,13 +119,16 @@ versioned yet; breaking changes are listed in the CHANGELOG. Usage: [API_GUIDE](
 TLS reverse proxy (optional; the container listens on loopback)
  → ProxyHeaders       only from INSIGHT_TRUSTED_PROXIES: real client address and scheme (uvicorn's middleware)
  → TrustedHost        Host must be in INSIGHT_ALLOWED_HOSTS
- → Session            signed cookie; the session ID must be stored and unexpired (operator_sessions)
+ → Session            signed cookie; the session ID must be stored and unexpired (operator_sessions), and
+                      name the operator or a person with a role who is not disabled (users)
  → Boundary           Origin check, 2 MB body limit, security headers (+ HSTS, RateLimit headers)
  → require_auth       one FastAPI dependency on every /api route, in this order:
       1. credential   Bearer key (hash lookup; uniform 401; invalid keys throttled per address)
                       or session (401) + CSRF on writes (403)
       2. authorise    read-only key: GET only; browser-only routes; TLP-limited key: no audit, no enrichment
-      3. rate limit   token bucket per caller and policy (read / write / ioc-export) → 429 + Retry-After
+      3. permission   the route's permission (method + path template, web/route_permissions.py) against
+                      the caller's role; no entry or a lower role → 403 (ADR 0046)
+      4. rate limit   token bucket per caller and policy (read / write / ioc-export) → 429 + Retry-After
  → route              opens the transaction with the caller as audit actor and passes its TLP limit
  → services           the only SQL layer; TLP limits become one condition on Document.tlp
 ```
@@ -140,6 +143,14 @@ TLS reverse proxy (optional; the container listens on loopback)
   architecture test and a leak-sweep test.
 - **Audit actor**: `services.set_actor(db, ...)` names the caller on the database session; `services.audit`
   records it on every event, so service signatures did not change.
+- **Roles** (`permissions.py`, [ADR 0046](adr/0046-sso-sign-in-and-roles.md)): `viewer`, `analyst` and `admin`,
+  and one table of the lowest role each `Permission` needs. The operator is an admin; a key acts as a viewer
+  (`read`, `read-feedback`) or an analyst (`read-write`); people get their role in `users`. The API checks each
+  route's permission in `require_auth` and refuses routes missing from `web/route_permissions.py`. The
+  workspace checks the role in `Workspace.write(permission)` on every callback (`allowed` only spares the
+  person an error, `actor` covers lookups and syncs outside a transaction). Architecture tests fail when a
+  route has no `require_auth` or no permission, or a workspace action names none. Audit events name a person
+  `user:<id>`.
 - **Sign-in MFA** is optional. The host CLI pairs the authenticator, and `INSIGHT_MFA=on` requires a code.
   The database stores an AES-256-GCM ciphertext under a key derived from `INSIGHT_SESSION_SECRET`.
   [ADR 0015](adr/0015-totp-second-factor.md)

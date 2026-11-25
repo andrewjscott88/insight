@@ -9,6 +9,7 @@ from nicegui import ui
 
 from .. import services
 from ..connectors import sync_all, sync_source
+from ..permissions import Permission
 from ..source_registry import CATEGORIES, SOURCES, Source, in_use
 from .censys import build_censys_settings
 from .lookups import build_lookup_switches
@@ -41,8 +42,9 @@ def build_sources(ws: Workspace) -> None:
                 ui.label(message).classes('muted text-sm break-value prose')
 
     async def run(key: str, button: ui.button) -> None:
-        if not ws.authorized():
+        if not ws.allowed(Permission.SYNC_SOURCES):
             return
+        actor = ws.actor(Permission.SYNC_SOURCES)
         lock = ws.app.state.sync_lock
         if lock.locked():
             tell('Another source sync is running. Try again when it finishes.', 'warning')
@@ -50,7 +52,9 @@ def build_sources(ws: Workspace) -> None:
         button.disable()
         try:
             async with lock:
-                message = await sync_source(ws.sessions, key, max_tlp=ws.app.state.settings.max_tlp)
+                message = await sync_source(
+                    ws.sessions, key, max_tlp=ws.app.state.settings.max_tlp, actor=actor
+                )
             if ws.authorized():
                 tell(message, 'success')
                 ws.refresh_all()
@@ -68,9 +72,9 @@ def build_sources(ws: Workspace) -> None:
                 button.enable()
 
     def switch(source: Source, on: bool, sync_button: ui.button, schedule: ui.select) -> None:
-        if not ws.authorized():
+        if not ws.allowed(Permission.SOURCES):
             return
-        with ws.write() as db:
+        with ws.write(Permission.SOURCES) as db:
             services.set_source_switch(db, source.key, on, at=datetime.now(UTC))
         sync_button.set_enabled(on)
         schedule.set_enabled(on)
@@ -130,8 +134,9 @@ def build_sync_all_button(ws: Workspace) -> ui.button:
     """One button that syncs every source in turn, shows how far it has got, and sums up the results."""
 
     async def run_all(button: ui.button) -> None:
-        if not ws.authorized():
+        if not ws.allowed(Permission.SYNC_SOURCES):
             return
+        actor = ws.actor(Permission.SYNC_SOURCES)
         lock = ws.app.state.sync_lock
         if lock.locked():
             tell('Another source sync is running. Try again when it finishes.', 'warning')
@@ -143,7 +148,9 @@ def build_sync_all_button(ws: Workspace) -> ui.button:
         button.disable()
         try:
             async with lock:
-                results = await sync_all(ws.sessions, on_start=started, max_tlp=ws.app.state.settings.max_tlp)
+                results = await sync_all(
+                    ws.sessions, on_start=started, max_tlp=ws.app.state.settings.max_tlp, actor=actor
+                )
             if not ws.authorized():
                 return
             failed = [r.name for r in results if not r.ok]

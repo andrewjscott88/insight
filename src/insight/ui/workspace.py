@@ -5,13 +5,15 @@ from __future__ import annotations
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Any, Final
+from typing import Any, Final, Protocol
 
 from fastapi import FastAPI, Request
 from nicegui import ui
 from sqlalchemy.orm import Session
 
 from ..models import SessionFactory
+from ..permissions import NOT_PERMITTED, Permission
+from .messages import tell
 
 ALL_STATUSES: Final = 'All statuses'
 ALL_TLP: Final = 'All TLP levels'
@@ -42,6 +44,19 @@ class WorkspaceState:
 
 def _noop(*_: Any) -> None:
     return None
+
+
+class NotPermitted(PermissionError):
+    """The current session's role does not allow this workspace action (ADR 0046)."""
+
+
+class _Caller(Protocol):
+    """Who a session signs in (``web.auth.Caller``; the workspace does not import the web front end)."""
+
+    @property
+    def actor(self) -> str: ...
+
+    def may(self, permission: Permission) -> bool: ...
 
 
 @dataclass(slots=True)
@@ -80,6 +95,34 @@ class Workspace:
             return False
         return True
 
+    def _caller(self) -> _Caller | None:
+        caller: _Caller | None = self.app.state.session_caller(self.request.session)
+        return caller
+
+    def allowed(self, permission: Permission) -> bool:
+        """``authorized`` plus the role, checked on every callback: says so when it does not allow this.
+
+        Only spares the person an error; ``write`` and ``actor`` check again and are the control.
+        """
+        caller = self._caller()
+        if caller is None:
+            ui.navigate.to('/login')
+            return False
+        if not caller.may(permission):
+            tell(NOT_PERMITTED, 'warning')
+            return False
+        return True
+
+    def actor(self, permission: Permission) -> str:
+        """Who audit events name for ``permission`` done outside :meth:`write` (an outside lookup, a sync).
+
+        The current session's role is checked now; raises :class:`NotPermitted`.
+        """
+        caller = self._caller()
+        if caller is None or not caller.may(permission):
+            raise NotPermitted(f'{NOT_PERMITTED} ({permission})')
+        return caller.actor
+
     def on_refresh(self, refresh: Callable[[], Any]) -> None:
         self.refreshers.append(refresh)
 
@@ -93,8 +136,11 @@ class Workspace:
             yield db
 
     @contextmanager
-    def write(self) -> Generator[Session, None, None]:
-        """A write transaction; its audit events name the ``operator`` (only the operator uses the UI)."""
+    def write(self, permission: Permission) -> Generator[Session, None, None]:
+        """A write transaction for ``permission``. The current session's role is checked here, on every
+        callback, so a role change or a disabled account applies at once (raises :class:`NotPermitted`).
+        Audit events name the person: ``operator``, or ``user:<id>``."""
+        actor = self.actor(permission)
         with self.sessions.begin() as db:
-            db.info['actor'] = 'operator'
+            db.info['actor'] = actor
             yield db

@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 
 from .. import services
+from ..permissions import Permission
 from ..schemas import DocumentInput
 from .messages import problem_area, tell
 from .pdf_import import build_pdf_import
@@ -89,7 +90,7 @@ def build_ingest_dialog(ws: Workspace) -> ui.dialog:
             fields[wrong[0]].run_method('focus')
 
         def submit() -> None:
-            if not ws.authorized():
+            if not ws.allowed(Permission.ADD_REPORTS):
                 return
             problem.set_text('')
             try:
@@ -104,7 +105,7 @@ def build_ingest_dialog(ws: Workspace) -> ui.dialog:
                 show_errors(exc)
                 return
             try:
-                with ws.write() as db:
+                with ws.write(Permission.ADD_REPORTS) as db:
                     doc, created = services.ingest(db, item, max_tlp=ws.app.state.settings.max_tlp)
                     ws.state.selected = doc.id
             except (services.TlpNotPermitted, ValueError) as exc:  # The dialog stays open: say it there.

@@ -7,6 +7,7 @@ from collections.abc import Awaitable, Callable
 from nicegui import ui
 
 from .. import services
+from ..permissions import Permission
 from ..schemas import TLP_LEVELS, OperatorSourceInput
 from .messages import problem_area, tell
 from .schedules import ScheduleControls, build_schedule_control
@@ -87,7 +88,7 @@ def _editor(ws: Workspace, source: services.OperatorSourceView | None, refresh: 
         problem = problem_area()
 
         def save() -> None:
-            if not ws.authorized():
+            if not ws.allowed(Permission.SOURCES):
                 return
             try:
                 item = OperatorSourceInput.model_validate(
@@ -103,7 +104,7 @@ def _editor(ws: Workspace, source: services.OperatorSourceView | None, refresh: 
                         'reuse': 'public' if full_text.value else 'metadata',
                     }
                 )
-                with ws.write() as db:
+                with ws.write(Permission.SOURCES) as db:
                     if source is None:
                         services.create_operator_source(db, item, max_tlp=limit)
                     else:
@@ -153,11 +154,11 @@ def _confirm_delete(
         problem = problem_area()
 
         def remove() -> None:
-            if not ws.authorized():
+            if not ws.allowed(Permission.SOURCES):
                 return
             limit = ws.app.state.settings.max_tlp
             try:
-                with ws.write() as db:
+                with ws.write(Permission.SOURCES) as db:
                     current = services.get_operator_source(db, source.key, max_tlp=limit, lock=True)
                     if current.revision != source.revision:
                         raise LookupError
@@ -190,11 +191,11 @@ def build_operator_sources(
     def panel(source: services.OperatorSourceView) -> None:
         def switch(on: bool) -> None:
             nonlocal source
-            if not ws.authorized():
+            if not ws.allowed(Permission.SOURCES):
                 return
             limit = ws.app.state.settings.max_tlp
             try:
-                with ws.write() as db:
+                with ws.write(Permission.SOURCES) as db:
                     current = services.get_operator_source(db, source.key, max_tlp=limit, lock=True)
                     if current.revision != source.revision:
                         raise LookupError

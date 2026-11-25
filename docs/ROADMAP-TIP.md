@@ -401,6 +401,7 @@ explicit-ID tagging across all three catalogs ([ADR 0042](adr/0042-mobile-and-ic
 - **Effort:** L
 - **Acceptance criteria:** A second user can be a viewer and cannot ingest, sync, or change schedules. Analyst can triage but not mint keys or notification destinations (admin only). Architecture tests prevent routes from dropping `require_auth`. Existing single-operator deployments upgrade with a single admin user and keep working.
 - **Design:** [ADR 0046](adr/0046-sso-sign-in-and-roles.md) (accepted 2026-11-25): OIDC with PKCE and no new dependency, three fixed roles, a deny-by-default permission table for the API and the workspace, the operator as the built-in admin, and an optional read-only public view.
+- **Progress:** 3.4a done: users, the three roles, the permission matrix enforced in the API and the workspace, the operator as admin, `insight users` and the architecture tests. Next: 3.4b, OIDC sign-in.
 
 ### 3.5 Multi-worker sessions and rate limits
 

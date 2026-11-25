@@ -1,5 +1,37 @@
 # Changelog
 
+## Unreleased
+
+### Upgrade notes
+
+- Migration `0033` adds the `users` table and records which person each stored session belongs to. It runs at
+  start-up; existing sessions stay the operator's. Nothing changes for a single-operator instance: the
+  password sign-in is the built-in operator, an admin. Downgrading below `0033` ends people's sessions first.
+- API keys now act with a role: `read` and `read-feedback` keys as viewers, `read-write` keys as analysts. No
+  route a key could use before is refused now (every admin route was already browser-only).
+
+### Added: roles (TIP 3.4a)
+
+- Three fixed roles, **viewer**, **analyst** and **admin**, and one permission matrix
+  ([ADR 0046](docs/adr/0046-sso-sign-in-and-roles.md)). Viewers read and download; analysts also add, review
+  and work on intelligence, sync a source now and approve outside lookups; admins also change settings:
+  sources and lookup providers on or off, operator sources, schedules, alert destinations and the demo
+  reports.
+- Every API route has an entry in one permission table and is checked on every request; a route without one
+  is refused, and an architecture test fails until it has one. Every workspace action checks the session's
+  role on every callback, so a role change applies at once. A role below the action's gets `403 Your role
+  does not allow this` (in the workspace, a message saying so).
+- `insight users` on the host lists people who signed in through the identity provider and gives or takes
+  away a role, disables, enables, signs out or removes them. Every change ends the person's sessions and is
+  audited. Sign-in through the identity provider follows in TIP 3.4b.
+- `GET /api/session` also returns the caller's `role`, and the `actor` audit events name them by
+  (`operator`, or `user:<id>` for a person).
+
+### Changed
+
+- **Sign out everywhere** ends only your own sessions; other people stay signed in.
+- Each signed-in person has their own rate-limit budget, separate from the operator's.
+
 ## 1.0.0 - 2026-11-25
 
 Insight 1.0 completes the intelligence program (TIP Phase 4): requirements and requests for information,

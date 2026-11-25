@@ -25,7 +25,7 @@ from sqlalchemy import select
 from insight import __version__, services
 from insight.connectors import SOURCES, import_kev, parse_feed
 from insight.demo import seed
-from insight.models import Enrichment, Entity, Observation, SourceRun, database
+from insight.models import Enrichment, Entity, Observation, SourceRun, User, database
 from insight.schemas import (
     ActorCampaignInput,
     ActorInput,
@@ -134,6 +134,19 @@ def build(path: Path) -> None:
             )
             services.create_api_key(db, name='fixture', access='read', max_tlp='GREEN')
             services.start_operator_session(db, binding='fixture', at=when)  # its ID is thrown away
+            # 1.1.0 (ADR 0046): a person who signs in through the identity provider, with a session.
+            person = User(
+                issuer='https://idp.example.org/realms/fixture',
+                subject='fixture-analyst',
+                email='analyst@example.org',
+                display_name='Fixture analyst',
+                role='analyst',
+                first_sign_in_at=services.stamp(when),
+                last_sign_in_at=services.stamp(when),
+            )
+            db.add(person)
+            db.flush()
+            services.start_operator_session(db, binding='fixture', at=when, user_id=person.id)
             services.tag_technique(db, manual.id, 'T1071.001')  # 0.7.0: an analyst's ATT&CK tag
             services.create_operator_source(
                 db, OperatorSourceInput(name='Fixture feed', url='https://feed.example.org/advisories')

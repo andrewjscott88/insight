@@ -70,8 +70,10 @@ def _register_page_routes(app: FastAPI, templates: Jinja2Templates) -> None:
         if not tokens_match(form.get('csrf_token'), request.session.get('csrf')):
             raise HTTPException(403, 'Invalid CSRF token')
         everywhere = form.get('everywhere') == '1'
+        caller = await asyncio.to_thread(app.state.session_caller, request.session) if everywhere else None
         ended = await asyncio.to_thread(end_sessions, app, request.session.get('sid'), everywhere=everywhere)
         if everywhere:
-            log.info('Operator signed out everywhere: %d session(s) ended', ended)
+            who = caller.actor if caller is not None else 'someone'
+            log.info('Signed out everywhere (%s): %d session(s) ended', who, ended)
         request.session.clear()
         return RedirectResponse('/login', status_code=303)

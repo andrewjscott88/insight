@@ -9,6 +9,7 @@ from nicegui import ui
 from pydantic import ValidationError
 
 from .. import services
+from ..permissions import Permission
 from ..schemas import ActorCampaignInput
 from ..threat_guide import ThreatGuide
 from .actors import _labels
@@ -70,10 +71,10 @@ def _manage(ws: Workspace, ref: str, refresh: Callable[[], Any]) -> None:
                 ui.label(f'{row.name} · TLP:{row.tlp}').classes('break-value')
 
                 def remove(campaign_id: str = row.campaign_id) -> None:
-                    if not ws.authorized():
+                    if not ws.allowed(Permission.NOTES_AND_LINKS):
                         return
                     try:
-                        with ws.write() as db:
+                        with ws.write(Permission.NOTES_AND_LINKS) as db:
                             services.unlink_actor_campaign(db, ref, campaign_id, max_tlp=ceiling)
                     except LookupError as exc:
                         error.set_text(str(exc))
@@ -86,13 +87,13 @@ def _manage(ws: Workspace, ref: str, refresh: Callable[[], Any]) -> None:
                 ui.button('Remove campaign association', on_click=remove).props('flat no-caps')
 
         def add(campaign_id: str) -> None:
-            if not ws.authorized():
+            if not ws.allowed(Permission.NOTES_AND_LINKS):
                 return
             try:
                 payload = ActorCampaignInput.model_validate(
                     {'campaign_id': campaign_id, 'note': note.value or '', 'tlp': label.value}
                 )
-                with ws.write() as db:
+                with ws.write(Permission.NOTES_AND_LINKS) as db:
                     services.link_actor_campaign(db, ref, payload, max_tlp=ceiling)
             except (LookupError, ValueError, ValidationError) as exc:
                 error.set_text(str(exc))

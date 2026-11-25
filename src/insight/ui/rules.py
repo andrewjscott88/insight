@@ -13,6 +13,7 @@ from nicegui import ui
 from pydantic import ValidationError
 
 from .. import services
+from ..permissions import Permission
 from ..schemas import TLP_LEVELS, RuleInput, RuleLinkInput
 from ..services.rules import LinkedRule
 from ..threat_guide import ThreatGuide
@@ -90,13 +91,13 @@ def render_report_rules(ws: Workspace, report_id: str, report_tlp: str, refresh:
                 problem = problem_area()
 
                 def attach() -> None:
-                    if not ws.authorized():
+                    if not ws.allowed(Permission.HUNTING):
                         return
                     if not saved.value:
                         problem.set_text('Choose a saved rule.')
                         return
                     try:
-                        with ws.write() as db:
+                        with ws.write(Permission.HUNTING) as db:
                             services.link_rule(db, saved.value, target, max_tlp=limit)
                     except (LookupError, ValueError) as exc:
                         problem.set_text(str(exc))
@@ -143,7 +144,7 @@ def open_rule_dialog(
         problem = problem_area()
 
         def save() -> None:
-            if not ws.authorized():
+            if not ws.allowed(Permission.HUNTING):
                 return
             try:
                 payload = RuleInput.model_validate(
@@ -156,7 +157,7 @@ def open_rule_dialog(
                         'tlp': label.value,
                     }
                 )
-                with ws.write() as db:
+                with ws.write(Permission.HUNTING) as db:
                     rule = services.add_rule(db, payload, max_tlp=limit)
                     targets = [target]
                     if technique.value:

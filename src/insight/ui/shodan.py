@@ -8,6 +8,7 @@ from nicegui import ui
 
 from .. import services, shodan
 from ..connectors import ProviderError
+from ..permissions import Permission
 from .messages import problem_area
 from .typography import heading
 from .workspace import Workspace
@@ -71,12 +72,12 @@ def open_shodan(ws: Workspace, ip: str) -> None:
         problem = problem_area()
 
         async def fetch() -> None:
-            if not ws.authorized() or not consent.value:
+            if not ws.allowed(Permission.LOOKUPS) or not consent.value:
                 return
             consent.set_value(False)
             problem.set_text('')
             try:
-                answer = await shodan.lookup(ws.sessions, ip, actor='operator')
+                answer = await shodan.lookup(ws.sessions, ip, actor=ws.actor(Permission.LOOKUPS))
             except (ProviderError, shodan.NotConfigured, shodan.RateLimited, LookupError) as exc:
                 if ws.authorized():
                     problem.set_text(str(exc))  # plan, credit and rate-limit refusals are shown as they are

@@ -15,6 +15,7 @@ from nicegui import ui
 
 from .. import services
 from ..attack import DOMAINS, Domain, catalog, search
+from ..permissions import Permission
 from .attack_catalog import build_catalog_browser
 from .messages import tell
 from .typography import heading, new_tab_link
@@ -62,10 +63,10 @@ def _render_tag(
     ws: Workspace, doc_id: str, tag: services.TechniqueTag, on_changed: Callable[[], Any]
 ) -> None:
     def remove() -> None:
-        if not ws.authorized():
+        if not ws.allowed(Permission.NOTES_AND_LINKS):
             return
         try:
-            with ws.write() as db:
+            with ws.write(Permission.NOTES_AND_LINKS) as db:
                 services.untag_technique(db, doc_id, tag.technique_id)
         except LookupError:
             tell('This item no longer exists.', 'warning')
@@ -121,10 +122,10 @@ def open_technique_dialog(ws: Workspace, doc_id: str, on_saved: Callable[[], Any
         results = ui.column().classes('w-full gap-1').props('aria-live=polite')
 
         def add(technique_id: str) -> None:
-            if not ws.authorized():
+            if not ws.allowed(Permission.NOTES_AND_LINKS):
                 return
             try:
-                with ws.write() as db:
+                with ws.write(Permission.NOTES_AND_LINKS) as db:
                     services.tag_technique(db, doc_id, technique_id, max_tlp=ws.app.state.settings.max_tlp)
             except LookupError:
                 dialog.close()

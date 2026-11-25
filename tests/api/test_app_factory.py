@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import time
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -19,14 +20,32 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from insight import main, services
 from insight.models import OperatorSession
+from insight.permissions import Permission
 from insight.schemas import DocumentInput
 from insight.services import ingest
 from insight.web.routes import workspace
 
 
-def request(method: str = 'GET', session: dict[str, Any] | None = None, csrf: str | None = None) -> Request:
+def matched(path: str) -> SimpleNamespace:
+    """What routing leaves in the scope for ``require_auth``: the matched route and its path template."""
+    return SimpleNamespace(path=path)
+
+
+def request(
+    method: str = 'GET', session: dict[str, Any] | None = None, csrf: str | None = None, path: str = ''
+) -> Request:
     headers = [(b'x-csrf-token', csrf.encode())] if csrf is not None else []
-    return Request({'type': 'http', 'method': method, 'headers': headers, 'session': session or {}})
+    path = path or ('/api/stats' if method == 'GET' else '/api/documents')
+    return Request(
+        {
+            'type': 'http',
+            'method': method,
+            'path': path,
+            'headers': headers,
+            'session': session or {},
+            'route': matched(path),
+        }
+    )
 
 
 BINDING = 'test-binding'
@@ -74,7 +93,7 @@ def test_session_checker_requires_a_live_stored_session(session_app: FastAPI) ->
     ],
 )
 def test_auth_dependency(method: str, signed_in: bool, csrf: str | None, status: int | None) -> None:
-    require_auth = main.auth_dependency(lambda _session: signed_in)
+    require_auth = main.auth_dependency(lambda _session: main.SESSION_CALLER if signed_in else None)
     incoming = request(method, {'csrf': 'token'}, csrf)
     if status is None:
         require_auth(incoming)
@@ -101,7 +120,8 @@ def test_rate_limit_policy(method: str, path: str, policy: str) -> None:
 
 def keyed_request(method: str, token: str, path: str = '/api/stats') -> Request:
     headers = [(b'authorization', f'Bearer {token}'.encode())]
-    return Request({'type': 'http', 'method': method, 'path': path, 'headers': headers, 'session': {}})
+    scope = {'type': 'http', 'method': method, 'path': path, 'headers': headers, 'session': {}}
+    return Request({**scope, 'route': matched(path)})
 
 
 @pytest.mark.parametrize(
@@ -119,7 +139,7 @@ def test_auth_dependency_with_api_keys(method: str, access: str, path: str, stat
     def verify(token: str) -> tuple[main.Caller | None, str]:
         return (caller, 'ok') if token == 'good' else (None, 'unknown')
 
-    require_auth = main.auth_dependency(lambda _session: False, verify_key=verify)
+    require_auth = main.auth_dependency(lambda _session: None, verify_key=verify)
     incoming = keyed_request(method, 'good', path)
     if status is None:
         require_auth(incoming)
@@ -134,7 +154,7 @@ def test_auth_dependency_with_api_keys(method: str, access: str, path: str, stat
 
 
 def test_api_keys_are_refused_when_no_verifier_is_configured() -> None:
-    require_auth = main.auth_dependency(lambda _session: True)
+    require_auth = main.auth_dependency(lambda _session: main.SESSION_CALLER)
     with pytest.raises(HTTPException) as exc:
         require_auth(keyed_request('GET', 'anything'))
     assert exc.value.status_code == 401
@@ -143,6 +163,58 @@ def test_api_keys_are_refused_when_no_verifier_is_configured() -> None:
 def test_caller_limit_keys_are_distinct() -> None:
     assert main.SESSION_CALLER.limit_key == 'session'
     assert main.Caller('api_key', 'abc').limit_key == 'key:abc'
+    assert main.Caller('session', user_id='u1', role='viewer').limit_key == 'user:u1'
+    assert main.Caller('session', user_id='u2', role='viewer').limit_key == 'user:u2'
+
+
+def test_a_callers_role_follows_from_who_it_is() -> None:
+    """Only a person's role is taken as given: a key is never an admin, the operator always is."""
+    assert main.Caller('api_key', 'k', 'read-write', role='admin').role == 'analyst'
+    assert main.Caller('api_key', 'k', 'read', role='admin').role == 'viewer'
+    assert main.Caller('session', role='viewer').role == 'admin'
+    assert main.Caller('session', user_id='u1', role='viewer').role == 'viewer'
+    nobody = main.Caller('session', user_id='u1')
+    assert nobody.role is None
+    assert not any(nobody.may(permission) for permission in Permission)
+
+
+def test_callers_are_named_in_the_audit_log() -> None:
+    assert main.SESSION_CALLER.actor == 'operator'
+    assert main.Caller('api_key', 'abc').actor == 'api-key:abc'
+    assert main.Caller('session', user_id='u1', role='analyst').actor == 'user:u1'
+
+
+@pytest.mark.parametrize(
+    ('role', 'method', 'path', 'allowed'),
+    [
+        ('viewer', 'GET', '/api/stats', True),
+        ('viewer', 'POST', '/api/documents', False),
+        ('analyst', 'POST', '/api/documents', True),
+        ('analyst', 'PUT', '/api/schedules/{key}', False),
+        ('admin', 'PUT', '/api/schedules/{key}', True),
+    ],
+)
+def test_auth_dependency_checks_the_role(role: str, method: str, path: str, allowed: bool) -> None:
+    person = main.Caller('session', user_id='u1', role=role)  # type: ignore[arg-type]
+    require_auth = main.auth_dependency(lambda _session: person)
+    incoming = request(method, {'csrf': 'token'}, 'token', path=path)
+    if allowed:
+        require_auth(incoming)
+        assert incoming.state.caller == person
+        return
+    with pytest.raises(HTTPException) as exc:
+        require_auth(incoming)
+    assert (exc.value.status_code, exc.value.detail) == (403, 'Your role does not allow this')
+
+
+@pytest.mark.parametrize('route', [None, matched('/api/not-in-the-table')])
+def test_auth_dependency_refuses_a_route_without_a_permission(route: SimpleNamespace | None) -> None:
+    """Deny by default: a route missing from the table is refused even to the operator (an admin)."""
+    require_auth = main.auth_dependency(lambda _session: main.SESSION_CALLER)
+    scope = {'type': 'http', 'method': 'GET', 'path': '/api/x', 'headers': [], 'session': {}}
+    with pytest.raises(HTTPException) as exc:
+        require_auth(Request({**scope, 'route': route} if route is not None else scope))
+    assert exc.value.status_code == 403
 
 
 def test_start_session_rotates_identity_and_prunes_expired_sessions(session_app: FastAPI) -> None:

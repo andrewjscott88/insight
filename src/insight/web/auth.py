@@ -1,4 +1,4 @@
-"""Callers, sessions, API keys and sign-in."""
+"""Callers, sessions, API keys, the auth dependency and sign-in."""
 
 from __future__ import annotations
 
@@ -22,14 +22,17 @@ from starlette.responses import Response
 from .. import apikeys, services
 from ..config import Settings
 from ..models import SessionFactory
-from ..ratelimit import AUTH_FAILURES, IOC_EXPORT, MCP, READ, TAXII, WRITE, Policy, RateLimiter
+from ..permissions import NOT_PERMITTED, OPERATOR_ROLE, Permission, Role, is_role, key_role, role_allows
+from ..ratelimit import AUTH_FAILURES, RateLimiter
 from .boundary import (
     SAFE_METHODS,
     SESSION_ONLY_ROUTES,
     SESSION_ONLY_WRITE_PREFIXES,
     UNLIMITED_READER_PREFIXES,
+    rate_limit_policy,
     tokens_match,
 )
+from .route_permissions import route_allows
 
 log = logging.getLogger('insight.auth')
 
@@ -61,26 +64,49 @@ AuthDependency: TypeAlias = Callable[[Request], None]
 
 @dataclass(frozen=True, slots=True)
 class Caller:
-    """Who made an API request: the signed-in operator, or the API key (named by its public key ID)."""
+    """Who made a request: the signed-in operator, a signed-in person, or the API key (named by its public
+    key ID)."""
 
     kind: Literal['session', 'api_key']
     key_id: str | None = None
     access: apikeys.Access = 'read-write'
     #: Most restrictive TLP label this caller may read or write (``None``: no per-caller limit).
     max_tlp: str | None = None
+    #: The signed-in person (``users.id``); ``None`` for the operator and for API keys.
+    user_id: str | None = None
+    #: What the caller may do (ADR 0046). Only a person's role is taken as given (``None``: nothing); a key's
+    #: follows from its access level and the operator's is admin, whatever is passed.
+    role: Role | None = None
+
+    def __post_init__(self) -> None:
+        if self.kind == 'api_key':
+            object.__setattr__(self, 'role', key_role(self.access))  # never an admin
+        elif self.user_id is None:
+            object.__setattr__(self, 'role', OPERATOR_ROLE)
 
     @property
     def limit_key(self) -> str:
-        """Rate-limit bucket: the operator's browser and the API key never share a budget."""
-        return 'session' if self.key_id is None else f'key:{self.key_id}'
+        """Rate-limit bucket: each person, the operator's browser and the API key have their own budget."""
+        if self.key_id is not None:
+            return f'key:{self.key_id}'
+        return 'session' if self.user_id is None else f'user:{self.user_id}'
 
     @property
     def actor(self) -> str:
         """How audit events name this caller."""
-        return 'operator' if self.key_id is None else f'api-key:{self.key_id}'
+        if self.key_id is not None:
+            return f'api-key:{self.key_id}'
+        return 'operator' if self.user_id is None else f'user:{self.user_id}'
+
+    def may(self, permission: Permission) -> bool:
+        """Whether this caller's role allows ``permission``."""
+        return role_allows(self.role, permission)
 
 
 SESSION_CALLER: Final = Caller('session')
+
+#: ``lookup(session) -> caller``: who a signed session cookie belongs to, or ``None`` (not signed in).
+SessionLookup: TypeAlias = Callable[[Mapping[str, Any]], Caller | None]
 
 #: ``verify(token) -> (caller or None, reason)``; ``reason`` is for logs only.
 KeyVerifier: TypeAlias = Callable[[str], tuple[Caller | None, str]]
@@ -90,23 +116,36 @@ def _moment(seconds: float) -> datetime:
     return datetime.fromtimestamp(seconds, UTC)
 
 
-def session_checker(app: FastAPI) -> SessionCheck:
-    """``check(session)``: True while the signed cookie names a stored, unexpired session (review B4).
+def session_lookup(app: FastAPI) -> SessionLookup:
+    """``lookup(session)``: the caller while the signed cookie names a stored, unexpired session (review B4)
+    of the operator or of a person with a role (ADR 0046); ``None`` otherwise.
 
-    Sessions live in the database, so a restart keeps the operator signed in; ending one there ends it in
-    every tab at once. The check is one primary-key lookup.
+    Sessions live in the database, so a restart keeps people signed in; ending one there ends it in every tab
+    at once, and a role change applies to the next request. The lookup is one or two primary-key reads. A
+    person still waiting for approval, or disabled, is not signed in here.
     """
 
-    def authenticated(session: Mapping[str, Any]) -> bool:
+    def caller(session: Mapping[str, Any]) -> Caller | None:
         sid = session.get('sid')
         if not (session.get('authenticated') and isinstance(sid, str) and sid):
-            return False
+            return None
         with app.state.session_factory() as db:
-            return services.operator_session_valid(
+            principal = services.session_principal(
                 db, sid, binding=app.state.session_binding, at=_moment(time.time())
             )
+        if principal is None or not is_role(principal.role):
+            return None
+        if principal.user_id is None:
+            return SESSION_CALLER
+        return Caller('session', user_id=principal.user_id, role=principal.role)
 
-    return authenticated
+    return caller
+
+
+def session_checker(app: FastAPI) -> SessionCheck:
+    """``check(session)``: True while the signed cookie names someone signed in with a role."""
+    lookup = session_lookup(app)
+    return lambda session: lookup(session) is not None
 
 
 def api_key_verifier(sessions: SessionFactory) -> KeyVerifier:
@@ -123,19 +162,6 @@ def api_key_verifier(sessions: SessionFactory) -> KeyVerifier:
             return Caller('api_key', key.key_id, access, key.max_tlp), reason
 
     return verify
-
-
-def rate_limit_policy(method: str, path: str) -> Policy:
-    """Which budget a request draws from. IOC exports are the expensive read and get their own."""
-    if (method, path) == ('POST', '/mcp'):
-        return MCP
-    if path in ('/api/iocs/export', '/api/iocs/stix', '/api/iocs/blocklist'):
-        return IOC_EXPORT
-    if path.startswith('/taxii2/insight/collections/') and (
-        '/objects/' in path or path.endswith('/manifest/')
-    ):
-        return TAXII
-    return READ if method in SAFE_METHODS else WRITE
 
 
 #: The width both values are padded to before comparing; a longer stored secret sets its own width.
@@ -166,7 +192,7 @@ def _client_address(request: Request) -> str:
 
 
 def auth_dependency(
-    authenticated: SessionCheck,
+    session_caller: SessionLookup,
     *,
     verify_key: KeyVerifier | None = None,
     limiter: RateLimiter | None = None,
@@ -180,7 +206,9 @@ def auth_dependency(
     * Otherwise the browser session: ``401`` without one, ``403`` for a write without the matching CSRF
       header.
 
-    Then the caller's rate limit is applied (``429`` with ``Retry-After`` when exhausted).
+    Then the route's permission is looked up by method and path template (``route_permissions``): a route
+    with no entry is refused, and so is a caller whose role does not allow it (``403``, ADR 0046). Last, the
+    caller's rate limit is applied (``429`` with ``Retry-After`` when exhausted).
     """
 
     def key_caller(request: Request, token: str) -> Caller:
@@ -221,13 +249,17 @@ def auth_dependency(
         else:
             if mcp_read:
                 raise HTTPException(401, 'API key required', headers=INVALID_KEY_HEADERS)
-            if not authenticated(request.session):
+            signed_in = session_caller(request.session)
+            if signed_in is None:
                 raise HTTPException(401, 'Sign in required')
             if method not in SAFE_METHODS and not tokens_match(
                 request.headers.get('X-CSRF-Token'), request.session.get('csrf')
             ):
                 raise HTTPException(403, 'Invalid CSRF token')
-            caller = SESSION_CALLER
+            caller = signed_in
+        template = getattr(request.scope.get('route'), 'path', None)
+        if not route_allows(method, template, role=caller.role, access=caller.access):
+            raise HTTPException(403, NOT_PERMITTED.rstrip('.'))
         request.state.caller = caller
         if limiter is not None:
             decision = limiter.hit(caller.limit_key, rate_limit_policy(method, path))
@@ -276,14 +308,12 @@ def new_session_id(app: FastAPI, replaces: Any, now: float) -> str:
 
 
 def end_sessions(app: FastAPI, sid: Any, *, everywhere: bool) -> int:
-    """Sign this browser out, or every browser (audited); returns how many sessions ended everywhere."""
-    with app.state.session_factory.begin() as db:
-        services.set_actor(db, 'operator')
-        if everywhere:
-            return services.end_all_operator_sessions(db)
-        if isinstance(sid, str) and sid:
-            services.end_operator_session(db, sid, binding=app.state.session_binding)
+    """Sign this browser out, or every browser of the same person (audited); returns how many sessions
+    ended everywhere."""
+    if not (isinstance(sid, str) and sid):
         return 0
+    with app.state.session_factory.begin() as db:
+        return services.sign_out(db, sid, binding=app.state.session_binding, everywhere=everywhere)
 
 
 def set_session_cookie(request: Request, sid: str) -> None:

@@ -9,6 +9,7 @@ from pydantic import ValidationError
 
 from .. import services
 from ..attack import search
+from ..permissions import Permission
 from ..schemas import CampaignInput, ThreatLinkInput, ThreatSubjectKind, ThreatTargetKind
 from .actors import _labels
 from .messages import problem_area, tell
@@ -29,7 +30,7 @@ def _new_campaign(ws: Workspace, saved: Callable[[], object]) -> None:
         error = problem_area()
 
         def save() -> None:
-            if not ws.authorized():
+            if not ws.allowed(Permission.NOTES_AND_LINKS):
                 return
             try:
                 item = CampaignInput.model_validate(
@@ -40,7 +41,7 @@ def _new_campaign(ws: Workspace, saved: Callable[[], object]) -> None:
                         'tlp': label.value,
                     }
                 )
-                with ws.write() as db:
+                with ws.write(Permission.NOTES_AND_LINKS) as db:
                     services.create_campaign(db, item, max_tlp=ws.app.state.settings.max_tlp)
             except (ValidationError, ValueError):
                 error.set_text('Check the name, other names, and sharing label.')
@@ -107,10 +108,10 @@ def _manage(ws: Workspace, kind: ThreatSubjectKind, ref: str, name: str) -> None
                     ui.label(f'{row.name} · TLP:{row.tlp}').classes('break-value')
 
                     def remove(link: services.ThreatLinkView = row) -> None:
-                        if not ws.authorized():
+                        if not ws.allowed(Permission.NOTES_AND_LINKS):
                             return
                         try:
-                            with ws.write() as db:
+                            with ws.write(Permission.NOTES_AND_LINKS) as db:
                                 services.unlink_threat(
                                     db, kind, ref, link.target_kind, link.target_id, max_tlp=ceiling
                                 )
@@ -132,13 +133,13 @@ def _manage(ws: Workspace, kind: ThreatSubjectKind, ref: str, name: str) -> None
                     ui.button('More links', on_click=lambda: page(20)).props('flat')
 
         def add(target_id: str) -> None:
-            if not ws.authorized():
+            if not ws.allowed(Permission.NOTES_AND_LINKS):
                 return
             try:
                 item = ThreatLinkInput.model_validate(
                     {'target_kind': target.value, 'target_id': target_id, 'tlp': label.value}
                 )
-                with ws.write() as db:
+                with ws.write(Permission.NOTES_AND_LINKS) as db:
                     services.link_threat(db, kind, ref, item, max_tlp=ceiling)
             except (LookupError, ValueError) as exc:
                 error.set_text(str(exc))

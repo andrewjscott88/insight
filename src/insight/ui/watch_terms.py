@@ -5,6 +5,7 @@ from __future__ import annotations
 from nicegui import ui
 
 from .. import services
+from ..permissions import Permission
 from .alerts import build_alerts
 from .messages import tell
 from .typography import heading
@@ -13,9 +14,9 @@ from .workspace import Workspace
 
 def build_watch_terms(ws: Workspace) -> None:
     def remove(term_id: str) -> None:
-        if not ws.authorized():
+        if not ws.allowed(Permission.REQUIREMENTS):
             return
-        with ws.write() as db:
+        with ws.write(Permission.REQUIREMENTS) as db:
             services.remove_watch_term(db, term_id)
         ws.refresh_all()
 
@@ -37,10 +38,10 @@ def build_watch_terms(ws: Workspace) -> None:
                 ).classes('text-xs')
 
     def add() -> None:
-        if not ws.authorized():
+        if not ws.allowed(Permission.REQUIREMENTS):
             return
         try:
-            with ws.write() as db:
+            with ws.write(Permission.REQUIREMENTS) as db:
                 created = services.add_watch_term(db, term_input.value or '')
         except ValueError as exc:
             term_input.error = str(exc)

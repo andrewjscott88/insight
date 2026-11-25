@@ -62,14 +62,19 @@ The test suite enforces most of these; skipping one fails CI.
 2. Add every new route to `PROTECTED` in `tests/api/test_auth.py`, and every new `GET` route to the
    GREEN-key sweep in `tests/api/test_key_tlp_limit.py`, with AMBER data planted in its `world` fixture so a
    leak would fail.
-3. Give every new table rows in `scripts/make_release_fixture.py` (a test checks that every table has data).
-4. Document every route in `docs/API.md` and give it a `curl` example in `docs/API_GUIDE.md`.
-5. Interface text: grade 9 or below, sentence case, every abbreviation in the glossary
+3. Give every new route a permission in `src/insight/web/route_permissions.py`; a route without one is
+   refused to everyone. In the workspace, check and write with the permission the action needs:
+   `ws.allowed(Permission.X)`, then `ws.write(Permission.X)`, and `actor=ws.actor(Permission.X)` for lookups
+   and syncs. Choose the lowest role the matrix in [ADR 0046](docs/adr/0046-sso-sign-in-and-roles.md) allows,
+   and the more conservative one when it is unclear. A new kind of action may need a new `Permission`.
+4. Give every new table rows in `scripts/make_release_fixture.py` (a test checks that every table has data).
+5. Document every route in `docs/API.md` and give it a `curl` example in `docs/API_GUIDE.md`.
+6. Interface text: grade 9 or below, sentence case, every abbreviation in the glossary
    (`ui/glossary_terms.py` is near its 300-line limit: split it if you add terms), headings through
    `typography.heading()`, messages through `messages.tell()`.
-6. User-visible changes go in `CHANGELOG.md` under `## Unreleased`, with an upgrade note for any migration;
+7. User-visible changes go in `CHANGELOG.md` under `## Unreleased`, with an upgrade note for any migration;
    update `README.md`, `ROADMAP.md` and `docs/ROADMAP-TIP.md` when a roadmap item is done.
-7. Tests: unit tests for the service, API tests through the real middleware, UI tests with the NiceGUI user
+8. Tests: unit tests for the service, API tests through the real middleware, UI tests with the NiceGUI user
    simulation (`await user.should_see(...)` before `user.find(...)`), and a `Regression:` test for each bug.
 
 ## Before you open a pull request

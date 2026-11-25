@@ -13,6 +13,7 @@ from nicegui import ui
 from pydantic import ValidationError
 
 from .. import services
+from ..permissions import Permission
 from ..schemas import CaseInput, CaseItemInput, CaseItemKind, CaseStatusFilter
 from .actors import _labels
 from .case_detail import open_case_dialog
@@ -36,7 +37,7 @@ def _create(
     item = CaseInput.model_validate(
         {'title': title, 'summary': summary, 'tlp': label, 'product_type': kind, 'audience': audience}
     )
-    with ws.write() as db:
+    with ws.write(Permission.PRODUCTS) as db:
         return services.create_case(db, item, max_tlp=ws.app.state.settings.max_tlp).id
 
 
@@ -53,7 +54,7 @@ def _new_case(ws: Workspace, saved: Callable[[str], object]) -> None:
         error = problem_area()
 
         def save() -> None:
-            if not ws.authorized():
+            if not ws.allowed(Permission.PRODUCTS):
                 return
             try:
                 case_id = _create(ws, title.value or '', '', label.value, kind.value, audience.value or '')
@@ -157,13 +158,13 @@ def open_add_to_case(ws: Workspace, kind: CaseItemKind, target_id: str, name: st
         error = problem_area()
 
         def add() -> None:
-            if not ws.authorized():
+            if not ws.allowed(Permission.PRODUCTS):
                 return
             try:
                 case_id = (
                     _create(ws, title.value or '', '', label.value) if target.value == NEW else target.value
                 )
-                with ws.write() as db:
+                with ws.write(Permission.PRODUCTS) as db:
                     item = CaseItemInput(kind=kind, target_id=target_id)
                     services.add_case_item(db, case_id, item, max_tlp=limit)
             except (ValidationError, ValueError, LookupError) as exc:

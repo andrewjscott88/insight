@@ -102,7 +102,10 @@ One table in code (`insight.permissions`) maps each action to the lowest role al
 
 API keys keep their CLI-only life cycle. A `read` key gets viewer permissions, and a `read-write` key gets
 analyst permissions; no key ever gets admin permissions. `read-feedback` and session-only routes stay as they
-are. Notification destinations and keys remain CLI-only, so no role can create them in the workspace.
+are. Keys remain CLI-only, so no role can create one. Alert destinations are set on the host
+(`insight notify`) or in the workspace's Settings ([ADR 0022](0022-alerts.md)); in the workspace only admins
+may add, test, switch or remove them. (Corrected in 3.4a: the first version of this ADR called destinations
+CLI-only.)
 
 Roles do not change TLP in v1: everyone signed in reads up to the instance limit. Per-user TLP ceilings and
 recipient groups come later, as the roadmap says.
@@ -174,3 +177,28 @@ read published intelligence but cannot write or reach the API".
 | 3.4b | OIDC sign-in: discovery, PKCE flow, token checks, group mapping, pending users and Settings → People, `INSIGHT_SSO_ONLY`; set-up notes per provider | — |
 | 3.4c | Read-only public view, and TIP 0.1's new check | — |
 | 3.4d | Gate: containerised Keycloak, browser matrix, authenticated ZAP active scan; staging notes | — |
+
+## Implementation notes
+
+### 3.4a
+
+- `insight.permissions` names the permissions: `read` (viewer); `add-reports`, `review`, `notes-and-links`,
+  `products`, `requirements`, `hunting`, `sync-sources` and `lookups` (analyst); `sources`, `schedules`,
+  `alerts` and `demo` (admin). `web/route_permissions.py` gives every API route one of them.
+- Choices this ADR did not settle, taken as the matrix reads or the more conservative way:
+  - Signed-in viewers may read the audit log and the watch terms ("read the workspace and the API"); the
+    public view (3.4c) hides them. Audit events name a person by ID only, never by e-mail.
+  - Watch terms are intelligence work for analysts, with requirements. Alert destinations send data out of
+    Insight, so they are admin-only.
+  - Loading the demo reports is admin-only: it adds practice data to a real dataset.
+  - Building a hunt guide only reads, so viewers may (the build is audited).
+  - Until 3.4b, a person waiting for approval counts as not signed in (`401`). 3.4b adds the page that tells
+    them they are waiting.
+  - **Sign out everywhere** ends only the caller's own sessions. Ending someone else's is an admin action
+    (`insight users sign-out`, and Settings → People in 3.4b).
+  - Each person has their own rate-limit budget.
+  - Downgrading below migration `0033` deletes people's sessions first, so none can become the operator's.
+  - Sessions of people use the same stored-session binding as the operator's, so a new operator password
+    also ends them. 3.4b decides whether provider sessions bind to the provider settings instead.
+- Controls a role cannot use are hidden from 3.4b on, when people other than the operator can sign in to the
+  workspace. Until then a refused action says "Your role does not allow this."

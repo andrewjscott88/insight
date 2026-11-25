@@ -9,6 +9,7 @@ from nicegui import ui
 
 from .. import services
 from ..hunt_guide import HuntGuide
+from ..permissions import Permission
 from .cases import build_cases
 from .focus_choices import FOCUS_KINDS
 from .hunt_packages import build_hunt_packages
@@ -107,11 +108,11 @@ def _guide_builder(ws: Workspace, open_saved: Callable[[str], None]) -> None:
 
     def build_guide() -> None:
         nonlocal guide
-        if not ws.authorized() or not subject.value:
+        if not ws.allowed(Permission.READ) or not subject.value:
             return
         invalidate()
         try:
-            with ws.write() as db:
+            with ws.write(Permission.READ) as db:
                 built = services.hunt_guide(
                     db, focus.value, subject.value, max_tlp=ws.app.state.settings.max_tlp
                 )
@@ -129,14 +130,14 @@ def _guide_builder(ws: Workspace, open_saved: Callable[[str], None]) -> None:
 
     def save_as_package() -> None:
         nonlocal saved_id
-        if not ws.authorized() or guide is None or not save_package.enabled:
+        if not ws.allowed(Permission.HUNTING) or guide is None or not save_package.enabled:
             return
         if saved_id is not None:
             open_saved(saved_id)
             return
         save_package.disable()
         try:
-            with ws.write() as db:
+            with ws.write(Permission.HUNTING) as db:
                 package_id = services.create_hunt_package_from_guide(
                     db, guide.kind, guide.ref, max_tlp=ws.app.state.settings.max_tlp
                 ).id

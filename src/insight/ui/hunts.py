@@ -14,6 +14,7 @@ from nicegui import ui
 from pydantic import ValidationError
 
 from .. import services
+from ..permissions import Permission
 from ..schemas import TLP_LEVELS, HuntCheckInput, HuntInput, HuntUpdate
 from ..threat_guide import ThreatGuide
 from .messages import problem_area, tell
@@ -117,7 +118,7 @@ def _check_row(
         problem = problem_area()
 
         def save() -> None:
-            if not ws.authorized():
+            if not ws.allowed(Permission.HUNTING):
                 return
             try:
                 payload = HuntCheckInput(
@@ -127,7 +128,7 @@ def _check_row(
                     period_end=date.fromisoformat(last.value) if last.value else None,
                     notes=note.value or '',
                 )
-                with ws.write() as db:
+                with ws.write(Permission.HUNTING) as db:
                     services.record_check(db, hunt_id, technique_id, payload)
             except (ValidationError, ValueError) as exc:
                 problem.set_text(_plain_problem(exc))
@@ -156,10 +157,10 @@ def _close_row(ws: Workspace, hunt_id: str, status: str, summary: str, refresh: 
     )
 
     def save(new_status: str) -> None:
-        if not ws.authorized():
+        if not ws.allowed(Permission.HUNTING):
             return
         try:
-            with ws.write() as db:
+            with ws.write(Permission.HUNTING) as db:
                 services.update_hunt(
                     db,
                     hunt_id,
@@ -196,11 +197,11 @@ def _start_dialog(ws: Workspace, guide: ThreatGuide, refresh: Callable[[], Any])
         problem = problem_area()
 
         def start() -> None:
-            if not ws.authorized():
+            if not ws.allowed(Permission.HUNTING):
                 return
             try:
                 payload = HuntInput(title=title.value or '', tlp=label.value)
-                with ws.write() as db:
+                with ws.write(Permission.HUNTING) as db:
                     services.start_hunt(db, guide.data.subject.ref, payload, max_tlp=limit)
             except ValidationError:
                 problem.set_text('Give the hunt a name.')

@@ -277,8 +277,31 @@ specialist term in plain language. Messages stay on screen until you press **Dis
 the GUI meets is [ADR 0017](adr/0017-readability-standard.md).
 
 ### Who did what
-`GET /api/audit` (and the `audit_events` table) records an `actor` per event: `operator`, `api-key:<key ID>`,
-`cli`, `connector:<source>` or `system`. Events from before schema revision `0005` have an empty actor.
+`GET /api/audit` (and the `audit_events` table) records an `actor` per event: `operator`, `user:<id>` (a person
+who signed in through the identity provider), `api-key:<key ID>`, `cli`, `connector:<source>` or `system`.
+Events from before schema revision `0005` have an empty actor. `insight users list` shows who each `user:<id>`
+is; audit events never hold a person's e-mail address.
+
+### People and roles
+Each person, the operator and each API key acts with a role: `viewer`, `analyst` or `admin`
+([ADR 0046](adr/0046-sso-sign-in-and-roles.md), [the matrix](API.md#roles)). The password sign-in is the built-in
+operator, always an `admin`. People sign in through the organisation's identity provider (TIP 3.4b); until an
+admin gives them a role they wait with no access. On the host, `insight users` does what an admin does in the
+workspace, and works when nobody who can sign in is an admin:
+
+```sh
+insight users list                          # people waiting for approval first
+insight users role ann@example.org analyst  # approve, or change a role (viewer, analyst, admin, none)
+insight users disable ann@example.org       # cannot sign in; sessions end
+insight users enable ann@example.org
+insight users sign-out ann@example.org      # end their sessions everywhere
+insight users remove ann@example.org        # asks first; their audit events stay
+# Docker: docker compose exec insight insight users list
+```
+
+Every change ends the person's sessions at once and is audited (`user.role`, `user.disable`, `user.enable`,
+`user.sign_out`, `user.remove`, actor `cli`). **Sign out everywhere** in the workspace ends only your own
+sessions; other people stay signed in.
 
 ### Sign-in throttling (expected behaviour)
 Each failed sign-in waits about 1 s before it is answered. After 30 failures in one minute, wrong passwords
@@ -375,6 +398,7 @@ database and any copies as you would a pre-upgrade backup.
 | Empty database | All revisions are applied from `0001` |
 | 0.1.0 database (no `alembic_version` table) | Stamped at `0001` (identical to the 0.1.0 schema), then upgraded |
 | Migrated database | Only newer revisions are applied |
+| Downgrading below `0033` | People's sessions end first, so none can turn into the operator's; the `users` table is dropped |
 
 On SQLite, migrations temporarily disable foreign keys (SQLite's documented procedure for table rebuilds) and
 run `PRAGMA foreign_key_check` before committing. On any error the transaction rolls back and the application

@@ -8,6 +8,7 @@ from nicegui import ui
 
 from .. import services
 from ..attack import technique
+from ..permissions import Permission
 from ..schemas import SoftwareLinkInput
 from ..threat_library import library
 from .actors import _labels
@@ -31,7 +32,7 @@ def _link_dialog(ws: Workspace, ref: str, doc_id: str, saved: Callable[[], objec
         problem = problem_area()
 
         def save() -> None:
-            if not ws.authorized():
+            if not ws.allowed(Permission.NOTES_AND_LINKS):
                 return
             try:
                 payload = SoftwareLinkInput.model_validate(
@@ -41,7 +42,7 @@ def _link_dialog(ws: Workspace, ref: str, doc_id: str, saved: Callable[[], objec
                         'tlp': label.value,
                     }
                 )
-                with ws.write() as db:
+                with ws.write(Permission.NOTES_AND_LINKS) as db:
                     services.link_software_report(db, ref, payload, max_tlp=ws.app.state.settings.max_tlp)
             except (LookupError, ValueError) as exc:
                 problem.set_text(str(exc))
@@ -118,10 +119,10 @@ def open_software(ws: Workspace, ref: str) -> None:
                     ui.label(f'TLP:{row["tlp"]}').classes('muted')
 
                     def remove(document_id: str = row['document_id']) -> None:
-                        if not ws.authorized():
+                        if not ws.allowed(Permission.NOTES_AND_LINKS):
                             return
                         try:
-                            with ws.write() as db:
+                            with ws.write(Permission.NOTES_AND_LINKS) as db:
                                 services.unlink_software_report(
                                     db, ref, document_id, max_tlp=ws.app.state.settings.max_tlp
                                 )

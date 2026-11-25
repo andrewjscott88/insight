@@ -8,6 +8,7 @@ from nicegui import ui
 
 from .. import greynoise, services
 from ..connectors import ProviderError
+from ..permissions import Permission
 from .messages import problem_area
 from .typography import heading
 from .workspace import Workspace
@@ -52,12 +53,12 @@ def open_greynoise(ws: Workspace, ip: str) -> None:
         problem = problem_area()
 
         async def fetch() -> None:
-            if not ws.authorized() or not consent.value:
+            if not ws.allowed(Permission.LOOKUPS) or not consent.value:
                 return
             consent.set_value(False)
             problem.set_text('')
             try:
-                answer = await greynoise.lookup(ws.sessions, ip, actor='operator')
+                answer = await greynoise.lookup(ws.sessions, ip, actor=ws.actor(Permission.LOOKUPS))
             except (ProviderError, greynoise.NotConfigured, greynoise.RateLimited, LookupError) as exc:
                 if ws.authorized():
                     problem.set_text(str(exc))

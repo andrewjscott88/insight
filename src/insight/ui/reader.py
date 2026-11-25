@@ -18,6 +18,7 @@ from .. import services
 from ..cve_scores import VULNCHECK_NOTICE
 from ..exploit_signals import LABELS
 from ..extraction import EVIDENCE_CONTEXT
+from ..permissions import Permission
 from ..schemas import DOCUMENT_STATUSES, NoteInput
 from .actors import render_report_groups
 from .cases import open_add_to_case
@@ -243,7 +244,7 @@ def _render_notes(ws: Workspace, data: dict[str, Any], actions: ReaderActions) -
     )
 
     def save_note() -> None:
-        if not ws.authorized():
+        if not ws.allowed(Permission.NOTES_AND_LINKS):
             return
         try:
             item = NoteInput(body=note_input.value or '')
@@ -251,7 +252,7 @@ def _render_notes(ws: Workspace, data: dict[str, Any], actions: ReaderActions) -
             note_input.error = 'Write a note first (up to 10,000 characters).'
             tell('Write a note first (up to 10,000 characters).', 'warning')
             return
-        with ws.write() as db:
+        with ws.write(Permission.NOTES_AND_LINKS) as db:
             saved = services.add_note(db, doc_id, item.body) is not None
         if not saved:
             tell('This item no longer exists.', 'warning')
