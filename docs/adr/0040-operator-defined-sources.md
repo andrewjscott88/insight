@@ -29,7 +29,9 @@ rule when they share a report. A deleted or unknown operator source counts as me
 source keeps the reports already collected.
 
 For TAXII 2.1, store the API root, collection ID and optional credential environment variable name. Read
-the value at request time. Send it only to the configured host over the pinned connection. Each page uses
+the value at request time. Send it only to the configured host over the pinned connection. Never send it
+while temporary open access is on (`INSIGHT_DEV_NO_AUTH=on`): any visitor could then repoint the source, so
+such a source shows as not configured and makes no request. Each page uses
 the same objects endpoint. Keep the batch within the STIX import limits, 20 pages and two minutes. Validate
 and import the complete batch and advance its date-added cursor in one transaction. Recheck the source and
 cursor before saving so a settings change or concurrent poll cannot apply a stale result. Keep per-report

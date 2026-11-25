@@ -138,6 +138,11 @@ material. It is not anonymous read-only publishing. The workspace notice makes t
 signing out cannot restrict entry while anyone can obtain a new session. No automatic expiry is configured
 for the switch itself: an operator must turn it off.
 
+Two things stay off while it is on, because any visitor could otherwise point them at a host of their
+choosing: Censys lookups and their cache ([ADR 0043](adr/0043-censys-platform-enrichment.md)), and the host
+credentials of operator TAXII sources. A TAXII source that names a credential shows as not configured and
+makes no request; collections without a credential still sync.
+
 Set `INSIGHT_DEV_NO_AUTH=off` or remove it and recreate/restart the application with the changed environment
 to restore the retained password. The authentication-mode change invalidates sessions created during the
 open period. Restore the earlier MFA setting if it was changed. Verify both a fresh browser and an old
