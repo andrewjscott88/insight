@@ -50,3 +50,4 @@ superseded ones are marked, never deleted.
 | [0043](0043-censys-platform-enrichment.md) | Approved private Censys Platform host context | Accepted |
 | [0044](0044-sector-intel-briefs.md) | Sector-focused Intel Brief and a 30-day workspace default | Accepted |
 | [0045](0045-sector-threat-hunt-guides.md) | Sector and industry hunt guides, downloads and draft packages | Accepted |
+| [0046](0046-sso-sign-in-and-roles.md) | SSO sign-in, users and three fixed roles (TIP 3.4) | Proposed |

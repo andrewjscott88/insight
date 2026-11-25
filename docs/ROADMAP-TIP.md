@@ -400,6 +400,7 @@ explicit-ID tagging across all three catalogs ([ADR 0042](adr/0042-mobile-and-ic
 - **Sources / libraries:** A pinable OIDC client compatible with FastAPI (evaluate before adding; hash-pin). Follow `docs/adr/0012` and `0015` so API keys stay CLI-minted.
 - **Effort:** L
 - **Acceptance criteria:** A second user can be a viewer and cannot ingest, sync, or change schedules. Analyst can triage but not mint keys or notification destinations (admin only). Architecture tests prevent routes from dropping `require_auth`. Existing single-operator deployments upgrade with a single admin user and keep working.
+- **Design:** [ADR 0046](adr/0046-sso-sign-in-and-roles.md) (proposed, 2026-11-25): OIDC with PKCE and no new dependency, three fixed roles, a deny-by-default permission table for the API and the workspace, the operator as the built-in admin, and an optional read-only public view.
 
 ### 3.5 Multi-worker sessions and rate limits
 
