@@ -326,6 +326,8 @@ def test_cpe_matching_source_and_licences_ship_as_resources() -> None:
         ('backups/backup-2026-01-01-120000.db', '', True),
         ('exports/iocs-2026-01-01-120000.json', '{}', True),  # TLP-labelled data from `make export-iocs`
         ('docs/exports/guide.md', 'text', False),
+        ('docs/deployments/2026-01-01-host.md', '# A deployment record', True),  # deployments stay private
+        ('docs/DEPLOYMENT.md', 'How to deploy', False),
         ('siem.conf', 'api_key = insk_0123456789ab_' + 'A' * 43, True),  # fake, built here gitleaks:allow
         ('docs/API.md', 'The key (`insk_<12-hex key ID>_<43-character secret>`)', False),
     ],
