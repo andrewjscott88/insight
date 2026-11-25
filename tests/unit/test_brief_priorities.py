@@ -89,11 +89,11 @@ def test_ransomware_use_is_said_marked_and_comes_first() -> None:
         'CVE-2026-0002': kev('CVE-2026-0002', ransomware=True, document='k2'),
     }
     result = compose(data(kev=entries), as_of=NOW)
-    assert 'CISA knows of ransomware campaigns that use 1 of them.' in result.summary
+    assert any('CISA knows of ransomware campaigns that use 1 of them.' in line for line in result.summary)
     exploited = [item.text for item in result.sections[0].items]
     assert exploited[0] == 'CVE-2026-0002 · Acme Gateway · added 2026-11-18 · used in ransomware'
     assert not exploited[1].endswith('used in ransomware')
-    assert titles(result)[:2] == ['Used in ransomware attacks', 'Known exploitation deserves attention']
+    assert titles(result)[:2] == ['Used in ransomware attacks', 'Flaws already used in attacks']
     ransomware = result.highlights[0]
     assert '1 flaw in this brief is known to CISA to be used in ransomware campaigns' in ransomware.text
     assert 'does not prove that your business is a target' in ransomware.text
@@ -130,7 +130,7 @@ def test_public_exploit_code_is_said_and_marked_before_ransomware_use() -> None:
 
 def test_a_single_new_kev_entry_used_in_ransomware_reads_naturally() -> None:
     result = compose(data(kev={'CVE-2026-0002': kev('CVE-2026-0002', ransomware=True)}), as_of=NOW)
-    assert 'CISA knows of ransomware campaigns that use it.' in result.summary
+    assert any('CISA knows of ransomware campaigns that use it.' in line for line in result.summary)
 
 
 # --------------------------------------------------------------------------- NVD CVSS beside CSAF
@@ -152,12 +152,14 @@ def test_nvd_beats_or_joins_a_csaf_score(nvd_score: float, shown: float) -> None
     (item,) = result.sections[1].items
     if nvd_score > 9.1:  # NVD's higher score wins and says where it comes from
         assert item.text == 'CVE-2026-1000 · CVSS 9.8 (NIST NVD) · ICSA-26-322-01 · Acme Gateway'
-        assert 'The highest base score is 9.8 out of 10, for CVE-2026-1000 (NIST NVD).' in result.summary
+        assert any('NIST NVD rates this flaw as critical.' in line for line in result.summary)
     elif nvd_score == 9.1:  # the same score: the advisory's line, nothing added
         assert item.text == 'CVE-2026-1000 · CVSS 9.1 · ICSA-26-322-01 · Acme Gateway'
     else:  # the advisory's higher score, with NVD's beside it
         assert item.text == 'CVE-2026-1000 · CVSS 9.1 · NIST NVD 8 · ICSA-26-322-01 · Acme Gateway'
-    assert f'{shown:g} out of 10' in ' '.join(result.summary)
+    assert f'CVSS {shown:g}' in item.text
+    assert f'{shown:g} out of 10' not in ' '.join(result.summary)
+    assert any('Acme Gateway' in line and 'not the chance of an attack' in line for line in result.summary)
 
 
 def test_nvd_alone_makes_a_cve_in_any_report_most_severe_and_explains_its_description() -> None:
@@ -173,7 +175,7 @@ def test_nvd_alone_makes_a_cve_in_any_report_most_severe_and_explains_its_descri
     (item,) = result.sections[1].items
     assert item.text == 'CVE-2026-2000 · CVSS 9.8 (NIST NVD) · Partner note on gateways'
     severity = next(h for h in result.highlights if h.title == 'Highest reported severity')
-    assert 'NIST NVD rates it, and a new report mentions it: Partner note on gateways.' in severity.text
+    assert 'NIST NVD rates this flaw as critical. Report: Partner note on gateways.' in severity.text
     assert 'skip sign-in checks' in severity.text
 
 
@@ -215,7 +217,7 @@ def test_likely_attacks_are_named_with_their_chance_and_the_caveat() -> None:
         'CVE-2026-6000': scored('CVE-2026-6000', epss=0.02),  # below 10%: not named
     }
     result = compose(data(documents=documents, mentions=mentions, scores=scores), as_of=NOW)
-    likely = next(h for h in result.highlights if h.title == 'Likely to be attacked soon')
+    likely = next(h for h in result.highlights if h.title == 'Forecasts worth checking')
     assert likely.text.startswith(
         '2 flaws in this brief have an EPSS score of 10% or more: '
         'CVE-2026-4000 (42%) and CVE-2026-5000 (12%). '

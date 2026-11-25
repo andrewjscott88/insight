@@ -507,7 +507,8 @@ The Settings switch has no API. Credentials stay on the host, outside request bo
 
 ## ATT&CK techniques
 
-MITRE ATT&CK® Enterprise techniques on reports ([ADR 0019](adr/0019-attack-techniques.md)). A report is tagged
+MITRE ATT&CK® Enterprise, Mobile and industrial-control-system techniques on reports
+([ADR 0019](adr/0019-attack-techniques.md), [ADR 0042](adr/0042-mobile-and-ics-attack-catalogs.md)). A report is tagged
 with every technique ID written in its text (`T1059`, `T1059.001`) that is in the bundled catalog (`source:
 report`); analysts add and remove techniques by hand (`source: analyst`). A new revision of a synced item keeps
 the analyst's additions and removals. Insight never guesses a technique from prose and never infers an actor.
@@ -515,13 +516,17 @@ Summaries and pivots count **current** reports you can see.
 
 | Route | Parameters | Result |
 | --- | --- | --- |
-| `GET /api/attack/techniques` | `q` (ID prefix or name, up to 100 characters), `limit` (50, at most 200) | `{version, techniques: [{id, name, tactics, url}]}` from the bundled catalog, by ID |
-| `GET /api/attack/summary` | `days` (30; `0` for all time, at most 3650) | `{version, period, techniques: [{id, name, tactics, url, reports, last_seen_at}]}`, most reports first |
-| `GET /api/attack/techniques/{technique_id}/documents` | `days` (0), `offset` (0), `limit` (25, at most 200) | `{id, name, tactics, url, offset, documents: [summaries]}`, newest first; `404` for an ID not in the catalog |
-| `GET /api/attack/navigator` | `days` (30; `0` for all time) | An [ATT&CK Navigator](https://mitre-attack.github.io/attack-navigator/) layer (format 4.5) of the summary, each technique scored by its number of reports, as an attachment. Audited as `attack.navigator` |
-| `GET /api/documents/{id}/techniques` | - | `[{id, name, tactics, url, source, evidence, actor, created_at, in_catalog}]` by ID; `404` if you cannot see the report |
+| `GET /api/attack/techniques` | `q` (ID prefix or name, up to 100 characters), `limit` (50, at most 200), `domain` (`enterprise`, `mobile` or `ics`; default `enterprise`) | `{version, domain, techniques: [{id, name, tactics, url, domain}]}` from the selected bundled catalog, by ID |
+| `GET /api/attack/summary` | `days` (30; `0` for all time, at most 3650), `domain` (default `enterprise`) | `{version, domain, period, techniques: [{id, name, tactics, url, domain, reports, last_seen_at}]}`, most reports first within the selected domain |
+| `GET /api/attack/techniques/{technique_id}/documents` | `days` (0), `offset` (0), `limit` (25, at most 200) | `{id, name, tactics, url, domain, offset, documents: [summaries]}`, newest first; `404` for an ID not in any catalog |
+| `GET /api/attack/navigator` | `days` (30; `0` for all time), `domain` (default `enterprise`) | An [ATT&CK Navigator](https://mitre-attack.github.io/attack-navigator/) layer (format 4.5) of the selected domain, each technique scored by its number of reports, as an attachment. Audited as `attack.navigator`, including the domain |
+| `GET /api/documents/{id}/techniques` | - | `[{id, name, tactics, url, domain, source, evidence, actor, created_at, in_catalog}]` by ID; `domain` is null for retired/unknown IDs; `404` if you cannot see the report |
 | `POST /api/documents/{id}/techniques` | JSON `{technique_id}` (`T1486` or `T1059.001`) | The tag. Restores a removed one; a tag that already exists is returned unchanged. Audited as `technique.tag`. `422` for an ID not in the catalog, `404` if you cannot see the report |
 | `DELETE /api/documents/{id}/techniques/{technique_id}` | - | `{removed}`. Later revisions keep it removed. Audited as `technique.untag`. `404` if it is not tagged or you cannot see the report |
+
+The default Enterprise summary also retains stored IDs absent from every current catalog, with their
+ID, report count and last-seen time. These retired/unknown tags have no saved domain; Mobile and ICS
+summaries exclude them, and Navigator layers omit them. The report still retains its original tag.
 
 ## Industry threats and threat guides
 
@@ -709,6 +714,8 @@ and times with an empty message, since counts and diagnostics can describe more 
 | `GET /api/ips/{ip}/greynoise` | Read the last cached response without external traffic. Available to read-only and TLP-limited keys. Returns `404` when no eligible reviewed CLEAR observation or cached response exists. |
 | `POST /api/enrichment/shodan/{ip}` | Optional ([ADR 0031](adr/0031-shodan.md)). Approve a Shodan host lookup of one public IPv4 accepted in a current TLP:CLEAR report, with the same callers and caching as GreyNoise. The result has `provider`, `ip`, `found`, `fetched_at` and `attribution`; a match also has `ports` (at most 100), `port_count`, `hostnames`, `org`, `isp`, `asn`, `country_code`, `os`, `tags`, `vulns` (CVE IDs Shodan infers) and `last_update`. `503` without `INSIGHT_SHODAN_KEY` (no call is made), `404` for an ineligible address, `429` with `Retry-After`, `502` when Shodan refuses the key, plan or credits (the message says which). |
 | `GET /api/ips/{ip}/shodan` | The last cached Shodan answer with `attribution`, without external traffic. Available to read-only and TLP-limited keys. `404` when nothing eligible is cached. |
+| `POST /api/enrichment/censys/{ip}` | Approve one Censys Platform v3 host lookup with JSON `{"approved":true}`. Only a private session with CSRF or unlimited read-write key may call. Requires an accepted observation of the public IPv4/IPv6 in a current CLEAR report and host `INSIGHT_CENSYS_PAT`; optional `INSIGHT_CENSYS_ORG_ID` selects an organization. Responses have `provider`, `ip`, `found`, `fetched_at`, `attribution`; a match adds up to 100 `services` (`port`, `protocol`, `transport`, `observed_at`), `service_count`, up to 20 `hostnames`, `asn`, `network_name`, `prefix`, `country_code`. Reuses fresh answers for 24 hours. `422` without explicit approval, `404` if ineligible, `503` if not configured or temporary open access is on, `429` with Retry-After for throttling, `502` for other provider failures. [Account conditions](CENSYS.md). |
+| `GET /api/ips/{ip}/censys` | Read the last eligible cached Censys answer without external traffic; available to private sessions and read/TLP-limited keys. Rechecks the current CLEAR accepted observation. `404` for missing/ineligible context and `503` while temporary open access is on. Censys context is not included in intelligence exports or MCP. |
 | `POST /api/enrichment/{provider}/{cve}` | Provider JSON (`epss`, `nvd`), or for `vulncheck` the metadata Insight keeps from VulnCheck KEV (needs `INSIGHT_VULNCHECK_API_KEY`, else `422`; one request every 2 s), cached. Only the CVE number is sent. `422` invalid input or unknown CVE (checked first, so it uses no lookup window), `429` with `Retry-After` when the provider's window is taken: one request every 6.5 s at NVD (0.7 s with `INSIGHT_NVD_API_KEY`) and every 1 s at EPSS, shared with every other caller and with automatic lookups, so the wait may come from Insight itself. `502` provider failure, `403` for TLP-limited keys (a lookup can name a CVE from any report to a provider). |
 | `GET /api/cves?days=30&limit=50` | The prioritised CVE view ([ADR 0024](adr/0024-prioritised-cves.md)): the CVEs that current reports received in the last `days` days (1-365) mention, most urgent first, from the reports the caller may see (TLP limit; the demo and rejected mentions left out). `{days, since, total, truncated, cves: [cve]}`; `limit` 1-500 rows. A row is `{cve, tier, label, reason, details: [line], reports, sources, first_seen, last_seen, report: {id, title}, kev: {date_added, due_date, ransomware, name, document_id} \| null, cvss: {score, source, csaf}, nvd, epss, exploit}`. `tier`: 1 used in ransomware (CISA KEV), 2 known exploited (KEV), 3 reported exploited (VulnCheck KEV), 4 public exploit (a report or VulnCheck), 5 likely to be attacked soon (EPSS 10% or more), 6 critical (CVSS 9 or more), 7 high (CVSS 7 or more), 8 no strong signal (tiers 3 and 4 since 0.9.0, [ADR 0028](adr/0028-exploit-availability.md)); within a tier, higher EPSS, higher CVSS, more reports, most recently seen. `details` are plain-English lines; `nvd`/`epss` as in the scores route. `exploit` is `null` or `{public_exploit, reported_exploited, reports: {poc\|metasploit\|exploit-db: count}, vulncheck, attribution}`: `reports` counts current reports the caller may see that mention that kind of public exploit near the CVE; `vulncheck` is VulnCheck KEV's cached answer `{listed, date_added, exploits: [{xdb_id, url, exploit_type, date_added}], exploit_count, reported_count, canaries, ransomware}` or `null`, and `attribution` is the notice VulnCheck's terms require when it is shown. `truncated`: more than 20,000 mentions, older ones left out |
 | `GET /api/cves/{cve}/scores` | The cached scores, read without contacting anyone ([ADR 0023](adr/0023-automatic-cve-lookups.md)): `{cve, nvd, epss, nvd_checked_at, epss_checked_at, vulncheck, vulncheck_checked_at, exploit}` (`vulncheck` and `exploit` as in `GET /api/cves`). `nvd` is `{score, severity, version, vector, status, published, description, cwes}` or `null` (not looked up, or NVD has no record); `score` is the CVSS base score from the newest version NVD has (4.0, 3.1, 3.0, then 2), `null` when NVD has not scored it (`status` says why, such as `Awaiting Analysis` or `Rejected`). `epss` is `{probability, percentile, date}` (both 0-1; probability of exploitation attempts in the next 30 days) or `null`. A `*_checked_at` time with a `null` score means the provider was asked and has none. `404` unless a current report the caller may see mentions the CVE, so TLP-limited keys can use it for their own reports. |
@@ -740,7 +747,7 @@ default 7; invalid values return `422`. It reads stored data and makes no source
 | `as_of` | string | Window end, as an ISO-8601 UTC timestamp. This is the brief's reference time, not a source's last successful sync. |
 | `report_count` | integer | Current, visible, non-demo reports included in this brief after its date filters. |
 | `source_count` | integer | Distinct source identities among those reports: connector key, or case/space-normalized source name for other reports. Not a count of independent confirmations or all configured connectors. |
-| `recent_reports` | integer | Included reports received during the last 24 hours relative to `as_of`. This is a receipt count, not a count of attacks or newly published vulnerabilities. |
+| `recent_reports` | integer | Included reports received during the last 24 hours relative to `as_of`. Retained as compatibility metadata; the workspace has no separate receipt card or highlight. This is not a count of attacks or newly published vulnerabilities. |
 | `summary` | array of strings | Plain-English executive summary. The existing field is retained; its wording can change. |
 | `highlights` | array of objects | Prioritized explanations with `{title, text, action, evidence}`. The first three values are strings; `evidence` is an array of brief items described below. `action` is a conditional next step, not an instruction executed by Insight. |
 | `coverage` | array of strings | Notes explaining the data covered, count limits, excluded invalid/future dates and stored source-check freshness. Connector error details are omitted. |
@@ -748,6 +755,8 @@ default 7; invalid values return `422`. It reads stored data and makes no source
 
 The added fields are always present and are not nullable. Empty collections are `[]`; counts may be zero.
 Existing clients can continue using `summary` and `sections` and ignore the additions.
+The receipt-count field remains, but `highlights` no longer includes a recent-receipt entry. Highlight titles
+and summary wording are presentation text, not stable identifiers.
 
 A **brief item** is `{text, document_id, entity, search}`. `text` is a string; the remaining values are strings
 or `null`. A `document_id` opens a visible report; `entity` opens the indicator's evidence; `search` searches
@@ -779,12 +788,54 @@ for the current report version within the included set, so a received report can
 comparison against a previous period is made in the brief itself (the threat landscape, `GET /api/landscape`,
 makes one), so repeated coverage must not be interpreted as an increase in attacks. Full behavior and interpretation: [Executive brief](EXECUTIVE_BRIEF.md).
 
+## Hunt guide previews and downloads
+
+These authenticated GET routes accept a browser session or any API-key access level that can read.
+They use the normal `read` rate budget and the stricter of the instance and caller TLP ceilings. They
+make no external request, call no model and run no search against organisational telemetry. Guide generation
+only writes its audit event; it saves no guide, package, product or finding.
+
+| Route | Result |
+| --- | --- |
+| `GET /api/hunt-guides?kind=theme&q=ransom` | Choice lists, filtered before the 50-choice cap per kind. `kind` is optional; omit it for all nine lists. `q` defaults to empty and is at most 120 characters. |
+| `GET /api/hunt-guides/{kind}/{ref}?format=json` | Build the guide from then-current visible evidence. `format` is `json` (default), `md` or `pdf`. Markdown/PDF are attachments with `Cache-Control: no-store`. |
+
+Kinds are `industry`, `theme`, `actor`, `cve`, `document`, `exploit`, `software`, `indicator` and `campaign`.
+Choice JSON maps each requested kind to an array of `[ref, display_name]` pairs. Use the returned `ref` in
+the guide path: an industry or theme key; catalog or analyst actor ID; CVE identifier; document ID; software ID;
+entity ID for an indicator; or campaign ID. For `exploit`, the ref is a CVE with saved exploit/exploitation context.
+`kind` is at most 20 characters and path `ref` at most 128. Unknown kinds, hidden subjects and missing
+subjects return the same `404 Hunt guide choice not found`. Invalid bounds or format return `422`.
+
+Report choices use existing title, source and body search. Other choices search their names, aliases or
+identifiers as applicable. Hidden, rejected-only and superseded-only indicator mentions cannot supply a
+starting subject. Search again to reach a match outside the first 50 choices; no pagination token is returned.
+For `industry`, a blank query lists the existing 15 sector categories. Search matches their names, scopes
+and source aliases. For example, `industry/healthcare` builds from source-backed groups and related current
+reports added in the last 30 days. Sector mentions and explicit group links retain distinct match reasons;
+they create no attribution. Guide generation makes no source lookup.
+
+The JSON guide is `{kind, ref, title, summary, tlp, created_at, sections}`. All fields except `sections` are
+strings; `created_at` is the generation time in UTC. A section is `{title, lines: [string]}`. Guides include
+fixed planning steps, library source references and saved metadata, never publisher bodies, summaries or
+private analyst notes. The output retains its aggregate sharing label even if a list or text is shortened.
+PDF repeats TLP on each page. Markdown/PDF defang network indicators and escape untrusted text.
+
+Limits: 20 current reports, 100 eligible reviewed indicators and 12 techniques. Report plans consider up to
+12 CVE references; campaign plans inspect up to 200 visible links and note other indicator/software links
+for separate review. Section text is capped at 40,000 characters, with per-line/section bounds and visible
+limit notes. See [Threat Hunt](THREAT_HUNT.md) for selection, attribution and copyright rules.
+
+Successful generation is audited as `hunt.guide`, with `object_id=ref`, caller actor and detail containing
+kind, format and TLP. UI previews record the same action with format `preview`; choice listing is not audited.
+These reads never create actor attribution or establish that an indicator is malicious.
+
 ## Workspace
 
 | Route | Result |
 | --- | --- |
 | `GET /api/stats` | `{documents, entities, unreviewed, observations_unreviewed}` (current revisions only) |
-| `GET /api/brief?days=7` | Executive summary, report/source counts, last-24-hour receipt count, linked highlights, coverage notes and existing detail sections. See the [executive brief contract](#executive-brief). |
+| `GET /api/brief?days=7` | Executive summary, report/source counts, compatibility receipt-count metadata, linked highlights, coverage notes and detail sections. No recent-receipt highlight. See the [executive brief contract](#executive-brief). |
 | `GET /api/landscape?days=7` | The threat landscape that opens the workspace ([ADR 0020](adr/0020-threat-landscape.md)), built from the data (no AI). `days` 1-30 (default 7); the period is compared with the 4 periods before it. `{days, since, compared_since, compared_periods, tlp, reports, sources, summary: [sentence], caveats: [sentence], threats: [threat], quieter: [threat], tactics: [tactic], brief}`. A threat is `{key, name, change: {label, current, usual}, sources, what, impact, check, reports: [{text, document_id}], words, techniques}`; `label` is `rising`, `new`, `steady`, `quieter` or `no-history` (nothing before the period to compare with); `usual` is reports per period before, `null` without history. A tactic is `{shortname, name, plain, change, techniques: [[id, name, reports]]}`. `brief` is the intel brief below for the same period. `tlp` is the most restrictive label of the reports counted: share no wider. Built only from reports the caller may see (TLP limit) |
 | `GET /api/landscape/briefing?days=7` | The same as a Markdown briefing (`text/markdown`, attachment `insight-threat-landscape-7d.md`), marked with its TLP on the first and last lines; text from reports is escaped. Audited as `landscape.briefing` |
 | `GET /api/audit` | Latest 200 audit events: `{action, object_id, detail, actor, created_at}`. Not available to TLP-limited keys |

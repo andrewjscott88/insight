@@ -72,3 +72,11 @@ def test_legacy_software_without_techniques_is_valid_and_unknown_software_is_mis
     assert software_navigator(lib, 'S9998')['techniques'] == []
     with pytest.raises(LookupError):
         software_navigator(lib, 'S0000')
+
+
+def test_enterprise_actor_layers_exclude_mobile_and_ics_report_tags(db: Session) -> None:
+    """Regression: adding new domain catalogs must not put their IDs into an Enterprise Navigator layer."""
+    data = services.guide_data(db, 'G0016', now=datetime.now(UTC))
+    guide = compose(replace(data, report_techniques={'T1398': 1, 'T0800': 1}), library())
+    assert {'T1398', 'T0800'} <= {row.id for row in guide.techniques}
+    assert not {'T1398', 'T0800'} & {row['techniqueID'] for row in navigator_layer(guide)['techniques']}

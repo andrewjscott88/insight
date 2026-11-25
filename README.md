@@ -13,6 +13,20 @@ For setup, backups and upgrades, see the [operator runbook](docs/RUNBOOK.md). Fo
 
 ## What works
 
+- **Focused intelligence briefs:** search the top of **Intel Brief** by **Sector / Industry** or any of
+  the other Threat Hunt types, select a match and choose **Show brief**. The landing page starts with
+  **Last 30 days**; **Last 7 days** remains available. Read concise takeaways and open supporting reports.
+  Sector briefs separate sourced group background, reports mentioning the sector and reports linked to
+  those groups. The period controls keep the chosen focus; **All intelligence** returns to the overview.
+  No AI or source fetch is involved. [Brief behavior](docs/EXECUTIVE_BRIEF.md)
+
+- **Guided threat hunting:** choose a sector/industry, threat type, actor, flaw, report, exploit activity,
+  malware/tool, indicator or campaign in **Threat Hunt**, then download a plan as Markdown or PDF, or choose
+  **Save as hunt package** to keep an editable draft. It uses saved metadata and fixed guidance, with source
+  references and TLP limits. Saving is audited; publication is separate. It never runs a hunt or calls
+  an AI service. **Saved hunt packages** and **Advanced: intelligence reports** hold the existing workflows.
+  [Workflow and limits](docs/THREAT_HUNT.md)
+
 - **Read-only MCP for agents:** Search reports and indicators, read report summaries, check indicator verdicts
   and confidence, and retrieve open requirements, hunt packages, group profiles and the threat landscape.
   Uses bearer API keys, TLP ceilings, publisher reuse rules and audited reads. Supports protocols
@@ -39,13 +53,16 @@ For setup, backups and upgrades, see the [operator runbook](docs/RUNBOOK.md). Fo
   example addresses, reserved names, big vendor sites). `GET /api/iocs/blocklist` lists only unexpired malicious
   values with an accepted mention and no warning, for firewalls and SIEMs.
 - **MITRE ATT&CK® techniques** ([ADR 0019](docs/adr/0019-attack-techniques.md)). Reports are tagged with the
-  technique IDs written in them (`T1059.001`), checked against a bundled Enterprise ATT&CK catalog; analysts add
+  technique IDs written in them (`T1059.001`), checked against bundled Enterprise, Mobile and industrial
+  control systems (ICS) ATT&CK catalogs; analysts add
   and remove the rest in the reader, and new revisions keep those decisions. **Investigate › ATT&CK techniques** groups
   the techniques in your reports by tactic over a period you choose, opens the reports behind each one, and
   downloads a layer for ATT&CK Navigator. Never guessed from prose; no attribution. `make attack-backfill` tags
   reports stored before 0.7.0. STIX exports link each included report to its current catalog-backed tags,
   with the report's sharing label and a link to the technique on MITRE's site.
   API: `/api/attack/*` and `/api/documents/{id}/techniques`.
+  Select a domain to browse its offline catalog or export a matching Navigator layer. Existing API calls
+  default to Enterprise. [Domain catalogs](docs/adr/0042-mobile-and-ics-attack-catalogs.md)
 - **Industry threats and threat guides** ([docs/THREAT_GUIDES.md](docs/THREAT_GUIDES.md),
   [ADR 0025](docs/adr/0025-threat-guides.md)): pick an industry and see up to ten threat groups that a cited
   source (MITRE ATT&CK or the MISP galaxy) says target it, each with the quoted evidence. Open one for a threat
@@ -74,28 +91,37 @@ For setup, backups and upgrades, see the [operator runbook](docs/RUNBOOK.md). Fo
 - **Certificate transparency (TIP 4.6 part 2).** Optional, approved crt.sh domain lookups show certificate names, issuer and dates in the workspace and link map. [Guide](docs/INFRASTRUCTURE_PIVOTS.md)
 - **Passive DNS (TIP 4.6 part 3).** With approved CIRCL access and your own credentials, manually approved pivots show bounded DNS history and provider/date links. [Guide](docs/INFRASTRUCTURE_PIVOTS.md)
 - **Shodan exposure context (optional, paid).** With your own Shodan key, the same reviewed address can be looked up at Shodan for open ports and exposure. [Runbook](docs/RUNBOOK.md#shodan-exposure-context)
+- **Censys Platform context (optional).** Approve a lookup of one reviewed public IPv4 or IPv6 address to
+  see observed services, host names and network details. Configure `INSIGHT_CENSYS_PAT` on the host and,
+  when needed, `INSIGHT_CENSYS_ORG_ID`. Censys requires private sign-in and is unavailable during temporary
+  open access. Results stay out of exports and follow your account terms; fresh lookups may use credits.
+  [Censys setup](docs/CENSYS.md)
 - **Optional abuse.ch indicator feeds.** Import recent URLs from URLhaus, network indicators and hashes from
   ThreatFox, and file hashes from MalwareBazaar. Set `INSIGHT_ABUSECH_AUTH_KEY` and enable the feeds you use.
   Each entry links to its record at the publisher. The connector reads only the provider's metadata API.
 - Curated connectors: CISA KEV, CISA security advisories (CISA's machine-readable CSAF files), SANS ISC and UK
-  NCSC feeds. **Sync now** per source, **Sync all sources** beside the threat landscape, and **opt-in
+  NCSC feeds. **Sync now** per source, **Sync all sources** beside Intel Brief, and **opt-in
   schedules** (off by default; every hour, 6 hours or day, per source or for all, from a time of day you choose,
   in UTC) so the feeds and the brief stay fresh by themselves. An unchanged feed is not downloaded again (`ETag` / `Last-Modified`). See
   [ADR 0018](docs/adr/0018-opt-in-scheduled-syncs.md).
 - **OTX subscriptions** import public CLEAR/WHITE pulses as reports with their indicators and source links.
   Set your own `INSIGHT_OTX_API_KEY` and turn on the source in the workspace. [Runbook](docs/RUNBOOK.md#8-sources-enrichment-and-their-failures)
-- **Threat landscape** opens the workspace ([ADR 0020](docs/adr/0020-threat-landscape.md)): a plain-English
+- **Intel Brief** opens the workspace ([ADR 0020](docs/adr/0020-threat-landscape.md),
+  [ADR 0041](docs/adr/0041-guided-threat-hunt-workspace.md)): a plain-English
   executive summary of the last 7 or 30 days, compared with the 4 weeks or months before. Which kinds of threat
   are **rising**, **new** or **quieter** (ransomware, phishing, data theft, supply chain, zero-days and 8 more,
   spotted by listed words and ATT&CK techniques), what each one is, **why it matters** and **what to check**,
   what attackers are doing by ATT&CK tactic, and every report behind it. Counted from your reports, not written
-  by AI; marked with the most restrictive TLP it used; **Download as a briefing to share** (Markdown).
+  by AI. Known exploited products or reported threat themes lead, with meaning and next steps before
+  report-volume context. The most restrictive contributing TLP stays attached; **Download as a briefing
+  to share** saves Markdown.
   `GET /api/landscape`, `GET /api/landscape/briefing`.
-- **Intel brief** inside it ([docs/EXECUTIVE_BRIEF.md](docs/EXECUTIVE_BRIEF.md)): what the period adds up to,
+- **Evidence behind the brief** ([docs/EXECUTIVE_BRIEF.md](docs/EXECUTIVE_BRIEF.md)): what the period adds up to,
   built from your reports (no AI). **What needs attention** gives plain findings (known exploitation, a recurring
-  topic, the highest severity, your watch terms, the last 24 hours), each with a conditional **next step** and
-  its evidence; beside the summary, how many reports came in during the **last 24 hours**, and **About this
-  brief** says what the data covers and how fresh each source is. Then *Exploited now* (CISA KEV), *Most
+  topic, the highest severity and your watch terms), each with a conditional **next step** and
+  its evidence. **About this brief** says what the data covers and how fresh each source is. There is no
+  separate last-24-hour receipt card or attention highlight; the existing `recent_reports` API field remains.
+  Then *Exploited now* (CISA KEV), *Most
   severe* (CVSS 9 or higher), *Your watch terms*, *Seen in several sources* and *Most-mentioned vendors*. Every
   line opens its report, indicator or a search. "New" means published in the period, so a first sync of old
   history does not flood it; the demo is left out. Also `GET /api/brief`.
@@ -284,11 +310,11 @@ After changing dependencies in `pyproject.toml`, run `python scripts/lock.py` (r
 
 ## Daily workflow
 
-The side menu follows the same day: **Today** (the brief, and counters that open the list behind them),
-**Requirements** (the questions your intelligence work answers, and requests for information from people or
-hunt tools, [ADR 0032](docs/adr/0032-intelligence-requirements.md)), **Triage** (new reports, the reader and review), **Investigate** (indicators, CVEs, ATT&CK techniques and threat
-groups), **Products**, **Share** (IOC export, TAXII, API keys, MISP) and **Settings** (sources, lookups, watch terms
-and alerts). On a phone the menu sits above the content.
+The side menu starts with **Intel Brief**, then **Triage** (reports and review), **Investigate** (indicators,
+CVEs, techniques and threat groups), **Threat Hunt** (guide builder, saved hunt packages and advanced
+intelligence reports), **Share** (IOC export, TAXII, API access and MISP), and **Settings**. Requirements and
+requests for information remain in **Settings → Intelligence questions (advanced)**. Sources, lookups,
+watch terms and alerts remain in Settings too. On a phone the menu sits above the content.
 
 1. **Collect:** paste authorized text or explicitly sync a curated feed.
 2. **Read:** search/filter the inbox and read evidence in context.
@@ -296,13 +322,20 @@ and alerts). On a phone the menu sits above the content.
 4. **Correlate:** pivot to other documents that mention the same canonical entity.
 5. **Prioritize:** watch terms identify possible organizational relevance; CISA KEV signals observed exploitation, NVD supplies vulnerability metadata, and EPSS estimates exploitation probability. None proves that your assets are exposed.
 6. **Record:** write an analyst note explaining your judgment.
-7. **Share:** export the indicators you reviewed (**Export IOCs**), filtered to the TLP you may share at. Check the file's label and evidence before it leaves your hands ([docs/IOC_EXPORT.md](docs/IOC_EXPORT.md)).
+7. **Plan:** build a guide in **Threat Hunt**, then download it or **Save as hunt package** to create a draft.
+   Review and edit the draft before explicitly publishing it. Run the hunt in your own tool
+   ([docs/THREAT_HUNT.md](docs/THREAT_HUNT.md)).
+8. **Share:** export the indicators you reviewed (**Export IOCs**), filtered to the TLP you may share at. Check the file's label and evidence before it leaves your hands ([docs/IOC_EXPORT.md](docs/IOC_EXPORT.md)).
 
 The data model separates documents, entities, observations, notes and external enrichments. It intentionally does not invent threat-actor attribution or causal relationships from co-occurrence.
 
 ## Handling sensitive intelligence
 
 TLP:CLEAR/GREEN/AMBER/AMBER+STRICT/RED are preserved as metadata. **This single-user release does not enforce organizational sharing groups or recipient-level TLP access.** Only import material you personally may access and retain. Local JSON exports preserve the label but cannot prevent later disclosure. An IOC export is labelled with the most restrictive TLP of the reports it includes; use `max_tlp` (or **Most restrictive TLP to include**) to keep restricted reports out of a file you intend to share. No external AI provider is called.
+
+Badges explain the intended audience while retaining the standard token, such as **Public · TLP:CLEAR**
+or **Your organization only · TLP:AMBER+STRICT**. Public disclosure under TLP does not waive copyright or
+publisher reuse terms. The presentation does not lower stored labels or access limits.
 
 No automatically fetched article HTML is rendered. Source text is displayed as text; links are HTTP(S) only. Curated connector destinations are fixed and checked for public DNS resolution, redirects are disabled, and payload sizes are bounded. An egress firewall is still advisable: application DNS checks are not a complete DNS-rebinding defense.
 

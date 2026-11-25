@@ -24,8 +24,8 @@ __all__ = ['browser']  # the fixture is used by name
 
 pytestmark = pytest.mark.e2e
 
-PAGE_BACKGROUND = {'light': 'rgb(246, 244, 250)', 'dark': 'rgb(5, 4, 7)'}
-SECTIONS = ('Today', 'Requirements', 'Triage', 'Investigate', 'Products', 'Share', 'Settings')
+PAGE_BACKGROUND = {'light': 'rgb(241, 245, 247)', 'dark': 'rgb(8, 12, 16)'}
+SECTIONS = ('Intel Brief', 'Triage', 'Investigate', 'Threat Hunt', 'Share', 'Settings')
 INVESTIGATE = ('Indicators', 'CVEs', 'ATT&CK techniques', 'Threat groups')
 DEMO_TITLE = 'Training scenario: edge appliance activity'
 #: Playwright's descriptors for these phones (pinned: a second Playwright instance cannot run beside the
@@ -143,7 +143,7 @@ def test_a_theme_choice_applies_at_once_and_is_remembered_on_this_device_only(br
     page.get_by_role('button', name='Light theme').click()
     expect(page.locator('body.body--light')).to_have_count(1)
     assert background(page) == PAGE_BACKGROUND['light']
-    assert page.eval_on_selector('meta[name=theme-color]', 'm => m.content') == '#f6f4fa'
+    assert page.eval_on_selector('meta[name=theme-color]', 'm => m.content') == '#f1f5f7'
     cookie = next(c for c in context.cookies() if c['name'] == 'insight_theme')
     assert (cookie['value'], cookie['sameSite'], cookie['path']) == ('light', 'Lax', '/')
 
@@ -181,11 +181,13 @@ def test_rendered_text_is_readable(browser: Any, scheme: str) -> None:
     sign_in(page)
     load_demo(page)
     samples = {
-        'filled button': page.get_by_role('button', name='Add intelligence'),
+        'filled button': page.get_by_role('button', name='Import Intel'),
         'outlined button': page.get_by_role('button', name='Export IOCs'),
         'muted label': page.get_by_text(re.compile(r'sources shown · newest first')),
-        'TLP badge': page.get_by_text('TLP:GREEN', exact=True).first,
-        'TLP AMBER+STRICT badge': page.get_by_text('TLP:AMBER+STRICT', exact=True).first,
+        'TLP badge': page.get_by_text('Community only · TLP:GREEN', exact=True).first,
+        'TLP AMBER+STRICT badge': page.get_by_text(
+            'Your organization only · TLP:AMBER+STRICT', exact=True
+        ).first,
         'selected theme button': page.get_by_role('button', name='System theme'),
     }
     for name, locator in samples.items():
@@ -259,7 +261,7 @@ def test_phone_workspace_fits_every_tab_and_dialog(phone: Any) -> None:
     sign_in(page)
     load_demo(page)
     assert overflow(page) <= 0
-    for section in (*SECTIONS[3:], *SECTIONS[:3]):  # Ends on Triage.
+    for section in (*SECTIONS[2:], *SECTIONS[:2]):  # Ends on Triage.
         tab = page.locator('.side-tabs').get_by_role('tab', name=section, exact=True)
         expect(tab).to_be_visible()
         tab.click()
@@ -270,7 +272,7 @@ def test_phone_workspace_fits_every_tab_and_dialog(phone: Any) -> None:
         show(page, 'Investigate', label)
         assert overflow(page) <= 0, f'Investigate · {label} overflows'
     show(page, 'Triage')
-    for button, close in (('Add intelligence', 'Cancel'), ('Export IOCs', 'Cancel')):
+    for button, close in (('Import Intel', 'Cancel'), ('Export IOCs', 'Cancel')):
         page.get_by_role('button', name=button).click()
         dialog = page.locator('.q-dialog .dialog-card')
         expect(dialog).to_be_visible()
@@ -293,9 +295,34 @@ def test_phone_inputs_are_16px_and_buttons_are_easy_to_tap(phone: Any) -> None:
     assert sizes
     assert min(sizes) >= 16, 'iOS zooms into inputs below 16px'
     open_document(page, DEMO_TITLE)
-    for name in ('Load demo', 'Export IOCs', 'Add intelligence', 'Accept', 'Back to list', 'Light theme'):
+    for name in ('Load demo', 'Export IOCs', 'Import Intel', 'Accept', 'Back to list', 'Light theme'):
         box = page.get_by_role('button', name=name).first.bounding_box()
         assert box['height'] >= 40, f'{name} is {box["height"]}px tall'
+
+
+def test_phone_hunt_guide_can_be_built_read_and_changed(phone: Any) -> None:
+    """Regression: every step of the hunt builder must fit a phone, including a full guide."""
+    page = phone.new_page()
+    sign_in(page)
+    show(page, 'Threat Hunt')
+    build = page.get_by_role('button', name='Build guide', exact=True)
+    download = page.get_by_role('button', name='Download PDF (opens in a new tab)', exact=True)
+    expect(build).to_be_disabled()
+    expect(download).to_be_disabled()
+    # Quasar's read-only input delegates taps to its field; its own pointer events are disabled.
+    page.locator('.q-field').filter(has=page.get_by_label('Threat type', exact=True)).click()
+    page.get_by_role('option', name='Ransomware', exact=True).click()
+    build.click()
+    expect(page.get_by_role('heading', name='Threat hunt guide: Ransomware', exact=True)).to_be_visible()
+    expect(download).to_be_enabled()
+    assert overflow(page) <= 0
+    for name in ('Build guide', 'Search', 'Download PDF (opens in a new tab)'):
+        assert page.get_by_role('button', name=name, exact=True).bounding_box()['height'] >= 40
+    page.locator('.q-field').filter(has=page.get_by_label('Start from', exact=True)).click()
+    page.get_by_role('option', name='Report or advisory', exact=True).click()
+    expect(download).to_be_disabled()
+    expect(page.get_by_role('heading', name='Threat hunt guide: Ransomware', exact=True)).to_have_count(0)
+    assert overflow(page) <= 0
 
 
 def test_phone_reader_comes_into_view_and_back_to_list_returns(phone: Any) -> None:

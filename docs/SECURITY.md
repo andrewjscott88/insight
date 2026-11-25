@@ -2,6 +2,15 @@
 
 ## Manual infrastructure connections
 
+Censys Platform receives one explicitly approved, reviewed public IPv4 or IPv6 address from a current
+CLEAR report. Its fixed HTTPS host is `api.platform.censys.io`; allow only that host if enabling the
+connector. `INSIGHT_CENSYS_PAT` is a bearer header, never a URL or database value. The optional organization
+UUID selects account access. The shared downloader checks DNS addresses, refuses redirects and caps the
+reply at 1 MB; one shared in-flight lookup and a two-second throttle apply. Every outbound attempt and
+cache write is audited. Both cached reads and new lookups are refused under temporary open access.
+Censys metadata is private context, excluded from all intelligence exports; contact details and banners
+are discarded. [Account terms, configuration and limits](CENSYS.md).
+
 TIP 4.6 part 1 adds RDAP and RIPEstat, each off by default with an audited Settings switch. An uncached
 lookup needs one explicit operator approval and an accepted observation in a current TLP:CLEAR report.
 Sessions and unlimited read-write keys can request lookups; limited keys can only read eligible cached data.

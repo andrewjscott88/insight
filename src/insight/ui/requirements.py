@@ -123,7 +123,7 @@ def _row(summary: services.RequirementSummary, show: Callable[[str], None], *, n
         ui.label(' · '.join(details)).classes('muted text-sm' + (' text-warning' if summary.quiet else ''))
 
 
-def build_requirements(ws: Workspace) -> None:
+def build_requirements(ws: Workspace, *, embedded: bool = False) -> None:
     status: dict[str, RequirementStatusFilter] = {'value': 'open'}
     # Dialogs live here, not inside the list: refreshing the list would delete an open dialog with it.
     holder = ui.element('div')
@@ -166,13 +166,13 @@ def build_requirements(ws: Workspace) -> None:
             group = [s for s in found if s.kind in kinds and (not s.parent_id or s.parent_id not in shown)]
             if not group:
                 continue
-            heading(title, 2, 'subsection-title')
+            heading(title, 3 if embedded else 2, 'subsection-title')
             for summary in group:
                 _row(summary, show)
                 for child in children.get(summary.id, []):
                     _row(child, show, nested=True)
 
-    heading('Requirements', 1)
+    heading('Intelligence questions' if embedded else 'Requirements', 2 if embedded else 1)
     ui.label(
         'The questions your intelligence work answers. A report addresses a requirement when it meets one of '
         'its criteria: a term, a CVE, an ATT&CK technique, a threat group or a campaign.'

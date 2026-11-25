@@ -9,6 +9,10 @@
 | Script against it (API key, `curl` for every call, SIEM recipes) | [API_GUIDE](API_GUIDE.md), then [API](API.md) for every field |
 | Export indicators (IOCs) to share, block or hunt | [IOC_EXPORT](IOC_EXPORT.md), [schema](schemas/insight-ioc-v1.schema.json), [example](examples/insight-iocs-example.json) |
 | Let a SIEM or TIP poll reviewed indicators over TAXII 2.1 | [TAXII](TAXII.md) |
+| Build and download a plan to use in a hunt tool | [THREAT_HUNT](THREAT_HUNT.md), [ADR 0041](adr/0041-guided-threat-hunt-workspace.md) |
+| Understand the opening brief, reporting periods and sharing labels | [EXECUTIVE_BRIEF](EXECUTIVE_BRIEF.md) |
+| Browse Enterprise, Mobile or ICS attack techniques | [ATT&CK domain catalogs](adr/0042-mobile-and-ics-attack-catalogs.md) |
+| Set up private Censys host lookups | [CENSYS](CENSYS.md) |
 | See which groups target an industry, export a threat guide, plan a hunt | [THREAT_GUIDES](THREAT_GUIDES.md), [ADR 0025](adr/0025-threat-guides.md) |
 | Know what indicators it extracts and how well | [EXTRACTION](EXTRACTION.md) |
 | Judge its security posture | [SECURITY](SECURITY.md), [reporting a vulnerability](../SECURITY.md) |

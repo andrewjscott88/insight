@@ -64,6 +64,15 @@ def test_a_report_links_to_its_indicators_and_techniques(db: Session, world: dic
     assert (seed.id, seed.type, seed.label, seed.depth) == (report, 'report', 'Loader campaign', 0)
 
 
+def test_mobile_and_ics_techniques_have_named_graph_nodes(db: Session) -> None:
+    """Regression: new domain tags must remain navigable instead of becoming missing catalog nodes."""
+    report_id = add(db, 'Multiple domains', 'T1398 and T0800.')
+    graph = build_graph(db, f'report:{report_id}', max_tlp='GREEN')
+    nodes = {n.id: n.label for n in graph.nodes}
+    assert 'Boot or Logon Initialization Scripts' in nodes['technique:T1398']
+    assert 'Activate Firmware Update Mode' in nodes['technique:T0800']
+
+
 def test_two_steps_reach_reports_that_share_an_indicator(db: Session, world: dict[str, Any]) -> None:
     graph = build_graph(db, f'report:{world["first"]}', depth=2)
     assert f'report:{world["second"]}' in ids(graph)

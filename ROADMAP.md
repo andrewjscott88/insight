@@ -13,6 +13,20 @@ response and dark-web collection they sell.
 Background: [docs/CI_CD.md](docs/CI_CD.md) (pipeline), [docs/VALIDATION.md](docs/VALIDATION.md) (what is not yet
 verified) and the README's "Scope and known limits".
 
+## Workspace enhancement under review
+
+[ADR 0041](docs/adr/0041-guided-threat-hunt-workspace.md) adds a clearer Intel Brief, an on-demand
+[Threat Hunt guide builder](docs/THREAT_HUNT.md), and plain-language sharing audiences. It brings existing
+packages and saved intelligence reports into Threat Hunt and keeps requirements in advanced Settings.
+This is an enhancement to the existing intelligence workflow, not completion of another TIP milestone.
+It adds no telemetry execution, automatic attribution, AI writing or schema migration.
+
+The unreleased update also adds **Sector / Industry** focus to Intel Brief and makes **Last 30 days** the
+workspace default. Sector mentions and explicit group links state why reports match, separately from
+catalog targeting history ([ADR 0044](docs/adr/0044-sector-intel-briefs.md)).
+Threat Hunt offers the same categories for downloadable guides and saved draft packages
+([ADR 0045](docs/adr/0045-sector-threat-hunt-guides.md)).
+
 ## 0.7.0: hardened, with complete vulnerability intelligence
 
 Close the security findings first, then make the vulnerability workflow complete. Intelligence work comes first
@@ -20,8 +34,9 @@ where the operator asked for it: ATT&CK techniques were brought forward from 0.9
 
 - [x] **TIP 2.3 ATT&CK techniques** ([ADR 0019](docs/adr/0019-attack-techniques.md)): the bundled Enterprise
       catalog, tags from technique IDs written in reports, analyst tags and removals kept across revisions, the
-      **ATT&CK techniques** tab with report pivots, a Navigator layer export and the API. Still to do: Mobile and
-      ICS catalogs.
+      **ATT&CK techniques** tab with report pivots, a Navigator layer export and the API. Mobile and ICS
+      catalogs are implemented in the unreleased workspace update, with domain selection, offline browsing
+      and matching Navigator exports ([ADR 0042](docs/adr/0042-mobile-and-ics-attack-catalogs.md)).
 - [x] **Threat landscape** ([ADR 0020](docs/adr/0020-threat-landscape.md)), at the operator's request: a
       plain-English executive summary of what is trending against the weeks before, why it matters and what to
       check, attacker behaviour by tactic, TLP-marked and downloadable as a briefing. Next: analyst-defined
@@ -147,8 +162,10 @@ tools over TAXII and STIX; sightings and requests for information come back
       ([ADR 0030](docs/adr/0030-postgres-timestamps-and-feed-cursors.md)).
 - [x] **TIP 3.8 Lightweight case management** ([ADR 0029](docs/adr/0029-cases.md)).
 - [ ] **TIP 3.6 Opt-in LLM proposals** under the contract in [docs/LLM_EXTENSION.md](docs/LLM_EXTENSION.md).
-- [x] **TIP 3.7 Optional Shodan enrichment** with the operator's own key ([ADR 0031](docs/adr/0031-shodan.md));
-      Censys waits for its Platform API transition.
+- [x] **TIP 3.7 Optional Shodan and Censys enrichment** with operator credentials. Shodan follows
+      [ADR 0031](docs/adr/0031-shodan.md). Censys Platform host lookups are implemented in the unreleased
+      update, with per-lookup approval, private access and metadata-only caching
+      ([ADR 0043](docs/adr/0043-censys-platform-enrichment.md)).
 
 
 **Out of scope on purpose:** cloning CrowdStrike, Mandiant or Recorded Future collection, a malware sandbox,

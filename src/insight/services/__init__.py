@@ -109,6 +109,7 @@ from .cases import (
     reopen_case,
     update_case,
 )
+from .censys_context import cached_censys_context, eligible_censys_ip, store_censys_context
 from .common import fold, like_pattern, stamp
 from .confidence import (
     CREDIBILITY,
@@ -149,7 +150,11 @@ from .exports import (
     ioc_export_counts,
     ioc_mentions,
 )
+from .focused_briefs import focused_brief
 from .graph import Graph, GraphEdge, GraphNode, build_graph
+from .hunt_guide_packages import create_hunt_package_from_guide
+from .hunt_guide_subjects import hunt_guide_subject, hunt_guide_subject_choices
+from .hunt_guides import hunt_guide, hunt_guide_choices
 from .hunt_package_stix import MAX_SERVED_HUNT_PACKAGES, export_hunt_package
 from .hunt_package_views import (
     MAX_HUNT_PACKAGES,
@@ -507,6 +512,7 @@ __all__ = [
     'blocklist',
     'brief_data',
     'build_graph',
+    'cached_censys_context',
     'cached_enrichments',
     'cached_greynoise_context',
     'cached_ip_context',
@@ -526,6 +532,7 @@ __all__ = [
     'create_campaign',
     'create_case',
     'create_hunt_package',
+    'create_hunt_package_from_guide',
     'create_operator_source',
     'create_requirement',
     'cve_score_view',
@@ -546,6 +553,7 @@ __all__ = [
     'document_requirements',
     'document_techniques',
     'due_alerts',
+    'eligible_censys_ip',
     'eligible_greynoise_ip',
     'eligible_pivot',
     'end_all_operator_sessions',
@@ -569,6 +577,7 @@ __all__ = [
     'find_mentions',
     'fingerprint',
     'finish_job',
+    'focused_brief',
     'fold',
     'get_campaign',
     'get_case',
@@ -582,6 +591,10 @@ __all__ = [
     'get_rule',
     'guide_data',
     'hunt_checks',
+    'hunt_guide',
+    'hunt_guide_choices',
+    'hunt_guide_subject',
+    'hunt_guide_subject_choices',
     'hunts_for',
     'import_operator_stix',
     'import_pdf',
@@ -696,6 +709,7 @@ __all__ = [
     'start_hunt',
     'start_operator_session',
     'stats',
+    'store_censys_context',
     'store_greynoise_context',
     'store_ip_context',
     'store_pdf_report',

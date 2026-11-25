@@ -35,7 +35,32 @@ from insight.appearance import (
 )
 from insight.ui.appearance import theme_color_script
 from insight.ui.styles import QUASAR_OVERRIDES, STYLE, TEXT_SIZE_STYLE
-from insight.ui.theme import PALETTES, TLP_CLASSES, palette_css, theme_head_html
+from insight.ui.theme import PALETTES, TLP_CLASSES, palette_css, theme_head_html, tlp_guidance, tlp_text
+
+
+@pytest.mark.parametrize(
+    ('label', 'audience', 'boundary'),
+    [
+        ('CLEAR', 'Public', 'Copyright and source terms still apply.'),
+        ('GREEN', 'Community only', 'Do not post publicly.'),
+        ('AMBER', 'Need to know', 'your organization and its clients'),
+        ('AMBER+STRICT', 'Your organization only', 'Do not share with clients.'),
+        ('RED', 'Named recipients only', 'Do not share it further.'),
+    ],
+)
+def test_sharing_labels_keep_the_standard_token_and_explain_the_audience(
+    label: str, audience: str, boundary: str
+) -> None:
+    """Regression: a bare colour code gave readers no plain-language sharing guidance."""
+    assert tlp_text(label) == f'{audience} · TLP:{label}'
+    assert boundary in tlp_guidance(label)
+
+
+def test_an_unknown_sharing_label_is_never_described_as_public() -> None:
+    """Regression: an unknown label must not inherit the public badge's appearance or meaning."""
+    assert tlp_text('UNKNOWN') == 'Sharing not confirmed · TLP:UNKNOWN'
+    assert tlp_guidance('UNKNOWN').startswith('Do not share this')
+
 
 APP_CSS = (Path(insight.__file__).parent / 'static' / 'app.css').read_text()
 TEXT_AAA = 7.0  # WCAG 1.4.6 Contrast (Enhanced)
@@ -173,8 +198,9 @@ def test_page_background_matches_the_palettes() -> None:
 
 def test_every_token_the_styles_use_is_defined() -> None:
     used = set(re.findall(r'var\(--ins-([a-z-]+)\)', STYLE + QUASAR_OVERRIDES))
+    global_tokens = set(re.findall(r'--ins-([a-z-]+)\s*:', STYLE))
     assert used
-    assert used <= PALETTES['dark'].keys()
+    assert used <= PALETTES['dark'].keys() | global_tokens
 
 
 @pytest.mark.parametrize('theme', ['dark', 'light'])
@@ -250,18 +276,18 @@ def test_regression_quasars_dark_surface_is_only_remapped_in_the_dark_theme() ->
 def test_theme_head_html_sets_the_first_paint_and_the_text_size() -> None:
     system = theme_head_html('system')
     assert system.count('<meta name="theme-color"') == 2
-    assert 'media="(prefers-color-scheme: light)" content="#f6f4fa"' in system
-    assert 'media="(prefers-color-scheme: dark)" content="#050407"' in system
+    assert 'media="(prefers-color-scheme: light)" content="#f1f5f7"' in system
+    assert 'media="(prefers-color-scheme: dark)" content="#080c10"' in system
     light = theme_head_html('light', 'large')
     assert light.count('<meta name="theme-color"') == 1
-    assert 'content="#f6f4fa"' in light
+    assert 'content="#f1f5f7"' in light
     assert 'prefers-color-scheme' not in light
     assert 'document.documentElement.dataset.text = "large";' in light
 
 
 def test_theme_color_script_replaces_the_address_bar_colour() -> None:
     assert theme_color_script('dark').count("name: 'theme-color'") == 1
-    assert "content: '#050407'" in theme_color_script('dark')
+    assert "content: '#080c10'" in theme_color_script('dark')
     assert theme_color_script('system').count('prefers-color-scheme') == 2
 
 
@@ -291,10 +317,16 @@ def test_lines_are_about_70_characters_and_nothing_is_in_capitals() -> None:
 def test_keyboard_focus_is_a_3px_outline_and_motion_can_be_turned_off() -> None:
     assert 'outline:3px solid var(--ins-focus) !important' in QUASAR_OVERRIDES
     assert '@media (prefers-reduced-motion: reduce)' in QUASAR_OVERRIDES
-    assert (
-        '.q-btn { text-transform:none;font-weight:600;font-size:1rem;line-height:1.5;min-height:2.75rem; }'
-        in STYLE
-    )
+    button = re.search(r'^\s*\.q-btn \{([^}]+)\}', STYLE, re.MULTILINE)
+    assert button
+    for declaration in (
+        'text-transform:none;',
+        'font-weight:600;',
+        'font-size:1rem;',
+        'line-height:1.5;',
+        'min-height:2.75rem;',
+    ):
+        assert declaration in button.group(1)
 
 
 def test_larger_text_scales_everything_and_adds_space() -> None:

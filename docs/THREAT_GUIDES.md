@@ -166,10 +166,15 @@ Check the licence and sharing label before sending the file to another team.
 ## From a guide to a hunt package
 
 A guide is the background; a **hunt package** is what you hand a hunt tool ([ADR 0034](adr/0034-hunt-packages.md)):
-one hypothesis, with the ATT&CK techniques, indicators and rules that test it. Make one in **Share → Hunt
+one hypothesis, with the ATT&CK techniques, indicators and rules that test it. Make one in **Threat Hunt → Hunt
 packages**, or with **Add to hunt package** in the reader or the indicator explorer, then publish it to the
 *Hunt packages* TAXII collection. Hunt records stay as they are, but get no new features: the hunt tool records
 what it ran and found, and reports sightings back.
+
+For a plan that starts from a threat type, actor, flaw, report, exploit activity, software, indicator or
+campaign, use the [Threat Hunt guide builder](THREAT_HUNT.md). It previews and downloads fixed guidance
+with saved metadata. It does not save a package, publish a product or execute a hunt. Existing products
+are under **Threat Hunt → Saved intelligence reports**.
 
 ## TLP
 

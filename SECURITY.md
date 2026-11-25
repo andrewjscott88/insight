@@ -44,6 +44,11 @@ only to its fixed HTTPS endpoint, never URLs or stored context. Active queries a
 
 ## Scope and posture
 
+Censys Platform host lookups require a host token, private sign-in and explicit approval of one reviewed
+public IP in a current CLEAR report. Credentials go only in headers to its fixed HTTPS API. Provider
+metadata stays in a private cache; temporary open access refuses both lookup and cache reads. No banners,
+contact details or provider data enter intelligence exports. [Account terms and controls](docs/CENSYS.md).
+
 Insight is a single-operator workbench. By default it listens on loopback only; it can be published behind a TLS
 reverse proxy. What it protects against, what it does not, and what to do before exposing it to a network is
 documented in [docs/SECURITY.md](docs/SECURITY.md). API keys start with `insk_`: if you find one in a public

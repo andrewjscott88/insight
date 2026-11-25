@@ -1,0 +1,16 @@
+{
+  "result": {
+    "resource": {
+      "ip": "8.8.8.8",
+      "location": {"country_code": "US", "city": "PRIVATE CITY", "coordinates": {"latitude": 1}},
+      "autonomous_system": {"asn": 64500, "name": "Synthetic network", "bgp_prefix": "8.8.8.0/24"},
+      "whois": {"organization": {"admin_contacts": [{"email": "private@example.org"}]}},
+      "services": [
+        {"port": 443, "protocol": "HTTPS", "transport_protocol": "TCP", "scan_time": "2026-11-20T12:00:00Z", "banner": "PRIVATE BANNER"},
+        {"port": 53, "protocol": "DNS", "transport_protocol": "udp", "scan_time": "2026-11-19T12:00:00Z"}
+      ],
+      "dns": {"names": ["synthetic.example.org", "synthetic.example.org"]}
+    },
+    "extensions": {"untrusted": "PRIVATE EXTENSION"}
+  }
+}

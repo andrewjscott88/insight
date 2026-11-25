@@ -52,7 +52,7 @@ async def test_unauthenticated_visitors_are_redirected(ui_env: SimpleNamespace) 
 
 
 async def test_workspace_renders_empty_state(user: User) -> None:
-    await user.should_see('Threat landscape')
+    await user.should_see('Intel brief')
     await user.should_see('Cyber Threat Intelligence Platform')
     await user.should_not_see('Collect. Connect. Understand.')
     await user.should_see('No reports match.')
@@ -503,16 +503,33 @@ async def test_workspace_size_does_not_grow_with_recurring_indicators(
         'utf-8'
     )
     with ui_env.app.state.session_factory.begin() as db:
-        for i in range(100):
+        for i in range(20):
             ingest(
                 db, DocumentInput(title=f'GLASS HARBOR copy {i}', body=text, source_name='Notional CTI Cell')
             )
     await user.open('/')
+    await user.should_see('Intel brief')
+    with user:
+        at_first_page = len(list(ElementFilter(local_scope=False)))
+    await user.should_see(marker='document-list')
+    first_list = user.find(marker='document-list').elements.pop()
+    at_first_page -= len(list(first_list.descendants()))
+    with ui_env.app.state.session_factory.begin() as db:
+        for i in range(20, 100):
+            ingest(
+                db, DocumentInput(title=f'GLASS HARBOR copy {i}', body=text, source_name='Notional CTI Cell')
+            )
+    await user.open('/')
+    await user.should_see('Intel brief')
     with user:
         elements = len(list(ElementFilter(local_scope=False)))
-    # 1,600: the side menu, Share section and clickable counters add a fixed ~20 elements to every page;
-    # the regression this guards (growth with recurring indicators) was ~3,500.
-    assert elements < 1600, f'{elements} UI elements'
+    await user.should_see(marker='document-list')
+    document_list = user.find(marker='document-list').elements.pop()
+    pivot_growth = elements - len(list(document_list.descendants())) - at_first_page
+    # The report list grows on purpose. Outside it, repeated indicators must not render more pivot rows.
+    # The absolute ceiling allows the guide builder and sharing hints, but still catches the old ~3,500.
+    assert pivot_growth <= 20, f'{pivot_growth} extra elements outside the report list'
+    assert elements < 1900, f'{elements} UI elements'
 
 
 async def test_tlp_marking_raises_the_label_and_warns(user: User, ui_env: SimpleNamespace) -> None:
@@ -613,33 +630,36 @@ def add_report(env: SimpleNamespace, title: str, source: str, body: str) -> None
         ingest(db, DocumentInput(title=title, body=body, source_name=source, tlp='CLEAR'))
 
 
-async def test_intel_brief_starts_empty_and_links_to_the_evidence(
+async def test_intel_brief_starts_empty_and_keeps_low_value_panels_out(
     user: User, ui_env: SimpleNamespace
 ) -> None:
+    """Regression: the concise landing brief must not restore removed volume and watch panels."""
+    empty = 'No recent intelligence is available. Sync your sources and check their status in Settings.'
     with user.scope(marker='brief-summary'):
-        await user.should_see('No recent reports are available for the last 7 days.')
+        await user.should_see(empty)
     await load_demo(user)  # practice data: not part of the brief
     with user.scope(marker='brief-summary'):
-        await user.should_see('No recent reports are available for the last 7 days.')
+        await user.should_see(empty)
     with ui_env.app.state.session_factory.begin() as db:
         services.add_watch_term(db, 'Scanning')
     add_report(ui_env, 'Scanning wave', 'SANS', 'Scanning from 198.51.100.23.')
     add_report(ui_env, 'Partner note', 'NCSC', 'We also saw 198.51.100.23.')
     await user.open('/')
     with user.scope(marker='brief-summary'):
-        await user.should_see('In the last 7 days, 2 new reports came in from 2 sources.')
-        await user.should_see('1 new report mentions your watch terms: Scanning (1).')
-    with user.scope(marker='brief-section-3'):
-        user.find(kind=ui.button, content='198.51.100.23 · 2 sources, 2 reports').click()
-    # The entity explorer opens, already searching for that indicator.
-    await user.should_see('IP · 198.51.100.23 · 2 source(s)')
-    await user.should_not_see('IP · 192.0.2.44')
-    with user.scope(marker='brief-section-2'):
-        user.find(kind=ui.button, content='Scanning · 1 new report').click()
-    # The inbox opens, already searching for the watch term.
+        await user.should_see('No clear priority stands out in these reports.')
+        await user.should_not_see('2 new reports came in from 2 sources.')
+    with user.scope(marker='intel-brief'):
+        await user.should_not_see('Your watch terms')
+        await user.should_not_see('Seen in several sources')
+        await user.should_not_see('Most-mentioned vendors')
+        await user.should_not_see('What attackers are doing')
+        await user.should_not_see(marker='brief-section-2')
+        await user.should_not_see(marker='brief-section-3')
+        await user.should_not_see(marker='brief-section-4')
+    # Removing the overview cards must not remove the underlying evidence from Triage.
     with user.scope(marker='document-list'):
         await user.should_see('Scanning wave')
-        await user.should_not_see('Partner note')
+        await user.should_see('Partner note')
 
 
 async def test_brief_highlight_opens_its_report_and_explains_the_time_window(
@@ -648,10 +668,10 @@ async def test_brief_highlight_opens_its_report_and_explains_the_time_window(
     add_report(ui_env, 'Gateway check', 'Vendor', 'Check the fix for CVE-2026-12345.')
     add_report(ui_env, 'Partner assessment', 'Partner', 'Our report also covers CVE-2026-12345.')
     await user.open('/')
-    with user.scope(marker='brief-context'):
-        await user.should_see('2 reports · 2 sources')
-        await user.should_see('Reports in this brief received in the last 24 hours.')
-        await user.should_see('Across the last 7 days')
+    await user.should_not_see(marker='brief-context')
+    await user.should_not_see('About this brief')
+    with user.scope(marker='brief-summary'):
+        await user.should_see('No clear priority stands out in these reports.')
     with user.scope(marker='brief-priority-0'):
         await user.should_see('A recurring topic in the reports')
         await user.should_see('More mentions do not mean more attacks.')
@@ -685,7 +705,7 @@ async def test_sync_all_sources_names_the_ones_that_failed(
     await user.should_see('cisa-csaf · error')
     with user.scope(marker='brief-summary'):
         # The KEV entry was added to CISA's list in 2025: received now, but not new.
-        await user.should_see('In the last 7 days, 2 new reports came in from 2 sources.')
+        await user.should_see('No clear priority stands out in these reports.')
     button = user.find(kind=ui.button, content='Sync all sources').elements.pop()
     assert button.enabled  # ready for the next run
 
@@ -715,12 +735,12 @@ async def test_sync_all_sources_success_feeds_the_brief(user: User, monkeypatch:
         'All 4 sources synced. The list below shows what each one added.', retries=SYNC_RETRIES
     )
     with user.scope(marker='brief-summary'):
-        await user.should_see('In the last 7 days, 4 new reports came in from 4 sources.')
         await user.should_see(
-            'CISA added 1 more weakness to its known exploited list, in products from Acme.'
+            'Known attacks: 1 flaw in this brief has been used in attacks. '
+            'Affected products include Acme Gateway.'
         )
-    with user.scope(marker='brief-section-4'):
-        await user.should_see('libumqtt (1)')
+        await user.should_see('Prioritize fixes for flaws already used in attacks.')
+    await user.should_not_see(marker='brief-section-4')
     with user.scope(marker='brief-section-0'):
         user.find(kind=ui.button, content=f'CVE-2024-12345 · Acme Gateway · added {today}').click()
     with user.scope(marker='document-detail'):

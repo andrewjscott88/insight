@@ -19,28 +19,28 @@ from .styles import QUASAR_OVERRIDES, STYLE, TEXT_SIZE_STYLE
 #: Colour tokens per theme.
 PALETTES: Final[dict[str, dict[str, str]]] = {
     'dark': {
-        'bg': PAGE_BACKGROUND['dark'], 'panel': '#0c0a12', 'card': '#100d18', 'hover': '#19142a',
-        'selected': '#211837', 'field': '#07060b', 'evidence-bg': '#0b0912',
-        'line': '#2b2442', 'evidence-line': '#6d58b0', 'field-border': '#8c82ad', 'focus': '#d8cbff',
-        'text': '#f4f1fb', 'muted': '#e4def3', 'accent': '#d8cbff', 'on-accent': '#12082e',
-        'link': '#b9d4ff', 'warn': '#ffd98c', 'error': '#ffc6ce',
-        'secondary': '#2a2145', 'highlight': '#ff8fa3',
-        'tlp-clear': '#e8e5f1', 'tlp-clear-bg': '#1f1b2c', 'tlp-green': '#a6ecc9', 'tlp-green-bg': '#10241e',
+        'bg': PAGE_BACKGROUND['dark'], 'panel': '#101820', 'card': '#121d26', 'hover': '#192a34',
+        'selected': '#12333f', 'field': '#0a1117', 'evidence-bg': '#0d1922',
+        'line': '#29414e', 'evidence-line': '#527c91', 'field-border': '#779baa', 'focus': '#7cecff',
+        'text': '#f3f8fb', 'muted': '#d3e3eb', 'accent': '#7cecff', 'on-accent': '#031319',
+        'link': '#a3edff', 'warn': '#ffd98c', 'error': '#ffc6ce',
+        'secondary': '#17303a', 'highlight': '#ff8fa3',
+        'tlp-clear': '#e4eff5', 'tlp-clear-bg': '#1b2932', 'tlp-green': '#a6ecc9', 'tlp-green-bg': '#10241e',
         'tlp-amber': '#f7d79b', 'tlp-amber-bg': '#291f12', 'tlp-red': '#ffc2cc', 'tlp-red-bg': '#2e1119',
-        'notice-bg': '#ece8f7', 'notice-text': '#0a0812',
+        'notice-bg': '#dff8ff', 'notice-text': '#07151b',
         'notice-warn-bg': '#f7d79b', 'notice-warn-text': '#2a1a02',
         'notice-error-bg': '#ffc2cc', 'notice-error-text': '#3b0a12',
     },
     'light': {
-        'bg': PAGE_BACKGROUND['light'], 'panel': '#fdfcff', 'card': '#fdfcff', 'hover': '#f1edf9',
-        'selected': '#efe9fb', 'field': '#ffffff', 'evidence-bg': '#f3f1f8',
-        'line': '#d8d3e4', 'evidence-line': '#8b74c8', 'field-border': '#6e6886', 'focus': '#4a1d9e',
-        'text': '#15121d', 'muted': '#36314a', 'accent': '#4a1d9e', 'on-accent': '#ffffff',
-        'link': '#1b3794', 'warn': '#7a3306', 'error': '#8f1d14',
-        'secondary': '#e2dcf0', 'highlight': '#8f1d3a',
+        'bg': PAGE_BACKGROUND['light'], 'panel': '#ffffff', 'card': '#ffffff', 'hover': '#e8f1f4',
+        'selected': '#e0f2f4', 'field': '#ffffff', 'evidence-bg': '#eaf1f4',
+        'line': '#c4d3db', 'evidence-line': '#5f8296', 'field-border': '#526b7a', 'focus': '#005564',
+        'text': '#10202c', 'muted': '#2c4655', 'accent': '#005564', 'on-accent': '#ffffff',
+        'link': '#064f63', 'warn': '#7a3306', 'error': '#8f1d14',
+        'secondary': '#dce9ed', 'highlight': '#8f1d3a',
         'tlp-clear': '#27313d', 'tlp-clear-bg': '#e6ebf0', 'tlp-green': '#14532d', 'tlp-green-bg': '#d9f5e3',
         'tlp-amber': '#6f2f07', 'tlp-amber-bg': '#fcefc7', 'tlp-red': '#881337', 'tlp-red-bg': '#ffe2e6',
-        'notice-bg': '#15121d', 'notice-text': '#ffffff',
+        'notice-bg': '#10202c', 'notice-text': '#ffffff',
         'notice-warn-bg': '#fcefc7', 'notice-warn-text': '#4a2204',
         'notice-error-bg': '#7f1d1d', 'notice-error-text': '#ffffff',
     },
@@ -53,6 +53,36 @@ TLP_CLASSES: Final = {
     'AMBER+STRICT': 'tlp-amber',
     'RED': 'tlp-red',
 }
+
+# Keep the standard token intact; an audience description does not replace a sharing rule.
+# FIRST TLP 2.0: https://www.first.org/tlp/
+TLP_AUDIENCES: Final = {
+    'CLEAR': 'Public',
+    'GREEN': 'Community only',
+    'AMBER': 'Need to know',
+    'AMBER+STRICT': 'Your organization only',
+    'RED': 'Named recipients only',
+}
+TLP_GUIDANCE: Final = {
+    'CLEAR': 'May be shared publicly. Copyright and source terms still apply.',
+    'GREEN': "Share within the source's community only. Do not post publicly.",
+    'AMBER': 'Share only with people who need to know in your organization and its clients.',
+    'AMBER+STRICT': (
+        'Share only with people who need to know in your organization. Do not share with clients.'
+    ),
+    'RED': 'Only the people who received this may read it. Do not share it further.',
+}
+
+
+def tlp_text(value: str) -> str:
+    """An audience hint beside the exact stored label, never a new classification."""
+    return f'{TLP_AUDIENCES.get(value, "Sharing not confirmed")} · TLP:{value}'
+
+
+def tlp_guidance(value: str) -> str:
+    """Explain who may receive the information, without changing its source terms."""
+    return TLP_GUIDANCE.get(value, 'Do not share this until the source confirms its sharing label.')
+
 
 #: Quasar's own colour variables, mapped onto the tokens so its components follow the theme. ``!important``
 #: because NiceGUI writes its default colours as an inline style on ``<body>``. ``--q-dark`` is Quasar's
@@ -98,5 +128,7 @@ def apply_theme(theme: Theme, text_size: TextSize = 'standard') -> None:
 
 
 def tlp_badge(value: str) -> None:
-    css_class = TLP_CLASSES.get(value, TLP_CLASSES['CLEAR'])
-    ui.label(f'TLP:{value}').classes(f'tlp-badge {css_class} text-xs rounded px-2 py-1')
+    css_class = TLP_CLASSES.get(value, TLP_CLASSES['RED'])
+    ui.label(tlp_text(value)).classes(
+        f'tlp-badge {css_class} text-xs rounded px-2 py-1 max-w-full whitespace-normal break-value shrink-0'
+    ).tooltip(tlp_guidance(value))

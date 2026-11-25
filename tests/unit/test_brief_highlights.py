@@ -27,6 +27,7 @@ def data(*docs: BriefDocument, **kwargs: object) -> BriefData:
 
 
 def test_receipt_count_uses_an_exact_clock_and_normalized_source_identity() -> None:
+    """Regression: retain API receipt metadata without recreating a last-24-hours highlight."""
     items = [document(1), document(2, hours=24, source=' PARTNER '), document(3, hours=24.001)]
     items += [replace(document(4), created_at='2026-11-20T00:00:00+12:00')]
     result = compose(data(*items))
@@ -36,8 +37,8 @@ def test_receipt_count_uses_an_exact_clock_and_normalized_source_identity() -> N
         3,
         1,
     )
-    assert {item.document_id for item in result.highlights[-1].evidence} == {'1', '2', '4'}
-    assert 'collection time' in result.highlights[-1].text
+    assert result.highlights == ()
+    assert not any('24-hour count' in note for note in result.coverage)
 
 
 def test_bad_future_and_old_dates_cannot_become_current_news() -> None:
@@ -102,7 +103,25 @@ def test_a_negated_weakness_is_quoted_without_reversing_its_meaning() -> None:
     )
     severe = next(h for h in compose(data(doc)).highlights if h.title == 'Highest reported severity')
     assert 'does not allow remote code execution' in severe.text
-    assert 'This could let' not in severe.text
+    assert 'could let an attacker run code' not in severe.text
+
+
+def test_summary_explains_stated_harm_and_keeps_exact_scores_in_the_details() -> None:
+    """Regression: the lead repeated CVSS numbers instead of explaining the source's stated harm."""
+    doc = replace(
+        document(1, body='- CVE-2026-1001, CVSS 3 base score 9.8: Remote code execution.'),
+        title='Advisory · Example Gateway',
+    )
+    result = compose(data(doc))
+    summary = ' '.join(result.summary)
+    assert 'Example Gateway' in summary
+    assert 'could let an attacker run code on an affected system' in summary
+    assert 'not the chance of an attack' in summary
+    assert 'Next step: check the named products and versions' in summary
+    assert 'CVE-2026-1001' not in summary
+    assert '9.8' not in summary
+    assert result.sections[1].items[0].text == ('CVE-2026-1001 · CVSS 9.8 · Advisory · Example Gateway')
+    assert result.sections[1].items[0].document_id == doc.id
 
 
 def test_known_exploitation_is_separate_from_high_severity_and_is_conditional() -> None:

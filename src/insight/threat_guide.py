@@ -90,7 +90,6 @@ class ThreatGuide:
 def _techniques(data: GuideData, lib: Library) -> list[TechniqueRow]:
     group = data.subject.catalog
     ids = {*(group.techniques if group else ()), *data.report_techniques}
-    tactic_names = {t.shortname: t.name for t in catalog().tactics}
     order = {t.shortname: i for i, t in enumerate(catalog().tactics)}
     rows, first = [], {}
     for tid in ids:
@@ -102,7 +101,7 @@ def _techniques(data: GuideData, lib: Library) -> list[TechniqueRow]:
             TechniqueRow(
                 id=found.id,
                 name=technique_name(found.id),
-                tactics=tuple(tactic_names.get(t, t) for t in found.tactics),
+                tactics=catalog(found.domain).tactic_names(found),
                 in_attack=bool(group and found.id in group.techniques),
                 in_reports=data.report_techniques.get(found.id, 0),
                 trending=data.trending.get(found.id, 0),
@@ -381,14 +380,18 @@ def guide_json(guide: ThreatGuide) -> dict[str, Any]:
 
 def navigator_layer(guide: ThreatGuide) -> dict[str, Any]:
     """An ATT&CK Navigator layer (format 4.5): 1 if ATT&CK lists the technique, plus 1 per linked report."""
-    counts = Counter({r.id: int(r.in_attack) + r.in_reports for r in guide.techniques})
+    # This actor/software library is Enterprise-only; never mislabel Mobile/ICS report tags in its layer.
+    enterprise = catalog().techniques
+    counts = Counter({r.id: int(r.in_attack) + r.in_reports for r in guide.techniques if r.id in enterprise})
     top = max(counts.values(), default=1)
     name = guide.name
     group = guide.data.subject.catalog
     software_sources = software_techniques(
         guide.library, (*(group.software if group else ()), *guide.data.linked_software)
     )
-    software_only = {tid: names for tid, names in software_sources.items() if tid not in counts}
+    software_only = {
+        tid: names for tid, names in software_sources.items() if tid not in counts and tid in enterprise
+    }
     return {
         'name': f'{name}: techniques (Insight threat guide)',
         'versions': {
@@ -420,6 +423,7 @@ def navigator_layer(guide: ThreatGuide) -> dict[str, Any]:
                 'enabled': True,
             }
             for r in guide.techniques
+            if r.id in enterprise
         ]
         + [
             {

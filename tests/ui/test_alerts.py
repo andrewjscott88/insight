@@ -26,6 +26,7 @@ def fill(user: User, style: str, name: str, address: str) -> None:
 async def test_an_analyst_adds_a_chat_webhook_and_sends_a_test(
     user: User, ui_env: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Regression: setup text about tokens must not be mistaken for a leaked webhook credential."""
     sent: list[str] = []
 
     async def fake_send(alert: Any, settings: Any, **_: Any) -> None:
@@ -34,10 +35,12 @@ async def test_an_analyst_adds_a_chat_webhook_and_sends_a_test(
     monkeypatch.setattr(alerts, 'send', fake_send)
     await user.open('/')
     await user.should_see('No alert destinations yet.')
-    fill(user, 'chat', 'Security team', 'https://hooks.example.org/services/T0/B0/token')
+    webhook = 'https://hooks.example.org/services/T0/B0/private-test-webhook-token'
+    fill(user, 'chat', 'Security team', webhook)
     await user.should_see('Destination added. Send a test alert to check it.')
     await user.should_see('Chat webhook (Slack, Mattermost, Google Chat) · hooks.example.org')
-    await user.should_not_see('token')
+    await user.should_not_see('private-test-webhook-token')
+    await user.should_not_see(webhook)
     user.find(kind=ui.button, content='Send a test alert').click()
     await user.should_see('Test alert sent.')
     assert sent == ['Security team']

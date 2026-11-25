@@ -30,13 +30,13 @@ def test_sign_in_follows_the_device_by_default(client: TestClient) -> None:
     page = client.get('/login')
     assert rendered_theme(page.text) == 'system'
     assert theme_colours(page.text) == [
-        ('(prefers-color-scheme: light)', '#f6f4fa'),
-        ('(prefers-color-scheme: dark)', '#050407'),
+        ('(prefers-color-scheme: light)', '#f1f5f7'),
+        ('(prefers-color-scheme: dark)', '#080c10'),
     ]
     assert '<meta name="viewport" content="width=device-width,initial-scale=1">' in page.text
 
 
-@pytest.mark.parametrize(('theme', 'colour'), [('light', '#f6f4fa'), ('dark', '#050407'), ('system', None)])
+@pytest.mark.parametrize(('theme', 'colour'), [('light', '#f1f5f7'), ('dark', '#080c10'), ('system', None)])
 def test_sign_in_uses_the_theme_this_device_picked(
     client: TestClient, theme: str, colour: str | None
 ) -> None:

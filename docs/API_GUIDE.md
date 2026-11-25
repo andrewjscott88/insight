@@ -444,7 +444,9 @@ curl -sS -X POST "$INSIGHT_URL/api/entities/$ENTITY_ID/assessment" -H "Authoriza
 ### ATT&CK techniques
 
 Reports are tagged with the MITRE ATT&CK® technique IDs written in them; analysts add the rest. Adding or
-removing a technique needs a read-write key.
+removing a technique needs a read-write key. Enterprise is the default catalog; set `domain=mobile` or
+`domain=ics` for Mobile or industrial control systems. Report tags and ID-specific report pivots work
+across all three catalogs. Each technique response includes its `domain`.
 
 ```sh
 # Look a technique up in the bundled catalog
@@ -457,6 +459,11 @@ curl -sS "$INSIGHT_URL/api/attack/techniques/T1486/documents" -H "Authorization:
   | jq '.documents[] | {id, title}'
 # A layer to open in ATT&CK Navigator ("Open Existing Layer" > "Upload from local")
 curl -sS -OJ "$INSIGHT_URL/api/attack/navigator?days=90" -H "Authorization: Bearer $INSIGHT_API_KEY"
+# Browse Mobile techniques and show industrial-control-system report coverage
+curl -sS "$INSIGHT_URL/api/attack/techniques?domain=mobile&q=T1398" -H "Authorization: Bearer $INSIGHT_API_KEY"
+curl -sS "$INSIGHT_URL/api/attack/summary?domain=ics&days=30" -H "Authorization: Bearer $INSIGHT_API_KEY"
+# Navigator layers contain only the selected domain
+curl -sS -OJ "$INSIGHT_URL/api/attack/navigator?domain=ics&days=30" -H "Authorization: Bearer $INSIGHT_API_KEY"
 # One report's techniques; add one, remove one
 curl -sS "$INSIGHT_URL/api/documents/$DOC_ID/techniques" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq
 curl -sS -X POST "$INSIGHT_URL/api/documents/$DOC_ID/techniques" -H "Authorization: Bearer $INSIGHT_API_KEY" \
@@ -577,9 +584,55 @@ curl -fsS -X POST "$INSIGHT_URL/api/hunt-packages/$PKG_ID/retire" -H "Authorizat
 curl -fsS -X DELETE "$INSIGHT_URL/api/hunt-packages/$PKG_ID" -H "Authorization: Bearer $INSIGHT_API_KEY"
 ```
 
+### Hunt guide previews and downloads
+
+These reads work with a session or any valid key that has read access. They respect both the key and instance
+sharing ceilings. The guide uses saved metadata and fixed advice; it neither contacts a source nor runs a
+hunt. It is not saved as a product or package. Each successful generation records `hunt.guide` in the audit.
+
+Use `INSIGHT_URL` and `INSIGHT_API_KEY` as described above. Search returns up to 50 choices per kind, after
+filtering. Omit `kind` to request all nine lists. Use a returned `ref` for the download; the theme example
+below is built in. For reports, search covers title, source and body.
+
+```bash
+curl -fsS --get "$INSIGHT_URL/api/hunt-guides" \
+  -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  --data-urlencode 'kind=industry' --data-urlencode 'q=banking'
+curl -fsS -o sector-hunt.md "$INSIGHT_URL/api/hunt-guides/industry/finance?format=md" \
+  -H "Authorization: Bearer $INSIGHT_API_KEY"
+curl -fsS -o sector-hunt.pdf "$INSIGHT_URL/api/hunt-guides/industry/finance?format=pdf" \
+  -H "Authorization: Bearer $INSIGHT_API_KEY"
+curl -fsS --get "$INSIGHT_URL/api/hunt-guides" \
+  -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  --data-urlencode 'kind=theme' --data-urlencode 'q=ransom'
+curl -fsS --get "$INSIGHT_URL/api/hunt-guides" \
+  -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  --data-urlencode 'kind=document' --data-urlencode 'q=FBI'
+curl -fsS "$INSIGHT_URL/api/hunt-guides/theme/ransomware?format=json" \
+  -H "Authorization: Bearer $INSIGHT_API_KEY"
+curl -fsS -o hunt-guide.md "$INSIGHT_URL/api/hunt-guides/theme/ransomware?format=md" \
+  -H "Authorization: Bearer $INSIGHT_API_KEY"
+curl -fsS -o hunt-guide.pdf "$INSIGHT_URL/api/hunt-guides/theme/ransomware?format=pdf" \
+  -H "Authorization: Bearer $INSIGHT_API_KEY"
+```
+
+The FBI search only finds reports already added to your workspace; it does not add or query a feed. Other
+`kind` values are `actor`, `cve`, `exploit`, `software`, `indicator` and `campaign`. Use IDs from choices, and
+URL-encode a path reference if needed. Hidden/missing subjects return the same `404`; invalid formats or
+oversized inputs return `422`. Refining `q` can find choices outside the first 50. Guide content is bounded
+to 20 reports, 100 eligible indicators and 12 techniques; limit notes explain omitted data. Review the
+sharing label and source terms before passing the file to another person.
+
+The **Sector / Industry** guide uses the existing category keys. Leave `q` empty to browse all 15.
+It combines cited group background with related current reports added in the last 30 days, explaining
+whether each report mentions the sector or has an explicit group link. The guide does not claim every
+listed technique or report describes an attack on that sector. Save it as a draft package from the workspace
+with **Save as hunt package**; publishing remains a separate action.
+
 ### Products (cases)
 
-The workspace calls a case a product: an intelligence product in progress, with its evidence and working notes
+The workspace keeps products under **Threat Hunt → Saved intelligence reports**: intelligence in progress,
+with evidence and working notes
 ([ADR 0029](adr/0029-cases.md), [ADR 0036](adr/0036-intelligence-products.md)). It takes the strictest label of
 what it holds and keeps it when items are removed. An archived (closed) case answers `409` to changes until it
 is reopened.
@@ -800,6 +853,12 @@ curl -sS "$INSIGHT_URL/api/ips/$IP/greynoise" -H "Authorization: Bearer $INSIGHT
 # Optional, with your own INSIGHT_SHODAN_KEY: send the same reviewed CLEAR address to Shodan (ADR 0031), then read the cache
 curl -sS -X POST "$INSIGHT_URL/api/enrichment/shodan/$IP" -H "Authorization: Bearer $INSIGHT_API_KEY" | jq '{ports, vulns, org, attribution}'
 curl -sS "$INSIGHT_URL/api/ips/$IP/shodan" -H "Authorization: Bearer $INSIGHT_API_KEY"
+# Censys Platform: private sign-in mode, host PAT, and one reviewed CLEAR IPv4/IPv6. May use account credits.
+# This body explicitly approves disclosing the IP to Censys. The key must be unlimited and read-write.
+curl -sS -X POST "$INSIGHT_URL/api/enrichment/censys/$IP" -H "Authorization: Bearer $INSIGHT_API_KEY" \
+  -H 'Content-Type: application/json' -d '{"approved":true}' | jq '{services, network_name, attribution}'
+# Read the last eligible private cache result; this makes no external request.
+curl -sS "$INSIGHT_URL/api/ips/$IP/censys" -H "Authorization: Bearer $INSIGHT_API_KEY"
 # The CVEs in your reports, most urgent first (ransomware, known exploited, likely attacked, critical, high), and why
 curl -sS "$INSIGHT_URL/api/cves?days=30&limit=10" -H "Authorization: Bearer $INSIGHT_API_KEY" \
   | jq '.cves[] | {cve, label, reason, cvss: .cvss.score, epss: .epss.probability}'

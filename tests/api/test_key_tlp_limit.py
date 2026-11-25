@@ -33,6 +33,7 @@ from insight.schemas import (
     EvidenceInput,
     HuntPackageInput,
     HuntPackageItemInput,
+    IndustryClaimInput,
     JudgementInput,
     OperatorSourceInput,
     RequirementInput,
@@ -46,6 +47,8 @@ from .test_auth import PROTECTED
 MARKER = 'ZEBRA-MERIDIAN-7731'
 HIDDEN_TECHNIQUE = 'T1490'  # Inhibit System Recovery: written only in the AMBER report
 HIDDEN_IP = '198.51.100.77'
+HIDDEN_CVE = 'CVE-2024-33333'
+HUNT_PUBLIC_CVE = 'CVE-2024-22222'
 HIDDEN_PIVOT_IP = '8.8.4.4'
 HIDDEN_PIVOT_DOMAIN = 'hidden.example.net'
 SHARED_IP = '192.0.2.44'
@@ -61,7 +64,7 @@ def world(app: FastAPI) -> dict[str, Any]:
     revision; and a GREEN-limited read-write key."""
     with app.state.session_factory.begin() as db:
         green, _ = services.ingest(
-            db, report('Public note', f'Scanning from {SHARED_IP} (T1595.001).', 'GREEN')
+            db, report('Public note', f'Scanning from {SHARED_IP} (T1595.001). {HUNT_PUBLIC_CVE}.', 'GREEN')
         )
         amber, _ = services.ingest(
             db,
@@ -69,7 +72,8 @@ def world(app: FastAPI) -> dict[str, Any]:
                 f'{MARKER} briefing',
                 f'{MARKER}: C2 at {HIDDEN_IP}, also {SHARED_IP}, {HIDDEN_PIVOT_IP} '
                 f'and {HIDDEN_PIVOT_DOMAIN}. '
-                f'{HIDDEN_TECHNIQUE}. A wiper followed.',
+                f'{HIDDEN_TECHNIQUE}, T1398 and T0800. A wiper followed. {HIDDEN_CVE}. '
+                f'{HUNT_PUBLIC_CVE} has a public proof of concept. Healthcare sector.',
                 'AMBER',
             ),
         )
@@ -78,6 +82,11 @@ def world(app: FastAPI) -> dict[str, Any]:
         # The public group must hide both the AMBER report and the AMBER link to a GREEN report.
         services.link_report(db, 'G0016', ActorLinkInput(document_id=amber.id, note=MARKER, tlp='AMBER'))
         services.link_report(db, 'G0016', ActorLinkInput(document_id=green.id, tlp='AMBER', note=MARKER))
+        services.record_industry_claim(
+            db,
+            'G0016',
+            IndustryClaimInput(industry='healthcare', document_id=amber.id, reason=MARKER, tlp='AMBER'),
+        )
         campaign = services.create_campaign(db, CampaignInput(name=f'{MARKER} campaign', tlp='AMBER'))
         services.link_actor_campaign(
             db, 'G0016', ActorCampaignInput(campaign_id=campaign.id, note=MARKER, tlp='AMBER')
@@ -99,6 +108,16 @@ def world(app: FastAPI) -> dict[str, Any]:
         nvd = {'vulnerabilities': [{'cve': {'descriptions': [{'lang': 'en', 'value': MARKER}]}}]}
         db.add(Enrichment(cve='CVE-2024-11111', provider='nvd', payload=json.dumps(nvd)))
         # A pivot cache is not its own access grant: a hidden/ineligible subject remains missing.
+        censys_obs = next(
+            o for o in services.detail(db, amber)['observations'] if o['value'] == HIDDEN_PIVOT_IP
+        )
+        db.add(
+            Enrichment(
+                subject=censys_obs['entity_id'],
+                provider='censys',
+                payload=json.dumps({'found': True, 'network_name': MARKER}),
+            )
+        )
         for provider, value in (
             ('rdap', HIDDEN_PIVOT_IP),
             ('asn', HIDDEN_PIVOT_IP),
@@ -288,6 +307,7 @@ def readable(response: Any) -> str:  # the test client's response (httpx or http
 
 def test_nothing_hidden_leaks_through_any_read_route(client: TestClient, world: dict[str, Any]) -> None:
     paths = [
+        f'/api/ips/{HIDDEN_PIVOT_IP}/censys',
         '/api/software',
         '/api/software/S0154',
         '/api/software/S0154/documents',
@@ -327,6 +347,14 @@ def test_nothing_hidden_leaks_through_any_read_route(client: TestClient, world: 
         '/api/attack/techniques',
         '/api/attack/summary?days=0',
         '/api/attack/navigator?days=0',
+        '/api/attack/summary?days=0&domain=mobile',
+        '/api/attack/summary?days=0&domain=ics',
+        '/api/attack/navigator?days=0&domain=mobile',
+        '/api/attack/navigator?days=0&domain=ics',
+        '/api/attack/techniques?domain=mobile',
+        '/api/attack/techniques?domain=ics',
+        '/api/attack/techniques/T1398/documents',
+        '/api/attack/techniques/T0800/documents',
         '/api/landscape?days=7',
         '/api/landscape/briefing?days=30',
         f'/api/attack/techniques/{HIDDEN_TECHNIQUE}/documents',
@@ -339,6 +367,31 @@ def test_nothing_hidden_leaks_through_any_read_route(client: TestClient, world: 
         '/api/actors',
         '/api/actors/G0016',
         '/api/actors/G0016/guide',
+        '/api/hunt-guides',
+        '/api/hunt-guides?kind=industry',
+        '/api/hunt-guides/industry/healthcare',
+        '/api/hunt-guides/industry/healthcare?format=md',
+        '/api/hunt-guides/industry/healthcare?format=pdf',
+        '/api/hunt-guides/actor/G0016',
+        '/api/hunt-guides/actor/G0016?format=md',
+        '/api/hunt-guides/actor/G0016?format=pdf',
+        '/api/hunt-guides/theme/wipers',
+        '/api/hunt-guides/theme/wipers?format=md',
+        '/api/hunt-guides/theme/wipers?format=pdf',
+        '/api/hunt-guides/software/S0154',
+        f'/api/hunt-guides/document/{world["amber"]}',
+        f'/api/hunt-guides/document/{world["green"]}?format=md',
+        f'/api/hunt-guides/document/{world["green"]}?format=pdf',
+        f'/api/hunt-guides/cve/{HIDDEN_CVE}',
+        f'/api/hunt-guides/cve/{HUNT_PUBLIC_CVE}',
+        f'/api/hunt-guides/cve/{HUNT_PUBLIC_CVE}?format=md',
+        f'/api/hunt-guides/cve/{HUNT_PUBLIC_CVE}?format=pdf',
+        f'/api/hunt-guides/exploit/{HIDDEN_CVE}',
+        f'/api/hunt-guides/exploit/{HUNT_PUBLIC_CVE}',
+        f'/api/hunt-guides/indicator/{world["hidden_entity"]}',
+        f'/api/hunt-guides/indicator/{world["shared_entity"]}',
+        f'/api/hunt-guides/campaign/{world["actor_campaign"]}',
+        f'/api/hunt-guides/actor/{world["hidden_actor"]}',
         '/api/actors/G0016/timeline',
         '/api/actors/G0016/campaigns',
         '/api/software/S0154/navigator',
@@ -399,12 +452,21 @@ def test_nothing_hidden_leaks_through_any_read_route(client: TestClient, world: 
             '/api/actors/G0016/timeline',
             '/api/actors/G0016/campaigns',
             '/api/software/S0154/navigator',
+            '/api/hunt-guides',
+            '/api/hunt-guides?kind=industry',
+            '/api/hunt-guides/industry/healthcare',
+            '/api/hunt-guides/industry/healthcare?format=md',
+            '/api/hunt-guides/industry/healthcare?format=pdf',
+            '/api/hunt-guides/actor/G0016',
+            '/api/hunt-guides/software/S0154',
+            f'/api/hunt-guides/cve/{HUNT_PUBLIC_CVE}',
         }:
             assert response.status_code == 200, response.text
         body = readable(response)
         for secret in (
             MARKER,
             HIDDEN_IP,
+            HIDDEN_CVE,
             world['amber'],
             world['new'],
             world['hidden_entity'],
@@ -430,12 +492,12 @@ def test_visible_data_is_counted_from_visible_reports_only(client: TestClient, w
     listed = get(client, world, '/api/documents', include_superseded='true').json()
     assert [d['id'] for d in listed] == [world['old'], world['green']]  # not the AMBER current revision
     entities = {e['value']: e['document_count'] for e in get(client, world, '/api/entities').json()}
-    assert entities == {SHARED_IP: 1, 'CVE-2024-11111': 1}
+    assert entities == {SHARED_IP: 1, 'CVE-2024-11111': 1, HUNT_PUBLIC_CVE: 1}
     assert get(client, world, '/api/stats').json() == {
         'documents': 1,  # the current revision of the synced item is AMBER: only the GREEN report counts
-        'entities': 2,
+        'entities': 3,
         'unreviewed': 1,
-        'observations_unreviewed': 1,
+        'observations_unreviewed': 2,
     }
     old = get(client, world, f'/api/documents/{world["old"]}').json()
     assert [r['id'] for r in old['revisions']] == [world['old']]  # the AMBER revision is not listed
@@ -445,7 +507,7 @@ def test_ioc_exports_are_capped_at_the_key_limit(client: TestClient, world: dict
     export = get(client, world, '/api/iocs/export', max_tlp='RED').json()
     assert export['filters']['max_tlp'] == 'GREEN'  # the stricter of the request and the key
     assert export['tlp'] == 'GREEN'
-    assert {ioc['value'] for ioc in export['iocs']} == {SHARED_IP}
+    assert {ioc['value'] for ioc in export['iocs']} == {SHARED_IP, HUNT_PUBLIC_CVE}
 
 
 def test_stix_exports_apply_the_key_and_instance_limits(
@@ -479,6 +541,8 @@ def test_techniques_from_hidden_reports_stay_hidden(client: TestClient, world: d
     assert 'T1595.001' in summary  # written in the GREEN report: counted
     for path in ('/api/attack/summary', '/api/attack/navigator'):
         assert HIDDEN_TECHNIQUE not in get(client, world, path, days=0).text, path
+        for domain, tid in (('mobile', 'T1398'), ('ics', 'T0800')):
+            assert tid not in get(client, world, path, days=0, domain=domain).text
     pivot = get(client, world, f'/api/attack/techniques/{HIDDEN_TECHNIQUE}/documents').json()
     assert pivot['documents'] == []
     headers, amber = world['headers'], world['amber']

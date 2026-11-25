@@ -14,6 +14,7 @@ import re
 import time
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from typing import Any
 
 import httpx
@@ -25,6 +26,7 @@ from sqlalchemy import select
 from insight import __version__, main, services
 from insight.config import Settings
 from insight.models import AuditEvent, Document, OperatorSession
+from insight.web import auth as web_auth
 
 CSRF = re.compile(r'name="csrf_token"[^>]*value="([^"]+)"')
 
@@ -36,6 +38,8 @@ def csrf_from(html: str) -> str:
 
 
 PROTECTED = [
+    ('GET', '/api/hunt-guides'),
+    ('GET', '/api/hunt-guides/actor/G0016'),
     ('GET', '/api/software'),
     ('GET', '/api/software/x'),
     ('GET', '/api/software/x/documents'),
@@ -100,6 +104,8 @@ PROTECTED = [
     ('GET', '/api/ips/8.8.8.8/greynoise'),
     ('POST', '/api/enrichment/shodan/8.8.8.8'),
     ('GET', '/api/ips/8.8.8.8/shodan'),
+    ('POST', '/api/enrichment/censys/8.8.8.8'),
+    ('GET', '/api/ips/8.8.8.8/censys'),
     ('GET', '/api/cves/CVE-2024-12345/scores'),
     ('GET', '/api/cves'),
     ('GET', '/api/industries'),
@@ -451,10 +457,29 @@ def test_operator_is_not_locked_out_by_a_handful_of_failures(
     assert client.post('/login', data=good).status_code == 303
 
 
-async def test_every_failure_waits_but_the_operator_never_waits_behind_them(settings: Settings) -> None:
-    """Review M1: the delay used to run while the sign-in lock was held, so the operator's attempt queued
-    behind every pending bad guess. Each failure still waits; a right password answers at once."""
+async def test_every_failure_waits_but_the_operator_never_waits_behind_them(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression: failed sign-in delays held the lock and queued the operator behind bad guesses.
+
+    Hold the failure delays until a valid sign-in completes; wall-clock speed is not the invariant.
+    """
     delay = 0.5
+    pending_failures = 5
+    all_waiting = asyncio.Event()
+    release_failures = asyncio.Event()
+    requested_delays: list[float] = []
+
+    async def hold_failure_delay(seconds: float) -> None:
+        requested_delays.append(seconds)
+        if len(requested_delays) == pending_failures:
+            all_waiting.set()
+        await release_failures.wait()
+
+    # Replace this module's namespace, not asyncio.sleep process-wide: framework scheduling stays real.
+    monkeypatch.setattr(
+        web_auth, 'asyncio', SimpleNamespace(sleep=hold_failure_delay, to_thread=asyncio.to_thread)
+    )
     app = main.create_app(dataclasses.replace(settings, failed_login_delay=delay), with_ui=False)
     async with (
         app.router.lifespan_context(app),
@@ -462,20 +487,28 @@ async def test_every_failure_waits_but_the_operator_never_waits_behind_them(sett
     ):
         token = csrf_from((await client.get('/login')).text)
 
-        async def timed(password: str) -> tuple[int, float]:
-            started = time.perf_counter()
-            response = await client.post('/login', data={'csrf_token': token, 'password': password})
-            return response.status_code, time.perf_counter() - started
-
-        async def operator() -> tuple[int, float]:
-            await asyncio.sleep(0.05)  # after the guesses have started their delays
-            return await timed('longtestpassword')
-
-        results = await asyncio.gather(*(timed(f'bad{i}') for i in range(5)), operator())
-    *guesses, (status, waited) = results
-    assert all(code == 401 and took >= delay * 0.9 for code, took in guesses)
-    assert status == 303
-    assert waited < delay  # not behind five delays, nor one
+        guesses = [
+            asyncio.create_task(client.post('/login', data={'csrf_token': token, 'password': f'bad{i}'}))
+            for i in range(pending_failures)
+        ]
+        try:
+            # A generous deadlock guard, not a response-time benchmark. A delay inside the lock would
+            # leave only the first failure waiting, so this barrier could never be reached.
+            await asyncio.wait_for(all_waiting.wait(), timeout=10)
+            assert requested_delays == [delay] * pending_failures
+            assert all(not guess.done() for guess in guesses)
+            operator = await asyncio.wait_for(
+                client.post('/login', data={'csrf_token': token, 'password': 'longtestpassword'}),
+                timeout=10,
+            )
+            assert operator.status_code == 303
+            assert not release_failures.is_set()
+            assert all(not guess.done() for guess in guesses)
+        finally:
+            release_failures.set()
+            results = await asyncio.wait_for(asyncio.gather(*guesses, return_exceptions=True), timeout=10)
+    assert all(isinstance(result, httpx.Response) and result.status_code == 401 for result in results)
+    assert requested_delays == [delay] * pending_failures
 
 
 def test_failed_sign_ins_are_logged_without_the_password(

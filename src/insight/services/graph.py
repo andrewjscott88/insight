@@ -16,7 +16,7 @@ from typing import Final, Literal, cast
 from sqlalchemy import ColumnElement, select
 from sqlalchemy.orm import InstrumentedAttribute, Session
 
-from ..attack import catalog
+from ..attack import technique
 from ..models import (
     ActorDocument,
     Campaign,
@@ -102,7 +102,7 @@ def _report_ok(max_tlp: str | None) -> list[ColumnElement[bool]]:
 
 
 def _technique_label(technique_id: str) -> str:
-    found = catalog().techniques.get(technique_id)
+    found = technique(technique_id)
     return f'{technique_id} {found.full_name}' if found else technique_id
 
 
@@ -147,9 +147,7 @@ class _Walker:
             )
             return GraphNode(node, 'indicator', entity.value, entity.kind) if entity and visible else None
         if kind == 'technique':
-            return (
-                GraphNode(node, 'technique', _technique_label(key)) if key in catalog().techniques else None
-            )
+            return GraphNode(node, 'technique', _technique_label(key)) if technique(key) is not None else None
         if kind == 'group':
             return GraphNode(node, 'group', _group_label(key)) if library().group(key) else None
         if kind == 'actor':

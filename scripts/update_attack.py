@@ -1,7 +1,8 @@
-"""Regenerate ``src/insight/data/attack-enterprise.json`` from MITRE's Enterprise ATT&CK STIX bundle.
+"""Regenerate a compact ATT&CK catalog from a local, reviewed MITRE STIX bundle.
 
-    curl -sSfO https://raw.githubusercontent.com/mitre-attack/attack-stix-data/master/enterprise-attack/enterprise-attack.json
     python scripts/update_attack.py enterprise-attack.json
+    python scripts/update_attack.py mobile-attack-20.1.json --domain mobile --sha256 <expected-sha256>
+    python scripts/update_attack.py ics-attack-20.1.json --domain ics --source-url <pinned-source-url>
 
 Keeps what Insight needs to tag reports: every current technique and sub-technique (ID, name, tactics)
 and the tactics in matrix order. Revoked and deprecated techniques are left out, so a report that names one
@@ -15,6 +16,7 @@ the generated file carries MITRE's copyright notice.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from collections.abc import Sequence
@@ -24,6 +26,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parent.parent
 TARGET = ROOT / 'src' / 'insight' / 'data' / 'attack-enterprise.json'
 SOURCE = 'https://github.com/mitre-attack/attack-stix-data (enterprise-attack)'
+DOMAINS = ('enterprise', 'mobile', 'ics')
 TERMS = 'https://attack.mitre.org/resources/legal-and-branding/terms-of-use/'
 
 
@@ -38,8 +41,10 @@ def _current(obj: dict[str, Any]) -> bool:
     return not obj.get('revoked') and not obj.get('x_mitre_deprecated')
 
 
-def compact(bundle: dict[str, Any]) -> dict[str, Any]:
-    """The catalog Insight ships, from a parsed ``enterprise-attack.json`` STIX bundle."""
+def compact(bundle: dict[str, Any], *, domain: str = 'enterprise') -> dict[str, Any]:
+    """The catalog Insight ships, from a parsed STIX bundle for the selected domain."""
+    if domain not in DOMAINS:
+        raise ValueError('Unknown ATT&CK domain')
     objects = bundle.get('objects')
     if bundle.get('type') != 'bundle' or not isinstance(objects, list):
         raise ValueError('Not a STIX bundle')
@@ -47,6 +52,8 @@ def compact(bundle: dict[str, Any]) -> dict[str, Any]:
     matrix = next((o for o in objects if o.get('type') == 'x-mitre-matrix' and _current(o)), None)
     if collection is None or matrix is None:
         raise ValueError('Not an ATT&CK bundle (collection or matrix missing)')
+    if domain not in str(collection.get('name', '')).casefold():
+        raise ValueError('The ATT&CK collection does not match the selected domain')
     tactics_by_ref = {o['id']: o for o in objects if o.get('type') == 'x-mitre-tactic' and _current(o)}
     tactics = []
     for ref in matrix['tactic_refs']:
@@ -66,7 +73,9 @@ def compact(bundle: dict[str, Any]) -> dict[str, Any]:
         phases = [
             p['phase_name']
             for p in obj.get('kill_chain_phases', [])
-            if p.get('kill_chain_name') == 'mitre-attack' and p.get('phase_name') in known
+            if p.get('kill_chain_name')
+            == ('mitre-attack' if domain == 'enterprise' else f'mitre-{domain}-attack')
+            and p.get('phase_name') in known
         ]
         techniques.append({'id': technique_id, 'name': obj['name'], 'tactics': phases})
     techniques.sort(key=lambda t: t['id'])
@@ -79,7 +88,9 @@ def compact(bundle: dict[str, Any]) -> dict[str, Any]:
             'This work is reproduced and distributed with the permission of The MITRE Corporation.'
         ),
         'terms': TERMS,
-        'source': SOURCE,
+        'source': SOURCE
+        if domain == 'enterprise'
+        else SOURCE.replace('enterprise-attack', f'{domain}-attack'),
         'version': str(collection.get('x_mitre_version', 'unknown')),
         'tactics': tactics,
         'techniques': techniques,
@@ -104,17 +115,29 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument('bundle', type=Path, help='enterprise-attack.json from MITRE attack-stix-data')
-    parser.add_argument('--output', type=Path, default=TARGET)
+    parser.add_argument('bundle', type=Path, help='A domain bundle from MITRE attack-stix-data')
+    parser.add_argument('--domain', choices=DOMAINS, default='enterprise')
+    parser.add_argument('--output', type=Path)
+    parser.add_argument('--source-url', help='Pinned source URL to record as provenance (no network request)')
+    parser.add_argument('--sha256', help='Expected bundle SHA-256; mismatch refuses to write')
     args = parser.parse_args(argv)
     try:
-        catalog = compact(json.loads(args.bundle.read_text(encoding='utf-8')))
+        data = args.bundle.read_bytes()
+        digest = hashlib.sha256(data).hexdigest()
+        if args.sha256 and digest != args.sha256.lower():
+            raise ValueError('Bundle SHA-256 does not match')
+        catalog = compact(json.loads(data), domain=args.domain)
+        if args.source_url or args.sha256:
+            catalog['source_sha256'] = digest
+        if args.source_url:
+            catalog['source'] = args.source_url
     except (OSError, ValueError, KeyError) as exc:
         print(f'update_attack: {exc}', file=sys.stderr)
         return 1
-    args.output.write_text(render(catalog), encoding='utf-8')
+    output = args.output or TARGET.with_name(f'attack-{args.domain}.json')
+    output.write_text(render(catalog), encoding='utf-8')
     print(
-        f'wrote {args.output}: ATT&CK {catalog["version"]}, {len(catalog["tactics"])} tactics, '
+        f'wrote {output}: ATT&CK {catalog["version"]}, {len(catalog["tactics"])} tactics, '
         f'{len(catalog["techniques"])} techniques'
     )
     return 0

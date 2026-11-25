@@ -34,12 +34,14 @@ from .boundary import BoundaryMiddleware
 from .routes.actor_activity import _register_actor_activity_routes
 from .routes.campaigns import _register_campaign_routes
 from .routes.cases import _register_case_routes
+from .routes.censys import _register_censys_routes
 from .routes.confidence import _register_confidence_routes
 from .routes.cves import _register_cve_routes
 from .routes.documents import _register_document_routes
 from .routes.entities import _register_entity_routes
 from .routes.explore import _register_explore_routes
 from .routes.exports import _register_export_routes
+from .routes.hunt_guides import _register_hunt_guide_routes
 from .routes.hunt_packages import _register_hunt_package_routes
 from .routes.hunting import _register_hunting_routes
 from .routes.imports import _register_import_routes
@@ -213,6 +215,7 @@ def create_app(settings: Settings | None = None, *, with_ui: bool = True) -> Fas
         _register_import_routes,
         _register_entity_routes,
         _register_confidence_routes,
+        _register_hunt_guide_routes,
         _register_hunt_package_routes,
         _register_sighting_routes,
         _register_technique_routes,
@@ -226,6 +229,7 @@ def create_app(settings: Settings | None = None, *, with_ui: bool = True) -> Fas
         _register_hunting_routes,
         _register_source_routes,
         _register_operator_source_routes,
+        _register_censys_routes,
         _register_enrichment_route,
         _register_pivot_routes,
         _register_taxii_routes,

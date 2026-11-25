@@ -168,3 +168,23 @@ Actor activity is read through `services/actor_timeline.py`, with shared bounded
 `actor_reports.py` and explicit, audited campaign associations in `actor_campaigns.py`. The guide, JSON API,
 Markdown export and narrow-screen UI share event DTOs. `software_navigator.py` is a pure projection and does
 not change direct group techniques or hunt hypotheses. Campaign label raises advance `updated_at` for TAXII.
+
+## Guided threat hunt workspace
+
+The opening **Intel Brief** and **Threat Hunt** navigation are a workflow enhancement
+([ADR 0041](adr/0041-guided-threat-hunt-workspace.md)), not a new intelligence engine. Requirements remain
+in advanced Settings; existing case/product views and hunt packages are composed under Threat Hunt.
+
+`services/hunt_guides.py` and `services/hunt_guide_subjects.py` gather bounded, TLP-filtered subject/evidence
+metadata for nine starting kinds. `hunt_guide_industries.py` shares the sector candidate/report selection
+with focused briefs and preserves source claims and match reasons. `hunt_guide_plan.py` supplies fixed
+planning steps and pinned ATT&CK references; `hunt_guide.py` bounds the DTO and renders Markdown/PDF
+with the existing writer.
+`web/routes/hunt_guides.py` and `ui/threat_hunt.py` share those services. Reads use the stricter instance and
+caller ceiling. Hidden and absent subjects look the same; the aggregate label covers contributing evidence
+and cap metadata. Explicit links stay distinct from theme matches and never imply attribution.
+
+Previews and downloads audit `hunt.guide` with the actor but do not save a guide, product, package or finding.
+No publisher bodies, summaries or analyst notes are included, and no external request, model call,
+telemetry query or rule execution occurs. There is no new dependency or migration. See
+[THREAT_HUNT](THREAT_HUNT.md) for bounds, attribution rules and the difference from saved products/packages.

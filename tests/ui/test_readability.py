@@ -38,20 +38,21 @@ async def load_demo_and_open(user: User, title: str) -> None:
 
 async def test_the_workspace_has_one_h1_and_real_section_headings(user: User) -> None:
     """Regression: every heading was a styled ``div``, so assistive technology saw none (WCAG 1.3.1)."""
-    await user.should_see('Threat landscape')
+    await user.should_see('Intel brief')
     found = headings(user)
     # One h1 per section; only the open section is in the browser's page.
     assert [text for tag, text in found if tag == 'h1'] == [
-        'Threat landscape',
-        'Requirements',
+        'Intel brief',
         'Triage',
         'Investigate',
-        'Products',
+        'Threat hunt',
         'Share',
         'Settings',
     ]
     assert ('h2', 'Executive summary') in found
-    assert found.index(('h1', 'Threat landscape')) < found.index(('h2', 'Executive summary'))
+    assert found.index(('h1', 'Intel brief')) < found.index(('h2', 'Executive summary'))
+    assert ('h2', 'Intelligence questions') in found
+    assert ('h2', 'Saved intelligence reports') in found
     assert {'Reports', 'Your intelligence, connected.'} <= {text for tag, text in found if tag == 'h2'}
 
 
@@ -65,7 +66,7 @@ async def test_the_report_reader_is_structured_by_headings(user: User) -> None:
     }
 
 
-@pytest.mark.parametrize(('button', 'title'), [('Add intelligence', 'Add intelligence'),
+@pytest.mark.parametrize(('button', 'title'), [('Import Intel', 'Add intelligence'),
                                                ('Export IOCs', 'Export indicators of compromise (IOCs)'),
                                                ('What the words mean', 'What the words mean')])  # fmt: skip
 async def test_dialogs_have_a_name_and_a_heading(user: User, button: str, title: str) -> None:
