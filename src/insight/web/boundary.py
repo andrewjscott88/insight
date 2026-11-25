@@ -10,6 +10,8 @@ from fastapi import FastAPI
 from starlette.responses import Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from ..ratelimit import IOC_EXPORT, MCP, READ, TAXII, WRITE, Policy
+
 MAX_BODY_BYTES: Final = 2_000_000
 
 SAFE_METHODS: Final = frozenset({'GET', 'HEAD', 'OPTIONS'})
@@ -38,6 +40,19 @@ SECURITY_HEADERS: Final = (
     (b'referrer-policy', b'same-origin'),
     (b'cache-control', b'no-store'),
 )
+
+
+def rate_limit_policy(method: str, path: str) -> Policy:
+    """Which budget a request draws from. IOC exports are the expensive read and get their own."""
+    if (method, path) == ('POST', '/mcp'):
+        return MCP
+    if path in ('/api/iocs/export', '/api/iocs/stix', '/api/iocs/blocklist'):
+        return IOC_EXPORT
+    if path.startswith('/taxii2/insight/collections/') and (
+        '/objects/' in path or path.endswith('/manifest/')
+    ):
+        return TAXII
+    return READ if method in SAFE_METHODS else WRITE
 
 
 def tokens_match(supplied: object, expected: object) -> bool:

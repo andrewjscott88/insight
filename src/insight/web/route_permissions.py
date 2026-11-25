@@ -7,11 +7,15 @@ accident. ``PUBLIC_ROUTES`` are the only routes without ``require_auth``.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from types import MappingProxyType
 from typing import Final
 
-from ..permissions import Permission
+from ..apikeys import FEEDBACK_INTAKE
+from ..permissions import Permission, role_allows
+
+log = logging.getLogger('insight.auth')
 
 #: Reachable without signing in: liveness, and the sign-in and sign-out pages (each CSRF-protected).
 PUBLIC_ROUTES: Final = frozenset(
@@ -221,3 +225,18 @@ ROUTE_PERMISSIONS: Final = _table(_BY_PERMISSION)
 def route_permission(method: str, template: str) -> Permission | None:
     """The permission a request to this route needs, or ``None`` (refused) when the route is not listed."""
     return ROUTE_PERMISSIONS.get(('GET' if method == 'HEAD' else method, template))
+
+
+def route_allows(method: str, template: object, *, role: str | None, access: str) -> bool:
+    """Whether a caller with ``role`` (and a key's ``access`` level) may use the matched route ``template``.
+
+    Refuses by default: an unlisted route, or a request that matched none, is never allowed.
+    """
+    permission = route_permission(method, template) if isinstance(template, str) else None
+    if permission is None:
+        log.error('Refused %s %s: the route has no permission entry', method, template or '(none)')
+        return False
+    if role_allows(role, permission):
+        return True
+    # A read-feedback key acts as a viewer but may send these two kinds of feedback (TIP 4.1, 4.2).
+    return access == 'read-feedback' and (method, template) in FEEDBACK_INTAKE

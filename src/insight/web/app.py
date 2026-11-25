@@ -25,6 +25,7 @@ from ..ratelimit import RateLimiter
 from .auth import (
     MFA_UNPAIRED_LOG,
     SESSION_TTL_SECONDS,
+    _register_login,
     api_key_verifier,
     auth_dependency,
     session_checker,
@@ -46,7 +47,6 @@ from .routes.hunt_packages import _register_hunt_package_routes
 from .routes.hunting import _register_hunting_routes
 from .routes.imports import _register_import_routes
 from .routes.landscape import _register_landscape_routes
-from .routes.login import _register_login
 from .routes.mcp import _register_mcp_routes
 from .routes.operator_sources import _register_operator_source_routes
 from .routes.pages import _register_page_routes

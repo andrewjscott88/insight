@@ -1,7 +1,8 @@
-"""Callers, sessions, API keys and the auth dependency (the sign-in form is in ``routes/login.py``)."""
+"""Callers, sessions, API keys, the auth dependency and sign-in."""
 
 from __future__ import annotations
 
+import asyncio
 import hmac
 import logging
 import secrets
@@ -13,20 +14,25 @@ from datetime import UTC, datetime
 from typing import Any, Final, Literal, TypeAlias, cast
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import RedirectResponse
+from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
+from starlette.responses import Response
 
 from .. import apikeys, services
+from ..config import Settings
 from ..models import SessionFactory
 from ..permissions import NOT_PERMITTED, OPERATOR_ROLE, Permission, Role, is_role, key_role, role_allows
-from ..ratelimit import AUTH_FAILURES, IOC_EXPORT, MCP, READ, TAXII, WRITE, Policy, RateLimiter
+from ..ratelimit import AUTH_FAILURES, RateLimiter
 from .boundary import (
     SAFE_METHODS,
     SESSION_ONLY_ROUTES,
     SESSION_ONLY_WRITE_PREFIXES,
     UNLIMITED_READER_PREFIXES,
+    rate_limit_policy,
     tokens_match,
 )
-from .route_permissions import route_permission
+from .route_permissions import route_allows
 
 log = logging.getLogger('insight.auth')
 
@@ -158,19 +164,6 @@ def api_key_verifier(sessions: SessionFactory) -> KeyVerifier:
     return verify
 
 
-def rate_limit_policy(method: str, path: str) -> Policy:
-    """Which budget a request draws from. IOC exports are the expensive read and get their own."""
-    if (method, path) == ('POST', '/mcp'):
-        return MCP
-    if path in ('/api/iocs/export', '/api/iocs/stix', '/api/iocs/blocklist'):
-        return IOC_EXPORT
-    if path.startswith('/taxii2/insight/collections/') and (
-        '/objects/' in path or path.endswith('/manifest/')
-    ):
-        return TAXII
-    return READ if method in SAFE_METHODS else WRITE
-
-
 #: The width both values are padded to before comparing; a longer stored secret sets its own width.
 SECRET_WIDTH: Final = 256
 
@@ -264,7 +257,8 @@ def auth_dependency(
             ):
                 raise HTTPException(403, 'Invalid CSRF token')
             caller = signed_in
-        if not permitted(request, caller):
+        template = getattr(request.scope.get('route'), 'path', None)
+        if not route_allows(method, template, role=caller.role, access=caller.access):
             raise HTTPException(403, NOT_PERMITTED.rstrip('.'))
         request.state.caller = caller
         if limiter is not None:
@@ -282,21 +276,6 @@ def auth_dependency(
             log.info('API key %s: %s %s', caller.key_id, method, path)
 
     return require_auth
-
-
-def permitted(request: Request, caller: Caller) -> bool:
-    """Whether ``caller`` may use the matched route. Refuses by default: an unlisted route, or a request that
-    matched no route, is never permitted."""
-    route = request.scope.get('route')
-    template = getattr(route, 'path', None)
-    permission = route_permission(request.method, template) if isinstance(template, str) else None
-    if permission is None:
-        log.error('Refused %s %s: the route has no permission entry', request.method, template or '(none)')
-        return False
-    if caller.may(permission):
-        return True
-    # A read-feedback key acts as a viewer but may send these two kinds of feedback (TIP 4.1, 4.2).
-    return caller.access == 'read-feedback' and (request.method, template) in apikeys.FEEDBACK_INTAKE
 
 
 def caller_of(request: Request) -> Caller:
@@ -345,3 +324,74 @@ def set_session_cookie(request: Request, sid: str) -> None:
 def start_session(app: FastAPI, request: Request, now: float) -> None:
     """Replace the caller's session with a fresh stored one (prevents session fixation)."""
     set_session_cookie(request, new_session_id(app, request.session.get('sid'), now))
+
+
+def _mfa_paired(sessions: SessionFactory) -> bool:
+    with sessions() as db:
+        return services.mfa_paired(db)
+
+
+def _check_code(sessions: SessionFactory, code: str, session_secret: str) -> bool:
+    """One transaction, so an accepted code is marked used atomically (False if no app is paired)."""
+    with sessions.begin() as db:
+        services.set_actor(db, 'operator')
+        return services.verify_mfa_code(db, code, session_secret=session_secret)
+
+
+def _register_login(app: FastAPI, settings: Settings, templates: Jinja2Templates) -> None:
+    sessions: SessionFactory = app.state.session_factory
+
+    @app.post('/login')
+    async def login(request: Request) -> Response:
+        form = await request.form(max_fields=4)
+        csrf = request.session.get('csrf')
+        if not tokens_match(form.get('csrf_token'), csrf):
+            raise HTTPException(403, 'Invalid CSRF token')
+        password = str(form.get('password', ''))
+        code = str(form.get('otp', ''))
+        mfa = settings.mfa
+        if mfa and not await asyncio.to_thread(_mfa_paired, sessions):
+            # Fail closed, before any password check: a switched-on second factor never silently disappears.
+            log.error(MFA_UNPAIRED_LOG)
+            return templates.TemplateResponse(
+                request=request,
+                name='login.html',
+                status_code=503,
+                context={'csrf_token': csrf, 'error': MFA_UNPAIRED, 'mfa': mfa},
+            )
+        # Checks run one at a time (the lock also keeps a code from being used twice), but the delay after a
+        # failure is served outside the lock: the operator never waits behind other clients' failures (M1).
+        # Once the backstop is reached, wrong passwords are refused, still after the delay; the right one
+        # signs in, so a flood of bad guesses cannot lock the operator out (ADR 0002).
+        async with app.state.login_lock:
+            current = time.time()
+            app.state.failures[:] = [t for t in app.state.failures if current - t < LOGIN_WINDOW_SECONDS]
+            limited = len(app.state.failures) >= LOGIN_MAX_FAILURES
+            password_ok = same_secret(password, settings.password)
+            # The code is only checked (and consumed) once the password is right, so wrong guesses never burn
+            # a valid code. One answer for either mistake: nothing tells a guesser which factor was wrong.
+            code_ok = not mfa
+            if password_ok and mfa:
+                code_ok = await asyncio.to_thread(_check_code, sessions, code, settings.session_secret)
+            failed = not (password_ok and code_ok)
+            if failed and not limited:  # Bounded: at most LOGIN_MAX_FAILURES timestamps are kept.
+                app.state.failures.append(current)
+        if failed:
+            reason = 'password' if not password_ok else 'authentication code'
+            failures = len(app.state.failures)
+            log.warning('Failed sign-in attempt: wrong %s (%d in the last minute)', reason, failures)
+            await asyncio.sleep(settings.failed_login_delay)
+            if limited:
+                log.warning('Sign-in refused: %d failures in the last minute', failures)
+                raise HTTPException(429, 'Too many login attempts; wait one minute')
+            error = 'Incorrect password or authentication code.' if mfa else 'Incorrect password.'
+            return templates.TemplateResponse(
+                request=request,
+                name='login.html',
+                status_code=401,
+                context={'csrf_token': csrf, 'error': error, 'mfa': mfa},
+            )
+        sid = await asyncio.to_thread(new_session_id, app, request.session.get('sid'), current)
+        set_session_cookie(request, sid)
+        log.info('Operator signed in%s', ' (password and authentication code)' if mfa else '')
+        return RedirectResponse('/', status_code=303)

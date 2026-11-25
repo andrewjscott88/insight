@@ -21,7 +21,7 @@ from insight import services
 from insight.models import AuditEvent
 from insight.permissions import MINIMUM_ROLE, ROLES, role_allows
 from insight.ratelimit import Policy
-from insight.web import auth
+from insight.web import auth, boundary
 from insight.web.route_permissions import ROUTE_PERMISSIONS
 
 REFUSAL = 'Your role does not allow this'
@@ -178,7 +178,7 @@ def test_a_role_from_an_unknown_value_grants_nothing(app: FastAPI, client: TestC
 def test_each_person_has_their_own_rate_limit(
     app: FastAPI, person: Callable[..., str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(auth, 'WRITE', Policy('write', 1, 60))
+    monkeypatch.setattr(boundary, 'WRITE', Policy('write', 1, 60))
     with TestClient(app) as first, TestClient(app) as second:
         person(app, first, 'analyst')
         person(app, second, 'analyst')

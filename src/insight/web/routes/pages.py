@@ -12,9 +12,8 @@ from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from starlette.responses import Response
 
-from ..auth import MFA_UNPAIRED, SessionCheck, end_sessions, start_session
+from ..auth import MFA_UNPAIRED, SessionCheck, _mfa_paired, end_sessions, start_session
 from ..boundary import tokens_match
-from .login import _mfa_paired
 
 log = logging.getLogger('insight.auth')
 

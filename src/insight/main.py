@@ -23,7 +23,6 @@ from .web.auth import (
     api_key_verifier,
     auth_dependency,
     caller_of,
-    rate_limit_policy,
     reader_limit,
     session_checker,
     session_lookup,
@@ -38,6 +37,7 @@ from .web.boundary import (
     SESSION_ONLY_WRITE_PREFIXES,
     UNLIMITED_READER_PREFIXES,
     BoundaryMiddleware,
+    rate_limit_policy,
     tokens_match,
 )
 from .web.routes.documents import get_document_or_404
