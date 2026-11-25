@@ -17,6 +17,7 @@
 {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
 <button class="primary" type="submit">Open workspace →</button>
 </form>
+{% if public_view %}<p class="muted"><a href="/">Read the public view without signing in</a></p>{% endif %}
 <p class="login-footer"><span class="status-dot" aria-hidden="true"></span> Source-led intelligence. Analyst-reviewed.</p>
 </main>
 </body>

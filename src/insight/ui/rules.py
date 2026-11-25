@@ -19,7 +19,7 @@ from ..services.rules import LinkedRule
 from ..threat_guide import ThreatGuide
 from .messages import problem_area, tell
 from .theme import tlp_badge
-from .typography import heading, new_tab_link
+from .typography import download_link, heading, new_tab_link
 from .verdicts import suggested_tlp
 from .workspace import Workspace
 
@@ -35,17 +35,18 @@ def render_rules(ws: Workspace, guide: ThreatGuide, refresh: Callable[[], Any]) 
     rules = guide.data.rules
     heading(f'Detection rules ({len(rules)})', 4)
     ui.label('Rules linked to this group, its techniques or its reports.').classes('muted prose')
-    _show_rules(rules)
-    ui.button(
-        'Add a rule',
-        icon='add',
-        on_click=lambda: open_rule_dialog(
-            ws, RuleLinkInput(target_kind='group', target_id=guide.data.subject.ref), refresh
-        ),
-    ).props('outline no-caps')
+    _show_rules(ws, rules)
+    if ws.can(Permission.HUNTING):
+        ui.button(
+            'Add a rule',
+            icon='add',
+            on_click=lambda: open_rule_dialog(
+                ws, RuleLinkInput(target_kind='group', target_id=guide.data.subject.ref), refresh
+            ),
+        ).props('outline no-caps')
 
 
-def _show_rules(rules: Sequence[LinkedRule]) -> None:
+def _show_rules(ws: Workspace, rules: Sequence[LinkedRule]) -> None:
     for linked in rules:
         rule = linked.rule
         with ui.expansion(f'{rule.name} · {KINDS.get(rule.kind, rule.kind)}').classes('w-full break-value'):
@@ -59,7 +60,7 @@ def _show_rules(rules: Sequence[LinkedRule]) -> None:
                 'text-sm break-value'
             )
             ui.label(rule.body).classes('source-body font-mono text-sm w-full')
-            new_tab_link('Download rule and manifest', f'/api/rules/{rule.id}/export')
+            download_link(ws, 'Download rule and manifest', f'/api/rules/{rule.id}/export')
 
 
 def render_report_rules(ws: Workspace, report_id: str, report_tlp: str, refresh: Callable[[], Any]) -> None:
@@ -71,10 +72,12 @@ def render_report_rules(ws: Workspace, report_id: str, report_tlp: str, refresh:
     except LookupError:
         return
     with ui.expansion(f'Detection rules ({len(rules)})').classes('w-full'):
-        _show_rules(rules)
-        ui.button(
-            'Add a rule to this report', on_click=lambda: open_rule_dialog(ws, target, refresh, report_tlp)
-        ).props('outline no-caps')
+        _show_rules(ws, rules)
+        if ws.can(Permission.HUNTING):
+            ui.button(
+                'Add a rule to this report',
+                on_click=lambda: open_rule_dialog(ws, target, refresh, report_tlp),
+            ).props('outline no-caps')
 
         def choose_existing() -> None:
             if not ws.authorized():
@@ -110,9 +113,10 @@ def render_report_rules(ws: Workspace, report_id: str, report_tlp: str, refresh:
                 ui.button('Cancel', on_click=dialog.close).props('flat')
             dialog.open()
 
-        ui.button('Link a saved rule', on_click=choose_existing).props('flat no-caps').mark(
-            'choose-saved-rule'
-        )
+        if ws.can(Permission.HUNTING):
+            ui.button('Link a saved rule', on_click=choose_existing).props('flat no-caps').mark(
+                'choose-saved-rule'
+            )
 
 
 def open_rule_dialog(

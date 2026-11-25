@@ -14,7 +14,7 @@ from ..schemas import ActorCampaignInput
 from ..threat_guide import ThreatGuide
 from .actors import _labels
 from .messages import problem_area, tell
-from .typography import heading, new_tab_link
+from .typography import download_link, heading, new_tab_link
 from .workspace import Workspace
 
 
@@ -38,10 +38,11 @@ def render_actor_timeline(ws: Workspace, guide: ThreatGuide, refresh: Callable[[
                 ui.label(event.detail).classes('text-sm prose break-value')
         if timeline.truncated:
             ui.label('This is a bounded view; more events may be available.').classes('muted prose')
-    new_tab_link('Download activity timeline (JSON)', f'/api/actors/{guide.data.subject.ref}/timeline')
-    ui.button('Link a campaign', on_click=lambda: _manage(ws, guide.data.subject.ref, refresh)).props(
-        'outline no-caps'
-    )
+    download_link(ws, 'Download activity timeline (JSON)', f'/api/actors/{guide.data.subject.ref}/timeline')
+    if ws.can(Permission.NOTES_AND_LINKS):
+        ui.button('Link a campaign', on_click=lambda: _manage(ws, guide.data.subject.ref, refresh)).props(
+            'outline no-caps'
+        )
 
 
 def _manage(ws: Workspace, ref: str, refresh: Callable[[], Any]) -> None:

@@ -66,7 +66,7 @@ def build_cves(ws: Workspace) -> None:
         days = ws.state.cve_days
         since = (datetime.now(UTC) - timedelta(days=days)).isoformat()
         with ws.read() as db:
-            found = services.cve_signals(db, since=since, ignore=DEMO)
+            found = services.cve_signals(db, since=since, ignore=DEMO, max_tlp=ws.reader_limit)
         ranked = rank(found.signals)
         if not ranked:
             ui.label('No report from this time mentions a CVE yet.').classes('muted p-2')

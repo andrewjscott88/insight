@@ -18,7 +18,7 @@ from ..attack import DOMAINS, Domain, catalog, search
 from ..permissions import Permission
 from .attack_catalog import build_catalog_browser
 from .messages import tell
-from .typography import heading, new_tab_link
+from .typography import download_link, heading, new_tab_link
 from .workspace import Workspace
 
 #: Period choices on the tab, in days (0: all time).
@@ -54,9 +54,10 @@ def render_report_techniques(
         ui.label('No techniques on this report yet.').classes('muted')
     for tag in tags:
         _render_tag(ws, doc_id, tag, on_changed)
-    ui.button(
-        'Add a technique', icon='add', on_click=lambda: open_technique_dialog(ws, doc_id, on_changed)
-    ).props('outline no-caps')
+    if ws.can(Permission.NOTES_AND_LINKS):
+        ui.button(
+            'Add a technique', icon='add', on_click=lambda: open_technique_dialog(ws, doc_id, on_changed)
+        ).props('outline no-caps')
 
 
 def _render_tag(
@@ -67,7 +68,7 @@ def _render_tag(
             return
         try:
             with ws.write(Permission.NOTES_AND_LINKS) as db:
-                services.untag_technique(db, doc_id, tag.technique_id)
+                services.untag_technique(db, doc_id, tag.technique_id, max_tlp=ws.reader_limit)
         except LookupError:
             tell('This item no longer exists.', 'warning')
             return
@@ -92,9 +93,10 @@ def _render_tag(
         with ui.row().classes('gap-x-6 gap-y-0 items-center'):
             if tag.in_catalog:
                 new_tab_link(f'About {tag.technique_id} on the ATT&CK site', tag.url)
-            ui.button('Remove', on_click=remove).props(
-                f'flat dense no-caps aria-label="Remove {tag.technique_id}"'
-            ).mark(f'remove-{tag.technique_id}')
+            if ws.can(Permission.NOTES_AND_LINKS):
+                ui.button('Remove', on_click=remove).props(
+                    f'flat dense no-caps aria-label="Remove {tag.technique_id}"'
+                ).mark(f'remove-{tag.technique_id}')
 
 
 def open_technique_dialog(ws: Workspace, doc_id: str, on_saved: Callable[[], Any]) -> None:
@@ -224,7 +226,8 @@ def build_techniques(ws: Workspace) -> None:
             counts = services.technique_summary(
                 db, since=since(days), domain=selected_domain, max_tlp=ws.app.state.settings.max_tlp
             )
-        new_tab_link(
+        download_link(
+            ws,
             'Download a layer for ATT&CK Navigator',
             f'/api/attack/navigator?days={days}&domain={selected_domain}',
         )

@@ -36,7 +36,7 @@ def build_inbox(ws: Workspace) -> None:
         if not ws.allowed(Permission.REVIEW) or status not in DOCUMENT_STATUSES:
             return
         with ws.write(Permission.REVIEW) as db:
-            found = services.set_document_status(db, doc_id, status) is not None
+            found = services.set_document_status(db, doc_id, status, max_tlp=ws.reader_limit) is not None
         if not found:
             tell('This item no longer exists.', 'warning')
             return
@@ -46,7 +46,7 @@ def build_inbox(ws: Workspace) -> None:
         if not ws.allowed(Permission.REVIEW):
             return
         with ws.write(Permission.REVIEW) as db:
-            found = services.set_observation_status(db, obs_id, status) is not None
+            found = services.set_observation_status(db, obs_id, status, max_tlp=ws.reader_limit) is not None
         if not found:
             tell('This item no longer exists.', 'warning')
             return
@@ -54,6 +54,7 @@ def build_inbox(ws: Workspace) -> None:
 
     def current_query() -> services.DocumentQuery:
         return services.DocumentQuery(
+            max_tlp=ws.reader_limit,
             q=state.q,
             status=None if state.status == ALL_STATUSES else state.status,
             tlp=None if state.tlp == ALL_TLP else state.tlp,
@@ -76,6 +77,7 @@ def build_inbox(ws: Workspace) -> None:
                     tlp=query.tlp,
                     include_superseded=query.include_superseded,
                     limit=services.MAX_PAGE_SIZE,
+                    max_tlp=ws.reader_limit,
                 )
                 docs = [hit.document for hit in page.hits]
                 snippets = {hit.document.id: hit.snippet for hit in page.hits}
@@ -108,7 +110,7 @@ def build_inbox(ws: Workspace) -> None:
                 ui.button(row['title'], on_click=lambda document_id=row['id']: choose(document_id)).props(
                     'flat no-caps align=left'
                 ).classes('text-left p-0 w-full')
-                if row['matches']:
+                if row['matches'] and not ws.public:  # Watch terms are not published.
                     ui.label('Watch matches: ' + ', '.join(row['matches'])).classes('text-primary text-sm')
                 ui.label(row['summary']).classes('muted text-sm line-clamp-2 break-value')
                 ui.label(
@@ -120,11 +122,15 @@ def build_inbox(ws: Workspace) -> None:
         if not ws.authorized():
             return
         with ws.read() as db:
-            doc = services.get_document(db, state.selected) if state.selected else None
-            data = services.detail(db, doc) if doc else None
+            doc = (
+                services.get_document(db, state.selected, max_tlp=ws.reader_limit) if state.selected else None
+            )
+            data = services.detail(db, doc, max_tlp=ws.reader_limit) if doc else None
             if data:
-                data['verdicts'] = load_verdicts(db, (o['entity_id'] for o in data['observations']))
-                data['techniques'] = services.document_techniques(db, data['id'])
+                data['verdicts'] = load_verdicts(
+                    db, (o['entity_id'] for o in data['observations']), max_tlp=ws.reader_limit
+                )
+                data['techniques'] = services.document_techniques(db, data['id'], max_tlp=ws.reader_limit)
                 cves = [o['value'] for o in data['observations'] if o['kind'] == 'cve']
                 data['cve_scores'] = {c: summary(s) for c, s in services.cve_scores(db, cves).items()}
                 data['exploit_signals'] = services.document_exploit_signals(db, data['id'])
@@ -150,7 +156,7 @@ def build_inbox(ws: Workspace) -> None:
             return
         with ws.write(Permission.DEMO) as db:
             added = seed(db, max_tlp=ws.app.state.settings.max_tlp)
-            newest = services.search_documents(db, services.DocumentQuery(limit=1))
+            newest = services.search_documents(db, services.DocumentQuery(limit=1, max_tlp=ws.reader_limit))
             state.selected = newest[0].id if newest else None
         ws.refresh_all()
         tell(
@@ -169,7 +175,8 @@ def build_inbox(ws: Workspace) -> None:
         with ui.column().classes(list_pane):
             with ui.row().classes('w-full justify-between items-center'):
                 heading('Reports', 2)
-                ui.button('Load demo', on_click=seed_demo).props('flat dense no-caps')
+                if ws.can(Permission.DEMO):
+                    ui.button('Load demo', on_click=seed_demo).props('flat dense no-caps')
             search_box = ui.input('Search intelligence', on_change=lambda e: set_filter(q=e.value)).props(
                 'outlined debounce=300 clearable'
             )

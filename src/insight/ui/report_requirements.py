@@ -50,4 +50,7 @@ def render_report_requirements(ws: Workspace, document_id: str, refresh: Callabl
                     'flat dense no-caps align=left'
                 ).classes('break-value text-left')
                 ui.label('; '.join(item.because)).classes('muted text-sm')
-                ui.button('Cite as evidence', on_click=lambda i=item: cite(i.id)).props('flat dense no-caps')
+                if ws.can(Permission.REQUIREMENTS):
+                    ui.button('Cite as evidence', on_click=lambda i=item: cite(i.id)).props(
+                        'flat dense no-caps'
+                    )

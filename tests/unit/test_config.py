@@ -288,3 +288,42 @@ def test_an_unclear_run_jobs_switch_stops_start_up(value: str) -> None:
 def test_a_wrong_alert_setting_stops_start_up() -> None:
     with pytest.raises(RuntimeError, match='INSIGHT_SMTP_SECURITY'):
         Settings.from_env({**GOOD, 'INSIGHT_SMTP_SECURITY': 'ssl'})
+
+
+@pytest.mark.parametrize(('value', 'expected'), [('', False), ('off', False), ('on', True), (' ON ', True)])
+def test_the_public_view_needs_an_explicit_on(value: str, expected: bool) -> None:
+    settings = Settings.from_env({**GOOD, 'INSIGHT_PUBLIC_VIEW': value, 'INSIGHT_MAX_TLP': 'CLEAR'})
+    assert settings.public_view is expected
+
+
+@pytest.mark.parametrize('value', ['1', 'true', 'yes', 'onn'])
+def test_public_view_typos_fail_closed(value: str) -> None:
+    with pytest.raises(RuntimeError, match='INSIGHT_PUBLIC_VIEW'):
+        Settings.from_env({**GOOD, 'INSIGHT_PUBLIC_VIEW': value, 'INSIGHT_MAX_TLP': 'CLEAR'})
+
+
+@pytest.mark.parametrize('limit', ['', 'GREEN', 'AMBER', 'AMBER+STRICT', 'RED'])
+def test_the_public_view_refuses_to_start_unless_only_clear_is_stored(limit: str) -> None:
+    with pytest.raises(RuntimeError, match='INSIGHT_MAX_TLP=CLEAR'):
+        Settings.from_env({**GOOD, 'INSIGHT_PUBLIC_VIEW': 'on', 'INSIGHT_MAX_TLP': limit})
+
+
+def test_the_public_view_replaces_open_access() -> None:
+    with pytest.raises(RuntimeError, match='INSIGHT_DEV_NO_AUTH'):
+        Settings.from_env(
+            {**GOOD, 'INSIGHT_PUBLIC_VIEW': 'on', 'INSIGHT_MAX_TLP': 'CLEAR', 'INSIGHT_DEV_NO_AUTH': 'on'}
+        )
+
+
+def test_the_public_view_works_with_a_hardened_instance() -> None:
+    settings = Settings.from_env(
+        {
+            **GOOD,
+            'INSIGHT_PUBLIC_VIEW': 'on',
+            'INSIGHT_MAX_TLP': 'CLEAR',
+            'INSIGHT_SECURE_COOKIES': '1',
+            'INSIGHT_MFA': 'on',
+            'INSIGHT_REQUIRE_HARDENED': 'on',
+        }
+    )
+    assert (settings.public_view, settings.hardening_gaps()) == (True, [])

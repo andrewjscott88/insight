@@ -21,7 +21,7 @@ from insight import services
 from insight.models import AuditEvent
 from insight.permissions import MINIMUM_ROLE, ROLES, role_allows
 from insight.ratelimit import Policy
-from insight.web import auth, boundary
+from insight.web import boundary, callers
 from insight.web.route_permissions import ROUTE_PERMISSIONS
 
 REFUSAL = 'Your role does not allow this'
@@ -85,7 +85,7 @@ def test_the_operator_is_an_admin(authed: TestClient) -> None:
 def test_api_keys_act_as_viewers_or_analysts(
     app: FastAPI, client: TestClient, access: str, role: str
 ) -> None:
-    assert auth.Caller('api_key', 'k', access).role == role  # type: ignore[arg-type]
+    assert callers.Caller('api_key', 'k', access).role == role  # type: ignore[arg-type]
     headers = key(app, access)
     assert client.get('/api/stats', headers=headers).status_code == 200
     added = client.post('/api/documents', headers=headers, json=DEFAULT_DOCUMENT)

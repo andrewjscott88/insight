@@ -67,8 +67,10 @@ async def test_the_write_check_is_the_control(ui_env: SimpleNamespace) -> None:
         request.session = session
         with pytest.raises(NotPermitted), ws.write(Permission.READ):
             pass
-    viewer = SimpleNamespace(actor='user:u1', may=lambda p: p == Permission.READ)
-    ui_env.app.state.session_caller = lambda _session: viewer
+    viewer = SimpleNamespace(
+        kind='session', max_tlp=None, actor='user:u1', may=lambda p: p == Permission.READ
+    )
+    ui_env.app.state.workspace_caller = lambda _session: viewer
     with ws.write(Permission.READ) as db:
         assert db.info['actor'] == 'user:u1'
     assert ws.actor(Permission.READ) == 'user:u1'

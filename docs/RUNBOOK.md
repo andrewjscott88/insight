@@ -69,6 +69,7 @@ Set in `.env` (Compose reads it) or the process environment. Real environment va
 | `INSIGHT_TRUSTED_PROXIES` | no | none | Reverse proxy address(es), IPs or CIDRs (`172.18.0.1`, `10.0.0.0/24`). See "Reverse proxy" below. `*` and malformed entries stop start-up. |
 | `INSIGHT_MFA` | no | `off` | `on` requires an authenticator-app code at sign-in (`make mfa-enable` pairs the app and sets it). Anything other than on/off stops start-up. |
 | `INSIGHT_DEV_NO_AUTH` | no | `off` | Temporary password-free operator access. Only `on` enables it; blank or `off` disables it. Invalid values or enabling it with MFA stop start-up. Anyone who can reach the site can enter and use its operator tools. See "Temporary password-free access" in §4. |
+| `INSIGHT_PUBLIC_VIEW` | no | `off` | Read-only public view: visitors who are not signed in read the TLP:CLEAR intelligence as viewers, with no writes, no downloads through the API and no settings. Only `on` enables it. Start-up refuses it unless `INSIGHT_MAX_TLP=CLEAR`, and together with `INSIGHT_DEV_NO_AUTH`. See "Public view" in §4. |
 | `INSIGHT_REQUIRE_HARDENED` | no | `off` | `on` refuses to start unless `INSIGHT_SECURE_COOKIES=1` and `INSIGHT_MFA=on` (and `INSIGHT_DEV_NO_AUTH` is off), naming each missing setting. For public deployments; see "Reverse proxy". Anything other than on/off stops start-up. CLI commands still run, so `make mfa-enable` can fix a refusal. |
 | `INSIGHT_MAX_TLP` | no | `AMBER+STRICT` | Most restrictive label stored. Reports at or raised to a higher label (i.e. TLP:RED) are refused on upload. `RED` allows everything. |
 | `INSIGHT_RUN_JOBS` | no | `on` | Run scheduled syncs in this process ([ADR 0018](adr/0018-opt-in-scheduled-syncs.md)). Nothing is scheduled until you choose a schedule (§8). Set `off` in every process but one if you run several. Anything other than on/off stops start-up. |
@@ -209,6 +210,39 @@ To restore password protection:
 Restoring sign-in stops future unauthenticated entry. It does not undo report changes or recall information
 that visitors viewed or exported during the open period. The [security record](SECURITY.md#temporary-public-operator-access)
 describes this tradeoff and the controls that remain.
+
+### Public view
+
+`INSIGHT_PUBLIC_VIEW=on` opens a **read-only** view of the workspace to visitors who are not signed in
+([ADR 0046](adr/0046-sso-sign-in-and-roles.md)). It replaces temporary password-free access for public
+demonstrations.
+
+What a visitor gets:
+- the Intel Brief, Triage, Investigate and the hunt guide builder, reading TLP:CLEAR reports, indicators,
+  techniques and threat groups;
+- nothing above TLP:CLEAR, even reports stored before the limit was lowered: every workspace read is limited
+  to CLEAR for them;
+- no changes of any kind (not even audit events), no outside lookups or provider context, and no downloads:
+  downloads go through the API, which still needs a sign-in or a key;
+- no Settings or Share, and none of the team's working material: analyst notes, watch terms, intelligence
+  requirements, hunt records, saved hunt packages and products.
+
+Page loads are rate-limited by address (300 a minute). Behind a reverse proxy, set `INSIGHT_TRUSTED_PROXIES`
+(see "Reverse proxy"); otherwise every visitor shares the proxy's address and so one budget. Interactive clicks
+are not counted separately, so on a public site also rate-limit at the reverse proxy. People who sign in (the operator, and from TIP 3.4b
+everyone with a role) get the full workspace for their role; the sign-in page links back to the public view.
+
+**Move a public site from open access to the public view:**
+1. In `.env`: `INSIGHT_DEV_NO_AUTH=off`, `INSIGHT_MAX_TLP=CLEAR`, `INSIGHT_PUBLIC_VIEW=on`. Start-up refuses
+   any other combination. Recommended too: `INSIGHT_SECURE_COOKIES=1`, `make mfa-enable`, then
+   `INSIGHT_REQUIRE_HARDENED=on`.
+2. Restart (`docker compose up -d`). The start-up log says `INSIGHT_PUBLIC_VIEW=on`. If it warns that reports
+   are labelled above `INSIGHT_MAX_TLP=CLEAR`, visitors never see them; review them anyway (§9).
+3. Check from a private browser window: `/` shows **Public view** and a **Sign in** link but no Settings, no
+   **Import Intel** and no **Export IOCs**; `curl -s -o /dev/null -w '%{http_code}' https://<host>/api/stats`
+   prints `401`; signing in still opens the whole workspace.
+
+To close it again, set `INSIGHT_PUBLIC_VIEW=off` and restart: visitors are sent to the sign-in page.
 
 ### The API key
 `insight api-key status` shows the key ID, access, expiry and last use (in Docker: `docker compose exec insight

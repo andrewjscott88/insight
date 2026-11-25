@@ -130,7 +130,8 @@ def open_software(ws: Workspace, ref: str) -> None:
                             tell(str(exc), 'warning')
                         contents.refresh()
 
-                    ui.button('Remove software link', on_click=remove).props('flat dense no-caps')
+                    if ws.can(Permission.NOTES_AND_LINKS):
+                        ui.button('Remove software link', on_click=remove).props('flat dense no-caps')
                 if row['note']:
                     ui.label(row['note']).classes('prose break-value')
             if not entry['reports']:
@@ -153,10 +154,11 @@ def open_software(ws: Workspace, ref: str) -> None:
                 ).classes('break-value')
                 if row['evidence']:
                     ui.label(row['evidence']).classes('evidence prose break-value')
-                ui.button(
-                    'Link this report',
-                    on_click=lambda d=row['document_id']: _link_dialog(ws, ref, d, contents.refresh),
-                ).props('outline no-caps')
+                if ws.can(Permission.NOTES_AND_LINKS):
+                    ui.button(
+                        'Link this report',
+                        on_click=lambda d=row['document_id']: _link_dialog(ws, ref, d, contents.refresh),
+                    ).props('outline no-caps')
 
         contents()
         ui.button('Close', on_click=dialog.close)
@@ -195,6 +197,8 @@ def render_report_software(ws: Workspace, doc_id: str, changed: Callable[[], obj
         ui.button(f'{item["name"]} ({item["id"]})', on_click=lambda r=item['id']: open_software(ws, r)).props(
             'flat dense no-caps'
         ).classes('break-value')
+    if not ws.can(Permission.NOTES_AND_LINKS):
+        return
     query = ui.input('Link software by name or ID').props('outlined debounce=250 maxlength=120')
     results = ui.column().classes('w-full').props('aria-live=polite')
 

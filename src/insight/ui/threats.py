@@ -14,12 +14,13 @@ from nicegui import ui
 
 from .. import services
 from ..industries import BY_KEY, INDUSTRIES
+from ..permissions import Permission
 from ..threat_library import library
 from .actors import open_actor_dialog
 from .campaigns import render_tracked_threats
 from .software import render_software_search
 from .threat_guide import open_guide_dialog
-from .typography import heading, new_tab_link
+from .typography import download_link, heading, new_tab_link
 from .workspace import Workspace
 
 SEARCH_RESULTS: Final = 12
@@ -56,7 +57,7 @@ def build_threats(ws: Workspace) -> None:
             return
         key = ws.state.threat_industry
         with ws.read() as db:
-            found = services.industry_profile(db, key, now=datetime.now(UTC))
+            found = services.industry_profile(db, key, now=datetime.now(UTC), max_tlp=ws.reader_limit)
         ui.label(BY_KEY[key].covers).classes('muted text-sm')
         ui.label(
             f'{found.candidates} groups have a source that says they target this industry. '
@@ -74,7 +75,7 @@ def build_threats(ws: Workspace) -> None:
             ui.label(f'You removed this industry from {len(found.removed)} group(s).').classes(
                 'muted text-sm'
             )
-        new_tab_link('Download this list as JSON', f'/api/industries/{key}/actors')
+        download_link(ws, 'Download this list as JSON', f'/api/industries/{key}/actors')
 
     def choose(key: str) -> None:
         ws.state.threat_industry = key
@@ -102,9 +103,10 @@ def build_threats(ws: Workspace) -> None:
             label='Industry',
             on_change=lambda e: choose(e.value),
         ).props('outlined').classes('w-72')
-        ui.button(
-            'Track your own actor', icon='add', on_click=lambda: open_actor_dialog(ws, open_guide)
-        ).props('outline no-caps')
+        if ws.can(Permission.NOTES_AND_LINKS):
+            ui.button(
+                'Track your own actor', icon='add', on_click=lambda: open_actor_dialog(ws, open_guide)
+            ).props('outline no-caps')
     render_tracked_threats(ws)
     render_software_search(ws)
     _group_search(ws)
@@ -125,7 +127,11 @@ def _group_search(ws: Workspace) -> None:
             if not text or not ws.authorized():
                 return
             with ws.read() as db:
-                mine = [a for a in services.list_actors(db) if text.casefold() in a.name.casefold()]
+                mine = [
+                    a
+                    for a in services.list_actors(db, max_tlp=ws.reader_limit)
+                    if text.casefold() in a.name.casefold()
+                ]
                 rows = [(a.id, f'{a.name} (your actor)') for a in mine]
             rows += [(g.id, f'{g.id} · {g.name}') for g in library().search(text, limit=SEARCH_RESULTS)]
             with results:

@@ -334,3 +334,39 @@ def test_every_permission_is_used() -> None:
     for path in UI_MODULES:
         used |= {p for _, call in _workspace_calls(path) if (p := _named_permission(call)) is not None}
     assert used == set(Permission)
+
+
+#: Service helpers that take a TLP limit as the ceiling for a label being written, not a reader's limit.
+LABEL_CEILINGS = {'tlp_permitted', 'permitted_tlp_levels', 'stricter_limit'}
+
+
+def test_the_workspace_passes_the_readers_tlp_limit_to_services() -> None:
+    """Every workspace call to a service that can filter by TLP passes ``max_tlp=``, so a visitor reading the
+    public view (``ws.reader_limit`` is CLEAR) never sees a report, verdict or link above it (ADR 0046)."""
+    import inspect
+
+    from insight import services
+
+    filtering = set()
+    for name in services.__all__:
+        found = getattr(services, name)
+        if callable(found):
+            try:
+                if 'max_tlp' in inspect.signature(found).parameters:
+                    filtering.add(name)
+            except (TypeError, ValueError):
+                continue
+    filtering -= LABEL_CEILINGS
+    missing = [
+        f'{path.name}:{node.lineno} services.{node.func.attr}'
+        for path in UI_MODULES
+        for node in ast.walk(ast.parse(path.read_text()))
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == 'services'
+        and node.func.attr in filtering
+        and not any(kw.arg == 'max_tlp' for kw in node.keywords)
+    ]
+    assert len(filtering) > 100
+    assert missing == [], f'pass max_tlp=ws.reader_limit (or a stricter limit): {missing}'

@@ -97,7 +97,8 @@ async def receive() -> dict[str, Any]:
 
 def run(scope: dict[str, Any], *, authenticated: bool = False) -> Recorder:
     recorder = Recorder()
-    owner = SimpleNamespace(state=SimpleNamespace(is_authenticated=lambda _session: authenticated))
+    caller = object() if authenticated else None  # who the workspace admits (a person or a visitor)
+    owner = SimpleNamespace(state=SimpleNamespace(workspace_caller=lambda _session: caller))
     middleware = BoundaryMiddleware(recorder.app, owner)  # type: ignore[arg-type]
     asyncio.run(middleware(scope, receive, recorder.send))
     return recorder

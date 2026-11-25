@@ -67,6 +67,9 @@ def render_credibility(ws: Workspace, document_id: str, value: int) -> None:
         tell('Credibility saved. Confidence in its indicators follows.', 'success')
 
     options = {grade: f'{grade} · {text}' for grade, text in services.CREDIBILITY.items()}
+    if not ws.can(Permission.REVIEW):
+        ui.label(f'How believable is this report? {options.get(value, value)}').classes('muted text-sm')
+        return
     ui.select(
         options, value=value, label='How believable is this report?', on_change=lambda e: save(e.value)
     ).props('outlined').classes('w-72 max-w-full').mark('report-credibility')

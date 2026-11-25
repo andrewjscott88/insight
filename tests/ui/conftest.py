@@ -12,6 +12,7 @@ import sys
 from collections.abc import AsyncIterator
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import httpx
 import pytest
@@ -25,8 +26,14 @@ PASSWORD = 'correct-password'
 
 
 @pytest.fixture
+def ui_settings() -> dict[str, Any]:
+    """Extra ``Settings`` for the app under test; a test module overrides this fixture to change them."""
+    return {}
+
+
+@pytest.fixture
 async def ui_env(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, database_url: str
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, database_url: str, ui_settings: dict[str, Any]
 ) -> AsyncIterator[SimpleNamespace]:
     monkeypatch.setenv('NICEGUI_STORAGE_PATH', str(tmp_path / '.nicegui'))
     # nicegui_reset_globals() evicts the page-defining modules from sys.modules on exit; restore them so
@@ -36,7 +43,9 @@ async def ui_env(
         with nicegui_reset_globals():
             from insight.main import create_app  # Must be imported after the reset.
 
-            settings = Settings(database_url=database_url, password=PASSWORD, session_secret='s' * 48)
+            settings = Settings(
+                database_url=database_url, password=PASSWORD, session_secret='s' * 48, **ui_settings
+            )
             app: FastAPI = create_app(settings)
             async with (
                 app.router.lifespan_context(app),

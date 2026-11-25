@@ -131,7 +131,7 @@ Next Alembic revision after `0008_operator_sessions.py` should be `0009_…`, ge
 - **New tables or endpoints:** None required. Optional: keep `/health` unauthenticated but versionless (0.5).
 - **Sources / libraries:** Existing `scripts/smoke.py`.
 - **Effort:** S
-- **Acceptance criteria:** Incognito `GET https://<public-host>/` returns 303 to `/login`. `GET /api/brief` and `POST /api/documents` without a session return 401. After sign-in, the workspace loads. `.env` has `INSIGHT_SECURE_COOKIES=1`, `INSIGHT_ALLOWED_HOSTS`, and `INSIGHT_TRUSTED_PROXIES` set correctly.
+- **Acceptance criteria:** Incognito `GET https://<public-host>/` returns 303 to `/login`, or, with the read-only public view on ([ADR 0046](adr/0046-sso-sign-in-and-roles.md)), shows the public view: anonymous visitors can read published intelligence but cannot write or reach the API. `GET /api/brief` and `POST /api/documents` without a session return 401. After sign-in, the workspace loads. `.env` has `INSIGHT_SECURE_COOKIES=1`, `INSIGHT_ALLOWED_HOSTS`, and `INSIGHT_TRUSTED_PROXIES` set correctly.
 
 ### 0.2 Fix stale session and scheduling documentation — done
 
@@ -401,7 +401,7 @@ explicit-ID tagging across all three catalogs ([ADR 0042](adr/0042-mobile-and-ic
 - **Effort:** L
 - **Acceptance criteria:** A second user can be a viewer and cannot ingest, sync, or change schedules. Analyst can triage but not mint keys or notification destinations (admin only). Architecture tests prevent routes from dropping `require_auth`. Existing single-operator deployments upgrade with a single admin user and keep working.
 - **Design:** [ADR 0046](adr/0046-sso-sign-in-and-roles.md) (accepted 2026-11-25): OIDC with PKCE and no new dependency, three fixed roles, a deny-by-default permission table for the API and the workspace, the operator as the built-in admin, and an optional read-only public view.
-- **Progress:** 3.4a done: users, the three roles, the permission matrix enforced in the API and the workspace, the operator as admin, `insight users` and the architecture tests. Next: 3.4b, OIDC sign-in.
+- **Progress:** 3.4a done: users, the three roles, the permission matrix enforced in the API and the workspace, the operator as admin, `insight users` and the architecture tests. 3.4c done before 3.4b (Andrew's choice): the read-only public view (`INSIGHT_PUBLIC_VIEW=on`) and controls hidden by role. Next: 3.4b, OIDC sign-in.
 
 ### 3.5 Multi-worker sessions and rate limits
 

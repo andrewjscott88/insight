@@ -191,13 +191,15 @@ def render_tracked_threats(ws: Workspace) -> None:
                 ]
                 options.extend(('campaign', c.id, c.name) for c in campaigns)
             for kind, ref, name in options:
-                ui.button(
-                    f'{name} ({kind})', on_click=lambda k=kind, r=ref, n=name: _manage(ws, k, r, n)
-                ).props('flat dense no-caps')
+                if ws.can(Permission.NOTES_AND_LINKS):
+                    ui.button(
+                        f'{name} ({kind})', on_click=lambda k=kind, r=ref, n=name: _manage(ws, k, r, n)
+                    ).props('flat dense no-caps')
 
-        ui.button('New campaign', on_click=lambda: _new_campaign(ws, records.refresh)).props(
-            'outline no-caps'
-        )
+        if ws.can(Permission.NOTES_AND_LINKS):
+            ui.button('New campaign', on_click=lambda: _new_campaign(ws, records.refresh)).props(
+                'outline no-caps'
+            )
         panel.on_value_change(lambda _: records.refresh())
         text.on_value_change(lambda _: records.refresh())
         records()

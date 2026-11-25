@@ -178,6 +178,29 @@ def test_a_callers_role_follows_from_who_it_is() -> None:
     assert not any(nobody.may(permission) for permission in Permission)
 
 
+def test_a_visitor_to_the_public_view_is_a_clear_only_viewer_without_writes() -> None:
+    visitor = main.Caller('public', role='admin', max_tlp='RED', user_id='u1')
+    assert (visitor.role, visitor.max_tlp, visitor.user_id, visitor.actor) == (
+        'viewer',
+        'CLEAR',
+        None,
+        'public',
+    )
+    assert visitor == main.PUBLIC_CALLER
+    assert [p for p in Permission if visitor.may(p)] == [Permission.READ]
+
+
+def test_only_the_workspace_admits_visitors_and_only_with_the_public_view_on(session_app: FastAPI) -> None:
+    session_app.state.settings = SimpleNamespace(public_view=False)
+    workspace = main.workspace_lookup(session_app)
+    assert workspace({}) is None
+    session_app.state.settings = SimpleNamespace(public_view=True)
+    assert workspace({}) == main.PUBLIC_CALLER
+    assert main.session_lookup(session_app)({}) is None, 'the API never admits a visitor'
+    live = stored_session(session_app, at=time.time())
+    assert workspace({'authenticated': True, 'sid': live}) == main.SESSION_CALLER
+
+
 def test_callers_are_named_in_the_audit_log() -> None:
     assert main.SESSION_CALLER.actor == 'operator'
     assert main.Caller('api_key', 'abc').actor == 'api-key:abc'

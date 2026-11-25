@@ -13,10 +13,8 @@ from .web.auth import (
     LOGIN_WINDOW_SECONDS,
     MFA_UNPAIRED,
     MFA_UNPAIRED_LOG,
-    SESSION_CALLER,
     SESSION_TTL_SECONDS,
     AuthDependency,
-    Caller,
     KeyVerifier,
     SessionCheck,
     acting,
@@ -27,6 +25,7 @@ from .web.auth import (
     session_checker,
     session_lookup,
     start_session,
+    workspace_lookup,
 )
 from .web.boundary import (
     HSTS,
@@ -40,6 +39,7 @@ from .web.boundary import (
     rate_limit_policy,
     tokens_match,
 )
+from .web.callers import PUBLIC_CALLER, SESSION_CALLER, Caller
 from .web.routes.documents import get_document_or_404
 from .web.routes.exports import IOC_EXPORT_PARAMETERS, ioc_export_query
 from .web.routes.sources import ENRICHMENT_INTERVAL_SECONDS
@@ -54,6 +54,7 @@ __all__ = [
     'MAX_BODY_BYTES',
     'MFA_UNPAIRED',
     'MFA_UNPAIRED_LOG',
+    'PUBLIC_CALLER',
     'ROOT',
     'SAFE_METHODS',
     'SECURITY_HEADERS',
@@ -81,4 +82,5 @@ __all__ = [
     'start_session',
     'theme_context',
     'tokens_match',
+    'workspace_lookup',
 ]
