@@ -15,9 +15,11 @@ Design rules for this suite:
 from __future__ import annotations
 
 import ipaddress
+import json
 import logging
 import os
 import re
+import secrets
 import shutil
 import socket
 import uuid
@@ -26,6 +28,7 @@ from contextlib import AbstractContextManager, contextmanager
 from pathlib import Path
 from typing import Any
 
+import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -36,7 +39,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from insight.config import Settings
 from insight.main import create_app
-from insight.models import database
+from insight.models import User, database
 
 PASSWORD = 'longtestpassword'
 SECRET = 'x' * 40
@@ -315,6 +318,57 @@ def csrf_token_from() -> Callable[[str], str]:
 def authed(client: TestClient) -> TestClient:
     do_login(client)
     return client
+
+
+def add_person(app: FastAPI, role: str | None, *, email: str = '', disabled: bool = False) -> str:
+    """Store a person who signs in through the identity provider (ADR 0046) and return their ID."""
+    with app.state.session_factory.begin() as db:
+        user = User(
+            issuer='https://idp.example.org/realms/test',
+            subject=str(uuid.uuid4()),
+            email=email,
+            display_name=f'Test {role or "pending"}',
+            role=role,
+            disabled=disabled,
+        )
+        db.add(user)
+        db.flush()
+        return user.id
+
+
+def sign_in_as(app: FastAPI, client: TestClient | httpx.AsyncClient, user_id: str) -> str:
+    """Give ``client`` a stored session for ``user_id``, as the provider sign-in will (TIP 3.4b), and install
+    its CSRF token. Returns the session ID."""
+    from base64 import b64encode
+    from datetime import UTC, datetime
+
+    from itsdangerous import TimestampSigner
+
+    from insight import services
+
+    with app.state.session_factory.begin() as db:
+        sid = services.start_operator_session(
+            db, binding=app.state.session_binding, at=datetime.now(UTC), user_id=user_id
+        )
+    csrf = secrets.token_urlsafe(32)
+    payload = b64encode(json.dumps({'authenticated': True, 'sid': sid, 'csrf': csrf}).encode())
+    signed = TimestampSigner(app.state.settings.session_secret).sign(payload).decode()
+    client.cookies.set('insight_session', signed)
+    client.headers['X-CSRF-Token'] = csrf
+    return sid
+
+
+@pytest.fixture
+def person() -> Callable[..., str]:
+    """``person(app, client, role)``: sign ``client`` in as a new person with ``role`` (``None``: waiting for
+    approval) and return their user ID."""
+
+    def sign_in(app: FastAPI, client: TestClient, role: str | None, **details: Any) -> str:
+        user_id = add_person(app, role, **details)
+        sign_in_as(app, client, user_id)
+        return user_id
+
+    return sign_in
 
 
 DEFAULT_DOCUMENT: dict[str, str] = {

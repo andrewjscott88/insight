@@ -25,10 +25,10 @@ from ..ratelimit import RateLimiter
 from .auth import (
     MFA_UNPAIRED_LOG,
     SESSION_TTL_SECONDS,
-    _register_login,
     api_key_verifier,
     auth_dependency,
     session_checker,
+    session_lookup,
 )
 from .boundary import BoundaryMiddleware
 from .routes.actor_activity import _register_actor_activity_routes
@@ -46,6 +46,7 @@ from .routes.hunt_packages import _register_hunt_package_routes
 from .routes.hunting import _register_hunting_routes
 from .routes.imports import _register_import_routes
 from .routes.landscape import _register_landscape_routes
+from .routes.login import _register_login
 from .routes.mcp import _register_mcp_routes
 from .routes.operator_sources import _register_operator_source_routes
 from .routes.pages import _register_page_routes
@@ -80,6 +81,8 @@ def _init_state(app: FastAPI, settings: Settings, sessions: SessionFactory) -> N
     app.state.failures = []
     app.state.login_lock = asyncio.Lock()
     app.state.sync_lock = asyncio.Lock()
+    # Who a session cookie signs in (ADR 0046), and whether it signs anyone in.
+    app.state.session_caller = session_lookup(app)
     app.state.is_authenticated = session_checker(app)
     # Two limiters so a flood of bad keys from many addresses can never evict a real caller's bucket.
     app.state.rate_limiter = RateLimiter()
@@ -198,7 +201,7 @@ def create_app(settings: Settings | None = None, *, with_ui: bool = True) -> Fas
     _log_deployment_warnings(settings, sessions)
     templates = Jinja2Templates(directory=ROOT / 'templates', context_processors=[theme_context(settings)])
     require_auth = auth_dependency(
-        app.state.is_authenticated,
+        app.state.session_caller,
         verify_key=api_key_verifier(sessions),
         limiter=app.state.rate_limiter,
         failure_limiter=app.state.auth_failure_limiter,

@@ -8,11 +8,17 @@ from __future__ import annotations
 
 import ast
 import re
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 
 import pytest
+from fastapi import FastAPI
+from fastapi.routing import APIRoute
+from starlette.routing import BaseRoute
 
 import insight
+from insight.permissions import Permission
+from insight.web.route_permissions import PUBLIC_ROUTES, ROUTE_PERMISSIONS
 
 PACKAGE = Path(insight.__file__).parent
 UI_MODULES = sorted((PACKAGE / 'ui').glob('*.py'))
@@ -31,6 +37,7 @@ ORM_CLASSES |= {'DocumentTechnique', 'SourceSwitch', 'LookupFailure'}
 ORM_CLASSES |= {'ThreatActor', 'ActorDocument', 'IndustryClaim', 'DetectionRule', 'RuleLink'}
 ORM_CLASSES |= {'Hunt', 'HuntCheck', 'ExploitSignal', 'Case', 'CaseItem'}
 ORM_CLASSES |= {'Requirement', 'RequirementCriterion', 'RequirementEvidence'}
+ORM_CLASSES |= {'User', 'OperatorSession'}
 
 
 def imports(path: Path) -> list[tuple[str, str]]:
@@ -248,3 +255,82 @@ def test_timestamp_columns_use_the_utc_timestamp_type() -> None:
         'converted a text_on_purpose column: update ADR 0030 and this test'
     )
     assert any(isinstance(c.type, UtcTimestamp) for t in Base.metadata.tables.values() for c in t.columns)
+
+
+# --------------------------------------------------------------------------- roles (ADR 0046)
+
+
+def registered_routes(app: FastAPI) -> Iterator[APIRoute]:
+    """Every API route, including those added with ``include_router``."""
+
+    def walk(routes: Sequence[BaseRoute]) -> Iterator[APIRoute]:
+        for route in routes:
+            if isinstance(route, APIRoute):
+                yield route
+            else:
+                included = getattr(getattr(route, 'original_router', None), 'routes', None)
+                if included:
+                    yield from walk(included)
+
+    return walk(app.routes)
+
+
+def requires_auth(route: APIRoute) -> bool:
+    calls = (getattr(d.call, '__qualname__', '') for d in route.dependant.dependencies)
+    return 'auth_dependency.<locals>.require_auth' in calls
+
+
+def test_every_route_requires_authentication_and_names_a_permission(app: FastAPI) -> None:
+    """A new route without ``require_auth`` or without a row in ``route_permissions`` fails here."""
+    seen: set[tuple[str, str]] = set()
+    for route in registered_routes(app):
+        for method in (route.methods or set()) - {'HEAD'}:
+            key = (method, route.path)
+            seen.add(key)
+            if key in PUBLIC_ROUTES:
+                continue
+            assert requires_auth(route), f'{method} {route.path} has no require_auth'
+            assert key in ROUTE_PERMISSIONS, f'{method} {route.path}: add it to web/route_permissions.py'
+    assert seen >= PUBLIC_ROUTES
+    assert set(ROUTE_PERMISSIONS) <= seen, sorted(set(ROUTE_PERMISSIONS) - seen)
+    assert len(seen) > 150
+
+
+def _workspace_calls(path: Path) -> Iterator[tuple[str, ast.Call]]:
+    for node in ast.walk(ast.parse(path.read_text())):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == 'ws'
+            and node.func.attr in ('write', 'allowed', 'actor')
+        ):
+            yield node.func.attr, node
+
+
+def _named_permission(call: ast.Call) -> Permission | None:
+    if len(call.args) != 1 or call.keywords:
+        return None
+    arg = call.args[0]
+    if isinstance(arg, ast.Attribute) and isinstance(arg.value, ast.Name) and arg.value.id == 'Permission':
+        return Permission[arg.attr]
+    return None
+
+
+@pytest.mark.parametrize('path', UI_MODULES, ids=lambda p: p.name)
+def test_every_workspace_action_names_a_permission(path: Path) -> None:
+    """``ws.write``, ``ws.allowed`` and ``ws.actor`` each take one ``Permission.NAME``, and nothing in the
+    workspace names its own audit actor: the session's role is checked on every callback (ADR 0046)."""
+    for name, call in _workspace_calls(path):
+        assert _named_permission(call) is not None, f'{path.name}:{call.lineno}: ws.{name}(Permission.NAME)'
+    for node in ast.walk(ast.parse(path.read_text())):
+        if isinstance(node, ast.keyword) and node.arg == 'actor':
+            assert not isinstance(node.value, ast.Constant), f'{path.name}:{node.value.lineno}: ws.actor(...)'
+
+
+def test_every_permission_is_used() -> None:
+    """The matrix has no permission that guards nothing (``docs/SECURITY.md`` lists them all)."""
+    used = set(ROUTE_PERMISSIONS.values())
+    for path in UI_MODULES:
+        used |= {p for _, call in _workspace_calls(path) if (p := _named_permission(call)) is not None}
+    assert used == set(Permission)

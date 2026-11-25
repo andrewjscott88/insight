@@ -12,7 +12,7 @@ from ... import __version__, services
 from ...brief import DEFAULT_DAYS, MAX_DAYS, compose, window_start
 from ...demo import seed
 from ...models import SessionFactory
-from ..auth import AuthDependency, acting, reader_limit
+from ..auth import AuthDependency, acting, caller_of, reader_limit
 
 
 def _register_workspace_routes(app: FastAPI, sessions: SessionFactory, require_auth: AuthDependency) -> None:
@@ -20,7 +20,14 @@ def _register_workspace_routes(app: FastAPI, sessions: SessionFactory, require_a
 
     @app.get('/api/session', dependencies=[Depends(require_auth)])
     def session_info(request: Request) -> dict[str, str]:
-        return {'csrf_token': request.session['csrf'], 'version': __version__}
+        """The CSRF token for writes, the running version, and who is signed in with which role."""
+        caller = caller_of(request)
+        return {
+            'csrf_token': request.session['csrf'],
+            'version': __version__,
+            'role': caller.role or '',
+            'actor': caller.actor,
+        }
 
     @app.get('/api/stats', dependencies=[Depends(require_auth)])
     def stats(request: Request) -> dict[str, int]:

@@ -1,8 +1,7 @@
-"""Callers, sessions, API keys and sign-in."""
+"""Callers, sessions, API keys and the auth dependency (the sign-in form is in ``routes/login.py``)."""
 
 from __future__ import annotations
 
-import asyncio
 import hmac
 import logging
 import secrets
@@ -14,14 +13,11 @@ from datetime import UTC, datetime
 from typing import Any, Final, Literal, TypeAlias, cast
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import RedirectResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from starlette.responses import Response
 
 from .. import apikeys, services
-from ..config import Settings
 from ..models import SessionFactory
+from ..permissions import NOT_PERMITTED, OPERATOR_ROLE, Permission, Role, is_role, key_role, role_allows
 from ..ratelimit import AUTH_FAILURES, IOC_EXPORT, MCP, READ, TAXII, WRITE, Policy, RateLimiter
 from .boundary import (
     SAFE_METHODS,
@@ -30,6 +26,7 @@ from .boundary import (
     UNLIMITED_READER_PREFIXES,
     tokens_match,
 )
+from .route_permissions import route_permission
 
 log = logging.getLogger('insight.auth')
 
@@ -61,26 +58,49 @@ AuthDependency: TypeAlias = Callable[[Request], None]
 
 @dataclass(frozen=True, slots=True)
 class Caller:
-    """Who made an API request: the signed-in operator, or the API key (named by its public key ID)."""
+    """Who made a request: the signed-in operator, a signed-in person, or the API key (named by its public
+    key ID)."""
 
     kind: Literal['session', 'api_key']
     key_id: str | None = None
     access: apikeys.Access = 'read-write'
     #: Most restrictive TLP label this caller may read or write (``None``: no per-caller limit).
     max_tlp: str | None = None
+    #: The signed-in person (``users.id``); ``None`` for the operator and for API keys.
+    user_id: str | None = None
+    #: What the caller may do (ADR 0046). Only a person's role is taken as given (``None``: nothing); a key's
+    #: follows from its access level and the operator's is admin, whatever is passed.
+    role: Role | None = None
+
+    def __post_init__(self) -> None:
+        if self.kind == 'api_key':
+            object.__setattr__(self, 'role', key_role(self.access))  # never an admin
+        elif self.user_id is None:
+            object.__setattr__(self, 'role', OPERATOR_ROLE)
 
     @property
     def limit_key(self) -> str:
-        """Rate-limit bucket: the operator's browser and the API key never share a budget."""
-        return 'session' if self.key_id is None else f'key:{self.key_id}'
+        """Rate-limit bucket: each person, the operator's browser and the API key have their own budget."""
+        if self.key_id is not None:
+            return f'key:{self.key_id}'
+        return 'session' if self.user_id is None else f'user:{self.user_id}'
 
     @property
     def actor(self) -> str:
         """How audit events name this caller."""
-        return 'operator' if self.key_id is None else f'api-key:{self.key_id}'
+        if self.key_id is not None:
+            return f'api-key:{self.key_id}'
+        return 'operator' if self.user_id is None else f'user:{self.user_id}'
+
+    def may(self, permission: Permission) -> bool:
+        """Whether this caller's role allows ``permission``."""
+        return role_allows(self.role, permission)
 
 
 SESSION_CALLER: Final = Caller('session')
+
+#: ``lookup(session) -> caller``: who a signed session cookie belongs to, or ``None`` (not signed in).
+SessionLookup: TypeAlias = Callable[[Mapping[str, Any]], Caller | None]
 
 #: ``verify(token) -> (caller or None, reason)``; ``reason`` is for logs only.
 KeyVerifier: TypeAlias = Callable[[str], tuple[Caller | None, str]]
@@ -90,23 +110,36 @@ def _moment(seconds: float) -> datetime:
     return datetime.fromtimestamp(seconds, UTC)
 
 
-def session_checker(app: FastAPI) -> SessionCheck:
-    """``check(session)``: True while the signed cookie names a stored, unexpired session (review B4).
+def session_lookup(app: FastAPI) -> SessionLookup:
+    """``lookup(session)``: the caller while the signed cookie names a stored, unexpired session (review B4)
+    of the operator or of a person with a role (ADR 0046); ``None`` otherwise.
 
-    Sessions live in the database, so a restart keeps the operator signed in; ending one there ends it in
-    every tab at once. The check is one primary-key lookup.
+    Sessions live in the database, so a restart keeps people signed in; ending one there ends it in every tab
+    at once, and a role change applies to the next request. The lookup is one or two primary-key reads. A
+    person still waiting for approval, or disabled, is not signed in here.
     """
 
-    def authenticated(session: Mapping[str, Any]) -> bool:
+    def caller(session: Mapping[str, Any]) -> Caller | None:
         sid = session.get('sid')
         if not (session.get('authenticated') and isinstance(sid, str) and sid):
-            return False
+            return None
         with app.state.session_factory() as db:
-            return services.operator_session_valid(
+            principal = services.session_principal(
                 db, sid, binding=app.state.session_binding, at=_moment(time.time())
             )
+        if principal is None or not is_role(principal.role):
+            return None
+        if principal.user_id is None:
+            return SESSION_CALLER
+        return Caller('session', user_id=principal.user_id, role=principal.role)
 
-    return authenticated
+    return caller
+
+
+def session_checker(app: FastAPI) -> SessionCheck:
+    """``check(session)``: True while the signed cookie names someone signed in with a role."""
+    lookup = session_lookup(app)
+    return lambda session: lookup(session) is not None
 
 
 def api_key_verifier(sessions: SessionFactory) -> KeyVerifier:
@@ -166,7 +199,7 @@ def _client_address(request: Request) -> str:
 
 
 def auth_dependency(
-    authenticated: SessionCheck,
+    session_caller: SessionLookup,
     *,
     verify_key: KeyVerifier | None = None,
     limiter: RateLimiter | None = None,
@@ -180,7 +213,9 @@ def auth_dependency(
     * Otherwise the browser session: ``401`` without one, ``403`` for a write without the matching CSRF
       header.
 
-    Then the caller's rate limit is applied (``429`` with ``Retry-After`` when exhausted).
+    Then the route's permission is looked up by method and path template (``route_permissions``): a route
+    with no entry is refused, and so is a caller whose role does not allow it (``403``, ADR 0046). Last, the
+    caller's rate limit is applied (``429`` with ``Retry-After`` when exhausted).
     """
 
     def key_caller(request: Request, token: str) -> Caller:
@@ -221,13 +256,16 @@ def auth_dependency(
         else:
             if mcp_read:
                 raise HTTPException(401, 'API key required', headers=INVALID_KEY_HEADERS)
-            if not authenticated(request.session):
+            signed_in = session_caller(request.session)
+            if signed_in is None:
                 raise HTTPException(401, 'Sign in required')
             if method not in SAFE_METHODS and not tokens_match(
                 request.headers.get('X-CSRF-Token'), request.session.get('csrf')
             ):
                 raise HTTPException(403, 'Invalid CSRF token')
-            caller = SESSION_CALLER
+            caller = signed_in
+        if not permitted(request, caller):
+            raise HTTPException(403, NOT_PERMITTED.rstrip('.'))
         request.state.caller = caller
         if limiter is not None:
             decision = limiter.hit(caller.limit_key, rate_limit_policy(method, path))
@@ -244,6 +282,21 @@ def auth_dependency(
             log.info('API key %s: %s %s', caller.key_id, method, path)
 
     return require_auth
+
+
+def permitted(request: Request, caller: Caller) -> bool:
+    """Whether ``caller`` may use the matched route. Refuses by default: an unlisted route, or a request that
+    matched no route, is never permitted."""
+    route = request.scope.get('route')
+    template = getattr(route, 'path', None)
+    permission = route_permission(request.method, template) if isinstance(template, str) else None
+    if permission is None:
+        log.error('Refused %s %s: the route has no permission entry', request.method, template or '(none)')
+        return False
+    if caller.may(permission):
+        return True
+    # A read-feedback key acts as a viewer but may send these two kinds of feedback (TIP 4.1, 4.2).
+    return caller.access == 'read-feedback' and (request.method, template) in apikeys.FEEDBACK_INTAKE
 
 
 def caller_of(request: Request) -> Caller:
@@ -276,14 +329,12 @@ def new_session_id(app: FastAPI, replaces: Any, now: float) -> str:
 
 
 def end_sessions(app: FastAPI, sid: Any, *, everywhere: bool) -> int:
-    """Sign this browser out, or every browser (audited); returns how many sessions ended everywhere."""
-    with app.state.session_factory.begin() as db:
-        services.set_actor(db, 'operator')
-        if everywhere:
-            return services.end_all_operator_sessions(db)
-        if isinstance(sid, str) and sid:
-            services.end_operator_session(db, sid, binding=app.state.session_binding)
+    """Sign this browser out, or every browser of the same person (audited); returns how many sessions
+    ended everywhere."""
+    if not (isinstance(sid, str) and sid):
         return 0
+    with app.state.session_factory.begin() as db:
+        return services.sign_out(db, sid, binding=app.state.session_binding, everywhere=everywhere)
 
 
 def set_session_cookie(request: Request, sid: str) -> None:
@@ -294,74 +345,3 @@ def set_session_cookie(request: Request, sid: str) -> None:
 def start_session(app: FastAPI, request: Request, now: float) -> None:
     """Replace the caller's session with a fresh stored one (prevents session fixation)."""
     set_session_cookie(request, new_session_id(app, request.session.get('sid'), now))
-
-
-def _mfa_paired(sessions: SessionFactory) -> bool:
-    with sessions() as db:
-        return services.mfa_paired(db)
-
-
-def _check_code(sessions: SessionFactory, code: str, session_secret: str) -> bool:
-    """One transaction, so an accepted code is marked used atomically (False if no app is paired)."""
-    with sessions.begin() as db:
-        services.set_actor(db, 'operator')
-        return services.verify_mfa_code(db, code, session_secret=session_secret)
-
-
-def _register_login(app: FastAPI, settings: Settings, templates: Jinja2Templates) -> None:
-    sessions: SessionFactory = app.state.session_factory
-
-    @app.post('/login')
-    async def login(request: Request) -> Response:
-        form = await request.form(max_fields=4)
-        csrf = request.session.get('csrf')
-        if not tokens_match(form.get('csrf_token'), csrf):
-            raise HTTPException(403, 'Invalid CSRF token')
-        password = str(form.get('password', ''))
-        code = str(form.get('otp', ''))
-        mfa = settings.mfa
-        if mfa and not await asyncio.to_thread(_mfa_paired, sessions):
-            # Fail closed, before any password check: a switched-on second factor never silently disappears.
-            log.error(MFA_UNPAIRED_LOG)
-            return templates.TemplateResponse(
-                request=request,
-                name='login.html',
-                status_code=503,
-                context={'csrf_token': csrf, 'error': MFA_UNPAIRED, 'mfa': mfa},
-            )
-        # Checks run one at a time (the lock also keeps a code from being used twice), but the delay after a
-        # failure is served outside the lock: the operator never waits behind other clients' failures (M1).
-        # Once the backstop is reached, wrong passwords are refused, still after the delay; the right one
-        # signs in, so a flood of bad guesses cannot lock the operator out (ADR 0002).
-        async with app.state.login_lock:
-            current = time.time()
-            app.state.failures[:] = [t for t in app.state.failures if current - t < LOGIN_WINDOW_SECONDS]
-            limited = len(app.state.failures) >= LOGIN_MAX_FAILURES
-            password_ok = same_secret(password, settings.password)
-            # The code is only checked (and consumed) once the password is right, so wrong guesses never burn
-            # a valid code. One answer for either mistake: nothing tells a guesser which factor was wrong.
-            code_ok = not mfa
-            if password_ok and mfa:
-                code_ok = await asyncio.to_thread(_check_code, sessions, code, settings.session_secret)
-            failed = not (password_ok and code_ok)
-            if failed and not limited:  # Bounded: at most LOGIN_MAX_FAILURES timestamps are kept.
-                app.state.failures.append(current)
-        if failed:
-            reason = 'password' if not password_ok else 'authentication code'
-            failures = len(app.state.failures)
-            log.warning('Failed sign-in attempt: wrong %s (%d in the last minute)', reason, failures)
-            await asyncio.sleep(settings.failed_login_delay)
-            if limited:
-                log.warning('Sign-in refused: %d failures in the last minute', failures)
-                raise HTTPException(429, 'Too many login attempts; wait one minute')
-            error = 'Incorrect password or authentication code.' if mfa else 'Incorrect password.'
-            return templates.TemplateResponse(
-                request=request,
-                name='login.html',
-                status_code=401,
-                context={'csrf_token': csrf, 'error': error, 'mfa': mfa},
-            )
-        sid = await asyncio.to_thread(new_session_id, app, request.session.get('sid'), current)
-        set_session_cookie(request, sid)
-        log.info('Operator signed in%s', ' (password and authentication code)' if mfa else '')
-        return RedirectResponse('/', status_code=303)

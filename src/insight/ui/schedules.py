@@ -11,6 +11,7 @@ from typing import Final
 from nicegui import ui
 
 from .. import services
+from ..permissions import Permission
 from ..source_registry import SOURCES, in_use, is_operator_source
 from .messages import tell
 from .workspace import Workspace
@@ -53,7 +54,7 @@ def _save(ws: Workspace, keys: list[str], minutes: int | None, start: str) -> li
     now = datetime.now(UTC)
     starts_at = services.time_of_day(start, now) if start != SOON else None
     saved = []
-    with ws.write() as db:
+    with ws.write(Permission.SCHEDULES) as db:
         schedules = services.list_schedules(db) if minutes is None else {}
         for key in keys:
             interval = minutes
@@ -98,7 +99,7 @@ def build_all_sources_schedule(ws: Workspace, controls: ScheduleControls) -> Non
             refresh()
 
     def start_changed(start: str | None) -> None:
-        if start is None or not ws.authorized():
+        if start is None or not ws.allowed(Permission.SCHEDULES):
             return
         controls.start = start
         if start != SOON and _save(ws, _in_use(ws), None, start):
@@ -106,7 +107,7 @@ def build_all_sources_schedule(ws: Workspace, controls: ScheduleControls) -> Non
             redraw()
 
     def changed(minutes: int | None) -> None:
-        if minutes is None or not ws.authorized():
+        if minutes is None or not ws.allowed(Permission.SCHEDULES):
             return
         keys = _in_use(ws)
         saved = _save(ws, keys, minutes, controls.start)
@@ -145,7 +146,7 @@ def build_schedule_control(
         ui.label(when or 'Syncs only when you ask.').classes('muted text-sm')
 
     def changed(value: int | None) -> None:
-        if value is None or not ws.authorized() or value == _interval(ws, key)[0]:
+        if value is None or not ws.allowed(Permission.SCHEDULES) or value == _interval(ws, key)[0]:
             next_sync.refresh()
             return
         if not _save(ws, [key], value, controls.start):

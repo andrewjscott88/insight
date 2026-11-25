@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from .. import services
 from ..flags import Flag, flags
+from ..permissions import Permission
 from ..schemas import TLP_LEVELS, AssessmentInput, Verdict
 from .messages import tell
 from .typography import heading
@@ -166,7 +167,7 @@ def open_verdict_dialog(
         ).props('outlined stack-label type=date')
 
         def save() -> None:
-            if not ws.authorized():
+            if not ws.allowed(Permission.REVIEW):
                 return
             try:
                 payload = AssessmentInput(
@@ -184,7 +185,7 @@ def open_verdict_dialog(
                     tell('Check the verdict and the reason (up to 2,000 characters).', 'warning')
                 return
             try:
-                with ws.write() as db:
+                with ws.write(Permission.REVIEW) as db:
                     services.assess_entity(db, target.entity_id, payload, max_tlp=max_tlp)
             except LookupError:
                 tell('This item no longer exists.', 'warning')

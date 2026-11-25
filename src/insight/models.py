@@ -336,6 +336,38 @@ class OperatorSession(Base):
     id_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
     created_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
     expires_at: Mapped[str] = mapped_column(UtcTimestamp(), index=True)
+    #: The person signed in (ADR 0046); ``None`` for the built-in operator's password sign-in.
+    user_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey('users.id', ondelete='CASCADE', name='fk_operator_sessions_user_id_users'),
+        index=True,
+        default=None,
+    )
+
+
+class User(Base):
+    """A person who signs in through the organisation's identity provider (ADR 0046).
+
+    The provider's issuer and subject identify them. ``role`` is ``viewer``, ``analyst`` or ``admin``, or
+    ``None`` while they wait for an admin to approve them (signed in, but with no access). When the host maps
+    provider groups to roles, ``role_from_groups`` is set and every sign-in sets the role again. The built-in
+    operator (the password sign-in) has no row. Changing a role, disabling a person or removing them ends
+    their sessions (``services.users``).
+    """
+
+    __tablename__ = 'users'
+    __table_args__ = (UniqueConstraint('issuer', 'subject'),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    issuer: Mapped[str] = mapped_column(String(500))
+    subject: Mapped[str] = mapped_column(String(255))
+    #: Only an address the provider says is verified; otherwise empty.
+    email: Mapped[str] = mapped_column(String(320), default='', server_default='')
+    display_name: Mapped[str] = mapped_column(String(200), default='', server_default='')
+    role: Mapped[str | None] = mapped_column(String(20), default=None)
+    role_from_groups: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    disabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    first_sign_in_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
+    last_sign_in_at: Mapped[str] = mapped_column(UtcTimestamp(), default=now)
 
 
 class OperatorMfa(Base):

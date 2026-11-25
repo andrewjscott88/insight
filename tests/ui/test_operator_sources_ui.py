@@ -33,8 +33,8 @@ async def test_feed_starts_off_and_sync_and_schedule_require_enabling(
 
     calls = []
 
-    async def sync(sessions: SessionFactory, key: str, *, max_tlp: str | None = None) -> str:
-        calls.append(key)
+    async def sync(sessions: SessionFactory, key: str, *, max_tlp: str | None = None, actor: str = '') -> str:
+        calls.append((key, actor))
         return 'Training feed checked.'
 
     monkeypatch.setattr(sources, 'sync_source', sync)
@@ -53,7 +53,7 @@ async def test_feed_starts_off_and_sync_and_schedule_require_enabling(
         user.find(kind=ui.button, content='Sync now').click()
     await user.should_see('Training feed checked.')
     await user.should_see(marker='feed-' + source.key)
-    assert calls == [source.key]
+    assert calls == [(source.key, 'operator')]
     with user.scope(marker='feed-' + source.key):
         user.find(kind=ui.select, content='Sync by itself').elements.pop().set_value(60)
     await user.should_see('The schedule is saved')
@@ -87,7 +87,7 @@ async def test_feed_starts_off_and_sync_and_schedule_require_enabling(
     await user.should_see('Its reports stay in Insight.')
     user.find(marker='confirm-delete-feed').click()
     await user.should_see('You have no feeds yet.')
-    assert calls == [source.key]
+    assert calls == [(source.key, 'operator')]
 
 
 async def test_stale_feed_switch_does_not_enable_a_replaced_address(

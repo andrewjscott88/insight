@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import json
 import secrets
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Final
 
@@ -18,6 +19,7 @@ from ..models import (
     ApiKey,
     OperatorMfa,
     OperatorSession,
+    User,
     now,
 )
 from ..schemas import (
@@ -221,11 +223,28 @@ def _session_hash(session_id: str, binding: str) -> str:
     return hashlib.sha256(f'{binding}:{session_id}'.encode()).hexdigest()
 
 
-def start_operator_session(db: Session, *, binding: str, at: datetime, replaces: str | None = None) -> str:
+@dataclass(frozen=True, slots=True)
+class SessionPrincipal:
+    """Who a stored session belongs to (ADR 0046)."""
+
+    #: The person (``users.id``); ``None`` for the built-in operator's password sign-in.
+    user_id: str | None
+    #: ``viewer``, ``analyst`` or ``admin``; ``None`` while the person waits for an admin's approval.
+    role: str | None
+
+
+#: The built-in operator: the password sign-in, an admin.
+OPERATOR_PRINCIPAL: Final = SessionPrincipal(None, 'admin')
+
+
+def start_operator_session(
+    db: Session, *, binding: str, at: datetime, replaces: str | None = None, user_id: str | None = None
+) -> str:
     """Store a new session and return its ID for the cookie; only a keyed hash of the ID is stored.
 
     ``replaces`` is the ID the browser had before, which ends here, so a sign-in never keeps an old ID
-    (session fixation). Expired sessions are deleted on the way.
+    (session fixation). Expired sessions are deleted on the way. ``user_id`` names the person who signed in
+    (``None``: the operator).
     """
     if replaces:
         end_operator_session(db, replaces, binding=binding)
@@ -236,17 +255,31 @@ def start_operator_session(db: Session, *, binding: str, at: datetime, replaces:
             id_hash=_session_hash(session_id, binding),
             created_at=stamp(at),
             expires_at=stamp(at + SESSION_TTL),
+            user_id=user_id,
         )
     )
     return session_id
 
 
+def session_principal(db: Session, session_id: str, *, binding: str, at: datetime) -> SessionPrincipal | None:
+    """Who ``session_id`` signs in, while it names a stored, unexpired session made under the current
+    credentials; ``None`` otherwise, and for a disabled or removed person."""
+    if not session_id:
+        return None
+    row = db.get(OperatorSession, _session_hash(session_id, binding))
+    if row is None or row.expires_at <= stamp(at):
+        return None
+    if row.user_id is None:
+        return OPERATOR_PRINCIPAL
+    user = db.get(User, row.user_id)
+    if user is None or user.disabled:
+        return None
+    return SessionPrincipal(user.id, user.role)
+
+
 def operator_session_valid(db: Session, session_id: str, *, binding: str, at: datetime) -> bool:
     """True while ``session_id`` names a stored, unexpired session made under the current credentials."""
-    if not session_id:
-        return False
-    row = db.get(OperatorSession, _session_hash(session_id, binding))
-    return row is not None and row.expires_at > stamp(at)
+    return session_principal(db, session_id, binding=binding, at=at) is not None
 
 
 def end_operator_session(db: Session, session_id: str, *, binding: str) -> None:
@@ -254,11 +287,35 @@ def end_operator_session(db: Session, session_id: str, *, binding: str) -> None:
     db.execute(delete(OperatorSession).where(OperatorSession.id_hash == _session_hash(session_id, binding)))
 
 
+def sign_out(db: Session, session_id: str, *, binding: str, everywhere: bool) -> int:
+    """Sign this browser out or, with ``everywhere``, every browser of the same person (the operator's, or
+    one person's; other people stay signed in). Returns how many sessions ended everywhere (0 otherwise).
+    The audit event names the person signing out."""
+    row = db.get(OperatorSession, _session_hash(session_id, binding)) if session_id else None
+    if row is None:
+        return 0
+    if not everywhere:
+        end_operator_session(db, session_id, binding=binding)
+        return 0
+    db.info['actor'] = 'operator' if row.user_id is None else f'user:{row.user_id}'
+    return end_own_sessions(db, row.user_id)
+
+
+def end_own_sessions(db: Session, user_id: str | None) -> int:
+    """Sign one person out of every browser: ``user_id``, or the operator when ``None``. Audited as
+    ``session.end_all`` with the number of sessions that were open; other people stay signed in."""
+    owner = OperatorSession.user_id.is_(None) if user_id is None else OperatorSession.user_id == user_id
+    count = db.scalar(select(func.count()).select_from(OperatorSession).where(owner)) or 0
+    db.execute(delete(OperatorSession).where(owner))
+    audit(db, 'session.end_all', user_id or 'operator', f'{count} session(s) ended')
+    return count
+
+
 def end_all_operator_sessions(db: Session) -> int:
-    """Sign every browser out. Audited as ``session.end_all`` with the number of sessions that were open."""
+    """Sign everyone out of every browser. Audited as ``session.end_all`` with the number of sessions."""
     count = db.scalar(select(func.count()).select_from(OperatorSession)) or 0
     db.execute(delete(OperatorSession))
-    audit(db, 'session.end_all', 'operator', f'{count} session(s) ended')
+    audit(db, 'session.end_all', 'everyone', f'{count} session(s) ended')
     return count
 
 

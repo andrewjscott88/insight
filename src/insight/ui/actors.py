@@ -14,6 +14,7 @@ from pydantic import ValidationError
 
 from .. import services
 from ..industries import INDUSTRIES
+from ..permissions import Permission
 from ..schemas import TLP_LEVELS, ActorInput, ActorLinkInput, IndustryClaimInput
 from ..threat_library import library
 from .messages import problem_area, tell
@@ -48,7 +49,7 @@ def open_actor_dialog(ws: Workspace, on_created: Callable[[str], Any]) -> None:
         problem = problem_area()
 
         def save() -> None:
-            if not ws.authorized():
+            if not ws.allowed(Permission.NOTES_AND_LINKS):
                 return
             try:
                 payload = ActorInput.model_validate(
@@ -60,7 +61,7 @@ def open_actor_dialog(ws: Workspace, on_created: Callable[[str], Any]) -> None:
                         'tlp': label.value,
                     }
                 )
-                with ws.write() as db:
+                with ws.write(Permission.NOTES_AND_LINKS) as db:
                     ref = services.create_actor(db, payload, max_tlp=ws.app.state.settings.max_tlp).id
             except ValidationError:
                 problem.set_text('Give the actor a name. A group ID looks like G0016.')
@@ -102,7 +103,7 @@ def open_industry_dialog(ws: Workspace, group_ref: str, on_saved: Callable[[], A
         problem = problem_area()
 
         def save() -> None:
-            if not ws.authorized():
+            if not ws.allowed(Permission.NOTES_AND_LINKS):
                 return
             try:
                 payload = IndustryClaimInput.model_validate(
@@ -114,7 +115,7 @@ def open_industry_dialog(ws: Workspace, group_ref: str, on_saved: Callable[[], A
                         'tlp': label.value,
                     }
                 )
-                with ws.write() as db:
+                with ws.write(Permission.NOTES_AND_LINKS) as db:
                     services.record_industry_claim(
                         db, group_ref, payload, max_tlp=ws.app.state.settings.max_tlp
                     )
@@ -153,9 +154,9 @@ def render_report_groups(ws: Workspace, doc_id: str, on_changed: Callable[[], An
             ).props('flat dense no-caps')
 
             def unlink(ref: str = subject.ref) -> None:
-                if not ws.authorized():
+                if not ws.allowed(Permission.NOTES_AND_LINKS):
                     return
-                with ws.write() as db:
+                with ws.write(Permission.NOTES_AND_LINKS) as db:
                     services.unlink_report(db, ref, doc_id, max_tlp=ceiling)
                 on_changed()
 
@@ -166,10 +167,10 @@ def render_report_groups(ws: Workspace, doc_id: str, on_changed: Callable[[], An
     matches = ui.column().classes('w-full gap-1').props('aria-live=polite')
 
     def link(ref: str) -> None:
-        if not ws.authorized():
+        if not ws.allowed(Permission.NOTES_AND_LINKS):
             return
         try:
-            with ws.write() as db:
+            with ws.write(Permission.NOTES_AND_LINKS) as db:
                 services.link_report(
                     db, ref, ActorLinkInput(document_id=doc_id), max_tlp=ceiling, preserve_note=True
                 )

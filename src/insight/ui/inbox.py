@@ -9,6 +9,7 @@ from nicegui import ui
 from .. import services
 from ..cve_scores import summary
 from ..demo import seed
+from ..permissions import Permission
 from ..schemas import DOCUMENT_STATUSES, TLP_LEVELS
 from .messages import tell
 from .mobile import show_reader
@@ -32,9 +33,9 @@ def build_inbox(ws: Workspace) -> None:
     ws.open_document = choose
 
     def review_document(doc_id: str, status: str) -> None:
-        if not ws.authorized() or status not in DOCUMENT_STATUSES:
+        if not ws.allowed(Permission.REVIEW) or status not in DOCUMENT_STATUSES:
             return
-        with ws.write() as db:
+        with ws.write(Permission.REVIEW) as db:
             found = services.set_document_status(db, doc_id, status) is not None
         if not found:
             tell('This item no longer exists.', 'warning')
@@ -42,9 +43,9 @@ def build_inbox(ws: Workspace) -> None:
         ws.refresh_all()
 
     def review_observation(obs_id: str, status: str) -> None:
-        if not ws.authorized():
+        if not ws.allowed(Permission.REVIEW):
             return
-        with ws.write() as db:
+        with ws.write(Permission.REVIEW) as db:
             found = services.set_observation_status(db, obs_id, status) is not None
         if not found:
             tell('This item no longer exists.', 'warning')
@@ -145,9 +146,9 @@ def build_inbox(ws: Workspace) -> None:
         document_list.refresh()
 
     def seed_demo() -> None:
-        if not ws.authorized():
+        if not ws.allowed(Permission.DEMO):
             return
-        with ws.write() as db:
+        with ws.write(Permission.DEMO) as db:
             added = seed(db, max_tlp=ws.app.state.settings.max_tlp)
             newest = services.search_documents(db, services.DocumentQuery(limit=1))
             state.selected = newest[0].id if newest else None

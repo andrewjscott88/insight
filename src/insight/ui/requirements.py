@@ -14,6 +14,7 @@ from nicegui import ui
 from pydantic import ValidationError
 
 from .. import services
+from ..permissions import Permission
 from ..schemas import RequirementInput, RequirementStatusFilter
 from .actors import _labels
 from .messages import problem_area, tell
@@ -70,7 +71,7 @@ def _new_requirement(ws: Workspace, saved: Callable[[str], object]) -> None:
         error = problem_area()
 
         def save() -> None:
-            if not ws.authorized():
+            if not ws.allowed(Permission.REQUIREMENTS):
                 return
             try:
                 item = RequirementInput.model_validate(
@@ -84,7 +85,7 @@ def _new_requirement(ws: Workspace, saved: Callable[[str], object]) -> None:
                         'parent_id': parent.value if kind.value == 'ir' else None,
                     }
                 )
-                with ws.write() as db:
+                with ws.write(Permission.REQUIREMENTS) as db:
                     requirement_id = services.create_requirement(db, item, max_tlp=limit).id
             except (ValidationError, ValueError, LookupError):
                 error.set_text(

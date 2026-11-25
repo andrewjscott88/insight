@@ -26,6 +26,7 @@ from .web.auth import (
     rate_limit_policy,
     reader_limit,
     session_checker,
+    session_lookup,
     start_session,
 )
 from .web.boundary import (
@@ -76,6 +77,7 @@ __all__ = [
     'rate_limit_policy',
     'reader_limit',
     'session_checker',
+    'session_lookup',
     'start_session',
     'theme_context',
     'tokens_match',

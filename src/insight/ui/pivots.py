@@ -8,6 +8,7 @@ from nicegui import ui
 
 from .. import passive_dns, pivot_data, pivots, services
 from ..connectors import ProviderError
+from ..permissions import Permission
 from .messages import problem_area, tell
 from .typography import heading
 from .workspace import Workspace
@@ -73,10 +74,10 @@ def build_pivot_switches(ws: Workspace) -> None:
     ).classes('muted prose')
 
     def change(provider: str, enabled: bool) -> None:
-        if not ws.authorized():
+        if not ws.allowed(Permission.SOURCES):
             return
         try:
-            with ws.write() as db:
+            with ws.write(Permission.SOURCES) as db:
                 services.set_pivot_switch(db, provider, enabled)
         except ValueError as exc:
             tell(str(exc), 'warning')
@@ -152,13 +153,18 @@ def open_pivots(ws: Workspace, value: str) -> None:
                 async def fetch(
                     p: str = provider, checkbox: ui.checkbox = consent, error: ui.label = problem
                 ) -> None:
-                    if not ws.authorized() or not checkbox.value:
+                    if not ws.allowed(Permission.LOOKUPS) or not checkbox.value:
                         return
                     checkbox.set_value(False)
                     error.set_text('')
                     try:
                         result = await pivots.lookup(
-                            ws.sessions, p, value, approved=True, actor='operator', max_tlp=None
+                            ws.sessions,
+                            p,
+                            value,
+                            approved=True,
+                            actor=ws.actor(Permission.LOOKUPS),
+                            max_tlp=None,
                         )
                     except (ProviderError, ValueError, LookupError, pivots.RateLimited) as exc:
                         if ws.authorized():

@@ -21,6 +21,7 @@ from ..cve_scores import (
     describe_vulncheck,
 )
 from ..lookups import LookupThrottled, request_lookup
+from ..permissions import Permission
 from .messages import problem_area
 from .typography import heading
 from .workspace import Workspace
@@ -110,7 +111,7 @@ def open_enrichment_dialog(ws: Workspace, cve: str) -> None:
                         )
 
         async def lookup() -> None:
-            if not ws.authorized() or not consent.value:
+            if not ws.allowed(Permission.LOOKUPS) or not consent.value:
                 return
             problem.set_text('')
             selected_provider = str(provider.value)

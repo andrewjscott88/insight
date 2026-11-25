@@ -9,6 +9,7 @@ from nicegui import ui
 from pydantic import ValidationError
 
 from .. import services
+from ..permissions import Permission
 from ..schemas import CredibilityInput, SourceRatingInput
 from .messages import tell
 from .typography import heading
@@ -55,10 +56,10 @@ def render_credibility(ws: Workspace, document_id: str, value: int) -> None:
     limit = ws.app.state.settings.max_tlp
 
     def save(chosen: int) -> None:
-        if not ws.authorized() or chosen == value:
+        if not ws.allowed(Permission.REVIEW) or chosen == value:
             return
         try:
-            with ws.write() as db:
+            with ws.write(Permission.REVIEW) as db:
                 services.set_credibility(db, document_id, CredibilityInput(credibility=chosen), max_tlp=limit)
         except (LookupError, ValidationError):
             tell('That could not be saved.', 'warning')
@@ -75,10 +76,10 @@ def build_source_ratings(ws: Workspace) -> None:
     """Settings: Source reliability: grade each source and see what it adds."""
 
     def save(name: str, grade: str, ageing: int) -> None:
-        if not ws.authorized():
+        if not ws.allowed(Permission.REVIEW):
             return
         payload = SourceRatingInput(source_name=name, reliability=grade, half_life_days=ageing or None)
-        with ws.write() as db:
+        with ws.write(Permission.REVIEW) as db:
             services.rate_source(db, payload)
         tell(f'{name}: reliability {grade}.', 'success')
 

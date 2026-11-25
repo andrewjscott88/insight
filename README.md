@@ -267,6 +267,7 @@ Open http://127.0.0.1:8080. Default local data lives in `./data/insight.db`. Use
 | `insight threat-library-sync` | Fetch the full pinned threat-group library (MITRE ATT&CK and MISP galaxy; checked by SHA-256) |
 | `insight mfa setup` | Pair an authenticator app for sign-in codes (shows a secret, then confirms one code). Also `status`, `reset`. MFA itself is **off by default** and switched with `INSIGHT_MFA=on`; with Docker, `make mfa-enable` / `make mfa-disable` do both steps |
 | `insight api-key create --name NAME` | Create the API key for scripts/SIEM (read-only unless `--access read-write`; `--max-tlp GREEN` hides more restrictive reports from it; shown once). Also `status`, `rotate`, `revoke`. See [docs/API.md](docs/API.md#api-key-scripts-and-siem) |
+| `insight users list` | People who signed in through the identity provider. Also `role USER viewer\|analyst\|admin\|none`, `disable`, `enable`, `sign-out`, `remove`; each change ends the person's sessions. The password sign-in is the built-in operator, always an admin ([roles](docs/API.md#roles)) |
 | `insight --version` | Print the version |
 
 Install the git hooks once: `pre-commit install --hook-type pre-commit --hook-type pre-push`.
@@ -354,7 +355,7 @@ docker compose cp insight:/data/backup-$(date +%Y%m%d).db ./
 
 ## Scope and known limits
 
-- No team accounts, SSO, RBAC or recipient-level dissemination rules. MFA is an optional single-operator authenticator-app code, off by default (`make mfa-enable`). One API key at a time.
+- No SSO sign-in or recipient-level dissemination rules yet: roles (viewer, analyst, admin) and their permission matrix are in place (TIP 3.4a), and sign-in through an identity provider follows in TIP 3.4b. MFA is an optional single-operator authenticator-app code, off by default (`make mfa-enable`). One API key at a time.
 - Rate limits live in server memory: one worker, and a restart resets them. Sessions are stored in the database and survive restarts. The API is unversioned (breaking changes are listed in the CHANGELOG's upgrade notes).
 - No full-text relevance ranking engine or drawn graph visualization yet. Source syncs can run on opt-in schedules (off by default).
 - Local PDF import extracts text in a bounded Linux worker. Arbitrary URL fetching, arbitrary feed entry, STIX/TAXII/MISP synchronization and automatic full-article storage remain outside the collection workflow.

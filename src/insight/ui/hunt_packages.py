@@ -13,6 +13,7 @@ from nicegui import ui
 from pydantic import ValidationError
 
 from .. import services
+from ..permissions import Permission
 from ..schemas import HuntPackageInput, HuntPackageItemInput, HuntPackageItemKind, HuntPackageStatusFilter
 from .actors import _labels
 from .hunt_package_detail import STATUS_TEXT, open_hunt_package_dialog
@@ -34,7 +35,7 @@ def _create(ws: Workspace, title: str, hypothesis: str, group: str, label: str) 
     payload = HuntPackageInput.model_validate(
         {'title': title, 'hypothesis': hypothesis, 'group': group.strip() or None, 'tlp': label}
     )
-    with ws.write() as db:
+    with ws.write(Permission.HUNTING) as db:
         return services.create_hunt_package(db, payload, max_tlp=ws.app.state.settings.max_tlp).id
 
 
@@ -64,7 +65,7 @@ def _new_package(ws: Workspace, saved: Callable[[str], object]) -> None:
         error = problem_area()
 
         def save() -> None:
-            if not ws.authorized():
+            if not ws.allowed(Permission.HUNTING):
                 return
             try:
                 package_id = _create(
@@ -178,7 +179,7 @@ def open_add_to_package(ws: Workspace, kind: HuntPackageItemKind, target_id: str
         error = problem_area()
 
         def add() -> None:
-            if not ws.authorized():
+            if not ws.allowed(Permission.HUNTING):
                 return
             try:
                 package_id = (
@@ -186,7 +187,7 @@ def open_add_to_package(ws: Workspace, kind: HuntPackageItemKind, target_id: str
                     if target.value == NEW
                     else target.value
                 )
-                with ws.write() as db:
+                with ws.write(Permission.HUNTING) as db:
                     item = HuntPackageItemInput(kind=kind, target_id=target_id)
                     services.add_hunt_package_item(db, package_id, item, max_tlp=limit)
             except services.HuntPackageConflict as exc:

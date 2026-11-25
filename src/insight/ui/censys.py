@@ -8,6 +8,7 @@ from nicegui import ui
 
 from .. import censys, services
 from ..connectors import ProviderError
+from ..permissions import Permission
 from .messages import problem_area
 from .typography import heading, new_tab_link
 from .workspace import Workspace
@@ -102,7 +103,7 @@ def open_censys(ws: Workspace, ip: str) -> None:
         problem = problem_area()
 
         async def fetch() -> None:
-            if not ws.authorized() or ws.app.state.settings.dev_no_auth or not consent.value:
+            if not ws.allowed(Permission.LOOKUPS) or ws.app.state.settings.dev_no_auth or not consent.value:
                 return
             consent.set_value(False)
             problem.set_text('')
@@ -110,7 +111,7 @@ def open_censys(ws: Workspace, ip: str) -> None:
                 answer = await censys.lookup(
                     ws.sessions,
                     ip,
-                    actor='operator',
+                    actor=ws.actor(Permission.LOOKUPS),
                     approved=True,
                     max_tlp=ws.app.state.settings.max_tlp,
                 )

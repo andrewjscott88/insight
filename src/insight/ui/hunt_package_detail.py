@@ -10,6 +10,7 @@ from nicegui import ui
 from pydantic import ValidationError
 
 from .. import services
+from ..permissions import Permission
 from ..schemas import HuntPackageItemInput, HuntPackageItemKind, HuntPackageUpdate
 from .messages import problem_area, tell
 from .theme import tlp_badge
@@ -42,10 +43,10 @@ def open_hunt_package_dialog(ws: Workspace, package_id: str, *, changed: Callabl
     with ui.dialog().props('aria-label="Hunt package"') as dialog, ui.card().classes('dialog-card w-full'):
 
         def write(action: Callable[[Any], object], done: str) -> None:
-            if not ws.authorized():
+            if not ws.allowed(Permission.HUNTING):
                 return
             try:
-                with ws.write() as db:
+                with ws.write(Permission.HUNTING) as db:
                     action(db)
             except services.HuntPackageConflict as exc:
                 error.set_text(str(exc))
@@ -164,10 +165,10 @@ def open_hunt_package_dialog(ws: Workspace, package_id: str, *, changed: Callabl
                 new_tab_link('Download as STIX', f'/api/hunt-packages/{package_id}/stix')
 
         def delete() -> None:
-            if not ws.authorized():
+            if not ws.allowed(Permission.HUNTING):
                 return
             try:
-                with ws.write() as db:
+                with ws.write(Permission.HUNTING) as db:
                     services.delete_hunt_package(db, package_id, max_tlp=limit)
             except services.HuntPackageConflict as exc:
                 confirm.close()

@@ -48,8 +48,10 @@ page is the field-by-field reference.
    token; `429` a wrong password after 30 failures in the last minute (each failure waits ~1 s; the right password always signs in); `503` MFA is on but no
    authenticator app is paired (sign-in locked). MFA is off by default (`INSIGHT_MFA=on` or `make mfa-enable`
    turns it on); then `otp` is the 6-digit code from the app, and each code works once.
-3. `GET /api/session` returns `{"csrf_token": "…", "version": "…"}` for the signed-in session.
-   Send the `csrf_token` value as `X-CSRF-Token` on **every non-GET** API request. The `version` field is the running Insight version.
+3. `GET /api/session` returns `{"csrf_token": "…", "version": "…", "role": "admin", "actor": "operator"}` for
+   the signed-in session. Send the `csrf_token` value as `X-CSRF-Token` on **every non-GET** API request. The
+   `version` field is the running Insight version; `role` and `actor` say what you may do and how the audit log
+   names you (see [Roles](#roles)).
 4. `POST /logout` (form field `csrf_token`) revokes the session server-side.
 
 **Temporary password-free mode:** with the explicit default-off `INSIGHT_DEV_NO_AUTH=on`, `GET /login`
@@ -95,6 +97,27 @@ c.headers['X-CSRF-Token'] = c.get('/api/session').json()['csrf_token']
 
 All `/api/*` routes return `401` without a valid session and `403` for writes without the CSRF header.
 
+### Roles
+
+Every request also needs a role that allows its route ([ADR 0046](adr/0046-sso-sign-in-and-roles.md)). There
+are three fixed roles; each may do everything the one before it may:
+
+| Role | May |
+| --- | --- |
+| `viewer` | Every `GET` route, and `POST /mcp` (fixed read-only tools) |
+| `analyst` | Also intelligence work: add and import reports; review reports, indicators and verdicts; credibility and source ratings; notes, ATT&CK tags, groups, campaigns and links; products; requirements and RFIs; hunt packages, hunts, rules and sightings; *Sync now*; an approved outside lookup |
+| `admin` | Also settings: operator sources, schedules and the demo reports (in the workspace also: switching sources and lookup providers on or off, and alert destinations) |
+
+- The password sign-in is the built-in operator, an `admin`, so a single-operator instance works as before.
+  People who sign in through the organisation's identity provider (TIP 3.4b) get their role from an admin
+  (`insight users role` on the host) or from provider groups.
+- A `read` or `read-feedback` key acts as a `viewer` (`read-feedback` keeps its two writes) and a `read-write`
+  key as an `analyst`. No key is ever an `admin`.
+- A role below the route's gets `403 {"detail": "Your role does not allow this"}`. Each route's permission is
+  listed in `src/insight/web/route_permissions.py`; a route missing from that table is refused to everyone.
+- Roles do not change TLP: everyone signed in reads up to the instance limit.
+- `actor` is how audit events name the caller: `operator`, `user:<id>` for a person, `api-key:<key ID>`.
+
 ## API key (scripts and SIEM)
 
 Automation should use the API key instead of the sign-in flow above. There is **one active key at a time**,
@@ -127,6 +150,7 @@ iocs = c.get('/api/iocs/export', params={'max_tlp': 'GREEN', 'review_status': 'a
 | CSRF token on writes | Required (`X-CSRF-Token`) | Not used |
 | Writes (`POST`) | Yes | Only with `--access read-write`; `--access read-feedback` may send requests for information (`POST /api/rfis`) and sightings (`POST /api/sightings`) and nothing else |
 | `GET /api/session`, the workspace UI | Yes | No (`403`) |
+| Role ([Roles](#roles)) | The operator is an `admin`; a person has their own | `read`, `read-feedback`: `viewer`; `read-write`: `analyst` |
 | Reports above a TLP limit | Sees all | With `--max-tlp`, invisible (see below) |
 
 - `401` with `WWW-Authenticate: Bearer error="invalid_token"` and `{"detail": "Invalid or expired API key"}`

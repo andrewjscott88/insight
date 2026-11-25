@@ -11,6 +11,7 @@ from nicegui import ui
 from pydantic import ValidationError
 
 from .. import services
+from ..permissions import Permission
 from ..schemas import CaseCloseInput, CaseNoteInput
 from .messages import problem_area, tell
 from .product_publish import render_publish
@@ -60,10 +61,10 @@ def open_case_dialog(ws: Workspace, case_id: str, *, changed: Callable[[], Any])
     with ui.dialog().props('aria-label="Product"') as dialog, ui.card().classes('dialog-card w-full'):
 
         def write(action: Callable[[Any], object], done: str) -> None:
-            if not ws.authorized():
+            if not ws.allowed(Permission.PRODUCTS):
                 return
             try:
-                with ws.write() as db:
+                with ws.write(Permission.PRODUCTS) as db:
                     action(db)
             except (services.CaseClosed, services.ProductIncomplete) as exc:
                 error.set_text(str(exc))
@@ -186,10 +187,10 @@ def open_case_dialog(ws: Workspace, case_id: str, *, changed: Callable[[], Any])
                 ).props('outline').mark('case-reopen')
 
         def delete() -> None:
-            if not ws.authorized():
+            if not ws.allowed(Permission.PRODUCTS):
                 return
             try:
-                with ws.write() as db:
+                with ws.write(Permission.PRODUCTS) as db:
                     services.delete_case(db, case_id, max_tlp=limit)
             except LookupError:
                 pass

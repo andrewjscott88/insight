@@ -10,6 +10,7 @@ from nicegui import ui
 from pydantic import ValidationError
 
 from .. import services
+from ..permissions import Permission
 from ..schemas import AnswerInput, CriterionInput, EvidenceInput
 from .messages import problem_area, tell
 from .theme import tlp_badge
@@ -68,10 +69,10 @@ def open_requirement_dialog(ws: Workspace, requirement_id: str, *, changed: Call
     with ui.dialog().props('aria-label="Requirement"') as dialog, ui.card().classes('dialog-card w-full'):
 
         def write(action: Callable[[Any, str], object], done: str) -> None:
-            if not ws.authorized():
+            if not ws.allowed(Permission.REQUIREMENTS):
                 return
             try:
-                with ws.write() as db:
+                with ws.write(Permission.REQUIREMENTS) as db:
                     action(db, limit)
             except (services.RequirementRetired, services.RequirementInUse) as exc:
                 error.set_text(str(exc))

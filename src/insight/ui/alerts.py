@@ -13,6 +13,7 @@ from nicegui import ui
 
 from .. import alerts, services
 from ..config import AlertSettings
+from ..permissions import Permission
 from ..services.alerts import TARGET_TLPS
 from .messages import tell
 from .typography import heading
@@ -56,10 +57,10 @@ def build_alerts(ws: Workspace) -> None:
         dialog.open()
 
     def add() -> None:
-        if not ws.authorized():
+        if not ws.allowed(Permission.ALERTS):
             return
         try:
-            with ws.write() as db:
+            with ws.write(Permission.ALERTS) as db:
                 target = services.add_target(
                     db,
                     name=name_input.value or '',
@@ -79,27 +80,27 @@ def build_alerts(ws: Workspace) -> None:
             show_secret(secret)
 
     def toggle(target_id: str, on: bool) -> None:
-        if not ws.authorized():
+        if not ws.allowed(Permission.ALERTS):
             return
-        with ws.write() as db:
+        with ws.write(Permission.ALERTS) as db:
             services.set_target_enabled(db, target_id, on)
         tell('Alerts to this destination are on.' if on else 'Alerts to this destination are off.', 'success')
 
     def remove(target_id: str) -> None:
-        if not ws.authorized():
+        if not ws.allowed(Permission.ALERTS):
             return
-        with ws.write() as db:
+        with ws.write(Permission.ALERTS) as db:
             services.delete_target(db, target_id)
         targets.refresh()
         recent.refresh()
         tell('Destination removed.', 'success')
 
     async def test(target_id: str, button: ui.button) -> None:
-        if not ws.authorized():
+        if not ws.allowed(Permission.ALERTS):
             return
         button.disable()
         try:
-            with ws.write() as db:
+            with ws.write(Permission.ALERTS) as db:
                 alert_id = services.queue_test_alert(db, target_id).id
             await alerts.deliver_due(ws.sessions, ids=[alert_id])
         finally:

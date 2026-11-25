@@ -99,6 +99,7 @@ def build_parser() -> argparse.ArgumentParser:
             'rule-add',
             'misp-export',
             'misp-import',
+            'users',
         ],
         nargs='?',
         default='serve',
@@ -117,7 +118,8 @@ def build_parser() -> argparse.ArgumentParser:
             'threat-library-sync: fetch the full pinned threat library | industries | '
             'threat-profile INDUSTRY: the top ten groups | threat-guide REF DEST: write a threat guide | '
             'rule-add FILE: store a YARA, Sigma, Suricata or Snort rule | '
-            'misp-export / misp-import: exchange a MISP event (see command --help)'
+            'misp-export / misp-import: exchange a MISP event (see command --help) | '
+            'users ACTION: people who sign in and their roles (see users --help)'
         ),
     )
     parser.add_argument(
@@ -777,8 +779,20 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f'MISP exchange failed: {exc}', file=sys.stderr)
             return 1
         return 0
+    if argv[:1] == ['users']:
+        from .cli_users import run_users
+
+        try:
+            print(run_users(argv[1:]))
+        except ValueError as exc:
+            print(f'Users: {exc}', file=sys.stderr)
+            return 1
+        except (EOFError, KeyboardInterrupt):
+            print('\nCancelled; nothing was changed.', file=sys.stderr)
+            return 1
+        return 0
     args = build_parser().parse_args(argv)
-    if args.command in ('misp-export', 'misp-import', 'import-pdf'):
+    if args.command in ('misp-export', 'misp-import', 'import-pdf', 'users'):
         print(f'usage: insight {args.command} [OPTIONS]; place options after the command', file=sys.stderr)
         return 2
     if args.command == 'init':
