@@ -1,6 +1,6 @@
 # ADR 0013: An instance TLP limit; TLP:RED refused by default
 
-Status: accepted (unreleased)
+Status: Accepted
 
 ## Context
 TLP:RED is for named recipients only. The instance is heading for an internet-facing deployment, where a

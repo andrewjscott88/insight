@@ -1,6 +1,6 @@
 # ADR 0016: Light and dark themes from one set of colour tokens; the choice is per device
 
-Status: accepted (unreleased); refines ADR 0003; colour targets raised by ADR 0017 (7:1, APCA)
+Status: Accepted; refines ADR 0003; colour targets raised by ADR 0017 (7:1, APCA)
 
 ## Context
 The workspace was dark only, with colours hard-coded in several places: the NiceGUI style sheet, `ui.colors()`,

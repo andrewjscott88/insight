@@ -1,6 +1,6 @@
 # ADR 0015: Optional TOTP second factor (off by default), managed on the host
 
-Status: accepted (unreleased); refines ADR 0002
+Status: Accepted; refines ADR 0002
 
 ## Context
 The instance is going public with one operator and one password. ADR 0002 slows guessing but cannot stop a

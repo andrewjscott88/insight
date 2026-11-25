@@ -1,6 +1,6 @@
 # ADR 0025: Industry threat profiles and actor threat guides from a sourced, pinned threat-group library
 
-Status: accepted (unreleased)
+Status: Accepted
 
 ## Context
 Analysts are asked two questions again and again: "who targets our industry?" and "what do we do about group X?".

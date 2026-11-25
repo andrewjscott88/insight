@@ -1,6 +1,6 @@
 # ADR 0012: One API key, managed from the CLI; per-caller rate limits
 
-Status: accepted (unreleased)
+Status: Accepted
 
 ## Context
 Scripts and a SIEM need to call the API. Until now the only credential was the browser session: clients had to

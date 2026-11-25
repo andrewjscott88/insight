@@ -1,6 +1,6 @@
 # ADR 0019: MITRE ATT&CK® techniques on reports, from the text and from analysts
 
-Status: accepted (unreleased)
+Status: Accepted
 
 ## Context
 Threat intelligence analysts describe adversary behaviour in MITRE ATT&CK terms: which techniques a campaign

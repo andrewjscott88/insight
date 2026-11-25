@@ -26,6 +26,21 @@ workflow and was published. [0.9.0 release run](https://github.com/andrewjscott8
 - The OASIS `taxii2-client` 2.3.0 read from a disposable Insight server over loopback. With a GREEN-limited
   key it paged the reviewed collection and received the indicators and reports allowed in the matching
   STIX export. An unauthenticated request returned `401`. This test runs with the regular API suite.
+- #119 refreshed the hash-pinned dependency locks: FastAPI 0.165.0, NiceGUI 3.19.0, python-socketio 5.18.1,
+  Pydantic 2.14.4, SQLAlchemy 2.1.9, certifi 2026.11.20 and patch releases. It passed CI, the milestone gate
+  and CodeQL. [CI](https://github.com/andrewjscott88/insight/actions/runs/45423427665) ·
+  [Milestone gate](https://github.com/andrewjscott88/insight/actions/runs/45546652420) ·
+  [CodeQL](https://github.com/andrewjscott88/insight/actions/runs/45423427397)
+- #121 added the guided Threat Hunt workspace, sector briefs, the mobile and ICS ATT&CK catalogs and Censys host
+  context, rebased onto #119 and #120. It passed CI, the milestone gate and CodeQL after seven test assertions
+  were rewritten so that CodeQL no longer read them as URL checks. Censys was exercised only with offline
+  fixtures; no live Censys account was used. ADR 0041 relaxes the 80-character line target for full-width
+  workspace text; the browser checks still cover text size, spacing, wrapping and page overflow.
+  [CI](https://github.com/andrewjscott88/insight/actions/runs/45551439338) ·
+  [Milestone gate](https://github.com/andrewjscott88/insight/actions/runs/45551434609) ·
+  [CodeQL](https://github.com/andrewjscott88/insight/actions/runs/45551439386)
+- The release pull request stops TAXII source credentials from being sent while temporary open access is on,
+  because any visitor could then point a source at another host. A regression test covers it.
 - The 1.0.0 SQLite upgrade fixture has schema `0032`, both operator-source kinds and a publisher-restricted
   report. SQLite integrity and foreign-key checks passed. The release metadata check found matching
   version, changelog and fixture, and all workflow actions and base images passed the strict pin check.

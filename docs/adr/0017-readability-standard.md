@@ -1,6 +1,6 @@
 # ADR 0017: A readability standard for the GUI: WCAG 2.2 AA, its reading-related AAA criteria, and dyslexia guidance
 
-Status: accepted (unreleased); refines ADR 0016
+Status: Accepted; refines ADR 0016
 
 ## Context
 An audit of the GUI against current guidance for people with reading difficulties (WCAG 2.2, W3C COGA, the

@@ -16,6 +16,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from . import connectors, stix_import
+from .config import parse_dev_no_auth
 from .operator_endpoints import valid_collection_id
 from .schemas import OperatorSourceInput
 from .stix_export import stable_id
@@ -53,6 +54,10 @@ class CollectionBatch:
 def _auth_header(name: str | None) -> dict[str, str]:
     if not name:
         return {}
+    if parse_dev_no_auth(os.environ.get('INSIGHT_DEV_NO_AUTH', '')):
+        # In temporary open access anyone who reaches the workspace can point a source at a host of their
+        # choosing, and a host credential would follow it there. The source shows as not configured instead.
+        raise TaxiiNotConfigured('TAXII source credentials are not used in temporary open access.')
     if not _NAME.fullmatch(name):
         raise TaxiiNotConfigured('The TAXII source credentials are not configured.')
     value = os.environ.get(name, '')

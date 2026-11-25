@@ -1,6 +1,6 @@
 # ADR 0042: ATT&CK Mobile and industrial-control-system catalogs
 
-Status: proposed (local iteration)
+Status: Accepted (1.0.0)
 
 ## Decision
 

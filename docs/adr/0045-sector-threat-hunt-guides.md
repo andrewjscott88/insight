@@ -1,6 +1,6 @@
 # ADR 0045: Sector and industry threat hunt guides
 
-Status: proposed (local iteration)
+Status: Accepted (1.0.0)
 
 ## Context
 

@@ -132,6 +132,21 @@ async def test_bad_configuration_never_requests_anything(
     assert taxii_client.credentials_configured('')
 
 
+async def test_open_access_never_sends_a_host_credential(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Regression: in temporary open access any visitor can repoint a source, so its credential stays home."""
+    monkeypatch.setenv(ENV_NAME, 'sample.token')
+    assert taxii_client.credentials_configured(ENV_NAME)
+    monkeypatch.setenv('INSIGHT_DEV_NO_AUTH', 'on')
+    calls = _setup(monkeypatch, [])
+    assert not taxii_client.credentials_configured(ENV_NAME)
+    with pytest.raises(taxii_client.TaxiiNotConfigured, match='temporary open access'):
+        await taxii_client.fetch_collection(ROOT, COLLECTION, credential_env=ENV_NAME)
+    assert calls == []
+    calls = _setup(monkeypatch, [(b'{}', TAXII_MEDIA_TYPE, '')])
+    await taxii_client.fetch_collection(ROOT, COLLECTION)  # a collection without a credential still works
+    assert calls == [(ENDPOINT, {}, {'Accept': TAXII_MEDIA_TYPE})]
+
+
 @pytest.mark.parametrize(
     ('root', 'collection'),
     [

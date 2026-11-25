@@ -1,6 +1,6 @@
 # ADR 0014: A TLP limit per API key, enforced in the service layer
 
-Status: accepted (unreleased)
+Status: Accepted
 
 ## Context
 The API key of ADR 0012 reads everything the instance stores. A SIEM or script rarely needs AMBER or

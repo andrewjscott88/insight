@@ -1,6 +1,6 @@
 # ADR 0043: private Censys Platform host context
 
-- Status: proposed (local iteration)
+- Status: Accepted (1.0.0)
 - Date: 2026-11-23
 
 ## Decision

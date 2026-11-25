@@ -1,6 +1,6 @@
 # ADR 0026: A read-only TAXII 2.1 server over the STIX export, with stable objects
 
-Status: accepted (unreleased)
+Status: Accepted
 
 ## Context
 SIEMs and threat-intelligence platforms (Microsoft Sentinel, OpenCTI, MISP and others) pull STIX from TAXII 2.1

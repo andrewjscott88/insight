@@ -1,6 +1,6 @@
 # ADR 0032: Intelligence requirements and requests for information
 
-Status: accepted (unreleased)
+Status: Accepted
 
 ## Context
 Leading threat-intelligence platforms organise work around the questions the business needs answered:
