@@ -15,7 +15,7 @@ from insight import services
 from insight.models import EntityAssessment
 from insight.ratelimit import IOC_EXPORT
 from insight.schemas import DocumentInput, IocExportQuery
-from insight.web.auth import rate_limit_policy
+from insight.web.boundary import rate_limit_policy
 
 PUBLIC_IP = '93.184.216.34'
 OTHER_IP = '45.33.32.156'
