@@ -48,6 +48,7 @@ def _register_page_routes(app: FastAPI, templates: Jinja2Templates) -> None:
                 'csrf_token': request.session['csrf'],
                 'error': MFA_UNPAIRED if locked else None,
                 'mfa': mfa,
+                'public_view': app.state.settings.public_view,
             },
         )
 

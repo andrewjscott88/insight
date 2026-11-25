@@ -13,6 +13,7 @@ from typing import Any
 from nicegui import ui
 
 from .. import services
+from ..permissions import Permission
 from ..threat_guide import ThreatGuide, compose, industry_claims, industry_name
 from ..threat_library import library
 from .actor_timeline import render_actor_timeline
@@ -20,7 +21,7 @@ from .actors import open_industry_dialog
 from .hunts import render_hunt_plan
 from .messages import tell
 from .theme import tlp_badge
-from .typography import heading, new_tab_link
+from .typography import download_link, heading, new_tab_link
 from .workspace import Workspace
 
 
@@ -83,16 +84,17 @@ def _render(ws: Workspace, guide: ThreatGuide, refresh: Callable[[], Any]) -> No
         new_tab_link(f'{group.id} on the ATT&CK site', group.url)
     base = f'/api/actors/{subject.ref}'
     with ui.row().classes('gap-x-6 gap-y-1'):
-        new_tab_link('Download the guide (Markdown)', f'{base}/guide?format=md')
-        new_tab_link('Download the guide (JSON)', f'{base}/guide')
-        new_tab_link('Download a layer for ATT&CK Navigator', f'{base}/navigator')
-        new_tab_link('Download the sweep list (CSV)', f'{base}/sweep?format=csv')
-        new_tab_link(
+        download_link(ws, 'Download the guide (Markdown)', f'{base}/guide?format=md')
+        download_link(ws, 'Download the guide (JSON)', f'{base}/guide')
+        download_link(ws, 'Download a layer for ATT&CK Navigator', f'{base}/navigator')
+        download_link(ws, 'Download the sweep list (CSV)', f'{base}/sweep?format=csv')
+        download_link(
+            ws,
             'Download the sweep list with reports that only name it (CSV)',
             f'{base}/sweep?format=csv&linked_only=false',
         )
     _targets(ws, guide, refresh)
-    _techniques(guide)
+    _techniques(ws, guide)
     _reports(ws, guide)
     render_actor_timeline(ws, guide, refresh)
     render_hunt_plan(ws, guide, refresh)
@@ -121,13 +123,14 @@ def _targets(ws: Workspace, guide: ThreatGuide, refresh: Callable[[], Any]) -> N
     if group is not None and group.last_activity is not None:
         latest = group.last_activity
         ui.label(f'Latest public activity: {latest.name}, last seen {latest.last_seen}.').classes('text-sm')
-    ui.button(
-        'Add or remove an industry',
-        on_click=lambda: open_industry_dialog(ws, guide.data.subject.ref, refresh),
-    ).props('outline no-caps')
+    if ws.can(Permission.NOTES_AND_LINKS):
+        ui.button(
+            'Add or remove an industry',
+            on_click=lambda: open_industry_dialog(ws, guide.data.subject.ref, refresh),
+        ).props('outline no-caps')
 
 
-def _techniques(guide: ThreatGuide) -> None:
+def _techniques(ws: Workspace, guide: ThreatGuide) -> None:
     heading(f'How it works: {len(guide.techniques)} techniques', 3, 'subsection-title mt-3')
     by_tactic: dict[str, list[str]] = {}
     for row in guide.techniques:
@@ -143,7 +146,9 @@ def _techniques(guide: ThreatGuide) -> None:
     if software:
         with ui.expansion(f'Tools and malware ({len(software)})').classes('w-full'):
             for item in software:
-                new_tab_link(f'Download {item.name} Navigator layer', f'/api/software/{item.id}/navigator')
+                download_link(
+                    ws, f'Download {item.name} Navigator layer', f'/api/software/{item.id}/navigator'
+                )
                 new_tab_link(f'{item.name} ({item.type})', item.url)
     if guide.mitigations:
         with ui.expansion(f'Ways to defend ({len(guide.mitigations)})').classes('w-full'):

@@ -51,7 +51,13 @@ class NotPermitted(PermissionError):
 
 
 class _Caller(Protocol):
-    """Who a session signs in (``web.auth.Caller``; the workspace does not import the web front end)."""
+    """Who uses the page (``web.callers.Caller``; the workspace does not import the web front end)."""
+
+    @property
+    def kind(self) -> str: ...
+
+    @property
+    def max_tlp(self) -> str | None: ...
 
     @property
     def actor(self) -> str: ...
@@ -90,14 +96,33 @@ class Workspace:
 
     def authorized(self) -> bool:
         """Re-checked on every callback: signing out in another tab revokes this page immediately."""
-        if not self.app.state.is_authenticated(self.request.session):
+        if self._caller() is None:
             ui.navigate.to('/login')
             return False
         return True
 
     def _caller(self) -> _Caller | None:
-        caller: _Caller | None = self.app.state.session_caller(self.request.session)
+        """The signed-in caller or, with the public view on, a visitor (ADR 0046); looked up every time."""
+        caller: _Caller | None = self.app.state.workspace_caller(self.request.session)
         return caller
+
+    @property
+    def public(self) -> bool:
+        """A visitor reading the public view: no writes, no downloads (those go through the API) and no
+        settings."""
+        caller = self._caller()
+        return caller is not None and caller.kind == 'public'
+
+    @property
+    def reader_limit(self) -> str | None:
+        """The TLP limit every read passes: ``CLEAR`` for a visitor, none for people who are signed in."""
+        caller = self._caller()
+        return 'CLEAR' if caller is None else caller.max_tlp
+
+    def can(self, permission: Permission) -> bool:
+        """Whether to offer a control: the role allows ``permission`` (a visitor never changes anything)."""
+        caller = self._caller()
+        return caller is not None and caller.kind != 'public' and caller.may(permission)
 
     def allowed(self, permission: Permission) -> bool:
         """``authorized`` plus the role, checked on every callback: says so when it does not allow this.
@@ -108,7 +133,7 @@ class Workspace:
         if caller is None:
             ui.navigate.to('/login')
             return False
-        if not caller.may(permission):
+        if caller.kind == 'public' or not caller.may(permission):
             tell(NOT_PERMITTED, 'warning')
             return False
         return True
@@ -119,7 +144,7 @@ class Workspace:
         The current session's role is checked now; raises :class:`NotPermitted`.
         """
         caller = self._caller()
-        if caller is None or not caller.may(permission):
+        if caller is None or caller.kind == 'public' or not caller.may(permission):
             raise NotPermitted(f'{NOT_PERMITTED} ({permission})')
         return caller.actor
 

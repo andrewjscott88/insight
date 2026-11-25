@@ -30,6 +30,7 @@ from .auth import (
     auth_dependency,
     session_checker,
     session_lookup,
+    workspace_lookup,
 )
 from .boundary import BoundaryMiddleware
 from .routes.actor_activity import _register_actor_activity_routes
@@ -84,6 +85,8 @@ def _init_state(app: FastAPI, settings: Settings, sessions: SessionFactory) -> N
     # Who a session cookie signs in (ADR 0046), and whether it signs anyone in.
     app.state.session_caller = session_lookup(app)
     app.state.is_authenticated = session_checker(app)
+    # The workspace (never the API) also lets visitors read while the public view is on.
+    app.state.workspace_caller = workspace_lookup(app)
     # Two limiters so a flood of bad keys from many addresses can never evict a real caller's bucket.
     app.state.rate_limiter = RateLimiter()
     app.state.auth_failure_limiter = RateLimiter()
@@ -116,6 +119,11 @@ def _log_deployment_warnings(settings: Settings, sessions: SessionFactory) -> No
         log.warning(
             'INSIGHT_DEV_NO_AUTH=on: anyone who can reach this workspace can view and change its data'
         )
+    if settings.public_view:
+        log.info(
+            'INSIGHT_PUBLIC_VIEW=on: visitors can read TLP:CLEAR intelligence without signing in; they '
+            'cannot change anything or use the API'
+        )
     if settings.trusted_proxies:
         log.info('Trusting X-Forwarded-For/-Proto from: %s', ', '.join(settings.trusted_proxies))
     if settings.require_hardened:
@@ -144,9 +152,11 @@ def _log_deployment_warnings(settings: Settings, sessions: SessionFactory) -> No
     if above:
         log.warning(
             '%d stored report(s) are labelled above INSIGHT_MAX_TLP=%s. They stay readable (also with the '
-            'API key); new ones are refused. Review them (RUNBOOK section 9) before exposing this instance.',
+            'API key); new ones are refused. Review them (RUNBOOK section 9) before exposing this '
+            'instance.%s',
             above,
             settings.max_tlp,
+            ' Visitors to the public view never see them.' if settings.public_view else '',
         )
 
 

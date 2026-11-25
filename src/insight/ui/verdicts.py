@@ -66,8 +66,8 @@ class Indicator:
     report_tlp: str | None = None
 
 
-def load_verdicts(db: Session, entity_ids: Iterable[str]) -> dict[str, VerdictView]:
-    """Recorded verdicts on these entities, by entity ID (the operator sees every label)."""
+def load_verdicts(db: Session, entity_ids: Iterable[str], *, max_tlp: str | None) -> dict[str, VerdictView]:
+    """Recorded verdicts on these entities that a reader limited to ``max_tlp`` may see, by entity ID."""
     return {
         entity_id: VerdictView(
             verdict=row.verdict,  # type: ignore[arg-type]  # only VERDICTS are ever stored
@@ -77,7 +77,7 @@ def load_verdicts(db: Session, entity_ids: Iterable[str]) -> dict[str, VerdictVi
             decided_at=row.decided_at,
             actor=row.actor,
         )
-        for entity_id, row in services.visible_assessments(db, entity_ids).items()
+        for entity_id, row in services.visible_assessments(db, entity_ids, max_tlp=max_tlp).items()
     }
 
 
@@ -120,11 +120,12 @@ def render_verdict(
         ui.label(view.reason).classes('muted text-sm prose break-value whitespace-pre-wrap')
     if view is not None and view.verdict == 'malicious' and found:
         ui.label('Kept off the blocklist because of its warning.').classes('text-warn text-sm prose')
-    ui.button(
-        'Change verdict' if view else 'Set verdict',
-        icon='gavel',
-        on_click=lambda: open_verdict_dialog(ws, target, view, on_saved),
-    ).props('flat dense no-caps')
+    if ws.can(Permission.REVIEW):
+        ui.button(
+            'Change verdict' if view else 'Set verdict',
+            icon='gavel',
+            on_click=lambda: open_verdict_dialog(ws, target, view, on_saved),
+        ).props('flat dense no-caps')
 
 
 def open_verdict_dialog(

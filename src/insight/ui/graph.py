@@ -98,7 +98,7 @@ def open_graph(ws: Workspace, node: str) -> None:
                 return
             with ws.read() as db:
                 try:
-                    graph = services.build_graph(db, state.node, depth=state.depth)
+                    graph = services.build_graph(db, state.node, depth=state.depth, max_tlp=ws.reader_limit)
                 except LookupError:
                     ui.label('This item is no longer available.').classes('muted')
                     return

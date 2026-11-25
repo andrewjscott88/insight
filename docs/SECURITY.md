@@ -152,6 +152,10 @@ open-mode session are refused without sign-in; the exact steps are in
 [RUNBOOK: Temporary password-free access](RUNBOOK.md#temporary-password-free-access).
 Restoration cannot reverse visitors' edits or recall reports they already read or exported.
 
+## Read-only public view
+
+`INSIGHT_PUBLIC_VIEW=on` ([ADR 0046](adr/0046-sso-sign-in-and-roles.md), TIP 3.4c) lets visitors who are not signed in read the workspace as viewers, and replaces temporary open access for public demonstrations. Start-up refuses it unless `INSIGHT_MAX_TLP=CLEAR`, and together with `INSIGHT_DEV_NO_AUTH=on`. A visitor is never signed in: the API still answers `401` without a session or key, so the API, MCP, TAXII and every download stay closed to them. In the workspace a visitor is a viewer limited to TLP:CLEAR: every read passes that limit (an architecture test fails when a workspace call to a TLP-filtering service passes no limit), so a report stored above CLEAR before the limit was lowered stays invisible, `?report=<id>` included. A visitor writes nothing, not even an audit event: `Workspace.write` and `Workspace.actor` refuse them whatever the permission. Settings, Share, analyst notes, watch terms and their matches, intelligence requirements, hunt records, saved hunt packages, products, outside lookups and provider context are not shown, because they are a team's working material or licensed data rather than published intelligence. Page loads are rate-limited per client address (the `read` budget); interactive callbacks are not counted separately, so rate-limit at the reverse proxy as well. Controls a role cannot use are hidden; the server-side checks remain the control.
+
 ## Publishing an instance: checklist
 
 For one operator reaching their own instance (and their scripts/SIEM) over the internet:
@@ -160,6 +164,7 @@ For one operator reaching their own instance (and their scripts/SIEM) over the i
 | --- | --- | --- |
 | TLS, HSTS | HSTS header when `INSIGHT_SECURE_COOKIES=1` | TLS at the reverse proxy; `INSIGHT_SECURE_COOKIES=1` |
 | Real client addresses, correct `Origin` checks | Trusted proxy headers, validated at start-up | `INSIGHT_TRUSTED_PROXIES`, `INSIGHT_ALLOWED_HOSTS` (RUNBOOK, "Reverse proxy") |
+| Anonymous visitors | Refused, or with `INSIGHT_PUBLIC_VIEW=on` a read-only TLP:CLEAR view of the workspace with no API access | `INSIGHT_PUBLIC_VIEW=on` with `INSIGHT_MAX_TLP=CLEAR` instead of `INSIGHT_DEV_NO_AUTH=on` (RUNBOOK, "Public view") |
 | Sign-in | Password, throttling, optional TOTP MFA; `INSIGHT_REQUIRE_HARDENED=on` refuses to start without secure cookies and MFA, and an internet-facing instance without them logs a warning | Keep `INSIGHT_DEV_NO_AUTH=off` for protected access; use a strong password (`make env`); `make mfa-enable`, then `INSIGHT_REQUIRE_HARDENED=on` |
 | Automation access | One hashed, expiring, scoped API key; per-key TLP limit; the read-only TAXII server answers API keys only, with accepted indicators within the key's TLP limit and publishers' reuse rules ([ADR 0026](adr/0026-taxii-server.md)) | `make api-key-create` with the least access and lowest `MAX_TLP` that works; rotate before expiry |
 | Abuse and overload | Per-caller rate limits, invalid-key throttling, 2 MB bodies | Optional edge limits at the proxy (connections, request rate) |

@@ -21,7 +21,7 @@ from ..landscape import PERIOD_CHOICES, Landscape, ThreatTrend, compose, period_
 from .brief_focus import build_brief_focus, render_focused_brief
 from .sources import build_sync_all_button
 from .theme import tlp_badge, tlp_guidance
-from .typography import heading, new_tab_link
+from .typography import download_link, heading
 from .workspace import Workspace
 
 #: Threats shown as cards; the rest are listed below them.
@@ -125,7 +125,7 @@ def build_landscape(ws: Workspace) -> None:
                 ui.label('This brief has limits on who may read it. Keep its sharing label.').classes(
                     'text-warn text-sm prose'
                 )
-            new_tab_link('Download as a briefing to share', f'/api/landscape/briefing?days={days}')
+            download_link(ws, 'Download as a briefing to share', f'/api/landscape/briefing?days={days}')
         with (
             ui.element('div').classes('brief-overview w-full'),
             ui.column().classes('summary-box w-full min-w-0 gap-2 p-4 sm:p-5').mark('brief-summary'),
@@ -192,8 +192,10 @@ def build_landscape(ws: Workspace) -> None:
         now = datetime.now(UTC)
         since = window_start(now, days)
         with ws.read() as db:
-            data = services.landscape_data(db, start=period_start(now, days), ignore=DEMO)
-            brief = services.brief_data(db, since=since)
+            data = services.landscape_data(
+                db, start=period_start(now, days), ignore=DEMO, max_tlp=ws.reader_limit
+            )
+            brief = services.brief_data(db, since=since, max_tlp=ws.reader_limit)
         result = compose(data, brief, since=since, days=days)
         render(result, executive_takeaways(brief, result), data.truncated or brief.truncated)
 

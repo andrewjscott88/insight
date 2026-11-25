@@ -10,9 +10,10 @@ from __future__ import annotations
 from typing import Final
 
 from fastapi import FastAPI, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import PlainTextResponse, RedirectResponse
 from nicegui import app as nicegui_app
 from nicegui import ui
+from starlette.responses import Response
 
 from ..appearance import (
     TEXT_SIZE_COOKIE,
@@ -23,6 +24,8 @@ from ..appearance import (
     theme_choice,
 )
 from ..models import SessionFactory
+from ..permissions import Permission
+from ..ratelimit import READ
 from .appearance import TextSizeSwitch, ThemeSwitch
 from .confidence import build_source_ratings
 from .cves import build_cves
@@ -54,6 +57,8 @@ SECTIONS: Final = (
     ('share', 'Share'),
     ('settings', 'Settings'),
 )
+#: Sections a visitor to the public view does not see: settings, and sharing (keys, exports, TAXII).
+PRIVATE_SECTIONS: Final = frozenset({'settings', 'share'})
 #: Investigate's own tabs: (name, label).
 INVESTIGATE: Final = (
     ('indicators', 'Indicators'),
@@ -90,44 +95,94 @@ def _investigate(ws: Workspace) -> ui.tabs:
 def _toolbar(app: FastAPI, ws: Workspace, ingest_dialog: ui.dialog, dark: ui.dark_mode, theme: Theme) -> None:
     with ui.row().classes('workspace-toolbar w-full justify-between items-center gap-3'):
         with ui.row().classes('items-center gap-3'):
-            ui.button('Import Intel', icon='add', on_click=ingest_dialog.open).classes('flex-1 sm:flex-none')
-            ui.button('Export IOCs', on_click=lambda: open_ioc_export_dialog(ws)).props('outline').classes(
-                'flex-1 sm:flex-none'
-            )
+            if ws.can(Permission.ADD_REPORTS):
+                ui.button('Import Intel', icon='add', on_click=ingest_dialog.open).classes(
+                    'flex-1 sm:flex-none'
+                )
+            if not ws.public:  # The export downloads through the API, which needs a sign-in or a key.
+                ui.button('Export IOCs', on_click=lambda: open_ioc_export_dialog(ws)).props(
+                    'outline'
+                ).classes('flex-1 sm:flex-none')
             ui.button('What the words mean', icon='help_outline', on_click=open_glossary).props(
                 'flat no-caps'
             )
         with ui.row().classes('workspace-controls items-center gap-2 sm:gap-4 max-w-full'):
             ThemeSwitch(ws, dark, theme)
             TextSizeSwitch(ws, text_size_choice(ws.request.cookies.get(TEXT_SIZE_COOKIE)))
-            # Backend provides a CSRF-protected logout confirmation form.
-            ui.link('End session' if app.state.settings.dev_no_auth else 'Sign out', '/logout').classes(
-                'muted target-link whitespace-nowrap'
-            )
+            if ws.public:
+                ui.link('Sign in', '/login').classes('muted target-link whitespace-nowrap')
+            else:
+                # Backend provides a CSRF-protected logout confirmation form.
+                ui.link('End session' if app.state.settings.dev_no_auth else 'Sign out', '/logout').classes(
+                    'muted target-link whitespace-nowrap'
+                )
+
+
+def _public_banner() -> None:
+    with ui.column().classes('panel w-full p-3 sm:p-4 gap-1').mark('public-view-banner'):
+        ui.label('Public view').classes('font-semibold')
+        ui.label(
+            'You can read the published TLP:CLEAR intelligence here. Sign in to add, review or share it.'
+        ).classes('prose')
+
+
+def _too_many_page_loads(app: FastAPI, request: Request) -> Response | None:
+    """Visitors to the public view are rate-limited by address (ADR 0046); signed-in people are not here."""
+    client = request.client.host if request.client else 'unknown'
+    decision = app.state.rate_limiter.hit(f'public:{client}', READ)
+    if decision.allowed:
+        return None
+    return PlainTextResponse('Too many requests; try again shortly.', 429, headers=decision.headers())
+
+
+def _settings(ws: Workspace) -> ui.expansion:
+    """The Settings section; returns the advanced intelligence questions, which other links open."""
+    heading('Settings', 1)
+    with ui.column().classes('panel w-full p-4 sm:p-5'):
+        build_sources(ws)
+    with ui.column().classes('panel w-full p-4 sm:p-5'):
+        build_source_ratings(ws)
+    with ui.column().classes('panel w-full p-4 sm:p-5'):
+        build_watch_terms(ws)
+    with (
+        ui.expansion('Intelligence questions (advanced)', icon='help_outline')
+        .classes('panel w-full')
+        .mark('advanced-requirements') as questions
+    ):
+        build_requirements(ws, embedded=True)
+    return questions
 
 
 def register_ui(app: FastAPI, session_factory: SessionFactory) -> None:
     """Register pages and mount NiceGUI after the backend routes and middleware."""
 
     @ui.page('/', title=f'Insight · {TAGLINE}')
-    async def workspace(request: Request) -> RedirectResponse | None:
-        if not app.state.is_authenticated(request.session):
+    async def workspace(request: Request) -> Response | None:
+        caller = app.state.workspace_caller(request.session)
+        if caller is None:
             return RedirectResponse('/login', status_code=303)
+        if caller.kind == 'public' and (refused := _too_many_page_loads(app, request)) is not None:
+            return refused
         # A theme picked on this device wins over the instance default (INSIGHT_THEME).
         theme = theme_choice(request.cookies.get(THEME_COOKIE), app.state.settings.theme)
         apply_theme(theme, text_size_choice(request.cookies.get(TEXT_SIZE_COOKIE)))
         dark = ui.dark_mode(dark_mode_value(theme))
         ws = Workspace(app=app, sessions=session_factory, request=request)
+        public = caller.kind == 'public'  # Signing in loads the page again.
         ingest_dialog = build_ingest_dialog(ws)
+        questions: ui.expansion | None = None
         with ui.element('div').classes('app-shell'):
             with ui.element('nav').props('aria-label="Main"').classes('side-nav'):
                 _brand()
                 with ui.tabs().props('vertical no-caps').classes('side-tabs') as menu:
                     for name, label in SECTIONS:
-                        ui.tab(name, label)
+                        if not (public and name in PRIVATE_SECTIONS):
+                            ui.tab(name, label)
             # A div: NiceGUI's page is already the one <main> landmark (axe: landmark-no-duplicate-main).
             with ui.element('div').classes('workspace gap-4 sm:gap-6'):
                 _toolbar(app, ws, ingest_dialog, dark, theme)
+                if public:
+                    _public_banner()
                 if app.state.settings.dev_no_auth:
                     with ui.column().classes('panel w-full p-3 sm:p-4 gap-1').mark('open-access-banner'):
                         ui.label('Temporary open access').classes('font-semibold')
@@ -146,27 +201,19 @@ def register_ui(app: FastAPI, session_factory: SessionFactory) -> None:
                         investigate = _investigate(ws)
                     with ui.tab_panel('cases').classes('panel p-4 sm:p-5'):
                         build_threat_hunt(ws)
-                    with ui.tab_panel('share').classes('panel p-4 sm:p-5'):
-                        build_share(ws)
-                    with ui.tab_panel('settings').classes('p-0 flex flex-col gap-6'):
-                        heading('Settings', 1)
-                        with ui.column().classes('panel w-full p-4 sm:p-5'):
-                            build_sources(ws)
-                        with ui.column().classes('panel w-full p-4 sm:p-5'):
-                            build_source_ratings(ws)
-                        with ui.column().classes('panel w-full p-4 sm:p-5'):
-                            build_watch_terms(ws)
-                        with (
-                            ui.expansion('Intelligence questions (advanced)', icon='help_outline')
-                            .classes('panel w-full')
-                            .mark('advanced-requirements') as questions
-                        ):
-                            build_requirements(ws, embedded=True)
+                    if not public:
+                        with ui.tab_panel('share').classes('panel p-4 sm:p-5'):
+                            build_share(ws)
+                    if not public:
+                        with ui.tab_panel('settings').classes('p-0 flex flex-col gap-6'):
+                            questions = _settings(ws)
 
         def show_section(name: str, tab: str | None = None) -> None:
-            # Existing question and gap links keep working without a main-menu tab.
+            # Existing question and gap links keep working without a main-menu tab (not for visitors).
+            if name == 'requirements' and questions is None:
+                return
             menu.set_value('settings' if name == 'requirements' else name)
-            if name == 'requirements':
+            if questions is not None and name == 'requirements':
                 questions.open()
             if tab:
                 investigate.set_value(tab)

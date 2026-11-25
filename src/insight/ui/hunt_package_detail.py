@@ -14,7 +14,7 @@ from ..permissions import Permission
 from ..schemas import HuntPackageItemInput, HuntPackageItemKind, HuntPackageUpdate
 from .messages import problem_area, tell
 from .theme import tlp_badge
-from .typography import heading, new_tab_link
+from .typography import download_link, heading
 from .workspace import Workspace
 
 KINDS: Final = {'technique': 'Technique', 'indicator': 'Indicator', 'rule': 'Rule', 'document': 'Report'}
@@ -162,7 +162,7 @@ def open_hunt_package_dialog(ws: Workspace, package_id: str, *, changed: Callabl
                             'Retired. Hunt tools are told it no longer applies.',
                         ),
                     ).props('outline').mark('hunt-retire')
-                new_tab_link('Download as STIX', f'/api/hunt-packages/{package_id}/stix')
+                download_link(ws, 'Download as STIX', f'/api/hunt-packages/{package_id}/stix')
 
         def delete() -> None:
             if not ws.allowed(Permission.HUNTING):

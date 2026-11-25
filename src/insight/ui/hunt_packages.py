@@ -138,9 +138,10 @@ def build_hunt_packages(ws: Workspace, *, embedded: bool = False) -> Callable[[s
         'Publish it when you want connected hunt tools to receive it. Or start a blank package.'
     ).classes('muted prose')
     with ui.row().classes('items-center gap-4'):
-        ui.button('Start a blank package', icon='add', on_click=lambda: _new_package(ws, created)).props(
-            'outline'
-        ).mark('hunt-new')
+        if ws.can(Permission.HUNTING):
+            ui.button('Start a blank package', icon='add', on_click=lambda: _new_package(ws, created)).props(
+                'outline'
+            ).mark('hunt-new')
         status_picker = (
             ui.select(STATUSES, value='all', label='Show', on_change=lambda e: choose(e.value))
             .props('outlined dense')

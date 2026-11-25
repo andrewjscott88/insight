@@ -10,6 +10,8 @@ from typing import Final, Literal
 
 from nicegui import ui
 
+from .workspace import Workspace
+
 Level = Literal[1, 2, 3, 4]
 #: The visual style of each level (see ``styles.py``).
 NEW_TAB: Final = ' (opens in a new tab)'
@@ -41,3 +43,11 @@ def new_tab_link(text: str, target: str) -> ui.link:
         .props(f'aria-label="{text}{NEW_TAB}"')
         .classes('target-link')
     )
+
+
+def download_link(ws: Workspace, text: str, target: str) -> ui.link | None:
+    """A link to download from the API (``/api/...``): not shown to a visitor reading the public view, who has
+    no API access (ADR 0046)."""
+    if ws.public:
+        return None
+    return new_tab_link(text, target)

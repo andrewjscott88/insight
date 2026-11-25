@@ -33,7 +33,7 @@ from .rules import render_report_rules
 from .software import render_report_software
 from .techniques import render_report_techniques
 from .theme import tlp_badge
-from .typography import heading, new_tab_link
+from .typography import download_link, heading, new_tab_link
 from .verdicts import Indicator, VerdictView, flag_badges, render_verdict
 from .workspace import Workspace
 
@@ -71,14 +71,18 @@ def render_report(ws: Workspace, data: dict[str, Any], actions: ReaderActions) -
     )
     if data['source_url']:
         new_tab_link('Open the original report', data['source_url'])
-    render_report_requirements(ws, data['id'], actions.refresh)
+    if not ws.public:  # Intelligence requirements are the team's own questions, not published.
+        render_report_requirements(ws, data['id'], actions.refresh)
     _render_revisions(data, actions)
-    ui.select(
-        list(DOCUMENT_STATUSES),
-        value=data['status'],
-        label='Document review',
-        on_change=lambda event: actions.review_document(data['id'], event.value),
-    ).props('outlined').classes('w-60 max-w-full')
+    if ws.can(Permission.REVIEW):
+        ui.select(
+            list(DOCUMENT_STATUSES),
+            value=data['status'],
+            label='Document review',
+            on_change=lambda event: actions.review_document(data['id'], event.value),
+        ).props('outlined').classes('w-60 max-w-full')
+    else:
+        ui.label(f'Document review: {data["status"]}').classes('muted text-sm')
     render_credibility(ws, data['id'], data.get('credibility', 6))
     heading('Report text', 3, 'subsection-title mt-3')
     ui.label(data['body']).classes('source-body panel p-4 w-full').props(
@@ -109,21 +113,24 @@ def render_report(ws: Workspace, data: dict[str, Any], actions: ReaderActions) -
         ui.button('Show links', on_click=lambda: open_graph(ws, f'report:{data["id"]}')).props(
             'outline no-caps'
         ).mark('report-links')
-        ui.button(
-            'Add to product', on_click=lambda: open_add_to_case(ws, 'document', data['id'], data['title'])
-        ).props('outline no-caps').mark('report-add-to-case')
-        ui.button(
-            'Add to hunt package',
-            on_click=lambda: open_add_to_package(ws, 'document', data['id'], data['title']),
-        ).props('outline no-caps').mark('report-add-to-hunt')
-        new_tab_link('Download this report as JSON', f'/api/documents/{data["id"]}/export')
-        new_tab_link("Export this report's IOCs", f'/api/iocs/export?document_id={data["id"]}')
+        if ws.can(Permission.PRODUCTS):
+            ui.button(
+                'Add to product', on_click=lambda: open_add_to_case(ws, 'document', data['id'], data['title'])
+            ).props('outline no-caps').mark('report-add-to-case')
+        if ws.can(Permission.HUNTING):
+            ui.button(
+                'Add to hunt package',
+                on_click=lambda: open_add_to_package(ws, 'document', data['id'], data['title']),
+            ).props('outline no-caps').mark('report-add-to-hunt')
+        download_link(ws, 'Download this report as JSON', f'/api/documents/{data["id"]}/export')
+        download_link(ws, "Export this report's IOCs", f'/api/iocs/export?document_id={data["id"]}')
     ui.label('Exports keep the TLP label. They do not give permission to share.').classes('muted prose')
     if any(obs['kind'] == 'email' for obs in data['observations']):
         ui.label('This report includes e-mail addresses. Check who may receive them before sharing.').classes(
             'text-warn prose'
         )
-    _render_notes(ws, data, actions)
+    if not ws.public:  # Analysts' notes are working notes, not published intelligence.
+        _render_notes(ws, data, actions)
     with ui.expansion('Where this report came from').classes('w-full muted'):
         ui.label('Fingerprint (SHA-256): ' + data['content_hash']).classes('break-value font-mono text-sm')
         if attachment := data.get('attachment'):
@@ -208,20 +215,22 @@ def _render_observation(
                 ui.label(scores).classes('text-sm prose')
                 if 'VulnCheck KEV' in scores:
                     ui.label(VULNCHECK_NOTICE).classes('muted text-sm prose')
-            ui.button(
-                'Look up this CVE',
-                icon='travel_explore',
-                on_click=lambda cve=obs['value']: open_enrichment_dialog(ws, cve),
-            ).props('flat dense no-caps')
+            if not ws.public:  # Provider answers are not published intelligence.
+                ui.button(
+                    'Look up this CVE',
+                    icon='travel_explore',
+                    on_click=lambda cve=obs['value']: open_enrichment_dialog(ws, cve),
+                ).props('flat dense no-caps')
         indicator = Indicator(obs['entity_id'], obs['kind'], obs['value'], report_tlp)
         render_verdict(ws, indicator, verdict, on_saved=actions.refresh)
-        with ui.row().classes('gap-2'):
-            for value, label in (('accepted', 'Accept'), ('rejected', 'Reject'), ('unreviewed', 'Reset')):
-                current = obs['review_status'] == value
-                ui.button(
-                    label,
-                    on_click=lambda oid=obs['id'], status=value: actions.review_observation(oid, status),
-                ).props(f'dense {"" if current else "outline"} aria-pressed={str(current).lower()}')
+        if ws.can(Permission.REVIEW):
+            with ui.row().classes('gap-2'):
+                for value, label in (('accepted', 'Accept'), ('rejected', 'Reject'), ('unreviewed', 'Reset')):
+                    current = obs['review_status'] == value
+                    ui.button(
+                        label,
+                        on_click=lambda oid=obs['id'], status=value: actions.review_observation(oid, status),
+                    ).props(f'dense {"" if current else "outline"} aria-pressed={str(current).lower()}')
 
 
 def _render_notes(ws: Workspace, data: dict[str, Any], actions: ReaderActions) -> None:
@@ -232,6 +241,8 @@ def _render_notes(ws: Workspace, data: dict[str, Any], actions: ReaderActions) -
             ui.label(note['body']).classes('whitespace-pre-wrap break-value prose')
             ui.label(note['created_at'][:16].replace('T', ' ')).classes('muted text-sm')
     doc_id = data['id']
+    if not ws.can(Permission.NOTES_AND_LINKS):
+        return
     note_input = (
         ui.textarea(
             'Add a note',
@@ -253,7 +264,7 @@ def _render_notes(ws: Workspace, data: dict[str, Any], actions: ReaderActions) -
             tell('Write a note first (up to 10,000 characters).', 'warning')
             return
         with ws.write(Permission.NOTES_AND_LINKS) as db:
-            saved = services.add_note(db, doc_id, item.body) is not None
+            saved = services.add_note(db, doc_id, item.body, max_tlp=ws.reader_limit) is not None
         if not saved:
             tell('This item no longer exists.', 'warning')
             return

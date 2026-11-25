@@ -202,3 +202,21 @@ read published intelligence but cannot write or reach the API".
     also ends them. 3.4b decides whether provider sessions bind to the provider settings instead.
 - Controls a role cannot use are hidden from 3.4b on, when people other than the operator can sign in to the
   workspace. Until then a refused action says "Your role does not allow this."
+
+### 3.4c
+
+Built before 3.4b, at Andrew's request, so a public demonstration site can leave temporary open access sooner.
+
+- A visitor is a `public` caller: a viewer whose reads are all limited to TLP:CLEAR, whatever else is stored,
+  and who writes nothing, not even an audit event (so a hunt guide preview is not audited for visitors). Only
+  the workspace admits visitors; the API, MCP and TAXII refuse them as before. An architecture test fails
+  when a workspace call to a service that filters by TLP passes no limit.
+- Downloads go through the API, so the public view offers none; the ADR's "no API access" decides.
+- "Not published intelligence" is read conservatively: besides Settings, watch terms and the audit log,
+  visitors do not see Share, analyst notes, watch-term matches, intelligence requirements, hunt records,
+  saved hunt packages, products, outside lookups or provider context (some of it is licensed).
+- Page loads by visitors are rate-limited per address with the `read` budget. NiceGUI callbacks are not
+  counted separately; the runbook asks for a proxy rate limit on public sites.
+- Controls a role cannot use are hidden in the panels visitors and viewers reach (`Workspace.can`). Settings
+  are not shown to visitors at all; hiding admin controls from analysts inside Settings comes with 3.4b,
+  when analysts can sign in.

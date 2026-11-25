@@ -160,7 +160,10 @@ def render_report_groups(ws: Workspace, doc_id: str, on_changed: Callable[[], An
                     services.unlink_report(db, ref, doc_id, max_tlp=ceiling)
                 on_changed()
 
-            ui.button('Remove link', on_click=unlink).props('flat dense no-caps')
+            if ws.can(Permission.NOTES_AND_LINKS):
+                ui.button('Remove link', on_click=unlink).props('flat dense no-caps')
+    if not ws.can(Permission.NOTES_AND_LINKS):
+        return
     query = ui.input('Link to a group, such as APT29 or G0016').props(
         'outlined dense debounce=250 maxlength=100'
     )

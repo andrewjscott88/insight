@@ -9,9 +9,8 @@ import secrets
 import time
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
-from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Final, Literal, TypeAlias, cast
+from typing import Any, Final, TypeAlias, cast
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import RedirectResponse
@@ -22,7 +21,7 @@ from starlette.responses import Response
 from .. import apikeys, services
 from ..config import Settings
 from ..models import SessionFactory
-from ..permissions import NOT_PERMITTED, OPERATOR_ROLE, Permission, Role, is_role, key_role, role_allows
+from ..permissions import NOT_PERMITTED, is_role
 from ..ratelimit import AUTH_FAILURES, RateLimiter
 from .boundary import (
     SAFE_METHODS,
@@ -32,6 +31,7 @@ from .boundary import (
     rate_limit_policy,
     tokens_match,
 )
+from .callers import PUBLIC_CALLER, SESSION_CALLER, Caller, SessionLookup
 from .route_permissions import route_allows
 
 log = logging.getLogger('insight.auth')
@@ -61,52 +61,6 @@ SessionCheck: TypeAlias = Callable[[Mapping[str, Any]], bool]
 
 AuthDependency: TypeAlias = Callable[[Request], None]
 
-
-@dataclass(frozen=True, slots=True)
-class Caller:
-    """Who made a request: the signed-in operator, a signed-in person, or the API key (named by its public
-    key ID)."""
-
-    kind: Literal['session', 'api_key']
-    key_id: str | None = None
-    access: apikeys.Access = 'read-write'
-    #: Most restrictive TLP label this caller may read or write (``None``: no per-caller limit).
-    max_tlp: str | None = None
-    #: The signed-in person (``users.id``); ``None`` for the operator and for API keys.
-    user_id: str | None = None
-    #: What the caller may do (ADR 0046). Only a person's role is taken as given (``None``: nothing); a key's
-    #: follows from its access level and the operator's is admin, whatever is passed.
-    role: Role | None = None
-
-    def __post_init__(self) -> None:
-        if self.kind == 'api_key':
-            object.__setattr__(self, 'role', key_role(self.access))  # never an admin
-        elif self.user_id is None:
-            object.__setattr__(self, 'role', OPERATOR_ROLE)
-
-    @property
-    def limit_key(self) -> str:
-        """Rate-limit bucket: each person, the operator's browser and the API key have their own budget."""
-        if self.key_id is not None:
-            return f'key:{self.key_id}'
-        return 'session' if self.user_id is None else f'user:{self.user_id}'
-
-    @property
-    def actor(self) -> str:
-        """How audit events name this caller."""
-        if self.key_id is not None:
-            return f'api-key:{self.key_id}'
-        return 'operator' if self.user_id is None else f'user:{self.user_id}'
-
-    def may(self, permission: Permission) -> bool:
-        """Whether this caller's role allows ``permission``."""
-        return role_allows(self.role, permission)
-
-
-SESSION_CALLER: Final = Caller('session')
-
-#: ``lookup(session) -> caller``: who a signed session cookie belongs to, or ``None`` (not signed in).
-SessionLookup: TypeAlias = Callable[[Mapping[str, Any]], Caller | None]
 
 #: ``verify(token) -> (caller or None, reason)``; ``reason`` is for logs only.
 KeyVerifier: TypeAlias = Callable[[str], tuple[Caller | None, str]]
@@ -138,6 +92,20 @@ def session_lookup(app: FastAPI) -> SessionLookup:
         if principal.user_id is None:
             return SESSION_CALLER
         return Caller('session', user_id=principal.user_id, role=principal.role)
+
+    return caller
+
+
+def workspace_lookup(app: FastAPI) -> SessionLookup:
+    """``lookup(session)`` for the workspace only: the signed-in caller or, with ``INSIGHT_PUBLIC_VIEW`` on, a
+    visitor reading the public view (ADR 0046). The API never uses it, so a visitor has no API access."""
+    signed_in = session_lookup(app)
+
+    def caller(session: Mapping[str, Any]) -> Caller | None:
+        found = signed_in(session)
+        if found is None and app.state.settings.public_view:
+            return PUBLIC_CALLER
+        return found
 
     return caller
 

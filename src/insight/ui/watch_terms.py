@@ -33,9 +33,10 @@ def build_watch_terms(ws: Workspace) -> None:
         for term_id, term in terms:
             with ui.row().classes('w-full items-center justify-between panel p-3'):
                 ui.label(term).classes('break-value')
-                ui.button('Remove', on_click=lambda term_id=term_id: remove(term_id)).props(
-                    'flat dense'
-                ).classes('text-xs')
+                if ws.can(Permission.REQUIREMENTS):
+                    ui.button('Remove', on_click=lambda term_id=term_id: remove(term_id)).props(
+                        'flat dense'
+                    ).classes('text-xs')
 
     def add() -> None:
         if not ws.allowed(Permission.REQUIREMENTS):
@@ -65,7 +66,8 @@ def build_watch_terms(ws: Workspace) -> None:
             .props('outlined maxlength=120')
             .classes('flex-1')
         )
-        ui.button('Add watch term', on_click=add)
+        if ws.can(Permission.REQUIREMENTS):
+            ui.button('Add watch term', on_click=add)
     with ui.column().classes('w-full gap-3 mt-4'):
         watch_terms()
     build_alerts(ws)

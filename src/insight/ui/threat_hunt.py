@@ -112,11 +112,15 @@ def _guide_builder(ws: Workspace, open_saved: Callable[[str], None]) -> None:
             return
         invalidate()
         try:
-            with ws.write(Permission.READ) as db:
-                built = services.hunt_guide(
-                    db, focus.value, subject.value, max_tlp=ws.app.state.settings.max_tlp
-                )
-                services.audit(db, 'hunt.guide', built.ref, f'{built.kind}; preview; TLP:{built.tlp}')
+            if ws.public:  # A visitor's preview writes nothing, not even an audit event (ADR 0046).
+                with ws.read() as db:
+                    built = services.hunt_guide(db, focus.value, subject.value, max_tlp=ws.reader_limit)
+            else:
+                with ws.write(Permission.READ) as db:
+                    built = services.hunt_guide(
+                        db, focus.value, subject.value, max_tlp=ws.app.state.settings.max_tlp
+                    )
+                    services.audit(db, 'hunt.guide', built.ref, f'{built.kind}; preview; TLP:{built.tlp}')
         except (LookupError, ValueError):
             invalidate()
             tell('This focus is no longer available. Choose another one.', 'error')
@@ -164,12 +168,16 @@ def _guide_builder(ws: Workspace, open_saved: Callable[[str], None]) -> None:
     ).classes('prose')
     build = ui.button('Build guide', icon='description', on_click=build_guide).mark('hunt-guide-build')
     build.disable()
-    heading('3. Save or download your hunt', 2, 'subsection-title')
-    ui.label(
-        'Save this selection and its guide as a draft hunt package to review and keep in Insight. '
-        'Or download Markdown or PDF to use outside Insight. Downloads open in a new tab.'
-    ).classes('prose')
-    with ui.row().classes('w-full gap-3'):
+    # A visitor to the public view can neither save nor download (downloads go through the API).
+    step = ui.column().classes('w-full gap-3 p-0')
+    step.set_visibility(not ws.public)
+    with step:
+        heading('3. Save or download your hunt', 2, 'subsection-title')
+        ui.label(
+            'Save this selection and its guide as a draft hunt package to review and keep in Insight. '
+            'Or download Markdown or PDF to use outside Insight. Downloads open in a new tab.'
+        ).classes('prose')
+    with step, ui.row().classes('w-full gap-3'):
         save_package = (
             ui.button('Save as hunt package', icon='save', on_click=save_as_package)
             .classes('flex-1 sm:flex-none')
@@ -190,6 +198,7 @@ def _guide_builder(ws: Workspace, open_saved: Callable[[str], None]) -> None:
     markdown.disable()
     pdf.disable()
     save_package.disable()
+    save_package.set_visibility(ws.can(Permission.HUNTING))
     preview()
     focus.on_value_change(choose_kind)
     subject.on_value_change(invalidate)
@@ -216,6 +225,8 @@ def build_threat_hunt(ws: Workspace) -> None:
 
     with ui.column().classes('w-full gap-4 min-w-0').mark('hunt-guide-builder'):
         _guide_builder(ws, open_saved)
+    if ws.public:  # Saved packages and reports are a team's working drafts, not published intelligence.
+        return
     ui.separator().classes('my-4')
     with (
         ui.expansion('Saved hunt packages', icon='inventory_2')

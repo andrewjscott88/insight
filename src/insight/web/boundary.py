@@ -104,7 +104,7 @@ class BoundaryMiddleware:
         expected = f'{scheme}://{headers.get("host", "")}'
         is_socket = scope['type'] == 'websocket' or '_nicegui_ws' in scope.get('path', '')
         if (origin and origin != expected) or (
-            is_socket and not self.owner.state.is_authenticated(scope.get('session', {}))
+            is_socket and self.owner.state.workspace_caller(scope.get('session', {})) is None
         ):
             if scope['type'] == 'websocket':
                 await send({'type': 'websocket.close', 'code': 1008})

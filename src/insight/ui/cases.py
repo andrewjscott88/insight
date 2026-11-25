@@ -127,7 +127,8 @@ def build_cases(ws: Workspace, *, embedded: bool = False) -> None:
         'is the strictest of what it holds. Publish a version when it is ready.'
     ).classes('muted prose')
     with ui.row().classes('items-center gap-4'):
-        ui.button('＋ Start a product', on_click=lambda: _new_case(ws, created)).mark('case-new')
+        if ws.can(Permission.PRODUCTS):
+            ui.button('＋ Start a product', on_click=lambda: _new_case(ws, created)).mark('case-new')
         ui.select(STATUSES, value='open', label='Show', on_change=lambda e: choose(e.value)).props(
             'outlined dense'
         ).classes('min-w-40').mark('case-status')

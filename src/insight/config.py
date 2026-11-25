@@ -80,6 +80,16 @@ def parse_dev_no_auth(value: str) -> bool:
     raise RuntimeError(f'INSIGHT_DEV_NO_AUTH must be "on" or "off"; got {value!r}')
 
 
+def parse_public_view(value: str) -> bool:
+    """``INSIGHT_PUBLIC_VIEW``: the read-only public view (ADR 0046); a typo must never enable it."""
+    choice = value.strip().lower()
+    if choice in {'', 'off'}:
+        return False
+    if choice == 'on':
+        return True
+    raise RuntimeError(f'INSIGHT_PUBLIC_VIEW must be "on" or "off"; got {value!r}')
+
+
 def parse_trusted_proxies(value: str) -> tuple[str, ...]:
     """``INSIGHT_TRUSTED_PROXIES``: comma-separated IP addresses or CIDR networks of the reverse proxy.
 
@@ -144,10 +154,21 @@ class Settings:
     dev_no_auth: bool = False
     #: Refuse to start unless the settings a public deployment needs are on (``INSIGHT_REQUIRE_HARDENED``).
     require_hardened: bool = False
+    #: Visitors who are not signed in read the workspace as viewers, TLP:CLEAR only (``INSIGHT_PUBLIC_VIEW``,
+    #: ADR 0046). Needs ``INSIGHT_MAX_TLP=CLEAR``; replaces temporary open access, so not with it.
+    public_view: bool = False
 
     def __post_init__(self) -> None:
         if self.dev_no_auth and self.mfa:
             raise RuntimeError('INSIGHT_DEV_NO_AUTH=on requires INSIGHT_MFA=off')
+        if self.public_view and self.dev_no_auth:
+            raise RuntimeError(
+                'INSIGHT_PUBLIC_VIEW=on replaces INSIGHT_DEV_NO_AUTH=on: turn temporary open access off'
+            )
+        if self.public_view and self.max_tlp != 'CLEAR':
+            raise RuntimeError(
+                'INSIGHT_PUBLIC_VIEW=on requires INSIGHT_MAX_TLP=CLEAR, so nothing above TLP:CLEAR is stored'
+            )
         if self.require_hardened and (gaps := self.hardening_gaps()):
             raise RuntimeError(
                 'INSIGHT_REQUIRE_HARDENED is on, so Insight will not start: '
@@ -210,6 +231,7 @@ class Settings:
             run_jobs=parse_run_jobs(env.get('INSIGHT_RUN_JOBS', '')),
             dev_no_auth=parse_dev_no_auth(env.get('INSIGHT_DEV_NO_AUTH', '')),
             require_hardened=parse_require_hardened(env.get('INSIGHT_REQUIRE_HARDENED', '')),
+            public_view=parse_public_view(env.get('INSIGHT_PUBLIC_VIEW', '')),
         )
 
 

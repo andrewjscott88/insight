@@ -116,6 +116,8 @@ are three fixed roles; each may do everything the one before it may:
 - A role below the route's gets `403 {"detail": "Your role does not allow this"}`. Each route's permission is
   listed in `src/insight/web/route_permissions.py`; a route missing from that table is refused to everyone.
 - Roles do not change TLP: everyone signed in reads up to the instance limit.
+- A visitor to the read-only public view (`INSIGHT_PUBLIC_VIEW=on`) is not signed in: every API route still
+  answers `401` without a session or a key.
 - `actor` is how audit events name the caller: `operator`, `user:<id>` for a person, `api-key:<key ID>`.
 
 ## API key (scripts and SIEM)

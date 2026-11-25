@@ -14,7 +14,7 @@ def build_stats(ws: Workspace) -> None:
         if not ws.authorized():
             return
         with ws.read() as db:
-            counts = services.stats(db)
+            counts = services.stats(db, max_tlp=ws.reader_limit)
             asked = services.requirement_counts(db, max_tlp=ws.app.state.settings.max_tlp)
         # Each tile opens the list it counts.
         tiles = (

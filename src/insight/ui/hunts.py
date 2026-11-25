@@ -77,18 +77,24 @@ def _sweep(guide: ThreatGuide) -> None:
 
 
 def _hunts(ws: Workspace, guide: ThreatGuide, refresh: Callable[[], Any]) -> None:
+    if ws.public:  # Hunt records are a team's working notes, not published intelligence.
+        return
     heading(f'Hunt records ({len(guide.data.hunts)})', 4)
     ui.label('Keep track of what you searched, so the next hunt can start where this one ended.').classes(
         'muted prose'
     )
-    ui.button('Start a hunt', icon='add', on_click=lambda: _start_dialog(ws, guide, refresh)).props(
-        'outline no-caps'
-    )
+    if ws.can(Permission.HUNTING):
+        ui.button('Start a hunt', icon='add', on_click=lambda: _start_dialog(ws, guide, refresh)).props(
+            'outline no-caps'
+        )
     techniques = [h.technique_id for h in guide.hypotheses[:SHOWN_HYPOTHESES]]
     for view in guide.data.hunts:
         hunt = view.hunt
         with ui.expansion(f'{hunt.title} · {hunt.status} · started {hunt.created_at[:10]}').classes('w-full'):
             tlp_badge(hunt.effective_tlp)
+            if not ws.can(Permission.HUNTING):
+                ui.label(hunt.summary or 'No summary yet.').classes('prose break-value')
+                continue
             for tid in dict.fromkeys([*view.checks, *techniques]):
                 _check_row(ws, hunt.id, tid, view.checks.get(tid), hunt.status == 'open', refresh)
             _close_row(ws, hunt.id, hunt.status, hunt.summary, refresh)
@@ -129,7 +135,7 @@ def _check_row(
                     notes=note.value or '',
                 )
                 with ws.write(Permission.HUNTING) as db:
-                    services.record_check(db, hunt_id, technique_id, payload)
+                    services.record_check(db, hunt_id, technique_id, payload, max_tlp=ws.reader_limit)
             except (ValidationError, ValueError) as exc:
                 problem.set_text(_plain_problem(exc))
                 return
@@ -165,6 +171,7 @@ def _close_row(ws: Workspace, hunt_id: str, status: str, summary: str, refresh: 
                     db,
                     hunt_id,
                     HuntUpdate.model_validate({'status': new_status, 'summary': text.value or ''}),
+                    max_tlp=ws.reader_limit,
                 )
         except LookupError:
             tell('This hunt no longer exists.', 'warning')

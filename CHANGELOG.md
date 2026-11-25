@@ -9,6 +9,7 @@
   password sign-in is the built-in operator, an admin. Downgrading below `0033` ends people's sessions first.
 - API keys now act with a role: `read` and `read-feedback` keys as viewers, `read-write` keys as analysts. No
   route a key could use before is refused now (every admin route was already browser-only).
+- Docker: `compose.yaml` passes the new `INSIGHT_PUBLIC_VIEW` setting (default `off`).
 
 ### Added: roles (TIP 3.4a)
 
@@ -26,6 +27,18 @@
   audited. Sign-in through the identity provider follows in TIP 3.4b.
 - `GET /api/session` also returns the caller's `role`, and the `actor` audit events name them by
   (`operator`, or `user:<id>` for a person).
+
+### Added: the read-only public view (TIP 3.4c)
+
+- `INSIGHT_PUBLIC_VIEW=on` lets visitors who are not signed in read the TLP:CLEAR intelligence: the Intel
+  Brief, reports, indicators, ATT&CK techniques, threat groups and the hunt guide builder. They cannot change
+  anything, look anything up outside Insight, download (downloads go through the API, which still needs a
+  sign-in or a key), or see Settings, Share, notes, watch terms, requirements, hunt records, hunt packages or
+  products. It replaces temporary open access for public demonstrations: start-up refuses it unless
+  `INSIGHT_MAX_TLP=CLEAR`, and together with `INSIGHT_DEV_NO_AUTH=on`. Page loads are rate-limited by address.
+  [How to move a site from open access](docs/RUNBOOK.md#public-view).
+- The workspace hides buttons and fields a role cannot use; the server still checks every action. A viewer
+  reads the review state and credibility of a report instead of changing them.
 
 ### Changed
 

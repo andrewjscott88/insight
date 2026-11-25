@@ -179,7 +179,8 @@ def build_requirements(ws: Workspace, *, embedded: bool = False) -> None:
         'its criteria: a term, a CVE, an ATT&CK technique, a threat group or a campaign.'
     ).classes('muted prose')
     with ui.row().classes('items-center gap-4'):
-        ui.button('＋ New requirement', on_click=lambda: _new_requirement(ws, created)).mark('req-new')
+        if ws.can(Permission.REQUIREMENTS):
+            ui.button('＋ New requirement', on_click=lambda: _new_requirement(ws, created)).mark('req-new')
         ui.select(STATUSES, value='open', label='Show', on_change=lambda e: choose(e.value)).props(
             'outlined dense'
         ).classes('min-w-40').mark('req-status')

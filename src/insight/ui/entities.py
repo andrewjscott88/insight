@@ -12,6 +12,7 @@ from typing import Any
 from nicegui import ui
 
 from .. import greynoise, services, shodan
+from ..permissions import Permission
 from .cases import open_add_to_case
 from .censys import open_censys
 from .confidence import render_confidence
@@ -30,8 +31,10 @@ def build_entities(ws: Workspace) -> None:
         if not ws.authorized():
             return
         with ws.read() as db:
-            docs = services.entity_documents(db, entity_id, offset=offset, limit=services.PIVOT_PAGE_SIZE)
-            total = services.count_entity_documents(db, entity_id)
+            docs = services.entity_documents(
+                db, entity_id, offset=offset, limit=services.PIVOT_PAGE_SIZE, max_tlp=ws.reader_limit
+            )
+            total = services.count_entity_documents(db, entity_id, max_tlp=ws.reader_limit)
             rows = [(d.id, d.title, d.tlp, d.is_current) for d in docs]
         with container:
             for doc_id, title, tlp, is_current in rows:
@@ -59,9 +62,9 @@ def build_entities(ws: Workspace) -> None:
         if not ws.authorized():
             return
         with ws.read() as db:
-            verdict = load_verdicts(db, [target.entity_id]).get(target.entity_id)
-            first, last = services.entity_seen(db, target.entity_id)
-            confidence = services.indicator_confidence(db, target.entity_id)
+            verdict = load_verdicts(db, [target.entity_id], max_tlp=ws.reader_limit).get(target.entity_id)
+            first, last = services.entity_seen(db, target.entity_id, max_tlp=ws.reader_limit)
+            confidence = services.indicator_confidence(db, target.entity_id, max_tlp=ws.reader_limit)
             eligible = target.kind == 'ip' and bool(services.eligible_greynoise_ip(db, target.value))
             show_greynoise = eligible and greynoise.configured()
             show_shodan = eligible and shodan.configured()
@@ -73,20 +76,24 @@ def build_entities(ws: Workspace) -> None:
                 )
             )
             show_pivot = bool(services.eligible_pivot(db, target.value, max_tlp=None))
+        if ws.public:  # Provider context is not published intelligence (and some is licensed).
+            show_greynoise = show_shodan = show_censys = show_pivot = False
         box.clear()
         with box:
             flag_badges(target.kind, target.value)
             ui.button('Show links', on_click=lambda: open_graph(ws, f'indicator:{target.entity_id}')).props(
                 'outline no-caps'
             ).mark(f'entity-links-{target.value}')
-            ui.button(
-                'Add to product',
-                on_click=lambda: open_add_to_case(ws, 'indicator', target.entity_id, target.value),
-            ).props('outline no-caps').mark(f'entity-add-to-case-{target.value}')
-            ui.button(
-                'Add to hunt package',
-                on_click=lambda: open_add_to_package(ws, 'indicator', target.entity_id, target.value),
-            ).props('outline no-caps').mark(f'entity-add-to-hunt-{target.value}')
+            if ws.can(Permission.PRODUCTS):
+                ui.button(
+                    'Add to product',
+                    on_click=lambda: open_add_to_case(ws, 'indicator', target.entity_id, target.value),
+                ).props('outline no-caps').mark(f'entity-add-to-case-{target.value}')
+            if ws.can(Permission.HUNTING):
+                ui.button(
+                    'Add to hunt package',
+                    on_click=lambda: open_add_to_package(ws, 'indicator', target.entity_id, target.value),
+                ).props('outline no-caps').mark(f'entity-add-to-hunt-{target.value}')
             if show_greynoise:
                 ui.button(
                     'GreyNoise Community context', on_click=lambda: open_greynoise(ws, target.value)
@@ -112,7 +119,8 @@ def build_entities(ws: Workspace) -> None:
             return
         with ws.read() as db:
             rows = [
-                (e.id, e.kind, e.value, count) for e, count in services.list_entities(db, ws.state.entity_q)
+                (e.id, e.kind, e.value, count)
+                for e, count in services.list_entities(db, ws.state.entity_q, max_tlp=ws.reader_limit)
             ]
         for entity_id, kind, value, count in rows:
             indicator = Indicator(entity_id, kind, value)
