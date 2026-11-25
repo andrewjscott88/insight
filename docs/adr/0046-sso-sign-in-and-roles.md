@@ -1,11 +1,14 @@
 # ADR 0046: SSO sign-in, users and roles (TIP 3.4)
 
-- Status: Proposed
+- Status: Accepted. Andrew confirmed the four open choices on 2026-11-25; it is built in parts 3.4a–d.
 - Date: 2026-11-25
 - Roadmap: [TIP 3.4](../ROADMAP-TIP.md#34-oidc-sign-in-and-rbac), issue #14
 
-Four choices below are Claude's recommendations, made while Andrew's answers were pending. They are marked
-**(to confirm)** and can change in review without changing the rest of the design.
+Andrew's choices:
+- the read-only public view;
+- a self-hosted provider (Keycloak or Authentik) for the first live test;
+- no access for new users until an admin approves them, unless provider groups grant a role;
+- analysts may approve outside lookups.
 
 ## Context
 
@@ -40,7 +43,8 @@ Insight signs people in with one OpenID Connect provider, set on the host:
   `groups`).
 
 Any standards-compliant provider works, for example Microsoft Entra ID, Google, Okta, Keycloak or Authentik.
-**(To confirm: which provider gets the first live test.)**
+The first live test uses a self-hosted Keycloak or Authentik. Set-up notes cover both, then the hosted
+providers.
 
 - **Discovery.** Insight reads `{issuer}/.well-known/openid-configuration` through `connectors.download`. That
   call is allowlisted to the issuer host and to the hosts the document names for its token endpoint and its
@@ -76,7 +80,7 @@ Any standards-compliant provider works, for example Microsoft Entra ID, Google, 
   
   Roles are fixed in code. There's one role per user and no separate `roles` table in v1, which is enough for
   three nested roles.
-- **First sign-in.** **(To confirm.)**
+- **First sign-in.**
   - If the host names provider groups (`INSIGHT_OIDC_ADMIN_GROUPS`, `INSIGHT_OIDC_ANALYST_GROUPS`,
     `INSIGHT_OIDC_VIEWER_GROUPS`, comma-separated), the highest matching group sets the role at every sign-in.
     Insight shows those users as managed by the provider.
@@ -93,7 +97,7 @@ One table in code (`insight.permissions`) maps each action to the lowest role al
 | Role | May |
 | --- | --- |
 | viewer | Read the workspace and the API; download exports, briefs, products and hunt guides |
-| analyst | Everything a viewer may, plus intelligence work: add and import reports; review indicators and verdicts; write notes and links; edit products, requirements, RFIs and hunt packages; sync a source now; **approve an outside lookup for a provider an admin has turned on (to confirm)** |
+| analyst | Everything a viewer may, plus intelligence work: add and import reports; review indicators and verdicts; write notes and links; edit products, requirements, RFIs and hunt packages; sync a source now; approve an outside lookup for a provider an admin has turned on |
 | admin | Everything an analyst may, plus settings: switch sources and providers on or off; operator sources; schedules; retention and deleting reports; threat-library sync; MFA; people and their roles; ending other people's sessions |
 
 API keys keep their CLI-only life cycle. A `read` key gets viewer permissions, and a `read-write` key gets
@@ -121,7 +125,7 @@ recipient groups come later, as the roadmap says.
 - Audit events name `user:<id>`, and the audit view shows the person's name and email. The password account
   stays `operator`, keys stay `api-key:<id>` and the CLI stays `cli`.
 
-### 6. A read-only public view **(to confirm)**
+### 6. A read-only public view
 
 `INSIGHT_PUBLIC_VIEW=on` lets visitors who are not signed in use the workspace with viewer permissions, minus
 anything that is not published intelligence: the audit log, watch terms and settings stay hidden.
@@ -142,7 +146,8 @@ read published intelligence but cannot write or reach the API".
   - the full role × route matrix through the real middleware;
   - the workspace's write checks.
 - **The milestone gate:**
-  - signs in through a containerised provider (Dex, pinned by digest) as a viewer, an analyst and an admin;
+  - signs in through a containerised Keycloak, the first live provider kind, pinned by digest and loaded
+    with a test realm, as a viewer, an analyst and an admin;
   - runs the matrix in the browser;
   - runs ZAP's active scan as an analyst.
 - **Staging:** `docs/RUNBOOK.md` gets steps for a staging instance against the real provider.
@@ -168,4 +173,4 @@ read published intelligence but cannot write or reach the API".
 | 3.4a | Users, roles, the matrix and its enforcement in the API and workspace; operator as admin; `insight users` CLI; architecture tests | 0033 |
 | 3.4b | OIDC sign-in: discovery, PKCE flow, token checks, group mapping, pending users and Settings → People, `INSIGHT_SSO_ONLY`; set-up notes per provider | — |
 | 3.4c | Read-only public view, and TIP 0.1's new check | — |
-| 3.4d | Gate: containerised provider, browser matrix, authenticated ZAP active scan; staging notes | — |
+| 3.4d | Gate: containerised Keycloak, browser matrix, authenticated ZAP active scan; staging notes | — |
