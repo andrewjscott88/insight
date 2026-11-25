@@ -135,7 +135,7 @@ def test_industry_guide_downloads_preserve_labels_and_hide_restricted_evidence(
     assert visible in content
     # Downloads deliberately defang network indicators; Markdown also escapes the brackets.
     content = content.replace(r'\[.\]', '.').replace('[.]', '.')
-    assert 'visible-hunt-sector.net' in content
+    assert content.count('visible-hunt-sector.net') >= 1
     for secret in (
         'PUBLISHER-ONLY',
         'HIDDEN-SECTOR',

@@ -91,8 +91,8 @@ def test_sector_guides_separate_mentions_from_links_and_export_metadata_only(db:
     assert linked.id not in str(sections['Reports mentioning this sector'])
     content = text(guide)
     assert 'https://example.org/target-source' in content
-    assert 'sector-hunt.net' in content
-    assert 'linked-sector-hunt.net' in content
+    assert content.count('sector-hunt.net') >= 1
+    assert content.count('linked-sector-hunt.net') >= 1
     for forbidden in ('PRIVATE', named.id, 'Hidden hospital', 'Old hospital', 'Future hospital'):
         assert forbidden not in content
     markdown = to_markdown(guide)

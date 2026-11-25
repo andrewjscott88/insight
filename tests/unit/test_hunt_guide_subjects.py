@@ -50,7 +50,7 @@ def test_report_advisory_plan_has_evidence_without_republishing_text(db: Session
     assert 'FBI advisory' in rendered
     assert 'T1059.001' in rendered
     assert 'PUBLISHER-BODY-DO-NOT-EXPORT' not in rendered
-    assert 'malicious-hunt-test.net' in rendered
+    assert rendered.count('malicious-hunt-test.net') >= 1
     assert 'No source URL was saved' in rendered
     doc.source_url = 'https://example.org/advisory'
     assert doc.source_url in text(services.hunt_guide(db, 'document', doc.id, now=NOW))

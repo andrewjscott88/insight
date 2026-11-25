@@ -65,7 +65,7 @@ def test_actor_guide_uses_current_explicit_links_and_metadata_only(db: Session) 
     guide = services.hunt_guide(db, 'actor', 'G0016', max_tlp='GREEN', now=NOW)
     rendered = text(guide)
     assert guide.tlp == 'GREEN'
-    assert 'bad-hunt-domain.net' in rendered
+    assert rendered.count('bad-hunt-domain.net') >= 1
     assert linked.id in rendered
     assert 'https://source.example.org/reports/hunt' in rendered
     assert 'attack.mitre.org/techniques/' in rendered
@@ -124,7 +124,7 @@ def test_theme_matches_words_and_techniques_but_filters_review_and_verdicts(db: 
     assert visible.id in rendered
     assert tagged.id in rendered
     assert unreviewed.id in rendered
-    assert 'active-hunt-domain.net' in rendered
+    assert rendered.count('active-hunt-domain.net') >= 1
     assert 'SECRET' not in rendered
     assert secret.id not in rendered
     assert 'pending-hunt-domain.net' not in rendered
@@ -156,11 +156,11 @@ def test_excluded_restricted_verdicts_still_label_the_guide(db: Session, expired
     )
     restricted = services.hunt_guide(db, kind, ref, max_tlp='AMBER', now=when)
     assert restricted.tlp == 'AMBER'
-    assert 'reviewed-hunt-domain.net' not in text(restricted)
+    assert text(restricted).count('reviewed-hunt-domain.net') == 0
     assert 'No eligible reviewed indicators' in text(restricted)
     assert 'Private decision text' not in text(restricted)
     assert public.tlp == 'CLEAR'
-    assert 'reviewed-hunt-domain.net' in text(public)
+    assert text(public).count('reviewed-hunt-domain.net') >= 1
     assert 'verdict: unknown' in text(public)
     assert services.hunt_guide(db, kind, ref, max_tlp='GREEN', now=when) == public
 
