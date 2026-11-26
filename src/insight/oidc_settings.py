@@ -91,10 +91,6 @@ class OidcSettings:
     def issuer_host(self) -> str:
         return urlsplit(self.issuer).hostname or ''
 
-    def tls_context(self) -> ssl.SSLContext | None:
-        """The TLS context for requests to the provider: ``None`` means the public certificate authorities."""
-        return None if self.ca_file is None else ssl.create_default_context(cafile=self.ca_file)
-
     @property
     def groups_mapped(self) -> bool:
         """Whether provider groups set roles (then every sign-in sets the role again)."""

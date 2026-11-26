@@ -229,7 +229,7 @@ async def download(
     max_bytes: int = MAX_BYTES,
     allowed_hosts: frozenset[str] = ALLOWED_HOSTS,
     allow_private: bool = False,
-    tls: ssl.SSLContext | None = None,
+    ca_file: str | None = None,
 ) -> bytes:
     """Fetch from the curated registry or an explicitly configured host, with the same HTTPS egress policy.
 
@@ -238,8 +238,8 @@ async def download(
     ``max_bytes`` raises the size limit for one pinned, hash-checked download (the threat library sync).
     ``allow_private`` lets one explicitly configured host be on a private network (the operator's MISP
     instance, opt-in); loopback, link-local, multicast and reserved addresses stay blocked.
-    ``tls`` replaces the public certificate authorities for one explicitly configured host (an identity
-    provider signed by an internal CA); certificates are still verified, host names included.
+    ``ca_file`` (PEM) replaces the public certificate authorities for one explicitly configured host (an
+    identity provider signed by an internal CA); certificates are still verified, host names included.
     ``transport`` exists for offline testing; production code never passes it.
     """
     parts = urlsplit(url)
@@ -270,7 +270,7 @@ async def download(
                 body,
                 max_bytes,
                 response_headers,
-                tls,
+                ca_file,
             )
     except TimeoutError as exc:  # The overall deadline (L6); a normal fetch failure, recorded like any other.
         raise TimeoutError(f'The download took longer than {DOWNLOAD_DEADLINE:g} seconds') from exc
@@ -286,14 +286,18 @@ async def _fetch(
     body: bytes | None,
     max_bytes: int = MAX_BYTES,
     response_headers: DownloadHeaders | None = None,
-    tls: ssl.SSLContext | None = None,
+    ca_file: str | None = None,
 ) -> bytes:
+    # Verification is never off: the public authorities, or a verifying context for the given CA file.
+    verify: ssl.SSLContext | bool = True
+    if ca_file is not None:
+        verify = ssl.create_default_context(cafile=ca_file)
     async with httpx.AsyncClient(
         timeout=httpx.Timeout(25),
         follow_redirects=False,
         trust_env=False,
         transport=transport,
-        verify=True if tls is None else tls,
+        verify=verify,
     ) as client:
         for index, address in enumerate(addresses):
             target = egress.pin(url, address)

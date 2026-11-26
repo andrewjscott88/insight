@@ -174,10 +174,12 @@ async def test_a_slow_drip_is_recorded_as_a_failed_sync(
 
 
 @pytest.mark.usefixtures('public_dns')
-async def test_a_tls_context_replaces_the_public_authorities(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_a_ca_file_replaces_the_public_authorities(monkeypatch: pytest.MonkeyPatch) -> None:
     """One explicitly configured host (an identity provider with an internal CA) can bring its own trust;
-    every other download verifies against the public certificate authorities."""
+    every other download verifies against the public certificate authorities. Verification is never off."""
     import ssl
+
+    import certifi
 
     seen: list[object] = []
     real_client = httpx.AsyncClient
@@ -189,7 +191,11 @@ async def test_a_tls_context_replaces_the_public_authorities(monkeypatch: pytest
         )
 
     monkeypatch.setattr(httpx, 'AsyncClient', client)
-    internal = ssl.create_default_context()
-    assert await download(KEV_URL, tls=internal) == b'ok'
+    assert await download(KEV_URL, ca_file=certifi.where()) == b'ok'
     assert await download(KEV_URL) == b'ok'
-    assert seen == [internal, True]
+    internal, public = seen
+    assert public is True
+    assert isinstance(internal, ssl.SSLContext)
+    assert internal.verify_mode == ssl.CERT_REQUIRED
+    assert internal.check_hostname
+    assert internal.get_ca_certs()
