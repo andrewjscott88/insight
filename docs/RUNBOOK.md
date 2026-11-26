@@ -268,8 +268,8 @@ the issuer and to the token and key-set hosts its discovery document names. Put 
 another port behind your reverse proxy.
 
 **Who gets in.** Without group settings, a person who signs in for the first time waits with no access until an
-admin gives them a role: `insight users list`, then `insight users role <email> analyst` (see "People and
-roles"). With group settings, the groups decide at every sign-in; leaving every group takes the role away. A
+admin gives them a role in Settings → People (or on the host: `insight users list`, then
+`insight users role <email> analyst`; see "People and roles"). With group settings, the groups decide at every sign-in; leaving every group takes the role away. A
 role an admin gave by hand stays unless the groups give one.
 
 **Keycloak:**
@@ -380,9 +380,18 @@ is; audit events never hold a person's e-mail address.
 Each person, the operator and each API key acts with a role: `viewer`, `analyst` or `admin`
 ([ADR 0046](adr/0046-sso-sign-in-and-roles.md), [the matrix](API.md#roles)). The password sign-in is the built-in
 operator, always an `admin`. People sign in through the organisation's identity provider ("Identity provider
-sign-in" above); until an admin or their provider groups give them a role, they wait with no access. On the
-host, `insight users` does what an admin does in the workspace, and works when nobody who can sign in is an
-admin:
+sign-in" above); until an admin or their provider groups give them a role, they wait with no access.
+
+**Settings → People** (admins only) lists everyone who has signed in through the provider, people waiting
+first. For each person an admin can give or change the role (`none` puts them back to waiting), turn them off
+or on, sign them out everywhere, or remove them (after a confirmation; their audit events stay). A role that
+comes from provider groups is changed in the provider. Your own account has no controls there: another admin,
+or `insight users` on the host, changes it, so nobody removes the last admin by accident. **Recent activity**
+below the list (open it) shows the latest 50 audit events with people named; the API's audit log keeps IDs
+(`user:<id>`), because viewers and read keys may read it.
+
+On the host, `insight users` does what an admin does in Settings → People, and works when nobody who can sign
+in is an admin:
 
 ```sh
 insight users list                          # people waiting for approval first
@@ -823,10 +832,9 @@ verify the signature (§6).
 
 ## 14. Known limitations
 
-- No recipient-level TLP enforcement; roles change what people may do, not which TLP labels they read. People
-  are managed with `insight users` on the host until Settings → People arrives. Rate limits and the sign-in
-  throttles live in memory (one worker; a restart resets them). Sessions are stored in the database and
-  survive restarts.
+- No recipient-level TLP enforcement; roles change what people may do, not which TLP labels they read. Rate
+  limits and the sign-in throttles live in memory (one worker; a restart resets them). Sessions are stored in
+  the database and survive restarts.
 - One API key at a time; rotation takes effect immediately (no overlap), so update the client right after
   `make api-key-rotate`.
 - `make smoke` and `scripts/smoke.py` sign in with the password only, so they need MFA off.

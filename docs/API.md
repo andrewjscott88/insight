@@ -119,11 +119,12 @@ are three fixed roles; each may do everything the one before it may:
 | --- | --- |
 | `viewer` | Every `GET` route, and `POST /mcp` (fixed read-only tools) |
 | `analyst` | Also intelligence work: add and import reports; review reports, indicators and verdicts; credibility and source ratings; notes, ATT&CK tags, groups, campaigns and links; products; requirements and RFIs; hunt packages, hunts, rules and sightings; *Sync now*; an approved outside lookup |
-| `admin` | Also settings: operator sources, schedules and the demo reports (in the workspace also: switching sources and lookup providers on or off, and alert destinations) |
+| `admin` | Also settings: operator sources, schedules and the demo reports (in the workspace also: switching sources and lookup providers on or off, alert destinations, and people in Settings → People) |
 
 - The password sign-in is the built-in operator, an `admin`, so a single-operator instance works as before.
   People who sign in through the organisation's identity provider (TIP 3.4b) get their role from an admin
-  (`insight users role` on the host) or from provider groups.
+  (Settings → People, or `insight users role` on the host) or from provider groups. People are managed only
+  there: no API route changes a person, and no key is an `admin`.
 - A `read` or `read-feedback` key acts as a `viewer` (`read-feedback` keeps its two writes) and a `read-write`
   key as an `analyst`. No key is ever an `admin`.
 - A role below the route's gets `403 {"detail": "Your role does not allow this"}`. Each route's permission is

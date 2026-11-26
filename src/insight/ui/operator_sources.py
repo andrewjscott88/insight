@@ -10,6 +10,7 @@ from .. import services
 from ..permissions import Permission
 from ..schemas import TLP_LEVELS, OperatorSourceInput
 from .messages import problem_area, tell
+from .offered import setting_switch
 from .schedules import ScheduleControls, build_schedule_control
 from .theme import tlp_badge
 from .typography import heading
@@ -204,10 +205,13 @@ def build_operator_sources(
                 feeds.refresh()
                 tell('This feed has changed. Check its settings and try again.', 'warning')
                 return
-            sync.set_enabled(on and source.configured)
-            schedule.set_enabled(on and (source.configured or bool(schedule.value)))
+            if sync is not None:
+                sync.set_enabled(on and source.configured)
+            if schedule is not None:
+                schedule.set_enabled(on and (source.configured or bool(schedule.value)))
+                if not on:
+                    schedule.set_value(0)
             if not on:
-                schedule.set_value(0)
                 controls.redraw[source.key]()
             tell('Feed is on.' if on else 'Feed is off. Its schedule is off too.', 'success')
 
@@ -232,22 +236,32 @@ def build_operator_sources(
                 if source.reuse == 'public'
                 else 'Share titles, dates and links only.'
             ).classes('text-sm')
-            ui.switch('Use this feed', value=source.enabled, on_change=lambda e: switch(bool(e.value)))
+            setting_switch(
+                ws,
+                Permission.SOURCES,
+                'Use this feed',
+                source.enabled,
+                switch,
+                state=('In use', 'Not in use'),
+            )
             with ui.row().classes('items-center gap-3 flex-wrap'):
-                sync = ui.button('Sync now')
-                sync.on_click(lambda: run(source.key, sync))
-                sync.set_enabled(source.enabled and source.configured)
+                sync = ui.button('Sync now') if ws.can(Permission.SYNC_SOURCES) else None
+                if sync is not None:
+                    sync.on_click(lambda button=sync: run(source.key, button))
+                    sync.set_enabled(source.enabled and source.configured)
                 schedule = build_schedule_control(
                     ws, source.key, source.name, controls, configured=source.configured
                 )
-                schedule.set_enabled(source.enabled and (source.configured or bool(schedule.value)))
-            with ui.row():
-                ui.button('Edit feed', on_click=lambda: _editor(ws, source, feeds.refresh)).props(
-                    'flat no-caps'
-                )
-                ui.button('Delete feed', on_click=lambda: _confirm_delete(ws, source, feeds.refresh)).props(
-                    'flat no-caps'
-                )
+                if schedule is not None:
+                    schedule.set_enabled(source.enabled and (source.configured or bool(schedule.value)))
+            if ws.can(Permission.SOURCES):
+                with ui.row():
+                    ui.button('Edit feed', on_click=lambda: _editor(ws, source, feeds.refresh)).props(
+                        'flat no-caps'
+                    )
+                    ui.button(
+                        'Delete feed', on_click=lambda: _confirm_delete(ws, source, feeds.refresh)
+                    ).props('flat no-caps')
 
     @ui.refreshable
     def feeds() -> None:
@@ -265,8 +279,9 @@ def build_operator_sources(
         if not found:
             ui.label('You have no feeds yet.').classes('muted text-sm')
 
-    ui.button('Add a feed', icon='add', on_click=lambda: _editor(ws, None, feeds.refresh)).props(
-        'outline no-caps'
-    )
+    if ws.can(Permission.SOURCES):
+        ui.button('Add a feed', icon='add', on_click=lambda: _editor(ws, None, feeds.refresh)).props(
+            'outline no-caps'
+        )
     feeds()
     ws.on_refresh(feeds.refresh)

@@ -35,6 +35,7 @@ from .inbox import build_inbox
 from .ingest import build_ingest_dialog
 from .ioc_export import open_ioc_export_dialog
 from .landscape import build_landscape
+from .people import build_people
 from .requirements import build_requirements
 from .share import build_share
 from .sources import build_sources
@@ -144,6 +145,9 @@ def _settings(ws: Workspace) -> ui.expansion:
         build_source_ratings(ws)
     with ui.column().classes('panel w-full p-4 sm:p-5'):
         build_watch_terms(ws)
+    if ws.can(Permission.PEOPLE):
+        with ui.column().classes('panel w-full p-4 sm:p-5').mark('people'):
+            build_people(ws)
     with (
         ui.expansion('Intelligence questions (advanced)', icon='help_outline')
         .classes('panel w-full')

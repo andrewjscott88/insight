@@ -392,6 +392,7 @@ from .users import (
     set_user_disabled,
     set_user_role,
     sign_out_user,
+    user_labels,
 )
 
 __all__ = [
@@ -768,6 +769,7 @@ __all__ = [
     'update_judgement',
     'update_operator_source',
     'update_requirement',
+    'user_labels',
     'validate_address',
     'verify_api_key',
     'verify_mfa_code',

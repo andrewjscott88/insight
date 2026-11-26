@@ -92,7 +92,9 @@ def _confirm(ws: Workspace, what: str, minutes: int, start: str, *, plural: bool
 
 
 def build_all_sources_schedule(ws: Workspace, controls: ScheduleControls) -> None:
-    """The start time, and one control that sets every source's schedule at once."""
+    """The start time, and one control that sets every source's schedule at once (admins only)."""
+    if not ws.can(Permission.SCHEDULES):
+        return
 
     def redraw() -> None:
         for refresh in controls.redraw.values():
@@ -135,8 +137,9 @@ def build_all_sources_schedule(ws: Workspace, controls: ScheduleControls) -> Non
 
 def build_schedule_control(
     ws: Workspace, key: str, name: str, controls: ScheduleControls, *, configured: bool = True
-) -> ui.select:
-    """A source's schedule choice, and when it next syncs by itself."""
+) -> ui.select | None:
+    """A source's schedule choice, and when it next syncs by itself. A role that may not change schedules
+    (ADR 0046) sees only when it next syncs, and gets ``None``."""
     minutes, _ = _interval(ws, key)
 
     @ui.refreshable
@@ -158,10 +161,13 @@ def build_schedule_control(
         _confirm(ws, name + ' syncs', value, controls.start)
         next_sync.refresh()
 
+    controls.redraw[key] = next_sync.refresh
+    if not ws.can(Permission.SCHEDULES):
+        next_sync()
+        return None
     choices = CHOICES if configured else {k: v for k, v in CHOICES.items() if k in (0, minutes)}
     select = ui.select(choices, value=minutes, label='Sync by itself', on_change=lambda e: changed(e.value))
     select.props('outlined dense').classes('min-w-[12rem]')
     next_sync()
     controls.selects[key] = select
-    controls.redraw[key] = next_sync.refresh
     return select

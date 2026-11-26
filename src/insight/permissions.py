@@ -64,6 +64,9 @@ class Permission(StrEnum):
     ALERTS = 'alerts'
     #: Load the synthetic demo reports into the workspace.
     DEMO = 'demo'
+    #: People who sign in through the identity provider: their roles, turning them off, signing them out and
+    #: removing them (Settings → People); and the audit trail that names them.
+    PEOPLE = 'people'
 
 
 #: The lowest role allowed each permission: the matrix in ADR 0046.
@@ -82,6 +85,7 @@ MINIMUM_ROLE: Final[Mapping[Permission, Role]] = MappingProxyType(
         Permission.SCHEDULES: 'admin',
         Permission.ALERTS: 'admin',
         Permission.DEMO: 'admin',
+        Permission.PEOPLE: 'admin',
     }
 )
 

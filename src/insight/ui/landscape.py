@@ -18,6 +18,7 @@ from ..brief import DEMO, BriefHighlight, BriefItem, BriefSection, count_of, win
 from ..brief_digest import executive_takeaways
 from ..briefing import LABELS
 from ..landscape import PERIOD_CHOICES, Landscape, ThreatTrend, compose, period_start, usual_text
+from ..permissions import Permission
 from .brief_focus import build_brief_focus, render_focused_brief
 from .sources import build_sync_all_button
 from .theme import tlp_badge, tlp_guidance
@@ -218,6 +219,7 @@ def build_landscape(ws: Workspace) -> None:
                     value=ws.state.landscape_days,
                     on_change=lambda e: choose(e.value),
                 ).props('no-caps unelevated aria-label="Period"')
-                build_sync_all_button(ws)
+                if ws.can(Permission.SYNC_SOURCES):  # Not for viewers or visitors (ADR 0046).
+                    build_sync_all_button(ws)
         build_brief_focus(ws, change_focus)
         landscape()
