@@ -252,6 +252,25 @@ Built before 3.4b, at Andrew's request, so a public demonstration site can leave
     signs nobody out. A new operator password still ends people's sessions too.
   - Insight's MFA guards the password sign-in, as before; the provider's own second factor guards the people
     it signs in. Insight does not read `amr` or `acr`, which providers fill in differently.
-- Part two: Settings → People (approve, change a role, disable, sign out, remove; people whose role comes
-  from groups shown as managed by the provider), admin controls hidden from analysts inside Settings, and
-  audit views that name people.
+- Part two follows below.
+
+### 3.4b, part two: People and Settings by role
+
+- A new permission, `people` (admin), guards Settings → People: giving, changing or taking away a role,
+  turning a person off or on, signing them out everywhere and removing them. There is no API route for any of
+  it, so no key can change a person; `insight users` on the host stays the break-glass.
+- Choices this ADR did not settle, taken the more conservative way:
+  - An admin's own row has no controls, and the actions refuse the admin's own account even from an old page:
+    another admin or the host CLI changes it, so nobody demotes or removes the last admin by accident.
+  - A person whose role comes from provider groups has no role control; the role is changed in the provider,
+    because the next sign-in would set it again. They can still be turned off, signed out or removed.
+  - "The audit view shows the person's name and e-mail" is Settings → People's recent activity (the latest
+    50 events, drawn only while its section is open so admin pages stay small), which only admins see. The API's audit log keeps `user:<id>`, because viewers and read keys
+    may read it, and audit events still never store an e-mail address. A removed person shows by ID.
+  - A role change is a select that applies at once, like the other Settings controls; it is audited and ends
+    the person's sessions.
+- Settings offer each role only the controls it may use (`ui/offered.py`: a switch, or the setting in words):
+  source, feed and lookup-provider switches, schedules, feeds and alert destinations to admins; *Sync now* and
+  source grades to analysts. The brief's **Sync all sources** was still offered to viewers and visitors in
+  3.4c (refused when used); it is now offered only to roles that may sync. The server-side check is unchanged
+  and stays the control.

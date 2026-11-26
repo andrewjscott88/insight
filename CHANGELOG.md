@@ -39,12 +39,19 @@
   `INSIGHT_PUBLIC_URL`, and the sign-in page offers **Sign in with your organisation**
   ([set-up per provider](docs/RUNBOOK.md#identity-provider-sign-in)). The authorisation code flow with PKCE,
   checked ID tokens (`RS256`, `PS256` or `ES256`; issuer, audience, expiry and nonce) and no new dependency.
-- Someone who signs in for the first time waits with no access until an admin gives them a role
-  (`insight users role`), and the sign-in page tells them so. `INSIGHT_OIDC_ADMIN_GROUPS`,
+- Someone who signs in for the first time waits with no access until an admin gives them a role in
+  **Settings → People** (or with `insight users role` on the host), and the sign-in page tells them so. `INSIGHT_OIDC_ADMIN_GROUPS`,
   `..._ANALYST_GROUPS` and `..._VIEWER_GROUPS` let provider groups set the role at every sign-in instead.
 - `INSIGHT_SSO_ONLY=on` turns the workspace password off; `insight users` on the host stays the break-glass.
 - Failed sign-ins through the provider are throttled per address before the provider is asked again.
-  Settings → People, to approve people in the workspace, follows.
+- **Settings → People** (admins only): approve people, change their role, turn them off or on, sign them out
+  everywhere, or remove them. A person whose role comes from provider groups is changed in the provider. An
+  admin's own account is left to another admin or the host CLI, so nobody locks the last admin out by
+  accident. Below the list, recent activity names who did what by name and e-mail address; the API's audit
+  log keeps naming people by ID.
+- Settings show each role only the controls it may use: analysts sync sources and grade them but see
+  switches, schedules, feeds, lookup providers and alert destinations in words; viewers read. **Sync all
+  sources** in the brief is no longer offered to viewers or public-view visitors (it was refused when used).
 
 ### Added: the read-only public view (TIP 3.4c)
 

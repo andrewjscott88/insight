@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from functools import partial
 
 from nicegui import ui
 
@@ -12,6 +13,7 @@ from ..cve_scores import NVD_NOTICE, VULNCHECK_NOTICE
 from ..lookups import NAMES, unready_providers
 from ..permissions import Permission
 from .messages import tell
+from .offered import setting_switch
 from .typography import heading
 from .workspace import Workspace
 
@@ -72,7 +74,7 @@ def build_lookup_switches(ws: Workspace) -> None:
         ('epss', 'Look up attack likelihood at FIRST EPSS by itself'),
         ('vulncheck', 'Look up exploitation and public exploits at VulnCheck KEV by itself'),
     ):
-        ui.switch(label, value=switches[provider], on_change=lambda e, p=provider: switch(p, bool(e.value)))
+        setting_switch(ws, Permission.SOURCES, label, switches[provider], partial(switch, provider))
     ui.label(
         'VulnCheck KEV is free but needs your own VulnCheck community key in '
         f'{PROVIDER_KEYS["vulncheck"]}. It adds exploitation reports and links to public exploits. '

@@ -62,6 +62,9 @@ class _Caller(Protocol):
     @property
     def actor(self) -> str: ...
 
+    @property
+    def user_id(self) -> str | None: ...
+
     def may(self, permission: Permission) -> bool: ...
 
 
@@ -118,6 +121,12 @@ class Workspace:
         """The TLP limit every read passes: ``CLEAR`` for a visitor, none for people who are signed in."""
         caller = self._caller()
         return 'CLEAR' if caller is None else caller.max_tlp
+
+    @property
+    def person(self) -> str | None:
+        """The ID of the person signed in through the identity provider; ``None`` for the operator."""
+        caller = self._caller()
+        return None if caller is None or caller.kind != 'session' else caller.user_id
 
     def can(self, permission: Permission) -> bool:
         """Whether to offer a control: the role allows ``permission`` (a visitor never changes anything)."""

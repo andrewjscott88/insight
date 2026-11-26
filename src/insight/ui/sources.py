@@ -14,6 +14,7 @@ from ..source_registry import CATEGORIES, SOURCES, Source, in_use
 from .censys import build_censys_settings
 from .lookups import build_lookup_switches
 from .messages import tell
+from .offered import setting_switch
 from .operator_sources import build_operator_sources
 from .pivots import build_pivot_switches
 from .schedules import ScheduleControls, build_all_sources_schedule, build_schedule_control
@@ -71,32 +72,44 @@ def build_sources(ws: Workspace) -> None:
             if key in SOURCES and not button.is_deleted:
                 button.enable()
 
-    def switch(source: Source, on: bool, sync_button: ui.button, schedule: ui.select) -> None:
+    def switch(source: Source, on: bool, sync_button: ui.button | None, schedule: ui.select | None) -> None:
         if not ws.allowed(Permission.SOURCES):
             return
         with ws.write(Permission.SOURCES) as db:
             services.set_source_switch(db, source.key, on, at=datetime.now(UTC))
-        sync_button.set_enabled(on)
-        schedule.set_enabled(on)
+        for control in (sync_button, schedule):
+            if control is not None:
+                control.set_enabled(on)
         if on:
             tell(f'{source.name} is on. Press Sync now to fetch its reports.', 'success')
         else:
-            schedule.set_value(0)  # Switching off turned the schedule off too.
+            if schedule is not None:
+                schedule.set_value(0)  # Switching off turned the schedule off too.
             tell(f'{source.name} is off. Insight will not contact it.', 'success')
 
     def source_panel(source: Source, on: bool, controls: ScheduleControls) -> None:
+        """Each control only for a role that may use it (ADR 0046); the others see the setting in words."""
         with ui.column().classes('panel w-full p-4 my-3'):
             heading(source.name, 4)
             ui.label(source.note).classes('muted text-sm prose')
             new_tab_link(f'View the {source.name} feed', source.url)
-            toggle = ui.switch('Use this source', value=on)
+            # The switch comes first on the page; its callback runs later, when both controls exist.
+            setting_switch(
+                ws,
+                Permission.SOURCES,
+                'Use this source',
+                on,
+                lambda value: switch(source, value, sync_button, schedule),
+                state=('In use', 'Not in use'),
+            )
             with ui.row().classes('items-center gap-3 flex-wrap'):
-                sync_button = ui.button('Sync now')
-                sync_button.on_click(lambda key=source.key, button=sync_button: run(key, button))
+                sync_button = ui.button('Sync now') if ws.can(Permission.SYNC_SOURCES) else None
+                if sync_button is not None:
+                    sync_button.on_click(lambda key=source.key, button=sync_button: run(key, button))
+                    sync_button.set_enabled(on)
                 schedule = build_schedule_control(ws, source.key, source.name, controls)
-            sync_button.set_enabled(on)
-            schedule.set_enabled(on)
-            toggle.on_value_change(lambda e: switch(source, bool(e.value), sync_button, schedule))
+                if schedule is not None:
+                    schedule.set_enabled(on)
 
     ws.on_refresh(source_history.refresh)
     heading('Public sources', 2)

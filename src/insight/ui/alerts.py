@@ -7,6 +7,7 @@ result.
 
 from __future__ import annotations
 
+from functools import partial
 from typing import Final
 
 from nicegui import ui
@@ -16,6 +17,7 @@ from ..config import AlertSettings
 from ..permissions import Permission
 from ..services.alerts import TARGET_TLPS
 from .messages import tell
+from .offered import setting_switch
 from .typography import heading
 from .workspace import Workspace
 
@@ -136,16 +138,20 @@ def build_alerts(ws: Workspace) -> None:
                 if last == 'failed':
                     ui.label(f'Last send failed: {error}').classes('text-warn text-sm prose')
                 with ui.row().classes('items-center gap-3 flex-wrap'):
-                    ui.switch(
+                    setting_switch(
+                        ws,
+                        Permission.ALERTS,
                         'Send alerts here',
-                        value=enabled,
-                        on_change=lambda e, i=target_id: toggle(i, bool(e.value)),
+                        enabled,
+                        partial(toggle, target_id),
+                        state=('Alerts go here', 'Alerts do not go here'),
                     )
-                    button = ui.button('Send a test alert').props('outline no-caps')
-                    button.on_click(lambda i=target_id, b=button: test(i, b))
-                    ui.button('Remove', on_click=lambda i=target_id: remove(i)).props(
-                        f'flat dense no-caps aria-label="Remove {name}"'
-                    )
+                    if ws.can(Permission.ALERTS):  # Admins only (ADR 0046).
+                        button = ui.button('Send a test alert').props('outline no-caps')
+                        button.on_click(lambda i=target_id, b=button: test(i, b))
+                        ui.button('Remove', on_click=lambda i=target_id: remove(i)).props(
+                            f'flat dense no-caps aria-label="Remove {name}"'
+                        )
 
     @ui.refreshable
     def recent() -> None:
@@ -186,17 +192,26 @@ def build_alerts(ws: Workspace) -> None:
         ui.label('This server does not send alerts by itself (INSIGHT_RUN_JOBS is off).').classes('text-warn')
     with ui.column().classes('w-full gap-3 mt-2'):
         targets()
-    with ui.column().classes('panel w-full p-4 gap-2 mt-2'):
-        heading('Add a destination', 4)
-        style_select = ui.select(STYLE_NAMES, value='chat', label='Kind').props('outlined').classes('w-full')
-        name_input = ui.input('Name', placeholder='e.g. Security team channel').props('outlined maxlength=80')
-        address_input = ui.input(
-            'Webhook address or e-mail', placeholder='https://… or alerts@example.org'
-        ).props('outlined maxlength=2048')
-        tlp_select = ui.select(
-            {level: f'Titles up to TLP:{level}' for level in TARGET_TLPS}, value='AMBER', label='TLP limit'
-        ).props('outlined')
-        ui.button('Add destination', on_click=add)
+    if ws.can(Permission.ALERTS):  # Admins only (ADR 0046).
+        with ui.column().classes('panel w-full p-4 gap-2 mt-2'):
+            heading('Add a destination', 4)
+            style_select = (
+                ui.select(STYLE_NAMES, value='chat', label='Kind').props('outlined').classes('w-full')
+            )
+            name_input = ui.input('Name', placeholder='e.g. Security team channel').props(
+                'outlined maxlength=80'
+            )
+            address_input = ui.input(
+                'Webhook address or e-mail', placeholder='https://… or alerts@example.org'
+            ).props('outlined maxlength=2048')
+            tlp_select = ui.select(
+                {level: f'Titles up to TLP:{level}' for level in TARGET_TLPS},
+                value='AMBER',
+                label='TLP limit',
+            ).props('outlined')
+            ui.button('Add destination', on_click=add)
+    else:
+        ui.label('An admin chooses where alerts go.').classes('muted text-sm')
     heading('Recent alerts', 4)
     with ui.column().classes('w-full gap-1'):
         recent()

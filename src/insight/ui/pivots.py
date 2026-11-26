@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from functools import partial
 from typing import Any
 
 from nicegui import ui
@@ -10,6 +11,7 @@ from .. import passive_dns, pivot_data, pivots, services
 from ..connectors import ProviderError
 from ..permissions import Permission
 from .messages import problem_area, tell
+from .offered import setting_switch
 from .typography import heading
 from .workspace import Workspace
 
@@ -88,11 +90,13 @@ def build_pivot_switches(ws: Workspace) -> None:
     with ws.read() as db:
         switches = services.pivot_switches(db)
     for provider, name in pivot_data.PROVIDERS.items():
-        switch = ui.switch(
-            f'Use {name}', value=switches[provider], on_change=lambda e, p=provider: change(p, bool(e.value))
-        ).mark(f'pivot-switch-{provider}')
-        if provider == 'circl' and not passive_dns.configured():
-            switch.disable()
+        switch = setting_switch(
+            ws, Permission.SOURCES, f'Use {name}', switches[provider], partial(change, provider)
+        )
+        if switch is not None:
+            switch.mark(f'pivot-switch-{provider}')
+            if provider == 'circl' and not passive_dns.configured():
+                switch.disable()
     if not passive_dns.configured():
         ui.label('Set the CIRCL passive DNS credentials on the server first.').classes('muted prose')
     ui.label(

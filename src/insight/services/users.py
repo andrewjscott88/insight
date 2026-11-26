@@ -7,6 +7,7 @@ person or removing them ends their sessions at once. Audit events name people by
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -72,6 +73,15 @@ def list_users(db: Session, *, at: datetime) -> list[UserView]:
     users = db.scalars(select(User)).all()
     views = [_view(user, open_sessions.get(user.id, 0)) for user in users]
     return sorted(views, key=lambda v: (v.role is not None, v.label.casefold(), v.id))
+
+
+def user_labels(db: Session, user_ids: Iterable[str]) -> dict[str, str]:
+    """Each person's name and e-mail by ID, for audit trails that name people (admins only, ADR 0046)."""
+    wanted = {user_id for user_id in user_ids if user_id}
+    if not wanted:
+        return {}
+    found = db.scalars(select(User).where(User.id.in_(wanted))).all()
+    return {user.id: _view(user, 0).label for user in found}
 
 
 def find_user(db: Session, ref: str, *, at: datetime) -> UserView:

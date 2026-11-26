@@ -101,10 +101,21 @@ def build_source_ratings(ws: Workspace) -> None:
                 ui.row().classes('w-full items-center gap-3 panel p-2').mark(f'source-rating-{s.source_name}')
             ):
                 ui.label(s.source_name).classes('font-semibold break-value prose min-w-40')
-                grade = ui.select(grades, value=s.reliability, label='Reliability').props('outlined dense')
-                ageing = ui.select(AGEING, value=s.half_life_days or 0, label='Ageing').props(
-                    'outlined dense'
-                )
+                if ws.can(Permission.REVIEW):
+                    grade = ui.select(grades, value=s.reliability, label='Reliability').props(
+                        'outlined dense'
+                    )
+                    ageing = ui.select(AGEING, value=s.half_life_days or 0, label='Ageing').props(
+                        'outlined dense'
+                    )
+                    grade.on_value_change(lambda e, n=s.source_name, a=ageing: save(n, e.value, a.value))
+                    ageing.on_value_change(lambda e, n=s.source_name, g=grade: save(n, g.value, e.value))
+                else:  # ADR 0046: the grade in words for a role that may not change it.
+                    days = s.half_life_days or 0
+                    ui.label(
+                        f'Reliability {grades.get(s.reliability, s.reliability)} · '
+                        f'ageing: {AGEING.get(days, f"{days} days").lower()}'
+                    ).classes('text-sm')
                 rejected = (
                     f'{round(100 * s.rejected / s.reviewed)}% rejected' if s.reviewed else 'none reviewed'
                 )
@@ -112,8 +123,6 @@ def build_source_ratings(ws: Workspace) -> None:
                     f'{s.reports} report(s) · {s.indicators} indicator(s), {s.unique_indicators} only here · '
                     f'{rejected}'
                 ).classes('muted text-sm')
-                grade.on_value_change(lambda e, n=s.source_name, a=ageing: save(n, e.value, a.value))
-                ageing.on_value_change(lambda e, n=s.source_name, g=grade: save(n, g.value, e.value))
 
     heading('Source reliability', 2)
     ui.label(
