@@ -28,8 +28,8 @@ def provider(monkeypatch: pytest.MonkeyPatch) -> FakeProvider:
     return fake
 
 
-def make_app(database_url: str, **env: str) -> FastAPI:
-    oidc = OidcSettings.from_env(oidc_env(**env))
+def make_app(database_url: str, *, provider: bool = True, **env: str) -> FastAPI:
+    oidc = OidcSettings.from_env(oidc_env(**env)) if provider else None
     settings = Settings(
         database_url=database_url,
         password=PASSWORD,
@@ -185,10 +185,9 @@ def test_turning_password_sign_in_off_ends_every_session(database_url: str, prov
 
 def test_the_session_binding_covers_the_provider(database_url: str) -> None:
     plain = make_app(database_url).state.session_binding
+    before = make_app(database_url, provider=False).state.session_binding
     assert plain.startswith('oidc-')
-    assert plain.removeprefix(plain.split(':', 1)[0] + ':') == services.session_binding(
-        SECRET, PASSWORD, False
-    )
+    assert plain.endswith(':' + before), 'the password binding itself is unchanged'
     others = {
         make_app(database_url, INSIGHT_SSO_ONLY='on').state.session_binding,
         make_app(database_url, INSIGHT_OIDC_CLIENT_ID='another-client').state.session_binding,
