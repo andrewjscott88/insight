@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 import logging
 from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
@@ -22,6 +23,7 @@ from ..appearance import PAGE_BACKGROUND, TEXT_SIZE_COOKIE, THEME_COOKIE, text_s
 from ..config import Settings
 from ..models import SessionFactory, database
 from ..oidc import OidcClient
+from ..oidc_settings import OidcSettings
 from ..ratelimit import RateLimiter
 from .auth import (
     MFA_UNPAIRED_LOG,
@@ -70,16 +72,23 @@ log = logging.getLogger('insight.auth')
 ROOT: Final = Path(__file__).resolve().parent.parent  # the insight package: templates/ and static/
 
 
+def provider_binding(oidc: OidcSettings) -> str:
+    """The session-binding prefix for sign-in through ``oidc``: issuer, client ID and ``INSIGHT_SSO_ONLY``."""
+    provider = f'{oidc.issuer}\0{oidc.client_id}\0{"sso-only" if oidc.sso_only else "password-too"}'
+    return f'oidc-{hashlib.sha256(provider.encode()).hexdigest()}:'
+
+
 def _init_state(app: FastAPI, settings: Settings, sessions: SessionFactory) -> None:
     app.state.settings = settings
     app.state.session_factory = sessions
-    # Stored session hashes are keyed to this, so a new password or MFA setting ends every session (B4), and
-    # so does another identity provider, or password sign-in turned off (ADR 0046).
-    oidc = settings.oidc
-    provider = None if oidc is None else f'{oidc.issuer}\0{oidc.client_id}\0{"sso-only" * oidc.sso_only}'
+    # Stored session hashes are keyed to this, so a new password or MFA setting ends every session (B4).
     app.state.session_binding = services.session_binding(
-        settings.session_secret, settings.password, settings.mfa, provider
+        settings.session_secret, settings.password, settings.mfa
     )
+    if settings.oidc is not None:
+        # So does another identity provider, or the password sign-in turned off (ADR 0046). Without a
+        # provider the binding is unchanged, so upgrading signs nobody out.
+        app.state.session_binding = provider_binding(settings.oidc) + app.state.session_binding
     if settings.dev_no_auth:
         # Keep open-access sessions separate. Turning the mode off must never turn an anonymous visitor's
         # existing cookie into a password-authenticated session, even with the same database and secret.

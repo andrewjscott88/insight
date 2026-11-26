@@ -183,6 +183,23 @@ def test_turning_password_sign_in_off_ends_every_session(database_url: str, prov
         assert after.get('/api/stats').status_code == 401
 
 
+def test_the_session_binding_covers_the_provider(database_url: str) -> None:
+    plain = make_app(database_url).state.session_binding
+    assert plain.startswith('oidc-')
+    assert plain.removeprefix(plain.split(':', 1)[0] + ':') == services.session_binding(
+        SECRET, PASSWORD, False
+    )
+    others = {
+        make_app(database_url, INSIGHT_SSO_ONLY='on').state.session_binding,
+        make_app(database_url, INSIGHT_OIDC_CLIENT_ID='another-client').state.session_binding,
+        make_app(
+            database_url, INSIGHT_OIDC_ISSUER='https://idp.example.org/realms/other'
+        ).state.session_binding,
+    }
+    assert len(others | {plain}) == 4
+    assert make_app(database_url, INSIGHT_OIDC_CLIENT_SECRET='rotated').state.session_binding == plain
+
+
 def test_without_a_provider_the_sso_routes_do_not_exist(client: TestClient) -> None:
     assert client.get('/login/sso').status_code == 404
     assert client.get('/login/sso/callback').status_code == 404

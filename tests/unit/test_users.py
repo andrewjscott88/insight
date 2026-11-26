@@ -207,19 +207,3 @@ def test_each_sign_in_updates_the_name_and_address(db: Session) -> None:
     services.set_user_disabled(db, later.id, True)
     assert signed_in(db).disabled, 'a disabled person comes back as they are; the caller refuses them'
     assert db.scalar(select(func.count()).select_from(User)) == 1
-
-
-def test_the_session_binding_covers_the_identity_provider() -> None:
-    import hashlib
-    import hmac
-
-    before = hmac.new(b'secret', b'pw\0password', hashlib.sha256).hexdigest()
-    assert services.session_binding('secret', 'pw', False) == before, (
-        'no provider: sessions survive the upgrade'
-    )
-    with_provider = services.session_binding('secret', 'pw', False, 'https://idp\0insight\0')
-    assert (
-        len({before, with_provider, services.session_binding('secret', 'pw', False, 'https://idp\0other\0')})
-        == 3
-    )
-    assert with_provider != services.session_binding('secret', 'pw', False, 'https://idp\0insight\0sso-only')
