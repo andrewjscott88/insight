@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import time
+from dataclasses import dataclass
 from typing import Any
 
 import pytest
@@ -91,6 +92,13 @@ def test_a_small_rsa_key_is_refused() -> None:
         check(token(small, claims(NONCE)), [small.jwk()])
 
 
+@dataclass(frozen=True)
+class Seconds:
+    """A claim time this many seconds from when the test runs."""
+
+    offset: int
+
+
 @pytest.mark.parametrize(
     ('changes', 'message'),
     [
@@ -102,11 +110,11 @@ def test_a_small_rsa_key_is_refused() -> None:
         ({'aud': [CLIENT_ID, 'another'], 'azp': 'another'}, 'wrong authorised party'),
         ({'azp': 'another'}, 'wrong authorised party'),
         ({'aud': 7}, 'bad audience'),
-        ({'exp': int(time.time()) - CLOCK_SKEW - 5}, 'expired'),
+        ({'exp': Seconds(-CLOCK_SKEW - 5)}, 'expired'),
         ({'exp': None}, 'missing or bad exp'),
         ({'exp': True}, 'missing or bad exp'),
-        ({'iat': int(time.time()) + CLOCK_SKEW + 60}, 'issued in the future'),
-        ({'nbf': int(time.time()) + CLOCK_SKEW + 60}, 'not valid yet'),
+        ({'iat': Seconds(CLOCK_SKEW + 60)}, 'issued in the future'),
+        ({'nbf': Seconds(CLOCK_SKEW + 60)}, 'not valid yet'),
         ({'nonce': 'replayed'}, 'wrong nonce'),
         ({'nonce': None}, 'wrong nonce'),
         ({'sub': None}, 'bad subject'),
@@ -114,7 +122,13 @@ def test_a_small_rsa_key_is_refused() -> None:
     ],
 )
 def test_claims_are_checked(changes: dict[str, Any], message: str) -> None:
-    body = {key: value for key, value in {**claims(NONCE), **changes}.items() if value is not None}
+    now = int(
+        time.time()
+    )  # Times are relative to the run, not to collection: a long suite outlasts the skew.
+    resolved = {
+        key: now + value.offset if isinstance(value, Seconds) else value for key, value in changes.items()
+    }
+    body = {key: value for key, value in {**claims(NONCE), **resolved}.items() if value is not None}
     with pytest.raises(InvalidToken, match=message):
         check(token(RSA, body))
 
