@@ -164,6 +164,7 @@ class OidcClient:
                 max_bytes=MAX_DOCUMENT_BYTES,
                 allowed_hosts=frozenset({host}),
                 allow_private=self.settings.private_network,
+                ca_file=self.settings.ca_file,
             )
             return json.loads(raw)
         except (json.JSONDecodeError, UnicodeDecodeError):

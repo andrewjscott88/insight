@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 import re
+import ssl
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Final, Self
@@ -53,6 +54,16 @@ def _groups(env: Mapping[str, str], name: str) -> frozenset[str]:
     return frozenset(group.strip() for group in env.get(name, '').split(',') if group.strip())
 
 
+def _check_ca_file(path: str) -> None:
+    """Refuse a CA file that cannot be read, or that holds no certificate authority (a server certificate)."""
+    try:
+        authorities = ssl.create_default_context(cafile=path).get_ca_certs()
+    except (OSError, ssl.SSLError) as exc:
+        raise RuntimeError(f'INSIGHT_OIDC_CA_FILE: {path} could not be read as PEM certificates') from exc
+    if not authorities:
+        raise RuntimeError(f'INSIGHT_OIDC_CA_FILE: {path} holds no certificate authority certificate')
+
+
 @dataclass(frozen=True, slots=True)
 class OidcSettings:
     """``INSIGHT_OIDC_*``: one provider, the confidential client Insight is registered as, and which
@@ -70,6 +81,9 @@ class OidcSettings:
     viewer_groups: frozenset[str] = frozenset()
     #: A self-hosted provider on a private network (loopback, link-local and metadata addresses stay blocked).
     private_network: bool = False
+    #: ``INSIGHT_OIDC_CA_FILE``: PEM certificate authorities that sign the provider's certificate (an internal
+    #: CA). They replace the public ones for requests to the provider; nothing else trusts them.
+    ca_file: str | None = None
     #: Turn the operator's password sign-in off (``INSIGHT_SSO_ONLY``); the CLI stays the break-glass.
     sso_only: bool = False
 
@@ -129,6 +143,9 @@ class OidcSettings:
         groups_claim = env.get('INSIGHT_OIDC_GROUPS_CLAIM', '').strip() or DEFAULT_GROUPS_CLAIM
         if not _CLAIM_NAME.fullmatch(groups_claim):
             raise RuntimeError(f'INSIGHT_OIDC_GROUPS_CLAIM is not a claim name: {groups_claim!r}')
+        ca_file = env.get('INSIGHT_OIDC_CA_FILE', '').strip() or None
+        if ca_file is not None:
+            _check_ca_file(ca_file)
         return cls(
             issuer=issuer,
             client_id=client_id,
@@ -140,5 +157,6 @@ class OidcSettings:
             analyst_groups=_groups(env, 'INSIGHT_OIDC_ANALYST_GROUPS'),
             viewer_groups=_groups(env, 'INSIGHT_OIDC_VIEWER_GROUPS'),
             private_network=_switch(env, 'INSIGHT_OIDC_PRIVATE_NETWORK'),
+            ca_file=ca_file,
             sso_only=_switch(env, 'INSIGHT_SSO_ONLY'),
         )

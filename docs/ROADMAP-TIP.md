@@ -401,7 +401,7 @@ explicit-ID tagging across all three catalogs ([ADR 0042](adr/0042-mobile-and-ic
 - **Effort:** L
 - **Acceptance criteria:** A second user can be a viewer and cannot ingest, sync, or change schedules. Analyst can triage but not mint keys or notification destinations (admin only). Architecture tests prevent routes from dropping `require_auth`. Existing single-operator deployments upgrade with a single admin user and keep working.
 - **Design:** [ADR 0046](adr/0046-sso-sign-in-and-roles.md) (accepted 2026-11-25): OIDC with PKCE and no new dependency, three fixed roles, a deny-by-default permission table for the API and the workspace, the operator as the built-in admin, and an optional read-only public view.
-- **Progress:** 3.4a done: users, the three roles, the permission matrix enforced in the API and the workspace, the operator as admin, `insight users` and the architecture tests. 3.4c done before 3.4b (Andrew's choice): the read-only public view (`INSIGHT_PUBLIC_VIEW=on`) and controls hidden by role. 3.4b done: OIDC sign-in (discovery, PKCE, ID token checks, group mapping, people waiting for approval, `INSIGHT_SSO_ONLY`, set-up notes), then Settings → People with recent activity naming people, and Settings controls offered by role. Next: the 3.4d gate.
+- **Progress:** 3.4a done: users, the three roles, the permission matrix enforced in the API and the workspace, the operator as admin, `insight users` and the architecture tests. 3.4c done before 3.4b (Andrew's choice): the read-only public view (`INSIGHT_PUBLIC_VIEW=on`) and controls hidden by role. 3.4b done: OIDC sign-in (discovery, PKCE, ID token checks, group mapping, people waiting for approval, `INSIGHT_SSO_ONLY`, set-up notes), then Settings → People with recent activity naming people, and Settings controls offered by role. 3.4d done: the milestone gate signs in through a containerised Keycloak as each role, runs the matrix in Chromium and ZAP's active scan as an analyst; staging steps in the runbook; `INSIGHT_OIDC_CA_FILE` for a provider behind an internal CA. TIP 3.4 is complete.
 
 ### 3.7 Optional Shodan or Censys enrichment (operator-supplied keys)
 
@@ -634,7 +634,7 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
 - [x] **3.1** Read-only TAXII 2.1 server over STIX collections: done, ADR 0026, [TAXII.md](TAXII.md)
 - [x] **3.2** Ranked search and graph view (`ROADMAP` #17): done, ADR 0027
 - [x] **3.3** Exploit-availability signals (metadata only, terms-reviewed sources): done, ADR 0028 (report signals and VulnCheck KEV; Exploit-DB and GitHub not contacted)
-- [ ] **3.4** OIDC and RBAC (`ROADMAP` #14)
+- [x] **3.4** OIDC and RBAC (`ROADMAP` #14): done, ADR 0046 (gate against a containerised Keycloak)
 - [x] **3.7** Optional Shodan/Censys enrichment (operator credentials; vendor-priced): Shodan, ADR 0031;
   Censys Platform host context in 1.0.0, ADR 0043.
 - [x] **3.8** Lightweight case management: done, ADR 0029 (no webhook on open)

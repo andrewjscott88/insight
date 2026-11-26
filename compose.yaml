@@ -31,6 +31,8 @@ services:
       INSIGHT_OIDC_ANALYST_GROUPS: ${INSIGHT_OIDC_ANALYST_GROUPS:-}
       INSIGHT_OIDC_VIEWER_GROUPS: ${INSIGHT_OIDC_VIEWER_GROUPS:-}
       INSIGHT_OIDC_PRIVATE_NETWORK: ${INSIGHT_OIDC_PRIVATE_NETWORK:-off}
+      # A path inside the container: mount the CA file read-only, e.g. ./idp-ca.pem:/run/insight/idp-ca.pem:ro
+      INSIGHT_OIDC_CA_FILE: ${INSIGHT_OIDC_CA_FILE:-}
       INSIGHT_SSO_ONLY: ${INSIGHT_SSO_ONLY:-off}
       # Default colour theme (system, light or dark) for browsers that have not picked one in the workspace
       # header. `make theme THEME=dark` sets it. "system" follows each device's light/dark setting.
