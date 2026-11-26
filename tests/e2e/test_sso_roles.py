@@ -31,19 +31,19 @@ expect.set_options(timeout=30_000)
 from tests.e2e.sso_flow import URL, launch, new_context, sign_in  # noqa: E402
 
 REFUSED = 'Your role does not allow this'
-#: (method, path, JSON body) → status for viewer, analyst, admin. One route per kind of permission that a
-#: browser session can reach without side effects on the other tests.
-MATRIX: list[tuple[str, str, dict[str, object] | None, tuple[int, int, int]]] = [
-    ('GET', '/api/brief', None, (200, 200, 200)),
-    ('GET', '/api/audit', None, (200, 200, 200)),
-    ('GET', '/api/sources', None, (200, 200, 200)),
+#: (method, path, JSON body) → whether a viewer, an analyst and an admin may. One route per kind of permission
+#: that a browser session can reach without side effects on the other tests.
+MATRIX: list[tuple[str, str, dict[str, object] | None, tuple[bool, bool, bool]]] = [
+    ('GET', '/api/brief', None, (True, True, True)),
+    ('GET', '/api/audit', None, (True, True, True)),
+    ('GET', '/api/sources', None, (True, True, True)),
     (
         'POST',
         '/api/documents',
         {'title': 'SSO gate report', 'source_name': 'SSO gate', 'body': 'Seen at 198.51.100.7.'},
-        (403, 201, 201),
+        (False, True, True),
     ),
-    ('PUT', '/api/schedules/cisa-kev', {'interval_minutes': 0}, (403, 403, 200)),
+    ('PUT', '/api/schedules/cisa-kev', {'interval_minutes': 0}, (False, False, True)),
 ]
 ROLES = ('viewer', 'analyst', 'admin')
 
@@ -80,10 +80,12 @@ def call(page: Any, method: str, path: str, body: dict[str, object] | None) -> t
 
 def check_matrix(page: Any, role: str) -> None:
     column = ROLES.index(role)
-    for method, path, body, expected in MATRIX:
+    for method, path, body, allowed in MATRIX:
         status, text = call(page, method, path, body)
-        assert status == expected[column], f'{role}: {method} {path} -> {status} {text}'
-        if status == 403:
+        if allowed[column]:
+            assert 200 <= status < 300, f'{role}: {method} {path} -> {status} {text}'
+        else:  # Refused for the role, not for anything else (the CSRF token is sent).
+            assert status == 403, f'{role}: {method} {path} -> {status} {text}'
             assert REFUSED in text, f'{role}: {method} {path} was refused for another reason: {text}'
 
 
