@@ -40,7 +40,7 @@ MATRIX: list[tuple[str, str, dict[str, object] | None, tuple[int, int, int]]] = 
     (
         'POST',
         '/api/documents',
-        {'title': 'SSO gate report', 'body': 'Seen at 198.51.100.7.'},
+        {'title': 'SSO gate report', 'source_name': 'SSO gate', 'body': 'Seen at 198.51.100.7.'},
         (403, 201, 201),
     ),
     ('PUT', '/api/schedules/cisa-kev', {'interval_minutes': 0}, (403, 403, 200)),
