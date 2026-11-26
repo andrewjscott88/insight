@@ -6,7 +6,7 @@ at ``limit / window`` per second: short bursts are fine, a sustained flood is no
 
 State lives in this process, like sessions and the sign-in throttle. Run one worker (``insight serve`` does).
 Moving to several workers or hosts means replacing :class:`RateLimiter` with a shared store (e.g. Redis);
-callers only use :meth:`RateLimiter.hit`, so that is a local change.
+callers only use :meth:`RateLimiter.hit` and :meth:`RateLimiter.allows`, so that is a local change.
 """
 
 from __future__ import annotations
@@ -45,6 +45,9 @@ TAXII: Final = Policy('taxii', 240, 3600)
 MCP: Final = Policy('mcp', 120, 60)
 #: Requests with an invalid API key, per client address. Valid keys are never counted or refused by this.
 AUTH_FAILURES: Final = Policy('auth-failures', 10, 60)
+#: Failed sign-ins through the identity provider, per client address (ADR 0046). Only failures are counted;
+#: once they are used up, callbacks are refused before anything reaches the provider.
+SSO_FAILURES: Final = Policy('sso-failures', 10, 60)
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,6 +105,13 @@ class RateLimiter:
             reset_after=reset_after,
             retry_after=0.0 if allowed else (cost - tokens) / policy.rate,
         )
+
+    def allows(self, caller: str, policy: Policy, cost: int = 1) -> bool:
+        """Whether :meth:`hit` would allow ``cost`` now; takes nothing."""
+        with self._lock:
+            now = self.clock()
+            tokens, updated, _ = self._buckets.get((policy.name, caller), (float(policy.limit), now, now))
+            return min(float(policy.limit), tokens + max(0.0, now - updated) * policy.rate) >= cost
 
     def _prune(self, now: float) -> None:
         """Forget buckets that have refilled completely (equivalent to never having seen them)."""

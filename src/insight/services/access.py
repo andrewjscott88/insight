@@ -212,11 +212,18 @@ def verify_mfa_code(db: Session, code: str, at: float | None = None, *, session_
 SESSION_TTL: Final = timedelta(hours=8)
 
 
-def session_binding(session_secret: str, password: str, mfa: bool) -> str:
+def session_binding(session_secret: str, password: str, mfa: bool, provider: str | None = None) -> str:
     """A keyed fingerprint of what a sign-in proved. Stored session hashes include it, so changing the
-    password or turning MFA on or off ends every session, as the restart such a change needs always did."""
-    message = f'{password}\0{"mfa" if mfa else "password"}'.encode()
-    return hmac.new(session_secret.encode(), message, hashlib.sha256).hexdigest()
+    password or turning MFA on or off ends every session, as the restart such a change needs always did.
+
+    ``provider`` names the identity provider sign-in (ADR 0046): its issuer, client ID and whether password
+    sign-in is off. Changing any of them, or turning the provider on or off, ends every session too; without
+    a provider the fingerprint is the one earlier versions stored.
+    """
+    message = f'{password}\0{"mfa" if mfa else "password"}'
+    if provider is not None:
+        message += f'\0{provider}'
+    return hmac.new(session_secret.encode(), message.encode(), hashlib.sha256).hexdigest()
 
 
 def _session_hash(session_id: str, binding: str) -> str:

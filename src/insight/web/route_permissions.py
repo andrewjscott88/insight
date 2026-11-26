@@ -19,7 +19,17 @@ log = logging.getLogger('insight.auth')
 
 #: Reachable without signing in: liveness, and the sign-in and sign-out pages (each CSRF-protected).
 PUBLIC_ROUTES: Final = frozenset(
-    {('GET', '/health'), ('GET', '/login'), ('POST', '/login'), ('GET', '/logout'), ('POST', '/logout')}
+    {
+        ('GET', '/health'),
+        ('GET', '/login'),
+        ('POST', '/login'),
+        ('GET', '/logout'),
+        ('POST', '/logout'),
+        # Sign-in through the identity provider (ADR 0046): the state and PKCE checks guard the callback.
+        ('GET', '/login/sso'),
+        ('GET', '/login/sso/callback'),
+        ('POST', '/login/sso/callback'),
+    }
 )
 
 _BY_PERMISSION: Final[dict[Permission, tuple[str, ...]]] = {

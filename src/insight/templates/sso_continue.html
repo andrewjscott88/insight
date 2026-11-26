@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en" data-theme="{{ theme }}" data-text="{{ text_size }}">
+<head>
+{% include '_theme_head.html' %}
+<title>Signing in · Insight</title>
+<script src="/static/sso-continue.js" defer></script>
+</head>
+<body class="login-page">
+<main class="login-card">
+<a class="brand" href="/"><span class="brand-mark" aria-hidden="true">✳</span>
+<span>Insight<small>Cyber Threat Intelligence Platform</small></span></a>
+<h1>Signing you in.</h1>
+<p class="muted" role="status">Finishing the sign-in from your identity provider.</p>
+<form id="sso-continue" method="post" action="/login/sso/callback">
+<input type="hidden" name="code" value="{{ code }}">
+<input type="hidden" name="state" value="{{ state }}">
+{% if error %}<input type="hidden" name="error" value="{{ error }}">{% endif %}
+<button class="primary" type="submit">Continue</button>
+</form>
+</main>
+</body>
+</html>

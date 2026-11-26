@@ -264,14 +264,16 @@ def acting(sessions: SessionFactory, request: Request) -> Iterator[Session]:
         yield services.set_actor(db, caller_of(request).actor)
 
 
-def new_session_id(app: FastAPI, replaces: Any, now: float) -> str:
-    """Store a fresh session, ending the one it replaces, and return its ID (blocking: database)."""
+def new_session_id(app: FastAPI, replaces: Any, now: float, *, user_id: str | None = None) -> str:
+    """Store a fresh session for the operator or ``user_id``, ending the one it replaces, and return its ID
+    (blocking: database)."""
     with app.state.session_factory.begin() as db:
         return services.start_operator_session(
             db,
             binding=app.state.session_binding,
             at=_moment(now),
             replaces=replaces if isinstance(replaces, str) else None,
+            user_id=user_id,
         )
 
 
@@ -311,6 +313,8 @@ def _register_login(app: FastAPI, settings: Settings, templates: Jinja2Templates
 
     @app.post('/login')
     async def login(request: Request) -> Response:
+        if settings.oidc is not None and settings.oidc.sso_only:
+            raise HTTPException(403, 'Password sign-in is off; sign in through the identity provider')
         form = await request.form(max_fields=4)
         csrf = request.session.get('csrf')
         if not tokens_match(form.get('csrf_token'), csrf):

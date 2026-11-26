@@ -229,8 +229,8 @@ What a visitor gets:
 
 Page loads are rate-limited by address (300 a minute). Behind a reverse proxy, set `INSIGHT_TRUSTED_PROXIES`
 (see "Reverse proxy"); otherwise every visitor shares the proxy's address and so one budget. Interactive clicks
-are not counted separately, so on a public site also rate-limit at the reverse proxy. People who sign in (the operator, and from TIP 3.4b
-everyone with a role) get the full workspace for their role; the sign-in page links back to the public view.
+are not counted separately, so on a public site also rate-limit at the reverse proxy. People who sign in (the operator, and anyone with a
+role who signs in through the identity provider) get the full workspace for their role; the sign-in page links back to the public view.
 
 **Move a public site from open access to the public view:**
 1. In `.env`: `INSIGHT_DEV_NO_AUTH=off`, `INSIGHT_MAX_TLP=CLEAR`, `INSIGHT_PUBLIC_VIEW=on`. Start-up refuses
@@ -244,6 +244,63 @@ everyone with a role) get the full workspace for their role; the sign-in page li
 
 To close it again, set `INSIGHT_PUBLIC_VIEW=off` and restart: visitors are sent to the sign-in page.
 
+### Identity provider sign-in
+
+People can sign in through your organisation's OpenID Connect provider ([ADR 0046](adr/0046-sso-sign-in-and-roles.md)).
+The workspace password stays as the built-in operator, an admin, until you turn it off.
+
+**Settings** (in `.env`; Compose passes them through):
+
+| Setting | Meaning |
+| --- | --- |
+| `INSIGHT_OIDC_ISSUER` | The provider's issuer, exactly as its discovery document states it, `https://` on port 443 |
+| `INSIGHT_OIDC_CLIENT_ID`, `INSIGHT_OIDC_CLIENT_SECRET` | Insight's confidential client at the provider |
+| `INSIGHT_PUBLIC_URL` | The `https://` address people open Insight at; the redirect URI is this plus `/login/sso/callback` |
+| `INSIGHT_OIDC_SCOPES` | Optional; default `openid email profile` (must include `openid`) |
+| `INSIGHT_OIDC_GROUPS_CLAIM` | Optional; the ID token claim that lists the person's groups, default `groups` |
+| `INSIGHT_OIDC_ADMIN_GROUPS`, `..._ANALYST_GROUPS`, `..._VIEWER_GROUPS` | Optional, comma-separated: the highest matching group sets the role at every sign-in. Names must match exactly what the provider sends |
+| `INSIGHT_OIDC_PRIVATE_NETWORK` | `on` for a provider on your private network (loopback and link-local stay blocked) |
+| `INSIGHT_SSO_ONLY` | `on` turns the password sign-in off; `insight users` on the host stays the break-glass |
+
+Start-up refuses a half-set provider, an `http://` issuer or public URL, and the provider together with
+`INSIGHT_DEV_NO_AUTH=on`. Insight reaches the provider only through its outbound checks: HTTPS on port 443, to
+the issuer and to the token and key-set hosts its discovery document names. Put a provider that listens on
+another port behind your reverse proxy.
+
+**Who gets in.** Without group settings, a person who signs in for the first time waits with no access until an
+admin gives them a role: `insight users list`, then `insight users role <email> analyst` (see "People and
+roles"). With group settings, the groups decide at every sign-in; leaving every group takes the role away. A
+role an admin gave by hand stays unless the groups give one.
+
+**Keycloak:**
+1. In your realm, create a client: client type OpenID Connect, client authentication on (confidential),
+   standard flow only. Valid redirect URI: `https://<insight>/login/sso/callback`. Under Advanced, set
+   *Proof Key for Code Exchange Code Challenge Method* to `S256`.
+2. Copy the client secret from the Credentials tab. The issuer is `https://<keycloak>/realms/<realm>`.
+3. For roles from groups: add a *Group Membership* mapper to the client's dedicated scope, token claim name
+   `groups`, added to the ID token. With *Full group path* on, names look like `/insight-analysts`; use them
+   that way in `INSIGHT_OIDC_*_GROUPS`.
+
+**Authentik:**
+1. Create an OAuth2/OpenID Provider: client type Confidential, redirect URI
+   `https://<insight>/login/sso/callback`, signing key set (RS256 or ES256), scopes `openid`, `email`,
+   `profile`. Then an Application that uses it.
+2. The issuer is `https://<authentik>/application/o/<application slug>/`, with the trailing slash. Authentik
+   puts group names in the `groups` claim through its `profile` scope.
+
+**Microsoft Entra ID, Google, Okta:** register a web application with the same redirect URI and a client
+secret. Entra's issuer is `https://login.microsoftonline.com/<tenant ID>/v2.0`; its groups claim sends group
+object IDs unless you configure names. Google offers no groups claim, so approve people by hand.
+
+**Sessions.** A person's session lasts 8 hours like the operator's. Changing the issuer, the client ID or
+`INSIGHT_SSO_ONLY`, or turning provider sign-in on or off, ends every session (as a new password does), so
+plan the change. Insight's own MFA guards only the password sign-in; require a second factor in the provider.
+
+**Check:** the sign-in page shows **Sign in with your organisation**; signing in sends you to the provider and
+back. The log records `Signed in through the identity provider: user:<id>`, and refusals with their reason
+(never a token or secret). Once someone who signs in through the provider is an admin, you can set
+`INSIGHT_SSO_ONLY=on`.
+
 ### The API key
 `insight api-key status` shows the key ID, access, expiry and last use (in Docker: `docker compose exec insight
 insight api-key status`). Rotate before the expiry date with `insight api-key rotate`, then paste the new key
@@ -251,6 +308,9 @@ into the SIEM or script: the old key stops working immediately. Rotating `INSIGH
 affect the key. `429` responses with `Retry-After` mean a client exceeded its rate limit (docs/API.md).
 
 ### Sign-in second factor (MFA)
+This second factor protects the workspace password (the built-in operator). People who sign in through your
+identity provider get their second factor there: require it in the provider's sign-in flow.
+
 MFA is **off by default**: sign-in asks for the password only. Turning it on adds a code from an authenticator
 app (Google Authenticator, Microsoft Authenticator, 1Password, Aegis, Bitwarden, ...). Two separate things are
 involved: **pairing** the app (stored in the database) and the **switch** `INSIGHT_MFA=on|off` (in `.env`).
@@ -319,9 +379,10 @@ is; audit events never hold a person's e-mail address.
 ### People and roles
 Each person, the operator and each API key acts with a role: `viewer`, `analyst` or `admin`
 ([ADR 0046](adr/0046-sso-sign-in-and-roles.md), [the matrix](API.md#roles)). The password sign-in is the built-in
-operator, always an `admin`. People sign in through the organisation's identity provider (TIP 3.4b); until an
-admin gives them a role they wait with no access. On the host, `insight users` does what an admin does in the
-workspace, and works when nobody who can sign in is an admin:
+operator, always an `admin`. People sign in through the organisation's identity provider ("Identity provider
+sign-in" above); until an admin or their provider groups give them a role, they wait with no access. On the
+host, `insight users` does what an admin does in the workspace, and works when nobody who can sign in is an
+admin:
 
 ```sh
 insight users list                          # people waiting for approval first
@@ -762,8 +823,10 @@ verify the signature (§6).
 
 ## 14. Known limitations
 
-- Single operator; no SSO, RBAC or recipient-level TLP enforcement; rate limits and the sign-in throttle live
-  in memory (one worker; a restart resets them). Sessions are stored in the database and survive restarts.
+- No recipient-level TLP enforcement; roles change what people may do, not which TLP labels they read. People
+  are managed with `insight users` on the host until Settings → People arrives. Rate limits and the sign-in
+  throttles live in memory (one worker; a restart resets them). Sessions are stored in the database and
+  survive restarts.
 - One API key at a time; rotation takes effect immediately (no overlap), so update the client right after
   `make api-key-rotate`.
 - `make smoke` and `scripts/smoke.py` sign in with the password only, so they need MFA off.

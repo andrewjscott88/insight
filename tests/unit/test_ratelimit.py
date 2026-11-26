@@ -74,6 +74,21 @@ def test_refused_requests_do_not_consume_tokens(clock: Clock) -> None:
     assert limiter.hit('caller', TEN_PER_MINUTE).allowed  # hammering while refused does not extend the wait
 
 
+def test_allows_looks_without_taking(clock: Clock) -> None:
+    limiter = RateLimiter(clock)
+    assert limiter.allows('caller', TEN_PER_MINUTE)
+    assert limiter._buckets == {}, 'looking never creates a bucket'
+    for _ in range(10):
+        assert limiter.allows('caller', TEN_PER_MINUTE)
+        limiter.hit('caller', TEN_PER_MINUTE)
+    assert not limiter.allows('caller', TEN_PER_MINUTE)
+    assert limiter.allows('other', TEN_PER_MINUTE)
+    clock.now += 6.1
+    assert limiter.allows('caller', TEN_PER_MINUTE)
+    assert limiter.allows('caller', TEN_PER_MINUTE), 'still there: allows took nothing'
+    assert not limiter.allows('caller', TEN_PER_MINUTE, cost=2)
+
+
 def test_cost_takes_several_tokens(clock: Clock) -> None:
     limiter = RateLimiter(clock)
     assert limiter.hit('caller', TEN_PER_MINUTE, cost=7).remaining == 3

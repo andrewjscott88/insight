@@ -9,7 +9,11 @@
   password sign-in is the built-in operator, an admin. Downgrading below `0033` ends people's sessions first.
 - API keys now act with a role: `read` and `read-feedback` keys as viewers, `read-write` keys as analysts. No
   route a key could use before is refused now (every admin route was already browser-only).
-- Docker: `compose.yaml` passes the new `INSIGHT_PUBLIC_VIEW` setting (default `off`).
+- Docker: `compose.yaml` passes the new `INSIGHT_PUBLIC_VIEW`, `INSIGHT_OIDC_*` and `INSIGHT_SSO_ONLY` settings
+  (all off or empty by default).
+- With an identity provider set, stored sessions are also bound to its issuer and client ID and to
+  `INSIGHT_SSO_ONLY`: setting the provider up, changing it or turning the password sign-in off ends every
+  session once. Without a provider nothing changes.
 
 ### Added: roles (TIP 3.4a)
 
@@ -24,9 +28,23 @@
   does not allow this` (in the workspace, a message saying so).
 - `insight users` on the host lists people who signed in through the identity provider and gives or takes
   away a role, disables, enables, signs out or removes them. Every change ends the person's sessions and is
-  audited. Sign-in through the identity provider follows in TIP 3.4b.
+  audited.
 - `GET /api/session` also returns the caller's `role`, and the `actor` audit events name them by
   (`operator`, or `user:<id>` for a person).
+
+### Added: sign-in through your identity provider (TIP 3.4b)
+
+- People can sign in through one OpenID Connect provider, for example Keycloak, Authentik, Microsoft Entra ID,
+  Google or Okta: set `INSIGHT_OIDC_ISSUER`, `INSIGHT_OIDC_CLIENT_ID`, `INSIGHT_OIDC_CLIENT_SECRET` and
+  `INSIGHT_PUBLIC_URL`, and the sign-in page offers **Sign in with your organisation**
+  ([set-up per provider](docs/RUNBOOK.md#identity-provider-sign-in)). The authorisation code flow with PKCE,
+  checked ID tokens (`RS256`, `PS256` or `ES256`; issuer, audience, expiry and nonce) and no new dependency.
+- Someone who signs in for the first time waits with no access until an admin gives them a role
+  (`insight users role`), and the sign-in page tells them so. `INSIGHT_OIDC_ADMIN_GROUPS`,
+  `..._ANALYST_GROUPS` and `..._VIEWER_GROUPS` let provider groups set the role at every sign-in instead.
+- `INSIGHT_SSO_ONLY=on` turns the workspace password off; `insight users` on the host stays the break-glass.
+- Failed sign-ins through the provider are throttled per address before the provider is asked again.
+  Settings → People, to approve people in the workspace, follows.
 
 ### Added: the read-only public view (TIP 3.4c)
 

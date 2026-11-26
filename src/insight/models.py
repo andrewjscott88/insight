@@ -326,10 +326,10 @@ class ApiKey(Base):
 class OperatorSession(Base):
     """A signed-in browser (review B4), stored so that a restart keeps it and sign-out reaches everywhere.
 
-    The cookie carries a random session ID. Only a hash of that ID, keyed to the current password and MFA
-    setting (``services.session_binding``), is stored: the database alone cannot sign anyone in, and changing
-    the password or the MFA setting ends every session. Rows are deleted when a session ends; expired ones
-    are deleted at the next sign-in.
+    The cookie carries a random session ID. Only a hash of that ID, keyed to the current password, MFA
+    setting and identity provider (``services.session_binding``), is stored: the database alone cannot sign
+    anyone in, and changing any of them ends every session. Rows are deleted when a session ends; expired
+    ones are deleted at the next sign-in.
     """
 
     __tablename__ = 'operator_sessions'

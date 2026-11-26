@@ -114,6 +114,55 @@ def sign_out_user(db: Session, user_id: str) -> int:
     return count
 
 
+def record_sign_in(
+    db: Session,
+    *,
+    issuer: str,
+    subject: str,
+    email: str,
+    display_name: str,
+    group_role: Role | None,
+    groups_mapped: bool,
+    at: datetime,
+) -> User:
+    """Add or update the person behind a verified provider sign-in, and return them (ADR 0046).
+
+    A new person gets the role their provider groups give (``group_role``), or none: they wait for an
+    admin. When the host maps groups, every sign-in sets the role again, and a role that came from groups
+    goes when the groups no longer give one; a role an admin gave stays. If the host stopped mapping groups,
+    a role that came from them goes too. A role change ends the person's other sessions. Audited as the
+    person (``user.add``, ``user.role``). A disabled person is returned as they are; the caller refuses them.
+    """
+    user = db.scalar(select(User).where(User.issuer == issuer, User.subject == subject))
+    if user is None:
+        user = User(
+            issuer=issuer,
+            subject=subject,
+            role=group_role,
+            role_from_groups=group_role is not None,
+            first_sign_in_at=stamp(at),
+            last_sign_in_at=stamp(at),
+        )
+        db.add(user)
+        db.flush()
+        db.info['actor'] = f'user:{user.id}'
+        audit(db, 'user.add', user.id, f'role: {group_role or "none, waiting for approval"}')
+    else:
+        db.info['actor'] = f'user:{user.id}'
+        previous = user.role
+        if groups_mapped and group_role is not None:
+            user.role, user.role_from_groups = group_role, True
+        elif user.role_from_groups:  # The groups no longer give a role, or groups are no longer mapped.
+            user.role, user.role_from_groups = None, False
+        if user.role != previous:
+            ended = end_user_sessions(db, user.id)
+            change = f'role: {previous or "none"} -> {user.role or "none"} (provider groups)'
+            audit(db, 'user.role', user.id, f'{change}; {ended} session(s) ended')
+    user.email, user.display_name = email[:320], display_name[:200]
+    user.last_sign_in_at = stamp(at)
+    return user
+
+
 def set_user_role(db: Session, user_id: str, role: Role | None) -> int:
     """Give a person a role, or take it away (``None``: back to waiting). Their sessions end, so the new
     role applies everywhere at once; returns how many ended. Audited as ``user.role``."""

@@ -21,6 +21,17 @@ services:
       # Read-only public view: visitors read TLP:CLEAR intelligence without signing in. Needs
       # INSIGHT_MAX_TLP=CLEAR; replaces INSIGHT_DEV_NO_AUTH (docs/RUNBOOK.md, "Public view").
       INSIGHT_PUBLIC_VIEW: ${INSIGHT_PUBLIC_VIEW:-off}
+      # Sign-in through your organisation's identity provider (docs/RUNBOOK.md, "Identity provider sign-in").
+      INSIGHT_OIDC_ISSUER: ${INSIGHT_OIDC_ISSUER:-}
+      INSIGHT_OIDC_CLIENT_ID: ${INSIGHT_OIDC_CLIENT_ID:-}
+      INSIGHT_OIDC_CLIENT_SECRET: ${INSIGHT_OIDC_CLIENT_SECRET:-}
+      INSIGHT_OIDC_SCOPES: ${INSIGHT_OIDC_SCOPES:-}
+      INSIGHT_OIDC_GROUPS_CLAIM: ${INSIGHT_OIDC_GROUPS_CLAIM:-}
+      INSIGHT_OIDC_ADMIN_GROUPS: ${INSIGHT_OIDC_ADMIN_GROUPS:-}
+      INSIGHT_OIDC_ANALYST_GROUPS: ${INSIGHT_OIDC_ANALYST_GROUPS:-}
+      INSIGHT_OIDC_VIEWER_GROUPS: ${INSIGHT_OIDC_VIEWER_GROUPS:-}
+      INSIGHT_OIDC_PRIVATE_NETWORK: ${INSIGHT_OIDC_PRIVATE_NETWORK:-off}
+      INSIGHT_SSO_ONLY: ${INSIGHT_SSO_ONLY:-off}
       # Default colour theme (system, light or dark) for browsers that have not picked one in the workspace
       # header. `make theme THEME=dark` sets it. "system" follows each device's light/dark setting.
       INSIGHT_THEME: ${INSIGHT_THEME:-system}
