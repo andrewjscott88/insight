@@ -158,13 +158,10 @@ tools over TAXII and STIX; sightings and requests for information come back
       [ADR 0046](docs/adr/0046-sso-sign-in-and-roles.md); building in parts 3.4a–d. Done: 3.4a (roles, the
       permission matrix and `insight users`), 3.4c (the read-only public view) and 3.4b (OIDC sign-in and
       Settings → People). Next: 3.4d, the gate against a real provider.*
-- [ ] [#16](https://github.com/andrewjscott88/insight/issues/16) **TIP 3.5 Multi-worker deployments:** shared rate
-      limits (sessions are already in the database).
 - [x] [#11](https://github.com/andrewjscott88/insight/issues/11) **PostgreSQL datetime columns and feed cursors
       (M2):** `timestamptz` on PostgreSQL, resumable OTX syncs, a tighter PostgreSQL budget
       ([ADR 0030](docs/adr/0030-postgres-timestamps-and-feed-cursors.md)).
 - [x] **TIP 3.8 Lightweight case management** ([ADR 0029](docs/adr/0029-cases.md)).
-- [ ] **TIP 3.6 Opt-in LLM proposals** under the contract in [docs/LLM_EXTENSION.md](docs/LLM_EXTENSION.md).
 - [x] **TIP 3.7 Optional Shodan and Censys enrichment** with operator credentials. Shodan follows
       [ADR 0031](docs/adr/0031-shodan.md). Censys Platform host lookups arrive in 1.0.0,
       with per-lookup approval, private access and metadata-only caching
@@ -173,6 +170,11 @@ tools over TAXII and STIX; sightings and requests for information come back
 
 **Out of scope on purpose:** cloning CrowdStrike, Mandiant or Recorded Future collection, a malware sandbox,
 automated adversary attribution, and any always-on cloud AI.
+
+**Taken off the roadmap (26 November 2026, maintainer's decision):** TIP 3.5, multi-worker deployments
+(Insight runs as one worker; rate limits and sign-in throttles stay in that process), and TIP 3.6, opt-in LLM
+proposals (Insight writes nothing with a model; [docs/LLM_EXTENSION.md](docs/LLM_EXTENSION.md) stays as the
+boundary any future work would have to meet).
 
 ## Done
 

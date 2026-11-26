@@ -98,7 +98,6 @@ Reports are attached to the run summary and as artifacts (90 days).
 | M3 Identity provider & groups | OIDC tests against a containerised IdP; role × endpoint authorisation matrix; authenticated ZAP active scan; staging deployment environment |
 | M4 Notifications | Delivery tests against a fake SMTP/webhook sink |
 | M5 Structured export | `stix2-validator` on every export; import/export round-trip; retention/licence rule tests |
-| M6 LLM enrichment | The `docs/LLM_EXTENSION.md` evaluation set (span correctness, unsupported claims, prompt-injection corpus) with thresholds; a test that no RED/AMBER+STRICT text reaches an external provider |
 
 ## Tier 4 - release (publishes)
 

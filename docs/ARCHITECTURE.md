@@ -169,11 +169,12 @@ globally throttled for the single operator.
 3. Introduce identity-provider accounts and recipient/group handling before collaboration.
    API work designed but deferred so far (single operator, no Redis/PostgreSQL in production yet): a versioned
    `/api/v1` with deprecation headers, a published OpenAPI contract with response models, RFC 9457 problem
-   details, cursor pagination, `202 Accepted` jobs for syncs and large exports, `Idempotency-Key`, shared
-   sessions and rate limits (Redis) for several workers, and several named keys per user.
+   details, cursor pagination, `202 Accepted` jobs for syncs and large exports, `Idempotency-Key`, and several
+   named keys per user. Insight runs as one worker: shared rate limits for several workers are not planned.
 4. Add asset inventory relevance, investigations and watchlist notifications.
 5. Add structured import/export and source-specific licensing/retention controls.
-6. Add opt-in LLM enrichment behind the independent contract, only after evaluations and routing policies.
+6. LLM enrichment is not planned: Insight writes nothing with a model ([LLM_EXTENSION.md](LLM_EXTENSION.md)
+   records the boundary any future work would have to meet).
 
 Actor activity is read through `services/actor_timeline.py`, with shared bounded report references in
 `actor_reports.py` and explicit, audited campaign associations in `actor_campaigns.py`. The guide, JSON API,

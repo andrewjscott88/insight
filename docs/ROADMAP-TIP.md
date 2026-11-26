@@ -403,26 +403,6 @@ explicit-ID tagging across all three catalogs ([ADR 0042](adr/0042-mobile-and-ic
 - **Design:** [ADR 0046](adr/0046-sso-sign-in-and-roles.md) (accepted 2026-11-25): OIDC with PKCE and no new dependency, three fixed roles, a deny-by-default permission table for the API and the workspace, the operator as the built-in admin, and an optional read-only public view.
 - **Progress:** 3.4a done: users, the three roles, the permission matrix enforced in the API and the workspace, the operator as admin, `insight users` and the architecture tests. 3.4c done before 3.4b (Andrew's choice): the read-only public view (`INSIGHT_PUBLIC_VIEW=on`) and controls hidden by role. 3.4b done: OIDC sign-in (discovery, PKCE, ID token checks, group mapping, people waiting for approval, `INSIGHT_SSO_ONLY`, set-up notes), then Settings → People with recent activity naming people, and Settings controls offered by role. Next: the 3.4d gate.
 
-### 3.5 Multi-worker sessions and rate limits
-
-- **What to build:** Move rate-limit state (and any remaining process-local locks that must be shared) out of one process (`ROADMAP.md` #16). Sessions are already in the database.
-- **Why / which TIP capability:** Reliability when you scale past `uvicorn` `workers=1` (`src/insight/cli.py:606-607`). Premium products are multi-tenant; this is just so Insight does not break if you add workers.
-- **Implementation notes:** Keep `RateLimiter.hit` as the interface (`src/insight/ratelimit.py`, ADR 0012). Back it with Redis or PostgreSQL. Job runner must still run in **one** process (`INSIGHT_RUN_JOBS`). Document the topology in the runbook.
-- **New tables or endpoints:** Possibly `rate_limit_buckets` if you avoid Redis.
-- **Sources / libraries:** Redis only if you are willing to operate it; otherwise a Postgres-backed limiter. Do not add a dependency lightly.
-- **Effort:** L
-- **Acceptance criteria:** Two app workers share rate limits and do not issue duplicate scheduled syncs. Tests simulate two processes. Single-worker SQLite installs remain the default.
-
-### 3.6 Opt-in LLM assistant (existing design contract)
-
-- **What to build:** Optional, off-by-default proposals for summaries or ATT&CK *suggestions*, stored as reviewable claims, never as facts (`docs/LLM_EXTENSION.md`).
-- **Why / which TIP capability:** AI features (Gemini, Copilot, OpenCTI EE). Insight's brief should remain the authoritative deterministic summary. Use the model only as an assistant.
-- **Implementation notes:** Implement the `AnalystAssistant` protocol already written in `docs/LLM_EXTENSION.md`. Store provider, model, version, timestamp, document hash, spans, and review state. Default to a local endpoint. No silent send of AMBER+ or RED text off-box. No tool execution. Gate with the evaluations the doc lists. UI must label output as "proposal."
-- **New tables or endpoints:** `model_proposals`. `POST /api/documents/{id}/propose` (session only).
-- **Sources / libraries:** Operator-chosen local or remote API. No vendor is baked in.
-- **Effort:** L
-- **Acceptance criteria:** Default installs make zero model calls (tested). A proposal cannot change verdicts or ingest without an analyst click. TLP policy is enforced before any outbound prompt. Evaluation notes are checked in or linked.
-
 ### 3.7 Optional Shodan or Censys enrichment (operator-supplied keys)
 
 Current implementation: Shodan and the Censys Platform host endpoint are supported. The Censys
@@ -586,7 +566,7 @@ software-only techniques in actor layers have score zero. [ADR 0038](adr/0038-ad
 ### 4.8 Read-only MCP endpoint
 
 Model Context Protocol access for AI agents, using API keys and their TLP ceilings. Insight itself still
-writes nothing with a model ([LLM_EXTENSION.md](LLM_EXTENSION.md); 3.6 stays separate and opt-in).
+writes nothing with a model ([LLM_EXTENSION.md](LLM_EXTENSION.md); LLM proposals, once 3.6, are off the roadmap).
 Eight read tools share a stateless `POST /mcp` endpoint for protocols 2026-07-28 and 2025-11-25.
 The per-key sharing ceiling applies to each result. [MCP guide](MCP.md), [ADR 0039](adr/0039-read-only-mcp.md).
 
@@ -600,8 +580,8 @@ The per-key sharing ceiling applies to each result. [MCP guide](MCP.md), [ADR 00
 - Phase 1: 1.1 → 1.2 → 1.3 (the vulnerability vertical), then 1.4 (alerts), then 1.5 / 1.6 (feeds); 1.7 is ongoing.
 - Phase 2: 2.1 before 2.2, 2.4 and 3.1; 2.3 before 2.5's ATT&CK seeding; 2.6 and 2.8 can proceed in parallel;
   2.7 and 2.9 after the export patterns exist; 2.10 after 2.3 (done) and with or after 2.5.
-- Phase 3: 3.1 after 2.1; 3.4 before treating Insight as multi-user; 3.6 only after evaluation hooks exist;
-  3.7 last and optional.
+- Phase 3: 3.1 after 2.1; 3.4 before treating Insight as multi-user; 3.7 last and optional. 3.5 (multi-worker
+  deployments) and 3.6 (opt-in LLM proposals) were taken off the roadmap on 26 November 2026.
 - Phase 4 is required for 1.0 (Andrew, 22 November 2026): 4.1 → 4.2 → 4.3 → 4.4 (the intelligence cycle and
   the hunt-tool contract), then 4.5–4.8 in any order. 4.2's sightings and 4.3's collection extend the TAXII and API contract that 4.1's RFI intake starts.
 
@@ -649,14 +629,12 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
 - [x] **2.9** Suricata and Snort 3 alert rules for the IP and domain blocklists
 - [x] **2.10** Industry threat profiles (top ten groups per industry, with evidence) and exportable actor threat guides with a threat hunt section (hypotheses, data sources, indicator sweep list, linked rules, hunt record); needs a bundled threat-group library: done, ADR 0025, [THREAT_GUIDES.md](THREAT_GUIDES.md)
 
-### Phase 3 — Advanced (8)
+### Phase 3 — Advanced (6)
 
 - [x] **3.1** Read-only TAXII 2.1 server over STIX collections: done, ADR 0026, [TAXII.md](TAXII.md)
 - [x] **3.2** Ranked search and graph view (`ROADMAP` #17): done, ADR 0027
 - [x] **3.3** Exploit-availability signals (metadata only, terms-reviewed sources): done, ADR 0028 (report signals and VulnCheck KEV; Exploit-DB and GitHub not contacted)
 - [ ] **3.4** OIDC and RBAC (`ROADMAP` #14)
-- [ ] **3.5** Shared rate limits for multi-worker deploys (`ROADMAP` #16)
-- [ ] **3.6** Opt-in LLM proposals per `docs/LLM_EXTENSION.md`
 - [x] **3.7** Optional Shodan/Censys enrichment (operator credentials; vendor-priced): Shodan, ADR 0031;
   Censys Platform host context in 1.0.0, ADR 0043.
 - [x] **3.8** Lightweight case management: done, ADR 0029 (no webhook on open)
@@ -674,7 +652,7 @@ Three items from the 0.5.0 review are prerequisites that this plan does not list
 - [x] **4.7** Adversary library imports: sourced group aliases, software links and sharing, actor timelines and Navigator layers (ADR 0038)
 - [x] **4.8** Read-only MCP endpoint for AI agents, with eight tools and per-key sharing ceilings (ADR 0039)
 
-**Total: 39 items.** Out of scope on purpose: cloning CrowdStrike/Mandiant/Recorded Future collection, building a malware sandbox, automated adversary attribution, and any always-on cloud AI.
+**Total: 37 items** (3.5 and 3.6 were taken off on 26 November 2026). Out of scope on purpose: cloning CrowdStrike/Mandiant/Recorded Future collection, building a malware sandbox, automated adversary attribution, and any always-on cloud AI.
 
 ---
 
