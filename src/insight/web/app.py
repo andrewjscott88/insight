@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 import logging
 from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
@@ -21,6 +22,8 @@ from .. import __version__, services
 from ..appearance import PAGE_BACKGROUND, TEXT_SIZE_COOKIE, THEME_COOKIE, text_size_choice, theme_choice
 from ..config import Settings
 from ..models import SessionFactory, database
+from ..oidc import OidcClient
+from ..oidc_settings import OidcSettings
 from ..ratelimit import RateLimiter
 from .auth import (
     MFA_UNPAIRED_LOG,
@@ -57,6 +60,7 @@ from .routes.requirements import _register_requirement_routes
 from .routes.sightings import _register_sighting_routes
 from .routes.software import _register_software_routes
 from .routes.sources import _register_enrichment_route, _register_source_routes
+from .routes.sso import _register_sso_routes
 from .routes.taxii import _register_taxii_routes
 from .routes.techniques import _register_technique_routes
 from .routes.threats import _register_threat_routes
@@ -68,6 +72,12 @@ log = logging.getLogger('insight.auth')
 ROOT: Final = Path(__file__).resolve().parent.parent  # the insight package: templates/ and static/
 
 
+def provider_binding(oidc: OidcSettings) -> str:
+    """The session-binding prefix for sign-in through ``oidc``: issuer, client ID and ``INSIGHT_SSO_ONLY``."""
+    provider = f'{oidc.issuer}\0{oidc.client_id}\0{"sso-only" if oidc.sso_only else "password-too"}'
+    return f'oidc-{hashlib.sha256(provider.encode()).hexdigest()}:'
+
+
 def _init_state(app: FastAPI, settings: Settings, sessions: SessionFactory) -> None:
     app.state.settings = settings
     app.state.session_factory = sessions
@@ -75,6 +85,10 @@ def _init_state(app: FastAPI, settings: Settings, sessions: SessionFactory) -> N
     app.state.session_binding = services.session_binding(
         settings.session_secret, settings.password, settings.mfa
     )
+    if settings.oidc is not None:
+        # So does another identity provider, or the password sign-in turned off (ADR 0046). Without a
+        # provider the binding is unchanged, so upgrading signs nobody out.
+        app.state.session_binding = provider_binding(settings.oidc) + app.state.session_binding
     if settings.dev_no_auth:
         # Keep open-access sessions separate. Turning the mode off must never turn an anonymous visitor's
         # existing cookie into a password-authenticated session, even with the same database and secret.
@@ -87,6 +101,8 @@ def _init_state(app: FastAPI, settings: Settings, sessions: SessionFactory) -> N
     app.state.is_authenticated = session_checker(app)
     # The workspace (never the API) also lets visitors read while the public view is on.
     app.state.workspace_caller = workspace_lookup(app)
+    # Sign-in through the organisation's identity provider (ADR 0046); discovery and keys are cached here.
+    app.state.oidc_client = OidcClient(settings.oidc) if settings.oidc is not None else None
     # Two limiters so a flood of bad keys from many addresses can never evict a real caller's bucket.
     app.state.rate_limiter = RateLimiter()
     app.state.auth_failure_limiter = RateLimiter()
@@ -118,6 +134,12 @@ def _log_deployment_warnings(settings: Settings, sessions: SessionFactory) -> No
     if settings.dev_no_auth:
         log.warning(
             'INSIGHT_DEV_NO_AUTH=on: anyone who can reach this workspace can view and change its data'
+        )
+    if settings.oidc is not None:
+        log.info(
+            'Sign-in through the identity provider at %s%s',
+            settings.oidc.issuer_host,
+            '; password sign-in is off (INSIGHT_SSO_ONLY=on)' if settings.oidc.sso_only else '',
         )
     if settings.public_view:
         log.info(
@@ -218,6 +240,7 @@ def create_app(settings: Settings | None = None, *, with_ui: bool = True) -> Fas
     )
     _register_page_routes(app, templates)
     _register_login(app, settings, templates)
+    _register_sso_routes(app, templates)
     for register in (
         _register_workspace_routes,
         _register_landscape_routes,

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Final, Self, cast
 
 from .appearance import DEFAULT_THEME, Theme, parse_theme
+from .oidc_settings import OidcSettings
 from .schemas import TLP, TLP_LEVELS
 
 MIN_PASSWORD_LENGTH = 12
@@ -157,6 +158,8 @@ class Settings:
     #: Visitors who are not signed in read the workspace as viewers, TLP:CLEAR only (``INSIGHT_PUBLIC_VIEW``,
     #: ADR 0046). Needs ``INSIGHT_MAX_TLP=CLEAR``; replaces temporary open access, so not with it.
     public_view: bool = False
+    #: Sign-in through an OpenID Connect provider (``INSIGHT_OIDC_*``, ADR 0046); ``None``: password only.
+    oidc: OidcSettings | None = None
 
     def __post_init__(self) -> None:
         if self.dev_no_auth and self.mfa:
@@ -165,6 +168,8 @@ class Settings:
             raise RuntimeError(
                 'INSIGHT_PUBLIC_VIEW=on replaces INSIGHT_DEV_NO_AUTH=on: turn temporary open access off'
             )
+        if self.oidc is not None and self.dev_no_auth:
+            raise RuntimeError('INSIGHT_OIDC_ISSUER cannot be used with INSIGHT_DEV_NO_AUTH=on')
         if self.public_view and self.max_tlp != 'CLEAR':
             raise RuntimeError(
                 'INSIGHT_PUBLIC_VIEW=on requires INSIGHT_MAX_TLP=CLEAR, so nothing above TLP:CLEAR is stored'
@@ -232,6 +237,7 @@ class Settings:
             dev_no_auth=parse_dev_no_auth(env.get('INSIGHT_DEV_NO_AUTH', '')),
             require_hardened=parse_require_hardened(env.get('INSIGHT_REQUIRE_HARDENED', '')),
             public_view=parse_public_view(env.get('INSIGHT_PUBLIC_VIEW', '')),
+            oidc=OidcSettings.from_env(env),
         )
 
 

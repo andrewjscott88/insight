@@ -11,12 +11,16 @@
 <p class="eyebrow">Your intel brief</p>
 <h1>Welcome back.</h1>
 <p class="muted">Sign in to see what changed and what to check next.</p>
+{% if waiting %}<p class="error" role="status">You are signed in, but an administrator has not given you a role yet. Ask them to approve you, then sign in again.</p>{% endif %}
+{% if sso %}<p><a class="primary" href="/login/sso">Sign in with your organisation →</a></p>{% endif %}
+{% if not sso_only %}
 <form action="/login" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-<label>Workspace password<input name="password" type="password" autocomplete="current-password" required autofocus></label>
+<label>Workspace password<input name="password" type="password" autocomplete="current-password" required{% if not sso %} autofocus{% endif %}></label>
 {% if mfa %}<label>Authentication code<input name="otp" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,7}" maxlength="7" required></label>{% endif %}
 {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
-<button class="primary" type="submit">Open workspace →</button>
+<button class="{% if sso %}secondary{% else %}primary{% endif %}" type="submit">Open workspace →</button>
 </form>
+{% elif error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
 {% if public_view %}<p class="muted"><a href="/">Read the public view without signing in</a></p>{% endif %}
 <p class="login-footer"><span class="status-dot" aria-hidden="true"></span> Source-led intelligence. Analyst-reviewed.</p>
 </main>

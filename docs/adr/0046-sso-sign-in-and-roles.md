@@ -199,7 +199,7 @@ read published intelligence but cannot write or reach the API".
   - Each person has their own rate-limit budget.
   - Downgrading below migration `0033` deletes people's sessions first, so none can become the operator's.
   - Sessions of people use the same stored-session binding as the operator's, so a new operator password
-    also ends them. 3.4b decides whether provider sessions bind to the provider settings instead.
+    also ends them. 3.4b also binds them to the provider settings (below).
 - Controls a role cannot use are hidden from 3.4b on, when people other than the operator can sign in to the
   workspace. Until then a refused action says "Your role does not allow this."
 
@@ -220,3 +220,38 @@ Built before 3.4b, at Andrew's request, so a public demonstration site can leave
 - Controls a role cannot use are hidden in the panels visitors and viewers reach (`Workspace.can`). Settings
   are not shown to visitors at all; hiding admin controls from analysts inside Settings comes with 3.4b,
   when analysts can sign in.
+
+### 3.4b, part one: sign-in
+
+- `insight.oidc_settings` reads the provider settings. Start-up refuses a half-set provider, an issuer or
+  `INSIGHT_PUBLIC_URL` that is not `https://` on port 443, scopes without `openid`, and the provider together
+  with `INSIGHT_DEV_NO_AUTH=on`. The redirect URI is always `INSIGHT_PUBLIC_URL` + `/login/sso/callback`.
+- `insight.oidc` (discovery, PKCE and the code exchange) and `insight.id_tokens` (signature and claims) are
+  hand-written, as decided. Choices this ADR did not settle, taken the more conservative way:
+  - The discovery document must name the configured issuer exactly and, where it lists them, offer `code`
+    and `S256`. Its endpoints must be `https://` on port 443, the only port the downloader allows; a provider
+    on another port goes behind the reverse proxy. The client authenticates with `client_secret_basic`, or
+    `client_secret_post` when that is all the provider offers.
+  - Because the session cookie is `SameSite=Strict`, the callback's `GET` only renders a page that posts the
+    code and state on to the same address, and that `POST` carries the cookie. The state is compared in
+    constant time.
+  - Discovery and the key set are cached for an hour. A token signed with a key the cached set lacks fetches
+    the set again, at most every five minutes. After discovery or the key set fails, nothing is sent to the
+    provider for ten seconds; only the token exchange carries a visitor's input, so it never starts a pause.
+  - Failed callbacks count per address, ten a minute on a budget of their own; once it is used up, callbacks
+    get `429` before the provider is asked.
+  - A person is recognised by issuer and subject; the e-mail address is only shown. With group settings, the
+    groups set the role at every sign-in, and leaving every group takes the role away; a role an admin gave
+    stays when no group gives one. A role change from groups ends the person's sessions and is audited as
+    the person.
+  - A person waiting for approval gets a session that admits them to nothing; the sign-in page uses it to say
+    they are waiting. Approving them ends it, so they sign in again.
+  - Sessions bind to the provider as well (the question 3.4a left open): with a provider set, the stored-session
+    binding also covers its issuer, its client ID and `INSIGHT_SSO_ONLY`, so changing the provider, or turning
+    the password sign-in off, ends every session. Without a provider the binding is unchanged, so upgrading
+    signs nobody out. A new operator password still ends people's sessions too.
+  - Insight's MFA guards the password sign-in, as before; the provider's own second factor guards the people
+    it signs in. Insight does not read `amr` or `acr`, which providers fill in differently.
+- Part two: Settings → People (approve, change a role, disable, sign out, remove; people whose role comes
+  from groups shown as managed by the provider), admin controls hidden from analysts inside Settings, and
+  audit views that name people.

@@ -251,6 +251,9 @@ This public endpoint returns `{"status":"ok"}` when Insight is up. Monitors can 
 | `POST /login` | Form fields `csrf_token`, `password`, and `otp` when MFA is on. `303` success, `401` wrong password or code, `403` bad CSRF, `429` throttled, `503` MFA on but no app paired |
 | `GET /logout` | Sign-out confirmation form (contains `csrf_token`) |
 | `POST /logout` | Form field `csrf_token`; revokes the session, `303` to `/login` |
+| `GET /login/sso` | With `INSIGHT_OIDC_ISSUER` set: `303` to your identity provider (otherwise `404`) |
+| `GET /login/sso/callback` | Where the provider sends the browser back; answers a page that posts the code on |
+| `POST /login/sso/callback` | Form fields `code` and `state` (or `error`): checks them, signs the person in, `303` to `/` |
 | `GET /api/session` | Returns `{"csrf_token": "...", "version": "...", "role": "admin", "actor": "operator"}` for a signed-in browser session: the role says what you may do ([API reference](API.md#roles)). API keys receive `403`. |
 
 Commands: [section 2.2](#22-browser-session-what-the-workspace-uses).

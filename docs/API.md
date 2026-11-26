@@ -53,6 +53,19 @@ page is the field-by-field reference.
    `version` field is the running Insight version; `role` and `actor` say what you may do and how the audit log
    names you (see [Roles](#roles)).
 4. `POST /logout` (form field `csrf_token`) revokes the session server-side.
+5. **Sign-in through the identity provider** ([ADR 0046](adr/0046-sso-sign-in-and-roles.md)), when
+   `INSIGHT_OIDC_ISSUER` is set (otherwise these routes answer `404`):
+   - `GET /login/sso` stores a fresh state, nonce and PKCE verifier in the session cookie and answers `303`
+     to the provider's authorisation endpoint (`502` with the sign-in page if the provider cannot be reached).
+   - `GET /login/sso/callback?code=…&state=…` is where the provider sends the browser back. It only answers a
+     page that posts the code and state on, because the `SameSite=Strict` cookie is left out of requests that
+     come from another site.
+   - `POST /login/sso/callback` (form fields `code`, `state`, or `error`) checks that the state matches this
+     browser's, at most ten minutes old and used once; exchanges the code with the verifier; checks the ID
+     token; then signs the person in (`303` to `/`). A person with no role yet can sign in but has no access
+     until an admin gives them one. Refusals answer `400` (`403` for a disabled person), and repeated failures
+     from one address get `429`.
+   - With `INSIGHT_SSO_ONLY=on`, the password form is gone and `POST /login` answers `403`.
 
 **Temporary password-free mode:** with the explicit default-off `INSIGHT_DEV_NO_AUTH=on`, `GET /login`
 creates the normal operator session and CSRF token, then returns a `200` continuation page instead of a
