@@ -27,6 +27,7 @@ RUN_VALUE_OPTIONS = frozenset({
     '-v', '--volume', '-p', '--publish', '-e', '--env', '--env-file', '--name', '--network', '--tmpfs',
     '--cap-drop', '--cap-add', '--security-opt', '--entrypoint', '-w', '--workdir', '-u', '--user', '--mount',
     '--platform', '--add-host', '-l', '--label', '-h', '--hostname', '--memory', '--cpus', '--pull',
+    '--ip', '--network-alias', '--sysctl',
 })  # fmt: skip
 #: Images the workflows build themselves.
 LOCAL_IMAGES = ('insight:',)

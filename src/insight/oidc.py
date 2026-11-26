@@ -136,6 +136,7 @@ class OidcClient:
 
     def __init__(self, settings: OidcSettings) -> None:
         self.settings = settings
+        self._tls = settings.tls_context()
         self._provider: tuple[float, Provider] | None = None
         self._keys: tuple[float, list[object]] | None = None
         #: When discovery or the key set last failed.
@@ -164,6 +165,7 @@ class OidcClient:
                 max_bytes=MAX_DOCUMENT_BYTES,
                 allowed_hosts=frozenset({host}),
                 allow_private=self.settings.private_network,
+                tls=self._tls,
             )
             return json.loads(raw)
         except (json.JSONDecodeError, UnicodeDecodeError):

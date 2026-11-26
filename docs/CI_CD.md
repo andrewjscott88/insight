@@ -85,6 +85,7 @@ every supported Python (`workflow_call`), then:
 | Backup/restore drill | Online `insight backup` from a running server, restore into a second server, verify data |
 | Browser E2E (Playwright) | Real Chromium against the read-only container: sign-in, security headers, demo, ingest → review → note, search, sign-out revokes other tabs |
 | OWASP ZAP baseline | Signed-in passive scan of the container; fails on FAIL-level alerts |
+| Sign-in through Keycloak (TIP 3.4d) | Keycloak 26 (pinned by digest, test realm `tests/e2e/sso/realm.json` with fresh secrets per run), the container and a Caddy TLS proxy on one Docker network, both names signed by a throwaway CA that Insight trusts only for the provider (`INSIGHT_OIDC_CA_FILE`). Chromium signs in through Keycloak's form as a newcomer (waits), a viewer, an analyst and an admin, roles from Keycloak groups; checks what the workspace offers each and the API matrix from the browser with the session's CSRF token; the cookie is `Secure`, `HttpOnly`, `SameSite=Strict`. Then **ZAP's active scan as the analyst**; fails on high-risk alerts, lists the rest in the summary |
 | Licences + SBOM | Runtime licence policy; CycloneDX SBOM artifact |
 
 Reports are attached to the run summary and as artifacts (90 days).
@@ -95,7 +96,7 @@ Reports are attached to the run summary and as artifacts (90 days).
 | --- | --- |
 | M1 Pilot & extraction quality | Grow `tests/corpus/extraction.json` with real, permitted reports; ratchet the baseline up as the extractor improves (defanged indicators are the known gap) |
 | M2 PostgreSQL, cursors | Datetime-column migration (see ARCHITECTURE.md); cursor-resume tests with fake feeds; tighten the PostgreSQL performance budget |
-| M3 Identity provider & groups | OIDC tests against a containerised IdP; role × endpoint authorisation matrix; authenticated ZAP active scan; staging deployment environment |
+| M3 Identity provider & groups | Done (TIP 3.4d): the "Sign-in through Keycloak" job above; staging steps in `docs/RUNBOOK.md` |
 | M4 Notifications | Delivery tests against a fake SMTP/webhook sink |
 | M5 Structured export | `stix2-validator` on every export; import/export round-trip; retention/licence rule tests |
 
@@ -159,7 +160,7 @@ cosign verify ghcr.io/<org>/insight@sha256:<digest> \
 | # | Input | Why / how |
 | --- | --- | --- |
 | 1 | **Repository layout**: `insight/` must be the git repository root | GitHub only reads `.github/` at the root. |
-| 2 | ~~**Pin actions to commit SHAs and the base image to a digest**~~ | Done for 0.5.0: every `uses:` is pinned to a commit SHA with its tag in a comment, both `FROM` lines carry the `python:3.13-slim` index digest, and `.github/zizmor.yml` enforces `hash-pin`. Dependabot keeps the SHAs and digest current. Since code review L7, the third-party images workflows start with `docker run` (gitleaks, ZAP, the rehearsal's registry) are pinned by digest too, with the tag in a comment, and `scripts/check_pins.py` fails on any that is not. Dependabot does not see images inside `run:` steps: refresh one by reading the `Digest: sha256:…` line a run's `docker pull` prints (or `docker buildx imagetools inspect IMAGE:TAG`) and replacing it. `trivy-action` moved from the deleted `0.28.0` tag to `v0.36.0` (the old tags were removed after the March 2026 tag-hijack incident, GHSA-69fq-xp46-6x23). |
+| 2 | ~~**Pin actions to commit SHAs and the base image to a digest**~~ | Done for 0.5.0: every `uses:` is pinned to a commit SHA with its tag in a comment, both `FROM` lines carry the `python:3.13-slim` index digest, and `.github/zizmor.yml` enforces `hash-pin`. Dependabot keeps the SHAs and digest current. Since code review L7, the third-party images workflows start with `docker run` (gitleaks, ZAP, the rehearsal's registry, and since TIP 3.4d Keycloak and Caddy) are pinned by digest too, with the tag in a comment, and `scripts/check_pins.py` fails on any that is not. Dependabot does not see images inside `run:` steps: refresh one by reading the `Digest: sha256:…` line a run's `docker pull` prints (or `docker buildx imagetools inspect IMAGE:TAG`) and replacing it. `trivy-action` moved from the deleted `0.28.0` tag to `v0.36.0` (the old tags were removed after the March 2026 tag-hijack incident, GHSA-69fq-xp46-6x23). |
 | 3 | **Confirm action and tool versions** | Written against `checkout@v7`, `setup-python@v7`, `upload-artifact@v4`, `docker/*@v4/v6/v7`, `cosign-installer@v4`, `attest-build-provenance@v4`, `codeql-action@v4`, `trivy-action@0.28.0`, `gitleaks v8.18.4`, `uv 0.13.7`. Pinning (2) also confirms these exist. |
 | 4 | **Branch protection** on `main` | Required checks listed under Tier 1; require PR review; block force-push. |
 | 5 | **`release` environment** with required reviewers | Settings → Environments. Publishing waits for a named approver. |

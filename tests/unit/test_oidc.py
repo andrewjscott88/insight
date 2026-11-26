@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import time
+from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
@@ -269,3 +270,75 @@ async def test_the_provider_must_be_on_a_public_address_unless_allowed(
         Flow.new(time.time()), time.time()
     )
     assert target.startswith(ISSUER)
+
+
+# ------------------------------------------------------------------------- an internal certificate authority
+
+
+def pem_certificate(directory: Path, *, authority: bool) -> Path:
+    """A self-signed certificate: a certificate authority, or (``authority=False``) a server certificate."""
+    import datetime
+
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.x509.oid import NameOID
+
+    key = ec.generate_private_key(ec.SECP256R1())
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, 'Insight test CA')])
+    now = datetime.datetime.now(datetime.UTC)
+    certificate = (
+        x509.CertificateBuilder()
+        .subject_name(name)
+        .issuer_name(name)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - datetime.timedelta(minutes=1))
+        .not_valid_after(now + datetime.timedelta(days=1))
+        .add_extension(x509.BasicConstraints(ca=authority, path_length=None), critical=True)
+        .sign(key, hashes.SHA256())
+    )
+    path = directory / ('ca.pem' if authority else 'server.pem')
+    path.write_bytes(certificate.public_bytes(serialization.Encoding.PEM))
+    return path
+
+
+def test_an_internal_ca_file_is_checked_at_start_up(tmp_path: Path) -> None:
+    with pytest.raises(RuntimeError, match='could not be read'):
+        settings(INSIGHT_OIDC_CA_FILE=str(tmp_path / 'missing.pem'))
+    (tmp_path / 'junk.pem').write_text('not a certificate')
+    with pytest.raises(RuntimeError, match='could not be read'):
+        settings(INSIGHT_OIDC_CA_FILE=str(tmp_path / 'junk.pem'))
+    with pytest.raises(RuntimeError, match='no certificate authority'):
+        settings(INSIGHT_OIDC_CA_FILE=str(pem_certificate(tmp_path, authority=False)))
+    with pytest.raises(RuntimeError, match='needs INSIGHT_OIDC_ISSUER'):
+        OidcSettings.from_env({'INSIGHT_OIDC_CA_FILE': str(tmp_path / 'ca.pem')})
+    assert settings().tls_context() is None, 'without the setting: the public authorities'
+
+
+async def test_requests_to_the_provider_trust_only_the_internal_ca(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import ssl
+
+    from insight import connectors
+
+    ca = pem_certificate(tmp_path, authority=True)
+    found = settings(INSIGHT_OIDC_CA_FILE=str(ca))
+    assert found.ca_file == str(ca)
+    provider = FakeProvider()
+    provider.install(monkeypatch)
+    wrapped = connectors.download
+    contexts: list[object] = []
+
+    async def recording(*args: object, **kwargs: object) -> bytes:
+        contexts.append(kwargs.get('tls'))
+        return await wrapped(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(connectors, 'download', recording)
+    await OidcClient(found).authorization_url(Flow.new(time.time()), time.time())
+    (context,) = contexts
+    assert isinstance(context, ssl.SSLContext)
+    assert context.verify_mode == ssl.CERT_REQUIRED
+    assert context.check_hostname
+    assert [c['subject'] for c in context.get_ca_certs()] == [((('commonName', 'Insight test CA'),),)]

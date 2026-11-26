@@ -171,3 +171,25 @@ async def test_a_slow_drip_is_recorded_as_a_failed_sync(
         connectors.SourceSyncError, match=r'TimeoutError: The download took longer than 0\.2 seconds'
     ):
         await connectors.sync_source(session_factory, 'sans-isc')
+
+
+@pytest.mark.usefixtures('public_dns')
+async def test_a_tls_context_replaces_the_public_authorities(monkeypatch: pytest.MonkeyPatch) -> None:
+    """One explicitly configured host (an identity provider with an internal CA) can bring its own trust;
+    every other download verifies against the public certificate authorities."""
+    import ssl
+
+    seen: list[object] = []
+    real_client = httpx.AsyncClient
+
+    def client(**kwargs: Any) -> httpx.AsyncClient:
+        seen.append(kwargs['verify'])
+        return real_client(
+            **{**kwargs, 'transport': transport(lambda _r: httpx.Response(200, content=b'ok'))}
+        )
+
+    monkeypatch.setattr(httpx, 'AsyncClient', client)
+    internal = ssl.create_default_context()
+    assert await download(KEV_URL, tls=internal) == b'ok'
+    assert await download(KEV_URL) == b'ok'
+    assert seen == [internal, True]

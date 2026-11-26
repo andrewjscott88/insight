@@ -223,9 +223,9 @@ Built before 3.4b, at Andrew's request, so a public demonstration site can leave
 
 ### 3.4b, part one: sign-in
 
-- `insight.oidc_settings` reads the provider settings. Start-up refuses a half-set provider, an issuer or
-  `INSIGHT_PUBLIC_URL` that is not `https://` on port 443, scopes without `openid`, and the provider together
-  with `INSIGHT_DEV_NO_AUTH=on`. The redirect URI is always `INSIGHT_PUBLIC_URL` + `/login/sso/callback`.
+- `insight.oidc_settings` reads the provider settings. Start-up refuses a half-set provider, an issuer that
+  is not `https://` on port 443, an `INSIGHT_PUBLIC_URL` that is not `https://`, scopes without `openid`, and
+  the provider together with `INSIGHT_DEV_NO_AUTH=on`. The redirect URI is always `INSIGHT_PUBLIC_URL` + `/login/sso/callback`.
 - `insight.oidc` (discovery, PKCE and the code exchange) and `insight.id_tokens` (signature and claims) are
   hand-written, as decided. Choices this ADR did not settle, taken the more conservative way:
   - The discovery document must name the configured issuer exactly and, where it lists them, offer `code`
@@ -274,3 +274,25 @@ Built before 3.4b, at Andrew's request, so a public demonstration site can leave
   source grades to analysts. The brief's **Sync all sources** was still offered to viewers and visitors in
   3.4c (refused when used); it is now offered only to roles that may sync. The server-side check is unchanged
   and stays the control.
+
+### 3.4d: the gate
+
+- The milestone gate's "Sign-in through Keycloak" job starts Keycloak 26.8.2 and Caddy 2.11.9, both pinned by
+  digest, with the container on one Docker network. A throwaway CA signs `idp.insight.test` and
+  `insight.insight.test`; the test realm (`tests/e2e/sso/realm.json`) gets a fresh client secret and password
+  each run. Keycloak groups give the roles; one test person is in no group.
+- Chromium signs in through Keycloak's own form as each role (`tests/e2e/test_sso_roles.py`): the newcomer
+  is told to wait and the API answers `401`; each role sees what it may use in the workspace, and the API
+  matrix runs from the browser with the session's CSRF token, so each `403` is the role's ("Your role does not
+  allow this"). The admin test runs last and finds the others in Settings → People. This is the first real
+  browser run of the `SameSite=Strict` callback page.
+- ZAP's full scan (spider and active scan) runs as the analyst, on the gate's network, with the analyst's
+  session cookie; the job fails on any high-risk alert and lists the others in the run summary. It also
+  reports whether the session survived the scan.
+- Choices this ADR did not settle, taken the more conservative way:
+  - The gate needed Insight to trust a private CA, so `INSIGHT_OIDC_CA_FILE` exists for real deployments too
+    (a provider behind an internal CA). The file's authorities **replace** the public ones for requests to
+    the provider and are used for nothing else; start-up refuses a file with no certificate authority in it.
+  - The provider is reached the way production reaches it: HTTPS on port 443, through the egress checks,
+    with `INSIGHT_OIDC_PRIVATE_NETWORK=on` for its private address. Nothing in the gate relaxes them.
+

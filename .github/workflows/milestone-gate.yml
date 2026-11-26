@@ -147,6 +147,134 @@ jobs:
             screenshots/
           retention-days: 90
 
+  sso-gate:
+    # TIP 3.4d (ADR 0046): sign-in through a real provider. Keycloak (test realm tests/e2e/sso/realm.json),
+    # Insight and a TLS proxy share one Docker network; a throwaway CA signs both names. Insight verifies the
+    # provider against that CA (INSIGHT_OIDC_CA_FILE) on its private address (INSIGHT_OIDC_PRIVATE_NETWORK),
+    # on port 443, as in production. Chromium signs in as each role; ZAP actively scans as the analyst.
+    name: Sign-in through Keycloak, browser role matrix, ZAP active scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13'
+      - run: docker build -t insight:rc .
+      - name: Throwaway test CA, certificate and secrets for this run
+        run: |
+          mkdir -p sso-pki && cd sso-pki
+          # Python 3.13 verifies strictly: the CA needs key usage, the server certificate key identifiers.
+          openssl req -x509 -newkey rsa:2048 -nodes -keyout ca.key -out ca.pem -days 1 \
+            -subj "/CN=Insight gate test CA" -addext "keyUsage=critical,keyCertSign,cRLSign"
+          openssl req -newkey rsa:2048 -nodes -keyout site.key -out site.csr -subj "/CN=insight.test"
+          printf '%s\n' 'subjectAltName=DNS:idp.insight.test,DNS:insight.insight.test' \
+            'basicConstraints=critical,CA:FALSE' 'keyUsage=critical,digitalSignature,keyEncipherment' \
+            'extendedKeyUsage=serverAuth' 'subjectKeyIdentifier=hash' 'authorityKeyIdentifier=keyid,issuer' \
+            > site.ext
+          openssl x509 -req -in site.csr -CA ca.pem -CAkey ca.key -CAcreateserial -out site.pem -days 1 \
+            -extfile site.ext
+          rm ca.key site.csr
+          secret="$(openssl rand -hex 24)"
+          password="$(openssl rand -hex 12)"
+          echo "::add-mask::${secret}"
+          echo "::add-mask::${password}"
+          echo "SSO_CLIENT_SECRET=${secret}" >> "$GITHUB_ENV"
+          echo "SSO_PASSWORD=${password}" >> "$GITHUB_ENV"
+          sed -e "s/@CLIENT_SECRET@/${secret}/" -e "s/@PASSWORD@/${password}/g" \
+            ../tests/e2e/sso/realm.json > realm.json
+      - name: Start Keycloak, Insight and the TLS proxy
+        run: |
+          docker network create --subnet 172.30.0.0/24 sso
+          # Pinned by digest. Tag: 26.8.2.
+          docker run -d --name keycloak --network sso \
+            -v "${PWD}/sso-pki/realm.json:/opt/keycloak/data/import/insight.json:ro" \
+            quay.io/keycloak/keycloak@sha256:7e66a96e4739239070aeaf72e4c5decf0f7f682cfc725b9f7ea2b336eaba38b3 \
+            start-dev --import-realm --hostname=https://idp.insight.test --proxy-headers=xforwarded
+          docker run -d --name insight --network sso --read-only --tmpfs /tmp --cap-drop ALL \
+            --security-opt no-new-privileges:true \
+            -v "${PWD}/sso-pki/ca.pem:/run/insight-sso/ca.pem:ro" \
+            -e INSIGHT_PASSWORD="$(openssl rand -hex 16)" -e INSIGHT_SESSION_SECRET="$(openssl rand -hex 32)" \
+            -e INSIGHT_SECURE_COOKIES=1 -e INSIGHT_ALLOWED_HOSTS=insight.insight.test,127.0.0.1,localhost \
+            -e INSIGHT_TRUSTED_PROXIES=172.30.0.10 -e INSIGHT_PUBLIC_URL=https://insight.insight.test \
+            -e INSIGHT_OIDC_ISSUER=https://idp.insight.test/realms/insight -e INSIGHT_OIDC_CLIENT_ID=insight \
+            -e INSIGHT_OIDC_CLIENT_SECRET="${SSO_CLIENT_SECRET}" -e INSIGHT_OIDC_PRIVATE_NETWORK=on \
+            -e INSIGHT_OIDC_CA_FILE=/run/insight-sso/ca.pem -e INSIGHT_OIDC_VIEWER_GROUPS=insight-viewers \
+            -e INSIGHT_OIDC_ANALYST_GROUPS=insight-analysts -e INSIGHT_OIDC_ADMIN_GROUPS=insight-admins \
+            insight:rc
+          # Pinned by digest. Tag: 2-alpine (Caddy 2.11.9).
+          docker run -d --name proxy --network sso --ip 172.30.0.10 \
+            --network-alias idp.insight.test --network-alias insight.insight.test -p 443:443 \
+            -v "${PWD}/tests/e2e/sso/Caddyfile:/etc/caddy/Caddyfile:ro" -v "${PWD}/sso-pki:/certs:ro" \
+            caddy@sha256:003a97808e781aa9f7e75cc2f43d34d461099031faf5e20faefb9f61126836f0
+      - name: Wait for the provider and Insight
+        run: |
+          get() { curl -fsS --cacert sso-pki/ca.pem --resolve "$1:443:127.0.0.1" "https://$1$2" -o /dev/null; }
+          for _ in $(seq 1 120); do
+            if get idp.insight.test /realms/insight/.well-known/openid-configuration \
+              && get insight.insight.test /health; then
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+      - name: The sign-in page offers the provider
+        run: >-
+          curl -fsS --cacert sso-pki/ca.pem --resolve insight.insight.test:443:127.0.0.1
+          https://insight.insight.test/login | grep -q 'Sign in with your organisation'
+      - name: Install browser test tooling
+        run: |
+          pip install --require-hashes -r requirements-e2e.lock && pip install --no-deps -e .
+          python -m playwright install --with-deps chromium
+      - name: Role matrix in the browser (Chromium)
+        run: pytest tests/e2e/test_sso_roles.py -m e2e -v --junitxml=junit-sso.xml
+        env:
+          INSIGHT_E2E_SSO_URL: https://insight.insight.test
+          INSIGHT_E2E_SSO_PASSWORD: ${{ env.SSO_PASSWORD }}
+      - name: OWASP ZAP active scan, signed in as an analyst (fails on high-risk alerts)
+        env:
+          INSIGHT_E2E_SSO_URL: https://insight.insight.test
+          INSIGHT_E2E_SSO_PASSWORD: ${{ env.SSO_PASSWORD }}
+        run: |
+          cookie="$(python tests/e2e/sso_flow.py analyst)"
+          echo "::add-mask::${cookie#insight_session=}"
+          session() {
+            curl -s -o /dev/null -w '%{http_code}' --cacert sso-pki/ca.pem \
+              --resolve insight.insight.test:443:127.0.0.1 -H "Cookie: ${cookie}" \
+              https://insight.insight.test/api/session
+          }
+          test "$(session)" = 200
+          mkdir -p zap && chmod 777 zap
+          # Pinned by digest (code review L7); on the gate's network only. Tag: stable.
+          docker run --rm --network sso -v "${PWD}/zap:/zap/wrk" \
+            ghcr.io/zaproxy/zaproxy:stable@sha256:9624669db72f54d86c4b46a7064518bd9bf79d8c61a4c31befa9923489f328af \
+            zap-full-scan.py -t https://insight.insight.test/ -I -m 2 -T 25 \
+            -r zap-active.html -J zap-active.json \
+            -z "-config replacer.full_list(0).description=session -config replacer.full_list(0).enabled=true \
+                -config replacer.full_list(0).matchtype=REQ_HEADER -config replacer.full_list(0).matchstr=Cookie \
+                -config replacer.full_list(0).replacement=${cookie}"
+          jq -r '.site[].alerts[] | "\(.riskdesc): \(.name) (\(.count))"' zap/zap-active.json | sort -u \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "Analyst session after the scan: HTTP $(session)" | tee -a "$GITHUB_STEP_SUMMARY"
+          high="$(jq '[.site[].alerts[] | select(.riskcode == "3")] | length' zap/zap-active.json)"
+          test "${high}" = 0
+      - if: failure()
+        run: |
+          for name in keycloak insight proxy; do
+            echo "== ${name}"
+            docker logs "${name}" 2>&1 | tail -150
+          done
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: sso-gate
+          path: |
+            junit-sso.xml
+            zap/
+          retention-days: 90
+
   supply-chain:
     name: Licences and SBOM
     runs-on: ubuntu-latest

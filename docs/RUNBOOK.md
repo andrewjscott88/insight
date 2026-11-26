@@ -260,6 +260,7 @@ The workspace password stays as the built-in operator, an admin, until you turn 
 | `INSIGHT_OIDC_GROUPS_CLAIM` | Optional; the ID token claim that lists the person's groups, default `groups` |
 | `INSIGHT_OIDC_ADMIN_GROUPS`, `..._ANALYST_GROUPS`, `..._VIEWER_GROUPS` | Optional, comma-separated: the highest matching group sets the role at every sign-in. Names must match exactly what the provider sends |
 | `INSIGHT_OIDC_PRIVATE_NETWORK` | `on` for a provider on your private network (loopback and link-local stay blocked) |
+| `INSIGHT_OIDC_CA_FILE` | A PEM file of the certificate authorities that sign the provider's certificate (an internal CA). They replace the public ones for requests to the provider only; mount the file read-only into the container |
 | `INSIGHT_SSO_ONLY` | `on` turns the password sign-in off; `insight users` on the host stays the break-glass |
 
 Start-up refuses a half-set provider, an `http://` issuer or public URL, and the provider together with
@@ -300,6 +301,27 @@ plan the change. Insight's own MFA guards only the password sign-in; require a s
 back. The log records `Signed in through the identity provider: user:<id>`, and refusals with their reason
 (never a token or secret). Once someone who signs in through the provider is an admin, you can set
 `INSIGHT_SSO_ONLY=on`.
+
+### Staging against your identity provider
+
+Try a provider change on a staging instance before production. The milestone gate does the same against a
+containerised Keycloak on every release (`docs/CI_CD.md`, "Sign-in through Keycloak").
+
+1. Run a second instance with its own database, `INSIGHT_SESSION_SECRET` and address, for example
+   `https://insight-staging.example.org`. Copy no production data you are not allowed to copy.
+2. At the provider, register a separate client for it, with the redirect URI
+   `https://insight-staging.example.org/login/sso/callback` and its own secret. Never reuse the production client.
+3. Create one test person per role, plus one in no group, and put them in the groups you map (or plan to
+   approve them in Settings → People). Use test accounts, not real people's.
+4. Set the `INSIGHT_OIDC_*` settings as for production (plus `INSIGHT_OIDC_CA_FILE` for an internal CA), start
+   it, and check: the newcomer is told to wait; the viewer reads but cannot import reports; the analyst can
+   import and sync but sees switches and schedules only in words; the admin sees Settings → People with all
+   of them, their roles and where each came from; `insight users list` on the host shows the same people.
+5. Try what should fail: a disabled person is refused; leaving a group takes the role away at the next
+   sign-in; `INSIGHT_SSO_ONLY=on` hides the password form; the log has the reason for each refusal and no
+   token or secret.
+6. Then change production, the same way. Changing the issuer, the client ID or `INSIGHT_SSO_ONLY` signs
+   everyone out once.
 
 ### The API key
 `insight api-key status` shows the key ID, access, expiry and last use (in Docker: `docker compose exec insight

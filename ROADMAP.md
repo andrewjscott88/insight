@@ -153,11 +153,11 @@ tools over TAXII and STIX; sightings and requests for information come back
       ([ADR 0027](docs/adr/0027-ranked-search-and-link-graph.md)).
 - [x] **TIP 3.3 Exploit-availability signals,** metadata only: report signals and optional VulnCheck KEV
       ([ADR 0028](docs/adr/0028-exploit-availability.md)).
-- [ ] [#14](https://github.com/andrewjscott88/insight/issues/14) **TIP 3.4 OIDC sign-in and roles (M3),** with an
-      authenticated ZAP active scan. *Next; designed in
-      [ADR 0046](docs/adr/0046-sso-sign-in-and-roles.md); building in parts 3.4a–d. Done: 3.4a (roles, the
-      permission matrix and `insight users`), 3.4c (the read-only public view) and 3.4b (OIDC sign-in and
-      Settings → People). Next: 3.4d, the gate against a real provider.*
+- [x] [#14](https://github.com/andrewjscott88/insight/issues/14) **TIP 3.4 OIDC sign-in and roles (M3),** with an
+      authenticated ZAP active scan ([ADR 0046](docs/adr/0046-sso-sign-in-and-roles.md)): roles, the
+      permission matrix and `insight users` (3.4a); OIDC sign-in and Settings → People (3.4b); the read-only
+      public view (3.4c); and the milestone gate against a containerised Keycloak, with the role matrix in a
+      real browser and ZAP's active scan as an analyst (3.4d).
 - [x] [#11](https://github.com/andrewjscott88/insight/issues/11) **PostgreSQL datetime columns and feed cursors
       (M2):** `timestamptz` on PostgreSQL, resumable OTX syncs, a tighter PostgreSQL budget
       ([ADR 0030](docs/adr/0030-postgres-timestamps-and-feed-cursors.md)).

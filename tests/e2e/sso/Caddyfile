@@ -1,0 +1,16 @@
+# The gate's TLS front door (3.4d): one test CA signs one certificate for both names. Insight reaches the
+# provider through it on port 443, as in production, and the browser reaches both through the published port.
+{
+	auto_https off
+	admin off
+}
+
+https://idp.insight.test:443 {
+	tls /certs/site.pem /certs/site.key
+	reverse_proxy keycloak:8080
+}
+
+https://insight.insight.test:443 {
+	tls /certs/site.pem /certs/site.key
+	reverse_proxy insight:8080
+}

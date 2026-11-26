@@ -32,6 +32,17 @@
 - `GET /api/session` also returns the caller's `role`, and the `actor` audit events name them by
   (`operator`, or `user:<id>` for a person).
 
+### Added: the gate against a real identity provider (TIP 3.4d)
+
+- The milestone gate, which every release runs, now signs in through a containerised Keycloak as a newcomer,
+  a viewer, an analyst and an admin, with roles from Keycloak groups. It checks in Chromium what each role
+  is offered and what the server allows, and runs ZAP's active scan signed in as an analyst (it fails on
+  high-risk alerts). See `docs/CI_CD.md`.
+- `INSIGHT_OIDC_CA_FILE`: a PEM file of the certificate authorities that sign your provider's certificate,
+  for a provider behind an internal CA. They replace the public ones for requests to the provider only.
+- The runbook has steps for a staging instance against your provider ("Staging against your identity
+  provider").
+
 ### Added: sign-in through your identity provider (TIP 3.4b)
 
 - People can sign in through one OpenID Connect provider, for example Keycloak, Authentik, Microsoft Entra ID,
