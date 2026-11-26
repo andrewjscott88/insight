@@ -1,4 +1,7 @@
-# Future LLM integration boundary (disabled in this release)
+# LLM integration boundary (not planned)
+
+LLM proposals (TIP 3.6) were taken off the roadmap on 26 November 2026: Insight writes nothing with a model.
+This page stays as the boundary any future work would have to meet.
 
 Keep the current deterministic pipeline authoritative for exact observable extraction. Future model output should be stored as a new proposal with provider/model/version, request timestamp, exact source spans, input document hash and analyst review state.
 

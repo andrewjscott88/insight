@@ -371,7 +371,7 @@ Planned work is listed in [ROADMAP.md](ROADMAP.md).
 
 ## Extending it
 
-Add adapters in `connectors.py` only after reviewing their destinations, size limits and source terms. Keep deterministic evidence and analyst review independent of enrichment. `docs/LLM_EXTENSION.md` defines the future LLM integration boundary without enabling it now.
+Add adapters in `connectors.py` only after reviewing their destinations, size limits and source terms. Keep deterministic evidence and analyst review independent of enrichment. Insight writes nothing with a model; `docs/LLM_EXTENSION.md` records the boundary any LLM work would have to meet (none is planned).
 
 ## License
 
