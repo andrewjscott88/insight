@@ -1,0 +1,19 @@
+# Temporary: resolves image digests for the 3.4d gate, then this branch is deleted.
+name: Image digests (temporary)
+on:
+  push:
+    branches: [tmp/image-digests]
+permissions:
+  contents: read
+jobs:
+  digests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - run: |
+          for image in quay.io/keycloak/keycloak:26.8.2 caddy:2-alpine; do
+            docker pull -q "$image" >/dev/null
+            echo "DIGEST $image $(docker image inspect --format '{{index .RepoDigests 0}}' "$image")"
+            echo "VERSION $image $(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}' "$image")"
+            echo "ENV $image $(docker image inspect --format '{{json .Config.Env}}' "$image")"
+          done
