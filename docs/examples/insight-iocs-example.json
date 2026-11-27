@@ -2,7 +2,7 @@
   "format": "insight-ioc-v1",
   "export_id": "00000000-0000-4000-8000-000000000001",
   "generated_at": "2026-01-16T09:00:00+00:00",
-  "generator": "insight 1.0.0",
+  "generator": "insight 1.1.0",
   "handling_notice": "Local export only. Preserve TLP and publisher restrictions. Not STIX. Extraction is not a maliciousness verdict: \"accepted\" means an analyst confirmed the extraction is accurate, not that the indicator is malicious.",
   "tlp": "AMBER+STRICT",
   "defanged": false,

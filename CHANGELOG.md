@@ -1,9 +1,20 @@
 # Changelog
 
-## Unreleased
+## 1.1.0 - 2026-11-27
+
+Insight 1.1 adds sign-in and roles (TIP 3.4): viewers, analysts and admins with a permission matrix enforced
+by the server, sign-in through your organisation's OpenID Connect provider with roles from its groups, admin
+management of people in Settings → People, and a read-only public view that replaces password-free access for
+public instances. Every release now proves sign-in against a containerised Keycloak in its gate.
 
 ### Upgrade notes
 
+- **Back up first** (`make backup`, or `pg_dump --format=custom` on PostgreSQL) and keep
+  `INSIGHT_SESSION_SECRET` unchanged.
+- **Leaving password-free access** (`INSIGHT_DEV_NO_AUTH=on`) for a public instance: set
+  `INSIGHT_DEV_NO_AUTH=off`, `INSIGHT_MAX_TLP=CLEAR` and `INSIGHT_PUBLIC_VIEW=on`, then restart. Visitors read
+  TLP:CLEAR intelligence without signing in; you sign in with the workspace password. Start-up refuses the
+  public view with password-free access or any other TLP limit. See the runbook, "Public view".
 - Migration `0033` adds the `users` table and records which person each stored session belongs to. It runs at
   start-up; existing sessions stay the operator's. Nothing changes for a single-operator instance: the
   password sign-in is the built-in operator, an admin. Downgrading below `0033` ends people's sessions first.
