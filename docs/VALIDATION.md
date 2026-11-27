@@ -34,6 +34,9 @@ published. [1.0.0 release run](https://github.com/andrewjscott88/insight/actions
   documents, state replay and other-browser state, throttling before the provider is asked, the pause after a
   failing provider, `INSIGHT_SSO_ONLY`, and sessions ended by provider changes. `INSIGHT_OIDC_CA_FILE` was used
   by the gate with its throwaway CA.
+- The 1.1.0 SQLite upgrade fixture (built by the Release fixture workflow on the release branch) has schema
+  `0033`, a person with a role and a session that belongs to them. SQLite integrity and foreign-key checks
+  passed, and the release metadata check found matching version, changelog, validation report and fixture.
 - **Not validated:** Authentik, Microsoft Entra ID, Google and Okta are documented in the runbook but were not
   tried; only Keycloak ran. No live identity provider has been connected to a deployed instance. The public
   view and roles are not yet running on a public deployment (operator deployment acceptance is pending). Issue
