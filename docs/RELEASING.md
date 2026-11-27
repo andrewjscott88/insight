@@ -25,14 +25,20 @@ optional dry runs of the gate.
 ## 2. Optional dry run
 
 To see the gate's result before tagging, run it on `main` (or the release branch): **Actions → Milestone gate →
-Run workflow**. A release-candidate tag (`git tag -s vX.Y.Z-rc.1 && git push origin vX.Y.Z-rc.1`) does the same
+Run workflow**. A release-candidate tag (`git tag -a vX.Y.Z-rc.1 -m "Insight X.Y.Z-rc.1" && git push origin vX.Y.Z-rc.1`) does the same
 and also checks the release metadata. Neither is required.
 
 ## 3. Release
 
 ```sh
-git tag -s vX.Y.Z && git push origin vX.Y.Z
+git fetch origin
+git tag -a vX.Y.Z -m "Insight X.Y.Z" <full SHA of the merge commit on main>
+git push origin vX.Y.Z
 ```
+
+Tags are annotated (`-a`). Releases so far are unsigned tags: what proves the artifacts is the release
+itself, which signs the image with cosign and attaches provenance and attestations. Sign the tag as well
+(`-s`, with a GPG or SSH signing key) if you have one set up; the workflow accepts either.
 
 `release.yml` runs, in one workflow run:
 

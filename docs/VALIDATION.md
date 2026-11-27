@@ -1,7 +1,47 @@
-# Validation report · 1.0.0
+# Validation report · 1.1.0
 
 What was verified for each release, what was not, and how. Update this file for every release (see
 [RELEASING.md](RELEASING.md)).
+
+## 1.1.0
+
+Sign-in and roles (TIP 3.4, ADR 0046). The previous release, 1.0.0, passed its tagged release workflow and was
+published. [1.0.0 release run](https://github.com/andrewjscott88/insight/actions/runs/45658674472)
+
+- Every part passed CI (Tier 1 on Python 3.11 to 3.15 and PostgreSQL 16), the full milestone gate and CodeQL
+  ("No new alerts in code changed by this pull request") on its final commit before it merged.
+  - 3.4a, roles, the permission matrix and `insight users` (migration `0033`): [PR #124](https://github.com/andrewjscott88/insight/pull/124) · [CI](https://github.com/andrewjscott88/insight/actions/runs/45680292510) · [Milestone gate](https://github.com/andrewjscott88/insight/actions/runs/45680288353) · [CodeQL](https://github.com/andrewjscott88/insight/actions/runs/45680292246)
+  - 3.4c, the read-only public view: [PR #125](https://github.com/andrewjscott88/insight/pull/125) · [CI](https://github.com/andrewjscott88/insight/actions/runs/45689605343) · [Milestone gate](https://github.com/andrewjscott88/insight/actions/runs/45689598775) · [CodeQL](https://github.com/andrewjscott88/insight/actions/runs/45689605367)
+  - 3.4b, OIDC sign-in: [PR #126](https://github.com/andrewjscott88/insight/pull/126) · [CI](https://github.com/andrewjscott88/insight/actions/runs/45738012362) · [Milestone gate](https://github.com/andrewjscott88/insight/actions/runs/45738009670) · [CodeQL](https://github.com/andrewjscott88/insight/actions/runs/45738012669)
+  - 3.4b, Settings → People and Settings by role: [PR #127](https://github.com/andrewjscott88/insight/pull/127) · [CI](https://github.com/andrewjscott88/insight/actions/runs/45747745360) · [Milestone gate](https://github.com/andrewjscott88/insight/actions/runs/45747744471) · [CodeQL](https://github.com/andrewjscott88/insight/actions/runs/45747745372)
+  - 3.4d, the gate against Keycloak: [PR #129](https://github.com/andrewjscott88/insight/pull/129) · [CI](https://github.com/andrewjscott88/insight/actions/runs/45852924645) · [Milestone gate](https://github.com/andrewjscott88/insight/actions/runs/45852921146) · [CodeQL](https://github.com/andrewjscott88/insight/actions/runs/45852924469)
+  - Roadmap: TIP 3.5 and 3.6 taken off (docs only): [PR #128](https://github.com/andrewjscott88/insight/pull/128) · [CI](https://github.com/andrewjscott88/insight/actions/runs/45765698157) · [Milestone gate](https://github.com/andrewjscott88/insight/actions/runs/45765695185) · [CodeQL](https://github.com/andrewjscott88/insight/actions/runs/45765698050)
+- **Sign-in against a real provider.** The gate's new job ran Keycloak 26.8.2 and Caddy 2.11.9 (pinned by digest)
+  with the built container, a throwaway CA and a test realm with fresh secrets. Chromium signed in through
+  Keycloak's own form: a person in no group was told to wait and got `401`; a viewer, an analyst and an admin
+  (roles from Keycloak groups) each saw only what they may use, and an API matrix run from the browser with the
+  session's CSRF token was allowed or refused with "Your role does not allow this" as the permission matrix
+  says. The session cookie was `Secure`, `HttpOnly` and `SameSite=Strict`, and the callback page that carries
+  the code past `SameSite=Strict` worked in a real browser. 4 of 4 browser tests passed.
+  [Gate run](https://github.com/andrewjscott88/insight/actions/runs/45852921146)
+- **ZAP active scan, signed in as the analyst** (spider and active scan, 25 URLs): 0 failures, 138 rules passed,
+  5 warnings, no high-risk alerts. One medium alert: no Content-Security-Policy header, which Insight has never
+  sent (its header set is documented in `docs/SECURITY.md`). Low alerts were missing Permissions-Policy and
+  cross-origin isolation headers. The analyst's session was still valid after the scan, so the scan stayed
+  signed in throughout.
+- The OIDC client and ID token checks have unit and API tests against an in-process fake provider: every
+  refused algorithm and header, issuer, audience, `azp`, times, nonce, key rotation, unsafe discovery
+  documents, state replay and other-browser state, throttling before the provider is asked, the pause after a
+  failing provider, `INSIGHT_SSO_ONLY`, and sessions ended by provider changes. `INSIGHT_OIDC_CA_FILE` was used
+  by the gate with its throwaway CA.
+- **Not validated:** Authentik, Microsoft Entra ID, Google and Okta are documented in the runbook but were not
+  tried; only Keycloak ran. No live identity provider has been connected to a deployed instance. The public
+  view and roles are not yet running on a public deployment (operator deployment acceptance is pending). Issue
+  #91 (the weekly mutation job) still awaits its scheduled Sunday run. Interoperability with a live third-party
+  TAXII server and a real SIEM remains unverified.
+- The nightly re-scan of the released 1.0.0 image passed on 26 and 27 November (it failed on 25 November on a
+  zstd CVE in the 0.9.0 image, which 1.0.0 already fixed).
+  [26 Nov](https://github.com/andrewjscott88/insight/actions/runs/45820180532) · [27 Nov](https://github.com/andrewjscott88/insight/actions/runs/45997120914)
 
 ## 1.0.0
 
